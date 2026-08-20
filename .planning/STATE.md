@@ -1,12 +1,19 @@
 ---
-gsd_state_version: '1.0'
+gsd_state_version: 1.0
+milestone: v2
+current_phase: 0
+current_phase_name: Runtime Reality Check
 status: planning
+stopped_at: Completed 00-01-PLAN.md
+last_updated: "2026-08-20T12:42:57.094Z"
+last_activity: 2026-08-20
+last_activity_desc: "Phase 0 planned and verified. Three revision rounds closed 11 defects, every one in the enforcement layer rather than the design. Plan checker verdict: PASS. Commit chain f1369f3 -> ba3b5df -> bbb18f3 -> e4b9f88"
+state_head: 221dbfcc6ab0c472d45fd81fb1e2fc7ebe5806e2
 progress:
-  total_phases: 12
+  total_phases: 11
   completed_phases: 0
-  total_plans: 52
+  total_plans: 0
   completed_plans: 0
-  percent: 0
 ---
 
 # Project State
@@ -21,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 0 of 12 (Runtime Reality Check)
-Plan: 0 of 4 in current phase (all 4 planned, verified, PASS)
+Plan: 1 of 4 in current phase (all 4 planned, verified, PASS)
 Status: Ready to execute
 Last activity: 2026-08-20 — Phase 0 planned and verified. Three revision rounds closed 11 defects, every one in the enforcement layer rather than the design. Plan checker verdict: PASS. Commit chain f1369f3 -> ba3b5df -> bbb18f3 -> e4b9f88
 
@@ -30,6 +37,7 @@ Progress: [░░░░░░░░░░] 0%
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: —
 - Total execution time: 0 hours
@@ -39,6 +47,11 @@ Progress: [░░░░░░░░░░] 0%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | - | - | - | - |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 00 P01 | 33m | 3 tasks | 45 files |
 
 ## Accumulated Context
 
@@ -54,6 +67,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - **Init**: ⚠️ `.map` guessing ON by default and unbudgeted, per operator decision taken with `caido/caido#2211` evidence on the table. Accepted risk: cumulative `sdk.requests.send()` can abort `caido-cli`. Mitigation is diagnostic only (visible send counter). Revisit if fixed upstream
 - **Init**: Detector corpus from permissive sources only — gitleaks, nuclei-templates, retire.js, jsluice. TruffleHog (AGPL) and SecretFinder (GPL) studied, never copied
 - **Init**: Detector rules ship with the plugin version — the Caido Developer Policy forbids any plugin self-update mechanism
+- [Phase 0]: setTimeout(fn,0) is the only primitive that yields the QuickJS event loop; cost 5.03ms median, so the yield trigger must be temporal (MAX_SYNC_SLICE_MS=25), not per-chunk
+- [Phase 0]: RSS is a high-water mark, not a live gauge — it never falls, so QUAL-06 cannot assert 'memory after <= memory before'
+- [Phase 0]: TextDecoder is reachable from no module, but string_decoder.StringDecoder and buffer.Buffer are — ENC-01/ENC-02 bind to those
+- [Phase 0]: A Caido instance with no project selected fails all proxying and never fires onInterceptResponse — a prerequisite for every traffic-observing spike
+- [Phase 0]: sdk.meta.db().exec takes no bind parameters; binding requires prepare() then Statement.run(...params)
 
 ### Known Risks Carried Forward
 
@@ -92,3 +110,9 @@ None.
 
 ---
 *Last updated: 2026-08-20 after initialization*
+
+## Session
+
+**Last session:** 2026-08-20T12:42:57.086Z
+**Stopped at:** Completed 00-01-PLAN.md
+**Resume file:** None
