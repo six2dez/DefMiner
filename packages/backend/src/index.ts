@@ -10,6 +10,12 @@
 //   4. SELECT sqlite_version() — read once and cached. RESEARCH.md Open Question 1:
 //                     `ON CONFLICT ... DO UPDATE` needs SQLite >= 3.24 and this
 //                     upsert strategy has NO fallback below it.
+//  4b. checkRuntimeSurfaces — the half of REQUIRED_SURFACES that cannot be known
+//                     without a handle (a Database's methods, a Statement's
+//                     methods, the SQLite build, the native hash). Its refusal is
+//                     just as hard as step 1's: no hook is registered. It runs
+//                     here and not at step 1 because you cannot discover a
+//                     Database's method set without a Database.
 //   5. installLifecycle — resolve the current project AND register
 //                     onProjectChange, before anything can be admitted. CORE-09's
 //                     isolation is a gate at the mouth of the pipeline, so it has
@@ -19,11 +25,25 @@
 //   8. ONLY THEN register onInterceptResponse — events arrive before init()
 //      finishes awaiting, and the `ready` latch is what makes that safe.
 
+// `crypto` is ALREADY in the shipped bundle via @defminer/engine/digest, and is
+// on the DIST-05 allowlist as a specifier Phase 0 measured loading inside Caido
+// 0.57.1. Imported here so `crypto.createHash` is a PROBED surface rather than
+// an assumed one — it adds nothing new to the bundle's import set, which
+// scripts/ci/check-bundle-imports.mjs gates.
+import { createHash } from "crypto";
+
 import { BoundedQueue } from "@defminer/engine/queue";
 import { QUEUE_CAP } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
-import { checkCompat, MIN_CAIDO } from "./compat";
+import {
+  checkCompat,
+  checkRuntimeSurfaces,
+  MIN_CAIDO,
+  MIN_SQLITE,
+  probeSurfaces,
+  type SurfaceContext,
+} from "./compat";
 import {
   configurePassive,
   type EnqueueClock,
@@ -57,6 +77,11 @@ let db: Database | undefined;
 let sqliteVersion: string | null = null;
 let compatible = false;
 let compatReason: string | null = null;
+// The context every surface probe reads. Filled in as init() acquires each
+// piece, so `getCompat` reports what was ACTUALLY reachable at the point the
+// plugin stopped — an empty `db` on an incompatible build is information, not a
+// gap.
+let surfaceCtx: SurfaceContext = { createHash };
 let schemaVersion: number | null = null;
 let maxEventToReloadMs = 0;
 
@@ -89,6 +114,23 @@ function status(): Record<string, unknown> {
   };
 }
 
+/**
+ * COMPAT-02's in-runtime report: which of REQUIRED_SURFACES this build actually
+ * exposes, measured inside the QuickJS runtime rather than inferred from a type
+ * package. `scripts/phase1/compat-smoke.sh` records it per leg.
+ */
+function compatReport(caidoVersion: string | null): Record<string, unknown> {
+  return {
+    compatible,
+    reason: compatReason,
+    minCaido: MIN_CAIDO,
+    minSqlite: MIN_SQLITE,
+    caidoVersion,
+    sqliteVersion,
+    surfaces: probeSurfaces(surfaceCtx),
+  };
+}
+
 export async function init(sdk: any): Promise<void> {
   log(sdk, "init");
 
@@ -103,7 +145,12 @@ export async function init(sdk: any): Promise<void> {
     // getStatus is the ONLY thing registered. No hook, no database. COMPAT-01's
     // "clear message" is this log line plus this RPC; the visible surface is owed
     // to Phase 5 (decision P1-D5).
+    surfaceCtx = { ...surfaceCtx, sdk };
     sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
+    // Registered on the REFUSAL path too. A build that refuses is exactly the
+    // build whose surface matrix somebody needs to read, and leg C of the
+    // compatibility smoke test has no other way to see it.
+    sdk.api.register("getCompat", () => compatReport(caidoVersion));
     return;
   }
   compatible = true;
@@ -153,6 +200,32 @@ export async function init(sdk: any): Promise<void> {
       "sqlite " + String(sqliteVersion) + " schema v" + String(schemaVersion),
     );
 
+    // 4b — the surfaces that CANNOT be known without a handle. A Database's
+    // method set is not discoverable without a Database, and a Statement's is
+    // not discoverable without a Statement, so this stage necessarily runs
+    // after meta.db(). Its refusal is just as hard as checkCompat's: no hook is
+    // registered, so an unmeasured runtime still observes nothing.
+    let statement: unknown;
+    try {
+      statement = await db.prepare("SELECT 1");
+    } catch (e) {
+      statement = undefined;
+      log(
+        sdk,
+        "could not prepare a probe statement: " + String(e).slice(0, 120),
+      );
+    }
+    surfaceCtx = { sdk, db, statement, sqliteVersion, createHash };
+    const runtimeSurfaces = checkRuntimeSurfaces(surfaceCtx);
+    if (!runtimeSurfaces.ok) {
+      compatible = false;
+      compatReason = runtimeSurfaces.reason;
+      log(sdk, "INCOMPATIBLE: " + runtimeSurfaces.reason);
+      sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
+      sdk.api.register("getCompat", () => compatReport(caidoVersion));
+      return;
+    }
+
     // 5 — the project scope every write is keyed on, plus the listener that
     // swaps it. The queue is constructed FIRST because the lifecycle drains it.
     queue = new BoundedQueue(QUEUE_CAP);
@@ -185,6 +258,7 @@ export async function init(sdk: any): Promise<void> {
     });
 
     sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
+    sdk.api.register("getCompat", () => compatReport(caidoVersion));
     sdk.api.register("getArtifacts", async () => {
       const pid = currentProjectId();
       if (!db || pid === null) return [];

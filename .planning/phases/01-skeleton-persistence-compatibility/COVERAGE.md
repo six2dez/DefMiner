@@ -69,8 +69,8 @@ where the SDK's absence forces a choice.
 | # | Surface | Disposition | Exercised by | Reason (opt-outs only) |
 |---|---------|-------------|--------------|------------------------|
 | 34 | `crypto` (bare) — `createHash` | **INTEGRATE** | 01-01 `digest.ts`; DIST-05 allowlist | — |
-| 35 | `string_decoder` — `StringDecoder` | **INTEGRATE** | 01-03 task 3 (`decode.ts`) — ENC-02 binds here specifically | — |
-| 36 | `buffer` — `Buffer` | **INTEGRATE** | 01-03 task 3 (`decode.ts`, the cross-checked second path) | — |
+| 35 | `string_decoder` — `StringDecoder` | **INTEGRATE (source-only)** | 01-03 task 3 (`decode.ts`) — ENC-02 binds here specifically; NOT in the shipped bundle, NOT in `REQUIRED_SURFACES` | Reconciled during 01-06 against the built artifact: `decode.ts` has no consumer in the shipped path (Broken Windows entry 8), so it is tree-shaken out and `grep -c StringDecoder packages/backend/dist/index.js` is **0**. Requiring it at runtime would mean statically importing a module the plugin does not use, so a module-load failure on a future Caido would take the whole plugin down to satisfy a probe. Promote to `INTEGRATE` in the wave that gives `decode.ts` a shipped consumer (Phase 3/5). |
+| 36 | `buffer` — `Buffer` | **INTEGRATE (source-only)** | 01-03 task 3 (`decode.ts`, the cross-checked second path); NOT in the shipped bundle, NOT in `REQUIRED_SURFACES` | Same reconciliation as row 35, same measurement, same promotion condition. |
 | 37 | `caido:crypto` | OPT-OUT | — | Measured to FAIL to load inside Caido 0.57.1 (`could not load module`). Bare `crypto` is the working path. Explicitly listed in the DIST-05 gate's failing set so a `caido:` prefix match cannot blanket-allow it. |
 | 38 | `caido:http` — `fetch` | OPT-OUT | — | Loads successfully, and is deliberately not used: same outbound-traffic prohibition as `sdk.requests.send`. Phase 0 also measured that it delivers nothing back to `onInterceptResponse`. |
 | 39 | `fs`, `os`, `path`, `url`, `events`, `sqlite` | OPT-OUT (allowlisted, unused) | — | All load inside Caido and are on the DIST-05 allowlist, but Phase 1 has no caller: no bodies are written to disk (P1-D3) and `sqlite` is reached only through `sdk.meta.db()`. Allowlisted-but-unused is recorded here so a future import is a deliberate change rather than a surprise. |
@@ -82,12 +82,22 @@ where the SDK's absence forces a choice.
 
 | Disposition | Count |
 |---|---|
-| INTEGRATE | 16 |
-| OPT-OUT (deferred to a named later phase) | 14 |
-| OPT-OUT (prohibited in this phase) | 3 |
+| INTEGRATE (in `REQUIRED_SURFACES`, gated at runtime) | 15 |
+| INTEGRATE (source-only — shipped source, tree-shaken out of the bundle) | 2 |
+| OPT-OUT (deferred to a named later phase) | 12 |
+| OPT-OUT (prohibited in this phase) | 4 |
 | OPT-OUT (structurally unavailable or unreachable) | 3 |
-| OPT-OUT (available, allowlisted, no Phase 1 caller) | 4 |
+| OPT-OUT (available or reachable, no Phase 1 caller) | 4 |
 | **Total surfaces enumerated** | **40** |
+
+**Counts corrected during 01-06 execution, and how.** This table previously read
+`INTEGRATE 16` while SEVENTEEN rows carried the `INTEGRATE` mark, and its opt-out buckets summed to 24 against
+23 opt-out rows — so it added to 40 only by two errors cancelling. Re-derived row by row against the tables
+above: rows 3, 4 and 21 are available-with-no-Phase-1-caller rather than deferred-to-a-named-phase (none names a
+later phase), row 38 (`caido:http` fetch) is prohibited rather than deferred (it is the same
+outbound-traffic prohibition as rows 9 and 27), and rows 35 and 36 are the source-only pair reconciled above.
+The gate in `tests/phase1-compat.spec.ts` now parses THIS FILE and asserts these counts against the parsed
+rows, so the summary can no longer drift from the table it summarises.
 
 Every OPT-OUT names either the phase that owns it, the requirement that forbids it, or the measurement that
 makes it unavailable. None is "not needed" without a reason.
