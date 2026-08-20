@@ -21,9 +21,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 0 of 12 (Runtime Reality Check)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-08-20 — Project initialized; five research tracks complete; roadmap revised after Codex adversarial review (12 phases, 136 requirements, 5 dependency inversions corrected)
+Plan: 0 of 4 in current phase (all 4 planned, verified, PASS)
+Status: Ready to execute
+Last activity: 2026-08-20 — Phase 0 planned and verified. Three revision rounds closed 11 defects, every one in the enforcement layer rather than the design. Plan checker verdict: PASS. Commit chain f1369f3 -> ba3b5df -> bbb18f3 -> e4b9f88
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -75,6 +75,16 @@ Codex (`gpt-5.6-sol`, xhigh) is configured as the default GSD reviewer (`review.
 - `.planning/research/SUMMARY.md` — synthesis, including a corrected treatment of what convergence between two LLMs actually proves
 
 **Corrections it forced:** `ACTIVE-03` claimed `sdk.requests.send()` inherits authentication — the SDK documents routing only. `.map` probing on authenticated apps now requires an explicit credential-propagation contract.
+
+### Phase 0 Planning Notes
+
+The verification loop found 11 real defects across three rounds — **none conceptual**. Requirement coverage, SPIKE ID mapping, wave disjointness, and the no-in-runtime-memory discipline were correct in the first draft. Every failure was the same shape: *the prose stated a rule correctly, and the gate checked less than the prose claimed.*
+
+- Round 1 — three verify gates that lied (one green on failure, one erroring on success, one a jq type error), the fresh-instance policy asserted in prose across four plans but mechanised in only one, a schema two plans consumed and neither could amend, and a definitional contradiction where the only path through the gate was fabricating a number
+- Round 2 — the corrected rule was **asymmetric**: it closed the null path and left the fabrication path open, so the one shape named as fabrication was the one shape that passed. Plus a gate that failed against the implementation its own plan mandated
+- Round 3 — the biconditional left a third route: zero cross-day denominator with sufficient days, where `0.0` passes as a measurement of something undefined
+
+Lesson for later phases: a plan that states a policy in four places and asserts it in one passes any review done by reading. Only executing the gates catches it.
 
 ### Pending Todos
 
