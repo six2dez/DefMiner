@@ -2,7 +2,7 @@
   "spike": "SPIKE-10",
   "artifact": "progress",
   "provisional": true,
-  "generated_at": "2026-08-20T12:38:56Z",
+  "generated_at": "2026-08-20T15:22:56Z",
   "question": "What is the content-hash cache hit rate on real browsing?",
   "why_wall_clock_bound": "The number that matters is the CROSS-DAY rate, which is a property of how sites version and re-serve their bundles across deploys. It cannot be synthesised from a scripted burst and cannot be produced on demand at the end of the phase. That is why the recorder ships in wave 1 and is merely READ in plan 00-04.",
   "recorder": {
@@ -20,17 +20,17 @@
     "note": "The one instance in this phase that is deliberately NOT disposable. Guest-enabled and therefore bound to 127.0.0.1 only, permanently.",
     "db": ".spike/recorder-data/plugins/73c7e164-4805-4123-b35e-95c2f4af5864/data.db"
   },
-  "rows": 2268,
-  "distinct_hashes": 1375,
+  "rows": 6827,
+  "distinct_hashes": 1489,
   "distinct_days": 1,
   "days": [
     "2026-08-20"
   ],
-  "sessions": 1,
-  "total_bytes": 157076610,
+  "sessions": 2,
+  "total_bytes": 459716530,
   "rates": {
-    "within_page": 0.0569,
-    "within_session": 0.3937,
+    "within_page": 0.0557,
+    "within_session": 0.5909,
     "cross_day": null,
     "cross_day_denominator": 0,
     "cross_day_undefined_reason": "No content hash has been observed on two or more distinct calendar days yet, so the cross-day rate is UNDEFINED \u2014 not zero. Zero would assert that caching measurably never works."
@@ -38,7 +38,7 @@
   "per_day": [
     {
       "day": "2026-08-20",
-      "rows": 2268,
+      "rows": 6827,
       "cross_day": null,
       "cross_day_denominator": 0
     }
