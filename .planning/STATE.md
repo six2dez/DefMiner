@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-08-20T22:55:45.566Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-08-20T23:35:03.525Z"
 last_activity: 2026-08-20
 last_activity_desc: Phase 01 execution started
-state_head: 54c912d2cd67c0e278c8aa3ca0bafd1b753b5910
+state_head: 7828589b6e198a11fff3f914842a2ffdde1e3e06
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-08-20 — Phase 01 execution started
 
@@ -59,6 +59,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P02 | 21 min | 2 tasks | 26 files |
 | Phase 01 P04 | 28 min | 3 tasks | 15 files |
 | Phase 01 P03 | 37 min | 3 tasks | 22 files |
+| Phase 01 P05 | 35 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: reloadMissing split into reloadMissing and reloadNoResponse — the SDK types these as two different optionality points and they call for different investigations
 - [Phase 01]: walk() takes its abort surface structurally ({aborted, reason?}) rather than as AbortSignal, because Phase 0 never enumerated AbortController in this runtime
 - [Phase 01]: knip's exports/types rules restored to error (01-02's instruction to this plan), at the cost of ignoreExportsUsedInFile — a documented hole to revisit in Phase 5
+- [Phase 01]: P5-D5: PassiveDeps.admissionAllowed is REQUIRED, not optional-with-a-permissive-default — a default of allow is invisible when init() forgets to wire CORE-09's gate, so the plugin works and the isolation simply is not there
+- [Phase 01]: P5-D6: the consumer captures a project EPOCH at the top of handleOne and re-checks it before every write — resolving the project id after the reload await wrote project A's traffic under project B, reproduced by neutering the guard, then closed
+- [Phase 01]: P5-D7: the restart check reads the plugin database with sqlite3 rather than getArtifacts — a guest can create TEMPORARY projects only (temporary:false returns PermissionDeniedUserError, measured on 0.57.1), so the project dies with the restart while the artifacts must not
+- [Phase 01]: P5-D8: describeError redacts URL-shaped substrings BEFORE truncating — truncating first leaves the front half of a URL, which is the half carrying the host (T-01-26). Found by the spec's recursive walk, not by review
+- [Phase 01]: CORE-10 measured externally on 0.57.1: max_slice_ms 0.028 against a 25 ms budget over 200 distinct chunks, and the loaded RPC distribution sits AT OR BELOW the idle baseline — Phase 1's visit is a no-op, so the instrument is proven wired and the stress test only becomes meaningful in Phase 3
 
 ### Known Risks Carried Forward
 
@@ -149,8 +155,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T22:55:33.153Z
-**Stopped at:** Completed 01-03-PLAN.md
+**Last session:** 2026-08-20T23:34:11.532Z
+**Stopped at:** Completed 01-05-PLAN.md
 **Resume file:** None
 
 ### Blockers

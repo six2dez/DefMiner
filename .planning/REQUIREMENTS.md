@@ -41,8 +41,8 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [x] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap for **matching-window** purposes, but the **yield trigger is temporal, not geometric**: accumulate synchronous work and yield when elapsed time approaches the slice budget. *(Measured on 0.57.1: `setTimeout(r,0)` is the only primitive that genuinely yields — service ratio 0.76 versus 0.00 for both `setImmediate` and `Promise.resolve()` — and it costs a median 5.67 ms per yield. Yielding per 64 KB chunk would cost 128 yields ≈ 730 ms of pure overhead on an 8 MB bundle. At a 25 ms slice the overhead is 19% instead.)*
 - [x] **CORE-07**: Wall-clock deadlines are checked between chunks; exceeding budget degrades the result to a recorded partial state rather than freezing.
 - [x] **CORE-08**: Content identical to something already analysed at the current detector-corpus version is never re-analysed.
-- [ ] **CORE-09**: Project switches cancel in-flight work and never leak results across projects.
-- [ ] **CORE-10**: Telemetry records the maximum synchronous slice actually observed in the field, so the budget is provable rather than asserted.
+- [x] **CORE-09**: Project switches cancel in-flight work and never leak results across projects.
+- [x] **CORE-10**: Telemetry records the maximum synchronous slice actually observed in the field, so the budget is provable rather than asserted.
 
 ### Persistence (STORE)
 
