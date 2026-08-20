@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 0
 current_phase_name: Runtime Reality Check
-status: planning
-stopped_at: Completed 00-01-PLAN.md
-last_updated: "2026-08-20T12:42:57.094Z"
+status: executing
+stopped_at: Completed 00-02-PLAN.md (SPIKE-08, -06, -09, -12)
+last_updated: "2026-08-20T14:35:21.373Z"
 last_activity: 2026-08-20
-last_activity_desc: "Phase 0 planned and verified. Three revision rounds closed 11 defects, every one in the enforcement layer rather than the design. Plan checker verdict: PASS. Commit chain f1369f3 -> ba3b5df -> bbb18f3 -> e4b9f88"
-state_head: 221dbfcc6ab0c472d45fd81fb1e2fc7ebe5806e2
+last_activity_desc: "00-02 complete: SPIKE-08, -06, -09, -12 answered on Caido 0.57.1. Caido decompresses before the hook; AST_MAX_BYTES 1.33 MB (stall-bound, not memory); MAX_NESTING_DEPTH 246 with a catchable RangeError; BEGIN does not span exec calls and fails silently; lstat exists so MAP-04 containment is viable. typescript installed at an approved checkpoint."
+state_head: eecf8daba4b59766147c9c1ba56a3f06c6109fd1
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 0 of 12 (Runtime Reality Check)
-Plan: 1 of 4 in current phase (all 4 planned, verified, PASS)
-Status: Ready to execute
-Last activity: 2026-08-20 — Phase 0 planned and verified. Three revision rounds closed 11 defects, every one in the enforcement layer rather than the design. Plan checker verdict: PASS. Commit chain f1369f3 -> ba3b5df -> bbb18f3 -> e4b9f88
+Plan: 2 of 4 complete in current phase (00-01, 00-02)
+Status: Executing
+Last activity: 2026-08-20 — 00-02 complete: SPIKE-08, -06, -09, -12 answered on Caido 0.57.1. Caido decompresses before the hook; AST_MAX_BYTES 1.33 MB (stall-bound, not memory); MAX_NESTING_DEPTH 246 with a catchable RangeError; BEGIN does not span exec calls and fails silently; lstat exists so MAP-04 containment is viable. typescript installed at an approved checkpoint.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 00 P01 | 33m | 3 tasks | 45 files |
+| Phase 00 P02 | 105m | 3 tasks | 53 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 0]: TextDecoder is reachable from no module, but string_decoder.StringDecoder and buffer.Buffer are — ENC-01/ENC-02 bind to those
 - [Phase 0]: A Caido instance with no project selected fails all proxying and never fires onInterceptResponse — a prerequisite for every traffic-observing spike
 - [Phase 0]: sdk.meta.db().exec takes no bind parameters; binding requires prepare() then Statement.run(...params)
+- [Phase 0]: SIZE_GATE_SOURCE is decompressed identity bytes — Caido decodes gzip/br/zstd before onInterceptResponse
+- [Phase 0]: MAX_NESTING_DEPTH taken as the minimum across nesting shapes (246 parens, not 710 brackets)
+- [Phase 0]: HARD_MAX_BYTES is time-bound not memory-bound; the timeout boundary was deliberately not bisected
+- [Phase 0]: Phase 1 storage must use single-statement idempotent upserts — BEGIN does not span exec calls, and fails silently
+- [Phase 0]: MAP-04 containment can use an lstat component walk; lstat exists on this build, realpath does not
 
 ### Known Risks Carried Forward
 
@@ -113,6 +119,6 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T12:42:57.086Z
-**Stopped at:** Completed 00-01-PLAN.md
+**Last session:** 2026-08-20T14:35:21.366Z
+**Stopped at:** Completed 00-02-PLAN.md (SPIKE-08, -06, -09, -12)
 **Resume file:** None

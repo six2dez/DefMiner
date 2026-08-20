@@ -41,14 +41,14 @@ The differentiators come after that foundation exists, because each is only as g
   5. Wall-clock is measured inside Caido via `performance.now()`, and memory is measured **for** Caido via external RSS sampling correlated to in-runtime markers, for decode, hash, lexer, and Meriyah parse at 0.5, 1.5, 3, and 8 MB; the recursion-depth probe records where the stack breaks and whether it throws or segfaults
   6. A written go/no-go table states each answer, the threshold it sets, and what changes if it is wrong — emitted as machine-checkable JSON, not prose
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 **Instance policy (non-negotiable):** every spike runs against `/Applications/Caido.app/Contents/Resources/bin/caido-cli` (0.57.1) with `--data-path` isolation, asserting the reported version before recording anything. Destructive spikes get a fresh instance and are never run on an instance a later step still needs — the failure mode is not a lost instance, it is a silently wrong measurement on a poisoned runtime.
 
 Plans:
 
 - [x] 00-01-PLAN.md — Shared harness (version-asserted launcher, probe driver, RSS sampler, hash-gated corpus, origin server, results writer, two JSON Schemas, vitest gates) + capability probe (SPIKE-07 regression-assert) + SPIKE-02, and **deploy the SPIKE-10 recorder** so cross-day data starts collecting immediately — *wave 1*
-- [ ] 00-02-PLAN.md — Budgets and persistence: SPIKE-08 first (an "8 MB ceiling" is meaningless until you know if it is compressed), then SPIKE-06 (fresh instance per size point, crash bisection, Tier-1 build), SPIKE-09, SPIKE-12 — *wave 2*
+- [x] 00-02-PLAN.md — Budgets and persistence: SPIKE-08 first (an "8 MB ceiling" is meaningless until you know if it is compressed), then SPIKE-06 (fresh instance per size point, crash bisection, Tier-1 build), SPIKE-09, SPIKE-12 — *wave 2*
 - [ ] 00-03-PLAN.md — Event matrix: SPIKE-05 and SPIKE-11 share one apparatus; SPIKE-03 runs last because it wedges the thread — *wave 2*
 - [ ] 00-04-PLAN.md — Destructive spikes on fresh instances: SPIKE-01, then SPIKE-04 across **three separate instances** (one per variant, because #2211 leaks cumulatively), plus SPIKE-04b the plugin-toggle-resets-the-leak test; read the SPIKE-10 recorder; emit `go-no-go.json` and the rendered `00-GO-NO-GO.md` — *wave 3*
 

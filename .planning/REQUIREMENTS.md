@@ -19,13 +19,13 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [ ] **SPIKE-04**: Reproduce `caido/caido#2211` on **0.57.1 — the exact build it was filed against**, so this is a direct reproduction rather than an extrapolation. Measure the `sdk.requests.send()` cliff across three variants (`save:true`, `save:false`, `caido:http` `fetch`), each on its **own fresh instance** because the leak is cumulative across a runtime's lifetime and would otherwise pollute later variants. Capture stderr and exit code separately — the `gc_decref_child` assertion is a C-level `abort()` under `panic = "abort"` and never reaches the structured log; look for exit code 134.
 - [ ] **SPIKE-04b**: Determine whether toggling the plugin off and on **resets the #2211 leak**. The host log shows a per-plugin executor (`plugin|executor: Stopping plugin executor`), suggesting the QuickJS runtime may be per-plugin and torn down on toggle. If it is, ACTIVE-13's crash recovery gains a far cheaper mitigation than "restart Caido". Ten minutes of work, potentially a large design win.
 - [ ] **SPIKE-05**: Build the event matrix — does `sdk.requests.send()` re-fire `onInterceptResponse`? Do Replay, Automate, imports, and workflows fire it? Does `save:false` or `plugins:false` change it?
-- [ ] **SPIKE-06**: Measure real CPU and RSS budgets inside Caido (not standalone quickjs-ng), and find where the 512 KiB stack actually breaks.
+- [x] **SPIKE-06**: Measure real CPU and RSS budgets inside Caido (not standalone quickjs-ng), and find where the 512 KiB stack actually breaks.
 - [x] **SPIKE-07**: ~~Confirm `structuredClone` exists in Caido's runtime~~ — **ANSWERED during Phase 0 research: it is `undefined` on 0.57.1.** The `meriyah@7` polyfill guard is therefore mandatory and unconditional, not defensive. Phase 0 need only regression-assert this alongside the other capability probes.
-- [ ] **SPIKE-08**: Determine whether proxied bodies are stored decompressed, and whether `Body.length` equals `toRaw().length`.
-- [ ] **SPIKE-09**: Verify `PRAGMA` and `BEGIN`/`COMMIT` survive across `exec` calls on the pooled SQLite connection.
+- [x] **SPIKE-08**: Determine whether proxied bodies are stored decompressed, and whether `Body.length` equals `toRaw().length`.
+- [x] **SPIKE-09**: Verify `PRAGMA` and `BEGIN`/`COMMIT` survive across `exec` calls on the pooled SQLite connection.
 - [ ] **SPIKE-10**: Measure the content-hash cache hit rate on real browsing. *(Biggest single performance lever — at 40% instead of 90%, CPU cost is 6× budget.)*
 - [ ] **SPIKE-11**: Determine whether 304s and cached responses reach the hook at all — decides whether retroactive scanning is optional or mandatory for correctness.
-- [ ] **SPIKE-12**: Establish `llrt/fs` containment behaviour with no `realpath` and no `lstat` available.
+- [x] **SPIKE-12**: Establish `llrt/fs` containment behaviour with no `realpath` and no `lstat` available.
 
 ### Ingestion pipeline (CORE)
 
