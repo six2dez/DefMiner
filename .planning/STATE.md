@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 0
 current_phase_name: Runtime Reality Check
 status: executing
-stopped_at: Completed 00-02-PLAN.md (SPIKE-08, -06, -09, -12)
-last_updated: "2026-08-20T14:35:21.373Z"
+stopped_at: Completed 00-03-PLAN.md
+last_updated: "2026-08-20T15:26:22.911Z"
 last_activity: 2026-08-20
-last_activity_desc: "00-02 complete: SPIKE-08, -06, -09, -12 answered on Caido 0.57.1. Caido decompresses before the hook; AST_MAX_BYTES 1.33 MB (stall-bound, not memory); MAX_NESTING_DEPTH 246 with a catchable RangeError; BEGIN does not span exec calls and fails silently; lstat exists so MAP-04 containment is viable. typescript installed at an approved checkpoint."
-state_head: eecf8daba4b59766147c9c1ba56a3f06c6109fd1
+last_activity_desc: "00-03 complete: SPIKE-05, -11, -03 answered on Caido 0.57.1. onInterceptResponse is a PROXY-ONLY hook — replay, automate, workflows, sdk.requests.send() in all four save/plugins combinations and caido:http fetch all reached the origin and delivered nothing. A browser-cache hit never enters Caido; a 304 arrives with a zero-length body and no content-type, so RETROACTIVE_SCAN_MANDATORY is true. Caido QUEUES: 500/500 events survived a 30 s handler block with the proxy never stalling. Handler throws and rejections are both swallowed with no trace in any log surface."
+state_head: d7a0fc3a160da37f4f12158c8109462195f669a1
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 0 of 12 (Runtime Reality Check)
-Plan: 2 of 4 complete in current phase (00-01, 00-02)
-Status: Executing
-Last activity: 2026-08-20 — 00-02 complete: SPIKE-08, -06, -09, -12 answered on Caido 0.57.1. Caido decompresses before the hook; AST_MAX_BYTES 1.33 MB (stall-bound, not memory); MAX_NESTING_DEPTH 246 with a catchable RangeError; BEGIN does not span exec calls and fails silently; lstat exists so MAP-04 containment is viable. typescript installed at an approved checkpoint.
+Plan: 3 of 4 complete in current phase (00-01, 00-02, 00-03)
+Status: Ready to execute
+Last activity: 2026-08-20 — 00-03 complete: SPIKE-05, -11, -03 answered on Caido 0.57.1. onInterceptResponse is a PROXY-ONLY hook — replay, automate, workflows, sdk.requests.send() in all four save/plugins combinations and caido:http fetch all reached the origin and delivered nothing. A browser-cache hit never enters Caido; a 304 arrives with a zero-length body and no content-type, so RETROACTIVE_SCAN_MANDATORY is true. Caido QUEUES: 500/500 events survived a 30 s handler block with the proxy never stalling. Handler throws and rejections are both swallowed with no trace in any log surface.
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 00 P01 | 33m | 3 tasks | 45 files |
 | Phase 00 P02 | 105m | 3 tasks | 53 files |
+| Phase 00 P03 | 45m | 3 tasks | 46 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 0]: HARD_MAX_BYTES is time-bound not memory-bound; the timeout boundary was deliberately not bisected
 - [Phase 0]: Phase 1 storage must use single-statement idempotent upserts — BEGIN does not span exec calls, and fails silently
 - [Phase 0]: MAP-04 containment can use an lstat component walk; lstat exists on this build, realpath does not
+- [Phase 0]: onInterceptResponse fires for proxied traffic ONLY — replay, automate, workflow, plugin sends and caido:http fetch are all invisible to it (SPIKE-05)
+- [Phase 0]: sdk.requests.send() does not re-fire the hook under any save/plugins combination, so ACTIVE-06 self-suppression is belt-and-braces, not load-bearing
+- [Phase 0]: A browser-cache hit never enters Caido at all and a 304 arrives with a zero-length body and no content-type — RETROACTIVE_SCAN_MANDATORY is true
+- [Phase 0]: Caido QUEUES intercept events: 499 survived a 30 s handler block and arrived in a 20 ms burst, contiguous, nothing lost; the proxy never stalled
+- [Phase 0]: Caido surfaces neither a synchronous throw nor an async rejection from a handler — ERR-03/OBS-01 must do all error visibility themselves
 
 ### Known Risks Carried Forward
 
@@ -119,6 +125,6 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T14:35:21.366Z
-**Stopped at:** Completed 00-02-PLAN.md (SPIKE-08, -06, -09, -12)
+**Last session:** 2026-08-20T15:26:12.239Z
+**Stopped at:** Completed 00-03-PLAN.md
 **Resume file:** None
