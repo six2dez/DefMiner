@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-08-20T23:27:01Z",
+  "question": "Success criterion 3 \u2014 under a synthetic 200-chunk SPA load, what is the maximum synchronous slice the plugin actually took, and does its own RPC keep answering an EXTERNAL prober throughout? Plus criterion 4's live half: do artifacts survive a real Caido restart?",
+  "method": "An external caller polls getStatus over REST on a fixed interval while load runs. A starved thread cannot report that it is starved and this runtime exposes no scheduler introspection, so the measurement is taken from outside the process (decision P5-D3, Pitfall 8).",
+  "reported_version": "0.57.1",
+  "expected_version": "0.57.1",
+  "caido_version_inside_plugin": "0.57.1",
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "run_id": "20260820T232639Z-19876",
+  "restart_run_id": "20260820T232639Z-19876-restart",
+  "load": {
+    "chunks_requested": 200,
+    "concurrency": 20,
+    "path_template": "/chunk-{n}.js",
+    "distinct_paths": 200,
+    "bytes_total": 17953135,
+    "min_chunk_bytes": 8192,
+    "max_chunk_bytes": 811144,
+    "origin": "scripts/spike/origin.py on 127.0.0.1",
+    "driver": "scripts/spike/load.sh (unchanged from Phase 0)",
+    "requests_completed": 200,
+    "requests_ok": 200,
+    "requests_failed": 0,
+    "elapsed_s": 0.376,
+    "rate_rps": 532.5
+  },
+  "max_slice_ms": 0.02799999713897705,
+  "max_sync_slice_ms_budget": 25,
+  "processed": 200,
+  "admitted": 200,
+  "proxied_responses_observed": 200,
+  "distinct_digests": 200,
+  "overflow": 0,
+  "queue_depth_at_end": 0,
+  "queue_cap": 2048,
+  "reload": {
+    "reloadHit": 200,
+    "reloadMissing": 0,
+    "reloadNoResponse": 0,
+    "reloadEmptyBody": 0
+  },
+  "errors": {
+    "storeErrors": 0,
+    "consumerErrors": 0,
+    "hookErrors": 0,
+    "byteLenMismatch": 0,
+    "abandonedOnProjectChange": 0
+  },
+  "last_error": null,
+  "counters_delta": {
+    "proxiedResponsesObserved": 200,
+    "admitted": 200,
+    "queueOverflow": 0,
+    "noProjectSelected": 0,
+    "abandonedOnProjectChange": 0,
+    "hookErrors": 0,
+    "processed": 200,
+    "reloadHit": 200,
+    "reloadMissing": 0,
+    "reloadNoResponse": 0,
+    "reloadEmptyBody": 0,
+    "analysisCacheHit": 0,
+    "analysisStarted": 200,
+    "analysisPartial": 0,
+    "retentionSweeps": 2,
+    "retentionDeleted": 0,
+    "storeErrors": 0,
+    "consumerErrors": 0,
+    "byteLenMismatch": 0
+  },
+  "rpc": {
+    "probe": "external \u2014 curl over the backend function REST endpoint",
+    "interval_s": 0.2,
+    "baseline_window_s": 12,
+    "tolerance_multiple": 10.0,
+    "baseline": {
+      "measured": true,
+      "samples": 53,
+      "errors": 0,
+      "median_ms": 1.238,
+      "p95_ms": 1.31,
+      "max_ms": 1.374,
+      "min_ms": 0.585,
+      "max_gap_between_samples_s": 0.235
+    },
+    "loaded": {
+      "measured": true,
+      "samples": 26,
+      "errors": 0,
+      "median_ms": 1.089,
+      "p95_ms": 1.249,
+      "max_ms": 1.311,
+      "min_ms": 0.439,
+      "max_gap_between_samples_s": 0.233
+    }
+  },
+  "restart": {
+    "checked": true,
+    "reason": null,
+    "identical": true,
+    "plugin_reattached": true,
+    "reinstalled": false,
+    "schema_version_before": 2,
+    "schema_version_after": 2,
+    "migration_advanced_version": false,
+    "schema_changed": false,
+    "before": {
+      "user_version": 2,
+      "tables": [
+        "analyses",
+        "artifacts",
+        "observations",
+        "settings"
+      ],
+      "artifacts": 200,
+      "observations": 200,
+      "analyses": 200,
+      "distinct_digests": 200,
+      "digest_sample": [
+        "027e993a2c07e6fa6dae9d0a7fece93d5209350b3a452a73d73e83dd3c9406ec",
+        "02909f74a95915aeee369da216538e8357b6d4b8b6605e3ab82f5f9dd7a1936d",
+        "02ae15e6e907cdfa6fce86ba05f840370a10286443287e562c3478c0c42e30fa",
+        "04630293047c9f8850d9fc0a1f15d928001ea19dd3295602e964401be2f51cfe",
+        "04c1975d0426877ebf1a9f5fbf0fe7cff099106631304e823387204d7011df55",
+        "0666c0d4985d9a089ba3f1f0fa482fae8df0aaaa561ad8564819a6a6f2b8e6fa",
+        "076a75d0e3184de49f59fe7cc175529a7bf7e2d35a536d5bc132f9bfc4f3f1f2",
+        "07b4f0168fe4d4e9f214469e926f2a3f2868aa45a3874a47b2216f24d2ed9623",
+        "08bd241ee014fdb4a12a8da5fda8aaea073ff079705d0518b8826abd844f8238",
+        "0901d0331e81a450b7a33e4debaa468e18bb7cd7a211234a15d721551af5a1de"
+      ],
+      "schema_sha256": "2f110c3c878e3568a596093c79d21699018f05cf30bfc2d512840e36d94d469e"
+    },
+    "after": {
+      "user_version": 2,
+      "tables": [
+        "analyses",
+        "artifacts",
+        "observations",
+        "settings"
+      ],
+      "artifacts": 200,
+      "observations": 200,
+      "analyses": 200,
+      "distinct_digests": 200,
+      "digest_sample": [
+        "027e993a2c07e6fa6dae9d0a7fece93d5209350b3a452a73d73e83dd3c9406ec",
+        "02909f74a95915aeee369da216538e8357b6d4b8b6605e3ab82f5f9dd7a1936d",
+        "02ae15e6e907cdfa6fce86ba05f840370a10286443287e562c3478c0c42e30fa",
+        "04630293047c9f8850d9fc0a1f15d928001ea19dd3295602e964401be2f51cfe",
+        "04c1975d0426877ebf1a9f5fbf0fe7cff099106631304e823387204d7011df55",
+        "0666c0d4985d9a089ba3f1f0fa482fae8df0aaaa561ad8564819a6a6f2b8e6fa",
+        "076a75d0e3184de49f59fe7cc175529a7bf7e2d35a536d5bc132f9bfc4f3f1f2",
+        "07b4f0168fe4d4e9f214469e926f2a3f2868aa45a3874a47b2216f24d2ed9623",
+        "08bd241ee014fdb4a12a8da5fda8aaea073ff079705d0518b8826abd844f8238",
+        "0901d0331e81a450b7a33e4debaa468e18bb7cd7a211234a15d721551af5a1de"
+      ],
+      "schema_sha256": "2f110c3c878e3568a596093c79d21699018f05cf30bfc2d512840e36d94d469e"
+    },
+    "note": "A guest may create TEMPORARY projects only (temporary:false returns PermissionDeniedUserError), so the project does not survive the restart and getArtifacts reports nothing afterwards. The ARTIFACTS must survive anyway: sdk.meta.db() is one database for the plugin across every project and is not deleted when a project is. That is why the comparison below is taken from the database file rather than through the RPC."
+  }
+}

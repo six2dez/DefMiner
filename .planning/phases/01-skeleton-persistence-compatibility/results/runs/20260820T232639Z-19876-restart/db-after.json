@@ -1,0 +1,26 @@
+{
+  "user_version": 2,
+  "tables": [
+    "analyses",
+    "artifacts",
+    "observations",
+    "settings"
+  ],
+  "artifacts": 200,
+  "observations": 200,
+  "analyses": 200,
+  "distinct_digests": 200,
+  "digest_sample": [
+    "027e993a2c07e6fa6dae9d0a7fece93d5209350b3a452a73d73e83dd3c9406ec",
+    "02909f74a95915aeee369da216538e8357b6d4b8b6605e3ab82f5f9dd7a1936d",
+    "02ae15e6e907cdfa6fce86ba05f840370a10286443287e562c3478c0c42e30fa",
+    "04630293047c9f8850d9fc0a1f15d928001ea19dd3295602e964401be2f51cfe",
+    "04c1975d0426877ebf1a9f5fbf0fe7cff099106631304e823387204d7011df55",
+    "0666c0d4985d9a089ba3f1f0fa482fae8df0aaaa561ad8564819a6a6f2b8e6fa",
+    "076a75d0e3184de49f59fe7cc175529a7bf7e2d35a536d5bc132f9bfc4f3f1f2",
+    "07b4f0168fe4d4e9f214469e926f2a3f2868aa45a3874a47b2216f24d2ed9623",
+    "08bd241ee014fdb4a12a8da5fda8aaea073ff079705d0518b8826abd844f8238",
+    "0901d0331e81a450b7a33e4debaa468e18bb7cd7a211234a15d721551af5a1de"
+  ],
+  "schema_sha256": "2f110c3c878e3568a596093c79d21699018f05cf30bfc2d512840e36d94d469e"
+}

@@ -18,7 +18,13 @@
   },
   "include": [
     "packages/**/*.ts",
-    "tests/pins.spec.ts",
+    // `tests/**`, not the one named spec plan 01-02 authored. Which tests are
+    // LINTED is eslint.config.js's decision (it names the Phase 0 gates it
+    // deliberately leaves alone); this file only has to supply a type program
+    // for whichever files that decision lets through. Naming them one at a time
+    // here meant every new tests/ spec failed with a parsing error until
+    // somebody remembered this file — which is a papercut, not a gate.
+    "tests/**/*.ts",
     "scripts/ci/**/*.ts",
     "scripts/ci/**/*.mjs",
     "scripts/ci/**/*.mts",
