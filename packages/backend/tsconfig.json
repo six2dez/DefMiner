@@ -14,5 +14,10 @@
   "compilerOptions": {
     "types": ["node", "@caido/quickjs-types"]
   },
-  "include": ["src/**/*.ts"]
+  // `test/**` carries the vitest-only SQLite fixture. It is in the project so the
+  // specs that import it typecheck; it is NOT reachable from src/index.ts, so it
+  // never enters the bundle and its `node:sqlite` import can never reach Caido's
+  // QuickJS (scripts/ci/check-bundle-imports.mjs reads the SHIPPED artifact, which
+  // is the only place that question can be answered honestly).
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }

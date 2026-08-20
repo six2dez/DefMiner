@@ -31,8 +31,8 @@ import {
 } from "./hooks/passive";
 import { startConsumer } from "./ingest/consumer";
 import { listArtifacts } from "./store/artifacts";
-import { getDb } from "./store/db";
-import { migrate, SCHEMA_VERSION } from "./store/migrations";
+import { getDb, readSqliteVersion } from "./store/db";
+import { migrate } from "./store/migrations";
 import { listObservations } from "./store/observations";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
@@ -115,15 +115,41 @@ export async function init(sdk: any): Promise<void> {
     // 2, 3 — handle, then ALL DDL, before any data write can leave a transaction
     // dangling on a pooled connection.
     db = await getDb(sdk);
-    schemaVersion = await migrate(db);
+    const migration = await migrate(db);
+    schemaVersion = migration.version;
+    // A migration failure is otherwise INVISIBLE — Caido surfaces neither a throw
+    // nor a rejection — so the structured per-step record is logged here and the
+    // plugin does not pretend the schema is what it expected (T-01-24).
+    if (!migration.ok) {
+      const failed = migration.steps.find((st) => !st.ok);
+      log(
+        sdk,
+        "MIGRATION INCOMPLETE at v" +
+          String(migration.version) +
+          " of " +
+          String(migration.head) +
+          ": " +
+          (failed && !failed.ok
+            ? failed.step + " — " + failed.error
+            : "unknown"),
+      );
+    }
+    if (migration.ahead) {
+      log(
+        sdk,
+        "database is at v" +
+          String(migration.from) +
+          ", NEWER than this build's v" +
+          String(migration.head) +
+          " — the ladder is forward-only and made no change",
+      );
+    }
 
-    // 4 — the measurement RESEARCH.md Open Question 1 asks for. Read once, cached,
-    // and surfaced on getStatus so scripts/phase1/runtime-answers.sh can record it
-    // as data rather than anyone assuming it.
-    const v = await (
-      await db.prepare("SELECT sqlite_version() AS v")
-    ).get<{ v: string }>();
-    sqliteVersion = v?.v ?? null;
+    // 4 — the measurement RESEARCH.md Open Question 1 asks for. Read once, cached
+    // in store/db.ts, and surfaced on getStatus so
+    // scripts/phase1/runtime-answers.sh can record it as data rather than anyone
+    // assuming it.
+    sqliteVersion = await readSqliteVersion(db);
     log(
       sdk,
       "sqlite " + String(sqliteVersion) + " schema v" + String(schemaVersion),

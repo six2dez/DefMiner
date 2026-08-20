@@ -30,3 +30,34 @@ export function getDb(sdk: MetaSdk): Promise<Database> {
 export function resetDbHandle(): void {
   handle = undefined;
 }
+
+// --- sqlite_version ---------------------------------------------------------
+//
+// ONE place in the codebase knows which SQLite is underneath. RESEARCH.md Open
+// Question 1 asked because `ON CONFLICT ... DO UPDATE` needs >= 3.24 and this
+// whole storage design has NO fallback below it; plan 01-01 measured 3.46.0 and
+// recorded it as EXERCISED (510 sightings collapsed into one row), not inferred
+// from a version string.
+//
+// Cached process-wide rather than per-handle: the engine underneath does not
+// change when the operator switches project, so `resetDbHandle()` deliberately
+// does NOT clear it. What a project change invalidates is the handle, not the
+// build of SQLite behind it.
+
+let sqliteVersion: string | null = null;
+
+/** Read `sqlite_version()` once and cache it. Returns `null` if the read fails —
+ *  never throws, because a version read is diagnostic and must not be able to
+ *  take `init()` down. */
+export async function readSqliteVersion(db: Database): Promise<string | null> {
+  if (sqliteVersion !== null) return sqliteVersion;
+  try {
+    const row = await (
+      await db.prepare("SELECT sqlite_version() AS v")
+    ).get<{ v: string }>();
+    sqliteVersion = row?.v === undefined ? null : String(row.v);
+  } catch {
+    sqliteVersion = null;
+  }
+  return sqliteVersion;
+}
