@@ -25,12 +25,14 @@ import {
   makeFakeResponse,
   makeFakeSdk,
 } from "../../test/fixtures/fake-sdk";
+// THE counter object, imported rather than constructed. Plan 01-05 moved it to
+// telemetry.ts and REPLACED the local one; a spec that built its own would be
+// the second object `telemetry.spec.ts`'s AST scan exists to forbid.
+import { counters, resetTelemetryForTest } from "../telemetry";
 
 import { REJECT_REASONS } from "./admit";
 import {
   configurePassive,
-  type Counters,
-  createCounters,
   type EnqueueClock,
   onResponse,
   resetPassiveForTest,
@@ -39,19 +41,17 @@ import {
 } from "./passive";
 
 let queue: BoundedQueue;
-let counters: Counters;
 let enqueuedAt: EnqueueClock;
 
 function wire(ready = true): void {
   queue = new BoundedQueue(QUEUE_CAP);
-  counters = createCounters();
+  resetTelemetryForTest();
   enqueuedAt = new Map();
   // `admissionAllowed` is REQUIRED on PassiveDeps (CORE-09). Always-true here:
   // every case in this file is about the hook, not about the lifecycle, and
   // lifecycle.spec.ts drives the false branch against the real gate.
   configurePassive({
     queue,
-    counters,
     enqueuedAt,
     admissionAllowed: () => true,
   });
@@ -183,11 +183,10 @@ describe("counters", () => {
   it("records a queue overflow when the queue is at cap", () => {
     // A small cap, so the overflow is reachable without 2048 fake responses.
     queue = new BoundedQueue(500);
-    counters = createCounters();
+    resetTelemetryForTest();
     enqueuedAt = new Map();
     configurePassive({
       queue,
-      counters,
       enqueuedAt,
       admissionAllowed: () => true,
     });

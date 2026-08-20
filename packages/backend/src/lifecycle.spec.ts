@@ -39,8 +39,6 @@ import {
 
 import {
   configurePassive,
-  type Counters,
-  createCounters,
   type EnqueueClock,
   onResponse,
   resetPassiveForTest,
@@ -60,6 +58,7 @@ import { listArtifacts } from "./store/artifacts";
 import { getDb, resetDbHandle } from "./store/db";
 import { migrate } from "./store/migrations";
 import { listObservations } from "./store/observations";
+import { counters, resetTelemetryForTest } from "./telemetry";
 
 import { init } from "./index";
 
@@ -69,7 +68,6 @@ const B = "project-bravo";
 
 let fx: SqliteFixture;
 let queue: BoundedQueue;
-let counters: Counters;
 let enqueuedAt: EnqueueClock;
 let resets: number;
 
@@ -84,7 +82,7 @@ beforeEach(async () => {
   const report = await migrate(fx.db);
   expect(report.ok, JSON.stringify(report.steps)).toBe(true);
   queue = new BoundedQueue(QUEUE_CAP);
-  counters = createCounters();
+  resetTelemetryForTest();
   enqueuedAt = new Map();
   resets = 0;
 });
@@ -126,7 +124,7 @@ function observable(): Record<string, unknown> {
 
 /** Wire the hook onto the REAL lifecycle gate. */
 function wireHook(): void {
-  configurePassive({ queue, counters, enqueuedAt, admissionAllowed });
+  configurePassive({ queue, enqueuedAt, admissionAllowed });
   setPassiveReady(true);
 }
 
@@ -250,7 +248,6 @@ describe("entries queued under the previous project", () => {
 
     const handle = startConsumer(sdk, {
       queue,
-      counters,
       db: fx.db,
       enqueuedAt,
       getProjectId: () => Promise.resolve(currentProjectId() ?? ""),
@@ -388,7 +385,6 @@ describe("a change to null", () => {
 
     const handle = startConsumer(sdk, {
       queue,
-      counters,
       db: fx.db,
       enqueuedAt,
       getProjectId: () => Promise.resolve(currentProjectId() ?? ""),

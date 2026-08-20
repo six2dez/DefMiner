@@ -16,110 +16,17 @@
 
 import { type BoundedQueue } from "@defminer/engine/queue";
 
-import {
-  admit,
-  type AdmitConfig,
-  DEFAULT_ADMIT_CONFIG,
-  REJECT_REASONS,
-  type RejectReason,
-} from "./admit";
+import { counters } from "../telemetry";
 
-/**
- * In-memory counters. PROVISIONAL BY DESIGN: plan 01-05 moves this object to
- * `telemetry.ts` and rewires this file and the consumer onto it, keeping the key
- * names. Write increments so that swapping the import is the whole of that
- * change, and do not add a second counter object anywhere.
- *
- * NAMING (OBS-02's decision, made here because it is expensive to change later):
- * these count PROXIED RESPONSES OBSERVED. Not "responses on this target", and
- * nothing here may be named with a word asserting completeness. Two measured blind
- * spots make any completeness claim false — `SURFACES_FIRING_INTERCEPT = "proxy"`,
- * so Replay, Automate, workflows, plugin sends and `caido:http` fetch deliver
- * nothing here; and `CACHED_RESPONSES_REACH_HOOK = false`, so a browser-cache hit
- * never enters Caido at all.
- */
-export type Counters = {
-  /** Proxied responses this hook was handed. */
-  proxiedResponsesObserved: number;
-  /** Admitted to the queue. */
-  admitted: number;
-  /** Rejected, by reason. Keyed on `admit.ts`'s closed union, so a counter for a
-   *  reason that does not exist is a compile error rather than a silent zero. */
-  rejected: Record<RejectReason, number>;
-  /** Entries the queue dropped because it was at cap (CORE-03 visible overflow). */
-  queueOverflow: number;
-  /** Proxied responses observed while NO project was active, so nothing could be
-   *  admitted. Not a reject reason: `admit.ts`'s union is closed and describes
-   *  the RESPONSE, whereas this describes the plugin's own state (CORE-09). */
-  noProjectSelected: number;
-  /** Iterations abandoned part-way because a project change landed while the
-   *  consumer was mid-`await`. The work already written belongs to the previous
-   *  project and is correctly attributed; what is refused is every write AFTER
-   *  the change (CORE-09, T-01-25). */
-  abandonedOnProjectChange: number;
-  /** Throws caught inside the hook. Caido surfaces none of them itself. */
-  hookErrors: number;
-  /** Entries the consumer drained to completion. */
-  processed: number;
-  /** `sdk.requests.get(id)` returned a usable request+response. */
-  reloadHit: number;
-  /** `sdk.requests.get(id)` itself resolved `undefined`. */
-  reloadMissing: number;
-  /** `sdk.requests.get(id)` resolved a pair whose `response` was `undefined`.
-   *  A SEPARATE counter from {@link reloadMissing} on purpose: the SDK types
-   *  those as two different optionality points (`get` returns
-   *  `RequestResponseOpt | undefined`, and `RequestResponseOpt.response` is
-   *  itself optional) and conflating them hides which one is happening. */
-  reloadNoResponse: number;
-  /** Reloaded but the body was absent or zero-length. */
-  reloadEmptyBody: number;
-  /** Artifacts skipped because this digest was already analysed at the current
-   *  DETECTOR_CORPUS_VERSION (CORE-08). */
-  analysisCacheHit: number;
-  /** Analyses this consumer claimed and walked. */
-  analysisStarted: number;
-  /** Walks that hit ARTIFACT_DEADLINE_MS and persisted a `partial` state. */
-  analysisPartial: number;
-  /** Retention sweep passes actually run from the consumer loop (STORE-06). */
-  retentionSweeps: number;
-  /** Rows those passes deleted. */
-  retentionDeleted: number;
-  /** Store writes that reported a failure. */
-  storeErrors: number;
-  /** Throws caught inside a consumer iteration. */
-  consumerErrors: number;
-  /** `body.length` from the hook disagreed with `toRaw().length` in the consumer.
-   *  BODY_LENGTH_EQUALS_RAW_LENGTH measured them equal across 24 round trips, so a
-   *  non-zero value here means that measurement no longer holds. */
-  byteLenMismatch: number;
-};
+import { admit, type AdmitConfig, DEFAULT_ADMIT_CONFIG } from "./admit";
 
-export function createCounters(): Counters {
-  const rejected = {} as Record<RejectReason, number>;
-  for (const r of REJECT_REASONS) rejected[r] = 0;
-  return {
-    proxiedResponsesObserved: 0,
-    admitted: 0,
-    rejected,
-    queueOverflow: 0,
-    noProjectSelected: 0,
-    abandonedOnProjectChange: 0,
-    hookErrors: 0,
-    processed: 0,
-    reloadHit: 0,
-    reloadMissing: 0,
-    reloadNoResponse: 0,
-    reloadEmptyBody: 0,
-    analysisCacheHit: 0,
-    analysisStarted: 0,
-    analysisPartial: 0,
-    retentionSweeps: 0,
-    retentionDeleted: 0,
-    storeErrors: 0,
-    consumerErrors: 0,
-    byteLenMismatch: 0,
-  };
-}
+// COUNTERS LIVE IN telemetry.ts AND NOWHERE ELSE (plan 01-05).
+//
+// This file used to declare them, with a note saying plan 01-05 would move them.
+// It did. The object is REPLACED, not shadowed: `telemetry.spec.ts` scans this
+// package's AST and fails if a second counters object appears anywhere, because
+// the failure mode is one object that is written and never read next to another
+// that is read and never written.
 
 /**
  * Enqueue timestamps, keyed by request id.
@@ -138,7 +45,6 @@ export type EnqueueClock = Map<string, number>;
 
 export type PassiveDeps = {
   queue: BoundedQueue;
-  counters: Counters;
   enqueuedAt: EnqueueClock;
   /**
    * CORE-09's gate at the mouth of the pipeline: false while no project is
@@ -218,7 +124,7 @@ export function onResponse(
 ): void {
   if (!ready || deps === undefined) return;
   try {
-    const c = deps.counters;
+    const c = counters;
     c.proxiedResponsesObserved++;
 
     // CORE-09's gate, BEFORE the admission decision. With no project active
@@ -261,7 +167,7 @@ export function onResponse(
     // error string thrown from a handler and found ZERO traces, while the plugin
     // kept receiving events normally.
     try {
-      if (deps !== undefined) deps.counters.hookErrors++;
+      counters.hookErrors++;
       sdk.console.log("[defminer] hook skip: " + String(e).slice(0, 160));
     } catch {
       /* sdk.console.log itself can throw during teardown; nothing left to do */

@@ -56,11 +56,11 @@ import {
   createFixtureDb,
   type SqliteFixture,
 } from "../../test/fixtures/sqlite-fixture";
-import {
-  type Counters,
-  createCounters,
-  type EnqueueClock,
-} from "../hooks/passive";
+import type { EnqueueClock } from "../hooks/passive";
+// THE counter object and the max-slice accessor, both imported. Plan 01-05
+// REPLACED the local counters object this file used to build; the assertions
+// below are unchanged, because the rewire moved where the object lives and not
+// what it holds.
 import {
   countAnalyses,
   DETECTOR_CORPUS_VERSION,
@@ -75,6 +75,7 @@ import {
   putSetting,
   RETENTION_MAX_ROWS_KEY,
 } from "../store/settings";
+import { counters, resetTelemetryForTest, slimStatus } from "../telemetry";
 
 import {
   type ConsumerDeps,
@@ -86,7 +87,6 @@ const PROJECT = "project-one";
 
 let fx: SqliteFixture;
 let queue: BoundedQueue;
-let counters: Counters;
 let enqueuedAt: EnqueueClock;
 
 beforeEach(async () => {
@@ -95,7 +95,7 @@ beforeEach(async () => {
   const report = await migrate(fx.db);
   expect(report.ok, JSON.stringify(report.steps)).toBe(true);
   queue = new BoundedQueue(QUEUE_CAP);
-  counters = createCounters();
+  resetTelemetryForTest();
   enqueuedAt = new Map();
 });
 
@@ -157,7 +157,6 @@ function plan(entries: Planned[]): {
 function deps(over: Partial<ConsumerDeps> = {}): ConsumerDeps {
   return {
     queue,
-    counters,
     db: fx.db,
     enqueuedAt,
     getProjectId: () => Promise.resolve(PROJECT),
@@ -498,6 +497,148 @@ describe("the analysis persists what the WALK returned, not constants", () => {
 
   it("ARTIFACT_DEADLINE_MS is the generated 30 s, so the case above is the real budget", () => {
     expect(ARTIFACT_DEADLINE_MS).toBe(30_000);
+  });
+});
+
+// ===========================================================================
+// 3b. CORE-10's WIRE — recordSlice, called by PRODUCTION code
+// ===========================================================================
+//
+// A `telemetry.ts` whose `recordSlice` nothing calls leaves
+// `getStatus().maxSliceMs` at zero for ever, and `tests/phase1-load.spec.ts`
+// deliberately FAILS on a zero rather than reading it as a perfect score — so
+// the defect would surface only after a live Caido run and a 200-chunk load,
+// which is the latest and most expensive moment in the phase to find it.
+//
+// The clock is INJECTED here so the number is deterministic. Real
+// `performance.now()` deltas over a 64 KiB window are genuinely tiny (the live
+// tracer recorded 0.023 ms) and could round to a clean zero on a coarse clock,
+// which would make this assertion flaky in exactly the direction that matters.
+
+describe("the consumer feeds the max synchronous slice into telemetry", () => {
+  /** A clock that advances a fixed amount per read, so every window's measured
+   *  slice is exactly `stepMs`. */
+  function steppedClock(stepMs: number): () => number {
+    let t = 0;
+    return () => {
+      const v = t;
+      t += stepMs;
+      return v;
+    };
+  }
+
+  it("leaves slimStatus().maxSliceMs greater than 0 after ONE processed artifact", async () => {
+    expect(
+      slimStatus().maxSliceMs,
+      "the maximum starts at 0 — otherwise this case proves nothing.",
+    ).toBe(0);
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/app.js", bytes: body("slice", 200_000) },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { now: steppedClock(3) });
+
+    expect(
+      slimStatus().maxSliceMs,
+      "getStatus().maxSliceMs is still 0 after a full iteration. The walk ran " +
+        "and measured a slice, and nothing carried it to telemetry: DELETE THE " +
+        "recordSlice(...) CALL IN consumer.ts AND THIS IS THE ASSERTION THAT " +
+        "FAILS. Without it the number reaches the 200-chunk load as a zero, " +
+        "where tests/phase1-load.spec.ts treats a zero as an instrument failure.",
+    ).toBeGreaterThan(0);
+    expect(counters.processed).toBe(1);
+  });
+
+  it("reports the SAME number the analyses row persisted, to the exact float", async () => {
+    const p = plan([
+      { id: "r1", url: "https://x.test/app.js", bytes: body("slice", 200_000) },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { now: steppedClock(3) });
+
+    const sha = (await listObservations(fx.db, PROJECT))[0].sha256;
+    const row = await getAnalysis(fx.db, PROJECT, sha, DETECTOR_CORPUS_VERSION);
+
+    expect(
+      slimStatus().maxSliceMs,
+      "the in-memory maximum and analyses.max_slice_ms disagree. They are taken " +
+        "from the SAME walk result one statement apart precisely so they cannot.",
+    ).toBe(Number(row?.max_slice_ms));
+  });
+
+  it("is not lowered by a later, shorter artifact", async () => {
+    const slow = plan([
+      { id: "r1", url: "https://x.test/slow.js", bytes: body("slow", 200_000) },
+    ]);
+    slow.offer();
+    await runOnce(slow.overrides, { now: steppedClock(11) });
+    const peak = slimStatus().maxSliceMs;
+    expect(peak).toBeGreaterThan(0);
+
+    resetConsumerForTest();
+    const fast = plan([
+      { id: "r2", url: "https://x.test/fast.js", bytes: body("fast", 200_000) },
+    ]);
+    fast.offer();
+    await runOnce(fast.overrides, { now: steppedClock(1) });
+
+    expect(
+      slimStatus().maxSliceMs,
+      "a shorter slice lowered the maximum. The number answers 'what is the " +
+        "worst this plugin has done to the one thread', not 'what did it do " +
+        "most recently'.",
+    ).toBe(peak);
+    expect(counters.processed).toBe(2);
+  });
+
+  it("does NOT raise the maximum for an iteration whose analyses row was never written", async () => {
+    // A project change during the walk abandons the row. Recording the slice
+    // anyway would leave getStatus() describing work no analyses row records.
+    //
+    // The epoch is flipped BY THE WALK'S OWN CLOCK rather than by counting guard
+    // calls: `now` is read only inside `analyseAndFinish`, so "a read has
+    // happened" is a precise statement that the walk is under way, and it stays
+    // precise if somebody adds another guard upstream.
+    let inWalk = false;
+    let t = 0;
+    const now = (): number => {
+      const v = t;
+      t += 7;
+      if (t > 7) inWalk = true;
+      return v;
+    };
+    const p = plan([
+      { id: "r1", url: "https://x.test/app.js", bytes: body("gone", 200_000) },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, {
+      now,
+      projectEpoch: () => (inWalk ? 1 : 0),
+    });
+
+    expect(inWalk, "the walk never ran, so this case proves nothing.").toBe(
+      true,
+    );
+    expect(counters.abandonedOnProjectChange).toBeGreaterThan(0);
+
+    // The row was CLAIMED and never finished — non-terminal, which is exactly
+    // the state ERR-02 reconciles in Phase 2 and which Phase 1 leaves alone.
+    const sha = (await listObservations(fx.db, PROJECT))[0].sha256;
+    const row = await getAnalysis(fx.db, PROJECT, sha, DETECTOR_CORPUS_VERSION);
+    expect(
+      row?.scan_state,
+      "the analysis reached a terminal state, so the abandonment did not happen " +
+        "at the finishAnalysis step and this case is testing something else.",
+    ).toBe("pending");
+    expect(row?.max_slice_ms).toBeNull();
+
+    expect(
+      slimStatus().maxSliceMs,
+      "the in-memory maximum rose for an iteration that persisted no " +
+        "max_slice_ms column. getStatus() would then describe work no analyses " +
+        "row records.",
+    ).toBe(0);
   });
 });
 

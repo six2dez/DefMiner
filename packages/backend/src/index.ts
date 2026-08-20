@@ -26,8 +26,6 @@ import type { Database } from "sqlite";
 import { checkCompat, MIN_CAIDO } from "./compat";
 import {
   configurePassive,
-  type Counters,
-  createCounters,
   type EnqueueClock,
   onResponse,
   setPassiveReady,
@@ -44,12 +42,15 @@ import { listArtifacts } from "./store/artifacts";
 import { getDb, readSqliteVersion } from "./store/db";
 import { migrate } from "./store/migrations";
 import { listObservations } from "./store/observations";
+import { slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
 // durable failure recording is ERR-04 and the health surface is OBS-01, both
 // Phase 2. Phase 1's obligation is only that these exist and are REACHABLE, so
 // Phase 2 does not have to retrofit them through reviewed code.
-const counters: Counters = createCounters();
+//
+// The COUNTERS are NOT here. They live in telemetry.ts, as one object the hook
+// and the consumer increment directly; this file only projects them.
 let queue: BoundedQueue | undefined;
 const enqueuedAt: EnqueueClock = new Map();
 let db: Database | undefined;
@@ -78,7 +79,9 @@ function status(): Record<string, unknown> {
     // NULL, not "". An empty string is a project id that happens to be blank,
     // which is a different claim from "there is no project selected".
     projectId: currentProjectId(),
-    counters,
+    // `counters`, `maxSliceMs` and `lastError`, projected — never the live
+    // object, and never a payload of any kind (T-01-26).
+    ...slimStatus(),
     queueDepth: queue ? queue.depth : 0,
     queueCap: queue ? queue.cap : 0,
     queueOverflowCount: queue ? queue.overflowCount : 0,
@@ -162,10 +165,9 @@ export async function init(sdk: any): Promise<void> {
     });
 
     // 6 — exactly one consumer.
-    configurePassive({ queue, counters, enqueuedAt, admissionAllowed });
+    configurePassive({ queue, enqueuedAt, admissionAllowed });
     startConsumer(sdk, {
       queue,
-      counters,
       db,
       enqueuedAt,
       getProjectId: () => Promise.resolve(currentProjectId() ?? ""),

@@ -38,7 +38,7 @@ import { yieldToLoop } from "@defminer/engine/yield";
 import type { Database } from "sqlite";
 
 import { contentTypeOf } from "../hooks/admit";
-import type { Counters, EnqueueClock } from "../hooks/passive";
+import type { EnqueueClock } from "../hooks/passive";
 import {
   claimAnalysis,
   DETECTOR_CORPUS_VERSION,
@@ -49,6 +49,10 @@ import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
 import { sweepRetention } from "../store/retention";
 import { getRetentionBounds } from "../store/settings";
+// THE counter object, and `recordSlice` — the two halves of CORE-10's wiring.
+// Imported rather than injected: there is exactly one counter object in this
+// plugin (plan 01-05), and a dependency-injected one would be a second.
+import { counters, recordError, recordSlice } from "../telemetry";
 
 /**
  * How long to wait before re-checking an EMPTY queue.
@@ -83,7 +87,6 @@ function defaultClock(): () => number {
 
 export type ConsumerDeps = {
   queue: BoundedQueue;
-  counters: Counters;
   db: Database;
   /** Resolved lazily and cached by the caller: `init()` can run before a project
    *  is selected, and with none selected the proxy fails anyway. Returns an empty
@@ -251,8 +254,8 @@ export function startConsumer(
         bounds,
         Date.now(),
       );
-      deps.counters.retentionSweeps++;
-      deps.counters.retentionDeleted += summary.deleted;
+      counters.retentionSweeps++;
+      counters.retentionDeleted += summary.deleted;
       if (summary.moreWork) {
         // Picked up at the NEXT cadence boundary, deliberately.
         log(
@@ -266,13 +269,14 @@ export function startConsumer(
     } catch (e) {
       // A sweep must never take the loop down with it: the database growing is a
       // problem, and the plugin stopping is a bigger one.
-      deps.counters.consumerErrors++;
+      counters.consumerErrors++;
+      recordError(e);
       log("retention sweep failed: " + String(e).slice(0, 160));
     }
   }
 
   async function handleOne(entry: Entry): Promise<void> {
-    const c = deps.counters;
+    const c = counters;
 
     // CORE-09. Captured BEFORE the reload, not after: this entry was admitted
     // under whatever project was active when the queue took it, and the reload
@@ -470,12 +474,22 @@ export function startConsumer(
         /* Phase 3 puts the detector here. */
       },
     });
-    if (result.partial) deps.counters.analysisPartial++;
+    if (result.partial) counters.analysisPartial++;
     if (!stillCurrent()) {
-      deps.counters.abandonedOnProjectChange++;
+      counters.abandonedOnProjectChange++;
       log("project changed during the walk; not finishing the analysis row");
       return;
     }
+    // --- CORE-10's WIRE -----------------------------------------------------
+    // The in-memory maximum `getStatus()` reports and the per-artifact
+    // `analyses.max_slice_ms` column take the SAME number from the SAME walk
+    // result, one statement apart, so the two cannot drift into disagreeing.
+    // PAIRED with the write rather than merely near it: an iteration that does
+    // not persist the column must not raise the in-memory maximum either, or
+    // `getStatus().maxSliceMs` starts describing work no `analyses` row records.
+    // Delete this line and `consumer.spec.ts` fails — that negative
+    // demonstration was RUN, not described.
+    recordSlice(result.maxSliceMs);
     const finished = await finishAnalysis(
       deps.db,
       projectId,
@@ -488,7 +502,7 @@ export function startConsumer(
       null,
     );
     if (!finished.ok) {
-      deps.counters.storeErrors++;
+      counters.storeErrors++;
       log("ANALYSIS_FINISH_FAILED " + finished.error);
     }
   }
@@ -510,7 +524,8 @@ export function startConsumer(
           // One poisoned response must never stop everything after it, and Caido
           // would report nothing if it did: HANDLER_ERROR_SURFACED is "neither",
           // so this counter and this log line are the entire error surface.
-          deps.counters.consumerErrors++;
+          counters.consumerErrors++;
+          recordError(e);
           log("consumer iteration failed: " + String(e).slice(0, 160));
         } finally {
           deps.enqueuedAt.delete(entry.id);
@@ -546,7 +561,8 @@ export function startConsumer(
     timer = setTimeout(() => {
       drain()
         .catch((e) => {
-          deps.counters.consumerErrors++;
+          counters.consumerErrors++;
+          recordError(e);
           log("drain failed: " + String(e).slice(0, 160));
         })
         .then(schedule, schedule);
