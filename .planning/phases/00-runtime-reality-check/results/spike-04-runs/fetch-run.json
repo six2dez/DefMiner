@@ -1,0 +1,32 @@
+{
+  "variant": "fetch",
+  "run_id": "20260820T163755Z-29196",
+  "listen": "127.0.0.1:8981",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T163755Z-29196",
+  "exit_code": 137,
+  "project_persistence": "temporary",
+  "target": "http://127.0.0.1:8092/_synth?bytes=2048&status=200",
+  "runtime_session": {
+    "runtime_session_id": "rs-mt1quxbp-57ozsunq",
+    "sends_this_runtime": 0,
+    "retained_wrappers": 0,
+    "ready": true,
+    "at": 1787243876966,
+    "qjs": 49.98400002717972
+  },
+  "failure_mode": "clean",
+  "sends_completed": 2000,
+  "failed_at_seq": null,
+  "failure_reason": "reached the 2000 cap with every send completing",
+  "host_alive_at_end": true,
+  "retain_wrappers": false,
+  "kill_phase_start_seq": 2001,
+  "killed_in_flight": true
+}

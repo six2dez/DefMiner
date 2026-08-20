@@ -1,0 +1,15 @@
+{
+  "id": "defminer-tier0-send",
+  "name": "DefMiner Tier-0 Send Probe",
+  "version": "0.0.1",
+  "description": "Phase 0 SPIKE-04/SPIKE-04b probe: sdk.requests.send() cliff with a write-ahead journal",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "tier0-send-backend",
+      "name": "Tier0 Send Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}

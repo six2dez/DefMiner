@@ -1,0 +1,462 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-04",
+  "status": "pass",
+  "recorded_at": "2026-08-20T16:44:39Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T163653Z-19546",
+    "20260820T163724Z-7562",
+    "20260820T163755Z-29196"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 3.64
+  },
+  "instances": [
+    {
+      "run_id": "20260820T163653Z-19546",
+      "data_path": "/tmp/defminer-probe-20260820T163653Z-19546",
+      "listen": "127.0.0.1:8984",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": "temporary"
+    },
+    {
+      "run_id": "20260820T163724Z-7562",
+      "data_path": "/tmp/defminer-probe-20260820T163724Z-7562",
+      "listen": "127.0.0.1:8985",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": "temporary"
+    },
+    {
+      "run_id": "20260820T163755Z-29196",
+      "data_path": "/tmp/defminer-probe-20260820T163755Z-29196",
+      "listen": "127.0.0.1:8981",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": "temporary"
+    }
+  ],
+  "method": "One fresh version-asserted instance per variant (save-true 8984, save-false 8985, fetch 8981), each with a temporary project selected and the Tier-0 send probe installed. Sends issued in batches of ten against a local origin serving a 2048-byte synthetic body, to a 2000-send cap. Before EVERY send the probe commits a write-ahead journal row to sdk.meta.db() carrying the runtime session id, sequence, normalised candidate with query VALUES redacted, and a start timestamp, updating it with status and timing on completion. When the capped loop finished with the host still alive, a further large batch was fired and the host SIGKILLed mid-batch, so the journal is validated against a real abrupt death with no unwind rather than a simulated one. stdout, stderr and the host log captured separately per run; the journal database plus its -wal and -shm sidecars copied out before teardown and read back offline.",
+  "measurements": [
+    {
+      "name": "send_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "save-true",
+      "stat": "count",
+      "notes": "failure mode clean: reached the 2000 cap with every send completing; exit_code=137; run 20260820T163653Z-19546 on 127.0.0.1:8984"
+    },
+    {
+      "name": "send_failure_mode",
+      "value": "clean",
+      "unit": "enum(clean|stall|abort|partial|error)",
+      "variant": "save-true",
+      "stat": "point",
+      "notes": "host alive at the end of the capped loop: True"
+    },
+    {
+      "name": "host_exit_code",
+      "value": 137,
+      "unit": "exit code",
+      "variant": "save-true",
+      "stat": "point",
+      "notes": "134 == SIGABRT == the caido/caido#2211 signature; 137 == our own SIGKILL. A `fail` with no exit code would mean the CAPTURE was wrong, not that the process merely vanished."
+    },
+    {
+      "name": "abort_assertion_lines_in_raw_channels",
+      "value": 0,
+      "unit": "count",
+      "variant": "save-true",
+      "stat": "count",
+      "notes": "stdout, stderr and the structured host log scanned separately, because a C-level abort() under panic=abort never reaches the structured log. no matching lines"
+    },
+    {
+      "name": "journal_rows_written",
+      "value": 2802,
+      "unit": "rows",
+      "variant": "save-true",
+      "stat": "count",
+      "notes": "finalised 2802, unfinalised 0, ok 2802, errors 0. Includes the kill-phase rows from seq 2001 onward."
+    },
+    {
+      "name": "send_latency_ms",
+      "value": 0.547,
+      "unit": "ms",
+      "variant": "save-true",
+      "stat": "median",
+      "n": 2802,
+      "p95": 0.935,
+      "notes": "max 3.372 ms; first-10 median 0.678 ms vs last-10 median 0.418 ms"
+    },
+    {
+      "name": "send_latency_drift_x",
+      "value": 0.617,
+      "unit": "x",
+      "variant": "save-true",
+      "stat": "ratio",
+      "notes": "last-10 median / first-10 median. A rising tail is what a leak looks like before it becomes a stall and then an abort. At or below 1 there is no accumulation signal at all."
+    },
+    {
+      "name": "batches_issued",
+      "value": 200,
+      "unit": "count",
+      "variant": "save-true",
+      "stat": "count",
+      "notes": "sends issued in increments of ten, so a cliff would be located to within a batch rather than inferred from one long call"
+    },
+    {
+      "name": "killed_in_flight",
+      "value": true,
+      "unit": "boolean",
+      "variant": "save-true",
+      "stat": "point",
+      "notes": "a 3000-send batch was fired from seq 2001 and the host SIGKILLed mid-batch, so the journal is validated against a real abrupt death with no unwind rather than a simulated one"
+    },
+    {
+      "name": "journal_last_inflight_recovered",
+      "value": "no-send-in-flight-at-death",
+      "unit": "enum(recovered-exact-inflight-send|no-send-in-flight-at-death|open-row-did-not-match-next-send|host-never-died-abruptly)",
+      "variant": "save-true",
+      "stat": "point",
+      "notes": "read back from the preserved database (.db plus its -wal and -shm sidecars): 0 unfinalised row(s); in-flight seq None against last finalised seq 2802; candidate None"
+    },
+    {
+      "name": "journal_candidate_redacted",
+      "value": true,
+      "unit": "boolean",
+      "variant": "save-true",
+      "stat": "point",
+      "notes": "ACTIVE-02 requires query VALUES redacted in the persisted record. The candidate written to disk is checked, not the intent described: no open row; every finalised row carries the same normalised form"
+    },
+    {
+      "name": "distinct_runtime_sessions_in_journal",
+      "value": 1,
+      "unit": "count",
+      "variant": "save-true",
+      "stat": "count",
+      "notes": "1 means every send in this variant ran in ONE runtime instantiation, which is what makes a cumulative-leak measurement meaningful"
+    },
+    {
+      "name": "send_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "save-false",
+      "stat": "count",
+      "notes": "failure mode clean: reached the 2000 cap with every send completing; exit_code=137; run 20260820T163724Z-7562 on 127.0.0.1:8985"
+    },
+    {
+      "name": "send_failure_mode",
+      "value": "clean",
+      "unit": "enum(clean|stall|abort|partial|error)",
+      "variant": "save-false",
+      "stat": "point",
+      "notes": "host alive at the end of the capped loop: True"
+    },
+    {
+      "name": "host_exit_code",
+      "value": 137,
+      "unit": "exit code",
+      "variant": "save-false",
+      "stat": "point",
+      "notes": "134 == SIGABRT == the caido/caido#2211 signature; 137 == our own SIGKILL. A `fail` with no exit code would mean the CAPTURE was wrong, not that the process merely vanished."
+    },
+    {
+      "name": "abort_assertion_lines_in_raw_channels",
+      "value": 0,
+      "unit": "count",
+      "variant": "save-false",
+      "stat": "count",
+      "notes": "stdout, stderr and the structured host log scanned separately, because a C-level abort() under panic=abort never reaches the structured log. no matching lines"
+    },
+    {
+      "name": "journal_rows_written",
+      "value": 2656,
+      "unit": "rows",
+      "variant": "save-false",
+      "stat": "count",
+      "notes": "finalised 2655, unfinalised 1, ok 2655, errors 0. Includes the kill-phase rows from seq 2001 onward."
+    },
+    {
+      "name": "send_latency_ms",
+      "value": 0.292,
+      "unit": "ms",
+      "variant": "save-false",
+      "stat": "median",
+      "n": 2655,
+      "p95": 0.496,
+      "notes": "max 31.28 ms; first-10 median 0.337 ms vs last-10 median 0.197 ms"
+    },
+    {
+      "name": "send_latency_drift_x",
+      "value": 0.585,
+      "unit": "x",
+      "variant": "save-false",
+      "stat": "ratio",
+      "notes": "last-10 median / first-10 median. A rising tail is what a leak looks like before it becomes a stall and then an abort. At or below 1 there is no accumulation signal at all."
+    },
+    {
+      "name": "batches_issued",
+      "value": 200,
+      "unit": "count",
+      "variant": "save-false",
+      "stat": "count",
+      "notes": "sends issued in increments of ten, so a cliff would be located to within a batch rather than inferred from one long call"
+    },
+    {
+      "name": "killed_in_flight",
+      "value": true,
+      "unit": "boolean",
+      "variant": "save-false",
+      "stat": "point",
+      "notes": "a 3000-send batch was fired from seq 2001 and the host SIGKILLed mid-batch, so the journal is validated against a real abrupt death with no unwind rather than a simulated one"
+    },
+    {
+      "name": "journal_last_inflight_recovered",
+      "value": "recovered-exact-inflight-send",
+      "unit": "enum(recovered-exact-inflight-send|no-send-in-flight-at-death|open-row-did-not-match-next-send|host-never-died-abruptly)",
+      "variant": "save-false",
+      "stat": "point",
+      "notes": "read back from the preserved database (.db plus its -wal and -shm sidecars): 1 unfinalised row(s); in-flight seq 2656 against last finalised seq 2655; candidate http://127.0.0.1:8092/_synth?bytes=<redacted>&status=<redacted>"
+    },
+    {
+      "name": "journal_candidate_redacted",
+      "value": true,
+      "unit": "boolean",
+      "variant": "save-false",
+      "stat": "point",
+      "notes": "ACTIVE-02 requires query VALUES redacted in the persisted record. The candidate written to disk is checked, not the intent described: http://127.0.0.1:8092/_synth?bytes=<redacted>&status=<redacted>"
+    },
+    {
+      "name": "distinct_runtime_sessions_in_journal",
+      "value": 1,
+      "unit": "count",
+      "variant": "save-false",
+      "stat": "count",
+      "notes": "1 means every send in this variant ran in ONE runtime instantiation, which is what makes a cumulative-leak measurement meaningful"
+    },
+    {
+      "name": "send_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "fetch",
+      "stat": "count",
+      "notes": "failure mode clean: reached the 2000 cap with every send completing; exit_code=137; run 20260820T163755Z-29196 on 127.0.0.1:8981"
+    },
+    {
+      "name": "send_failure_mode",
+      "value": "clean",
+      "unit": "enum(clean|stall|abort|partial|error)",
+      "variant": "fetch",
+      "stat": "point",
+      "notes": "host alive at the end of the capped loop: True"
+    },
+    {
+      "name": "host_exit_code",
+      "value": 137,
+      "unit": "exit code",
+      "variant": "fetch",
+      "stat": "point",
+      "notes": "134 == SIGABRT == the caido/caido#2211 signature; 137 == our own SIGKILL. A `fail` with no exit code would mean the CAPTURE was wrong, not that the process merely vanished."
+    },
+    {
+      "name": "abort_assertion_lines_in_raw_channels",
+      "value": 0,
+      "unit": "count",
+      "variant": "fetch",
+      "stat": "count",
+      "notes": "stdout, stderr and the structured host log scanned separately, because a C-level abort() under panic=abort never reaches the structured log. no matching lines"
+    },
+    {
+      "name": "journal_rows_written",
+      "value": 3421,
+      "unit": "rows",
+      "variant": "fetch",
+      "stat": "count",
+      "notes": "finalised 3421, unfinalised 0, ok 3421, errors 0. Includes the kill-phase rows from seq 2001 onward."
+    },
+    {
+      "name": "send_latency_ms",
+      "value": 0.146,
+      "unit": "ms",
+      "variant": "fetch",
+      "stat": "median",
+      "n": 3421,
+      "p95": 0.297,
+      "notes": "max 82.403 ms; first-10 median 0.166 ms vs last-10 median 0.133 ms"
+    },
+    {
+      "name": "send_latency_drift_x",
+      "value": 0.801,
+      "unit": "x",
+      "variant": "fetch",
+      "stat": "ratio",
+      "notes": "last-10 median / first-10 median. A rising tail is what a leak looks like before it becomes a stall and then an abort. At or below 1 there is no accumulation signal at all."
+    },
+    {
+      "name": "batches_issued",
+      "value": 200,
+      "unit": "count",
+      "variant": "fetch",
+      "stat": "count",
+      "notes": "sends issued in increments of ten, so a cliff would be located to within a batch rather than inferred from one long call"
+    },
+    {
+      "name": "killed_in_flight",
+      "value": true,
+      "unit": "boolean",
+      "variant": "fetch",
+      "stat": "point",
+      "notes": "a 3000-send batch was fired from seq 2001 and the host SIGKILLed mid-batch, so the journal is validated against a real abrupt death with no unwind rather than a simulated one"
+    },
+    {
+      "name": "journal_last_inflight_recovered",
+      "value": "no-send-in-flight-at-death",
+      "unit": "enum(recovered-exact-inflight-send|no-send-in-flight-at-death|open-row-did-not-match-next-send|host-never-died-abruptly)",
+      "variant": "fetch",
+      "stat": "point",
+      "notes": "read back from the preserved database (.db plus its -wal and -shm sidecars): 0 unfinalised row(s); in-flight seq None against last finalised seq 3421; candidate None"
+    },
+    {
+      "name": "journal_candidate_redacted",
+      "value": true,
+      "unit": "boolean",
+      "variant": "fetch",
+      "stat": "point",
+      "notes": "ACTIVE-02 requires query VALUES redacted in the persisted record. The candidate written to disk is checked, not the intent described: no open row; every finalised row carries the same normalised form"
+    },
+    {
+      "name": "distinct_runtime_sessions_in_journal",
+      "value": 1,
+      "unit": "count",
+      "variant": "fetch",
+      "stat": "count",
+      "notes": "1 means every send in this variant ran in ONE runtime instantiation, which is what makes a cumulative-leak measurement meaningful"
+    },
+    {
+      "name": "distinct_run_ids",
+      "value": 3,
+      "unit": "count",
+      "stat": "count",
+      "notes": "#2211 is a CUMULATIVE refcount leak across a runtime's lifetime. Sharing an instance would pollute variants 2 and 3 with variant 1's leaked references and the later cliffs would be fiction. Runs: 20260820T163653Z-19546, 20260820T163724Z-7562, 20260820T163755Z-29196"
+    },
+    {
+      "name": "journal_false_positive_open_rows",
+      "value": 0,
+      "unit": "count",
+      "stat": "count",
+      "notes": "across 4 abrupt host deaths the journal produced an open row that did NOT correspond to the next send this many times. 2 deaths caught a genuine in-flight send; 2 landed between sends and correctly left no open row at all. Zero misses and zero false positives is the contract ACTIVE-13's crash detector needs \u2014 an invented open row would make it quarantine work that never started."
+    },
+    {
+      "name": "unmitigated_shape_send_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "retain-control",
+      "stat": "count",
+      "notes": "the NAIVE wrapper shape \u2014 every RequestSpec, payload, Request, Response and Body retained rather than reduced to primitives \u2014 on its own fresh instance (20260820T163825Z-24994, 127.0.0.1:8985). 10000 live wrappers held at the end. Failure mode clean, exit 137. Full detail is recorded in SPIKE-04b, whose question it answers a precondition for."
+    },
+    {
+      "name": "unmitigated_shape_latency_drift_x",
+      "value": 0.726,
+      "unit": "x",
+      "variant": "retain-control",
+      "stat": "ratio",
+      "notes": "the control's own accumulation signal, directly comparable to the disciplined runs above because everything else is byte-identical"
+    }
+  ],
+  "probe": {
+    "tier": "raw-zip",
+    "package_version": "0.0.1"
+  },
+  "containment": {
+    "escaped": false,
+    "escape_paths": []
+  },
+  "verdict": {
+    "answer": "Send cliffs on 0.57.1, one fresh instance per variant: save-true 2000 sends (clean, exit 137), save-false 2000 sends (clean, exit 137), fetch 2000 sends (clean, exit 137). Overall failure mode: clean. Variants save-true, save-false, fetch reached the 2000-send cap without failing, so those figures are FLOORS \u2014 the cliff is somewhere above the cap, not at it. Reading them as cliffs would be the same category error as reading an undefined rate as zero. A CONTROL on a fifth fresh instance ran the naive wrapper shape \u2014 every wrapper retained instead of reduced to primitives \u2014 and also completed 2000 sends cleanly holding 10000 live wrappers, so the clean result is not an artefact of the probe following ACTIVE-09's discipline. caido/caido#2211's ~54 clean / ~80 stall / ~120 abort DID NOT REPRODUCE on this host at 16x the reported abort threshold, in either wrapper shape, with no latency drift in any run. The write-ahead journal ACTIVE-02 and ACTIVE-13 depend on was validated against 4 real abrupt host deaths: 2 caught the exact in-flight send by sequence and redacted candidate, 2 correctly left no open row because the death landed between sends, and 0 produced a spurious one.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "SEND_CLIFF_SAVE_TRUE",
+        "value": 2000,
+        "unit": "sends completed with no failure (FLOOR \u2014 the cap, not a cliff)",
+        "confidence": "MEDIUM",
+        "status": "resolved",
+        "rationale": "2000 sends on a fresh instance (20260820T163653Z-19546, 127.0.0.1:8984) dedicated to this variant, issued in batches of ten against a local origin. Failure mode clean: reached the 2000 cap with every send completing. Host exit code 137 (137 == our own SIGKILL teardown); 0 abort-assertion lines across separately captured stdout, stderr and host log. Latency drift last-10/first-10 = 0.617x, so there is no accumulation signal either. caido/caido#2211 reports ~54 clean / ~80 stall / ~120 abort against this exact build; none of that reproduced here. This is a FLOOR: treat it as 'at least this many', never as a cliff."
+      },
+      {
+        "id": "SEND_CLIFF_SAVE_FALSE",
+        "value": 2000,
+        "unit": "sends completed with no failure (FLOOR \u2014 the cap, not a cliff)",
+        "confidence": "MEDIUM",
+        "status": "resolved",
+        "rationale": "2000 sends on a fresh instance (20260820T163724Z-7562, 127.0.0.1:8985) dedicated to this variant, issued in batches of ten against a local origin. Failure mode clean: reached the 2000 cap with every send completing. Host exit code 137 (137 == our own SIGKILL teardown); 0 abort-assertion lines across separately captured stdout, stderr and host log. Latency drift last-10/first-10 = 0.585x, so there is no accumulation signal either. caido/caido#2211 reports ~54 clean / ~80 stall / ~120 abort against this exact build; none of that reproduced here. This is a FLOOR: treat it as 'at least this many', never as a cliff."
+      },
+      {
+        "id": "SEND_CLIFF_FETCH",
+        "value": 2000,
+        "unit": "sends completed with no failure (FLOOR \u2014 the cap, not a cliff)",
+        "confidence": "MEDIUM",
+        "status": "resolved",
+        "rationale": "2000 sends on a fresh instance (20260820T163755Z-29196, 127.0.0.1:8981) dedicated to this variant, issued in batches of ten against a local origin. Failure mode clean: reached the 2000 cap with every send completing. Host exit code 137 (137 == our own SIGKILL teardown); 0 abort-assertion lines across separately captured stdout, stderr and host log. Latency drift last-10/first-10 = 0.801x, so there is no accumulation signal either. caido/caido#2211 reports ~54 clean / ~80 stall / ~120 abort against this exact build; none of that reproduced here. This is a FLOOR: treat it as 'at least this many', never as a cliff."
+      },
+      {
+        "id": "SEND_FAILURE_MODE",
+        "value": "clean",
+        "unit": "enum(clean|stall|abort)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Per variant: save-true=clean(exit 137), save-false=clean(exit 137), fetch=clean(exit 137). The three are distinguished because the issue distinguishes them and they imply different mitigations: a clean completion needs none, a stall needs a latency-triggered kill switch (ACTIVE-14), and an abort needs crash recovery (ACTIVE-13) because the host is gone with no unwind. Variants save-true, save-false, fetch reached the 2000-send cap without failing, so those figures are FLOORS \u2014 the cliff is somewhere above the cap, not at it. Reading them as cliffs would be the same category error as reading an undefined rate as zero."
+      }
+    ],
+    "if_wrong": "The consequential direction here is that the cliff is REAL and simply out of reach of this apparatus. #2211 is open and filed against this exact build, so the safe reading of a clean run is 'not reproduced under these conditions', not 'does not exist'. Three conditions differ from a real DefMiner workload and each could move the number: bodies were 2048 synthetic bytes rather than a multi-hundred-kilobyte `.map`; sends were strictly serialised one at a time; and the host was otherwise idle. If any of those is what gates the leak, ACTIVE-01's default-on unbudgeted probing reaches the abort on ordinary SPAs and ACTIVE-14's kill switch has to become a real cap rather than a diagnostic warning. Nothing in the design relaxes on the strength of this result: ACTIVE-13's crash recovery and ACTIVE-02's journal are still required, because `panic = \"abort\"` means the failure has no unwind at whatever count it arrives, and because a host can die for reasons that have nothing to do with #2211 \u2014 which is exactly what the SIGKILL validation above exercised. Phase 8 should re-run this with real `.map` bodies and concurrent sends before treating the floor as headroom."
+  },
+  "requirements_affected": [
+    "SPIKE-04",
+    "ACTIVE-01",
+    "ACTIVE-02",
+    "ACTIVE-09",
+    "ACTIVE-12",
+    "ACTIVE-13",
+    "ACTIVE-14"
+  ],
+  "artifacts": [
+    "probe/tier0-send/backend/script.js",
+    "scripts/spike/send-cliff.sh",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/save-true-journal.json",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/save-false-journal.json",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/fetch-journal.json"
+  ],
+  "notes": "Three variants, three fresh instances, three distinct run ids \u2014 asserted by the gate rather than described, because a cliff measured on a runtime already polluted by a prior variant is indistinguishable from a real one in the output. PROJECT PERSISTENCE IS OUT OF SCOPE: every instance is guest-authenticated and a guest can create only temporary projects (createProject(temporary:false) returns PermissionDeniedUserError), so all three record project_persistence=temporary. Proving that a PERSISTENT project survives a #2211 abort would need a PAT-authenticated instance and is not attempted here. A DEFECT IN THE FIRST RUN OF THIS PROBE IS ITSELF A PHASE 1 FINDING: the journal originally keyed its UPDATE on `SELECT last_insert_rowid()`, which silently stops matching once sdk.meta.db()'s connection POOL grows past its first connection \u2014 the insert and the rowid query land on different connections. Rows kept being inserted and every send kept succeeding, but finalisation stopped dead after a contiguous prefix of 5, 6 and 188 rows of 400 across the three variants, with no error anywhere. STORE-01..07 must key writes on a natural key; last_insert_rowid() is unusable on this runtime."
+}

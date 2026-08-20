@@ -42,3 +42,15 @@ tier1/*/dist/
 .planning/phases/00-runtime-reality-check/results/runs/*/raw/webroot/
 .planning/phases/00-runtime-reality-check/results/runs/*/raw/chromium-profile/
 .planning/phases/00-runtime-reality-check/results/runs/*/raw/*.crt
+
+# Raw host-log copies preserved next to the SPIKE-04 journals by
+# scripts/spike/send-cliff.sh. They are copied out of the data path BEFORE
+# teardown deletes it, because a C-level abort under panic="abort" lands on
+# stderr and nowhere else and must be scannable offline — but they are the same
+# raw host logs as runs/*/*.log and ship for the same reason: never. Everything
+# a result legitimately needs from them (the abort-signature scan, its hit
+# counts and samples) is extracted into results/SPIKE-04*.json.
+# The journal .db files DO ship: they are the evidence, they are small, and the
+# only URL they carry is the probe's own synthetic target with query values
+# already redacted by the probe.
+.planning/phases/00-runtime-reality-check/results/spike-04-runs/*/*.log

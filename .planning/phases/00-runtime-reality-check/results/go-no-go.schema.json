@@ -113,7 +113,7 @@
           },
           "spike": {
             "type": "string",
-            "pattern": "^SPIKE-[0-9]{2}$"
+            "pattern": "^SPIKE-[0-9]{2}[a-z]?$"
           },
           "confidence": {
             "enum": [
@@ -170,7 +170,7 @@
         "properties": {
           "spike": {
             "type": "string",
-            "pattern": "^SPIKE-[0-9]{2}$"
+            "pattern": "^SPIKE-[0-9]{2}[a-z]?$"
           },
           "question": {
             "type": "string",

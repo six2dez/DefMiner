@@ -1,0 +1,270 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-04b",
+  "status": "pass",
+  "recorded_at": "2026-08-20T16:44:39Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T163916Z-20863",
+    "20260820T163825Z-24994"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 3.64
+  },
+  "instances": [
+    {
+      "run_id": "20260820T163916Z-20863",
+      "data_path": "/tmp/defminer-probe-20260820T163916Z-20863",
+      "listen": "127.0.0.1:8983",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": "temporary"
+    },
+    {
+      "run_id": "20260820T163825Z-24994",
+      "data_path": "/tmp/defminer-probe-20260820T163825Z-24994",
+      "listen": "127.0.0.1:8985",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": "temporary"
+    }
+  ],
+  "method": "A fresh version-asserted instance pinned to 127.0.0.1:8983 \u2014 not 8982, which SPIKE-01 stage 2 leaves wedged. 3 legs of up to 2000 save:true sends each, with togglePlugin(enabled:false) then togglePlugin(enabled:true) between legs and a readiness poll rather than a sleep. The probe mints a runtime session id per module instantiation and keeps a per-runtime send counter, so a change in the id and a reset of the counter are direct evidence that the QuickJS runtime was torn down and re-created. No retry loop against any lifecycle operation. A SECOND fresh instance carries the control that makes the question answerable at all: the same send loop with every wrapper RETAINED rather than reduced to primitives, which is the unmitigated shape #2211 describes and the one SPIKE-04's ACTIVE-09-disciplined variants deliberately avoid.",
+  "measurements": [
+    {
+      "name": "leg_sends_completed",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "leg-1",
+      "stat": "count",
+      "notes": "cumulative 2000, mode clean"
+    },
+    {
+      "name": "runtime_session_id_at_leg_start",
+      "value": "rs-mt1qwo0s-odugby5k",
+      "unit": "string",
+      "variant": "leg-1",
+      "stat": "point",
+      "notes": "the probe's per-runtime send counter read at leg start: 0; at leg end: 2000"
+    },
+    {
+      "name": "per_runtime_send_counter_at_leg_start",
+      "value": 0,
+      "unit": "sends",
+      "variant": "leg-1",
+      "stat": "point",
+      "notes": "0 at the start of a leg that follows a toggle means the module was re-evaluated \u2014 module state did not merely reset, it was rebuilt"
+    },
+    {
+      "name": "leg_sends_completed",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "leg-2",
+      "stat": "count",
+      "notes": "cumulative 4000, mode clean"
+    },
+    {
+      "name": "runtime_session_id_at_leg_start",
+      "value": "rs-mt1qx23z-anufg7n3",
+      "unit": "string",
+      "variant": "leg-2",
+      "stat": "point",
+      "notes": "the probe's per-runtime send counter read at leg start: 0; at leg end: 2000"
+    },
+    {
+      "name": "per_runtime_send_counter_at_leg_start",
+      "value": 0,
+      "unit": "sends",
+      "variant": "leg-2",
+      "stat": "point",
+      "notes": "0 at the start of a leg that follows a toggle means the module was re-evaluated \u2014 module state did not merely reset, it was rebuilt"
+    },
+    {
+      "name": "leg_sends_completed",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "leg-3",
+      "stat": "count",
+      "notes": "cumulative 6000, mode clean"
+    },
+    {
+      "name": "runtime_session_id_at_leg_start",
+      "value": "rs-mt1qxlzq-klyy6qds",
+      "unit": "string",
+      "variant": "leg-3",
+      "stat": "point",
+      "notes": "the probe's per-runtime send counter read at leg start: 0; at leg end: 2000"
+    },
+    {
+      "name": "per_runtime_send_counter_at_leg_start",
+      "value": 0,
+      "unit": "sends",
+      "variant": "leg-3",
+      "stat": "point",
+      "notes": "0 at the start of a leg that follows a toggle means the module was re-evaluated \u2014 module state did not merely reset, it was rebuilt"
+    },
+    {
+      "name": "distinct_runtime_sessions_across_toggles",
+      "value": 3,
+      "unit": "count",
+      "stat": "count",
+      "n": 3,
+      "notes": "the probe mints a session id per MODULE INSTANTIATION. A new id after a toggle proves the QuickJS runtime was torn down and re-created; the same id would prove it was not. Observed: rs-mt1qwo0s-odugby5k, rs-mt1qx23z-anufg7n3, rs-mt1qxlzq-klyy6qds"
+    },
+    {
+      "name": "toggle_recreates_runtime",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "derived from the session ids above and corroborated by the per-runtime send counter resetting to 0 at every leg start (True) \u2014 not from the host log's wording, which says only that an executor stopped"
+    },
+    {
+      "name": "toggle_mutation_returned_cleanly",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "togglePlugin returned error:null on every off and on call against a HEALTHY plugin. The contrast with SPIKE-01 is the point: the same mutation against a WEDGED plugin never returned at all, so a toggle is a usable primitive only while the runtime is still responsive"
+    },
+    {
+      "name": "total_sends_across_toggles",
+      "value": 6000,
+      "unit": "sends",
+      "stat": "count",
+      "notes": "3 legs of up to 2000 sends each on ONE instance, with a plugin toggle between legs, repeated so a one-off is distinguishable from a real reset"
+    },
+    {
+      "name": "single_runtime_reference_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "stat": "point",
+      "notes": "reference source: save-true-floor-no-cliff. The question is whether the toggled instance materially exceeds it"
+    },
+    {
+      "name": "sends_beyond_reference_ratio",
+      "value": 3.0,
+      "unit": "x",
+      "stat": "ratio",
+      "notes": "total surviving sends across toggles divided by the single-runtime reference"
+    },
+    {
+      "name": "host_exit_code",
+      "value": 137,
+      "unit": "exit code",
+      "stat": "point",
+      "notes": "134 == SIGABRT == the #2211 signature; 137 == our own SIGKILL teardown"
+    },
+    {
+      "name": "abort_assertion_lines_in_raw_channels",
+      "value": 0,
+      "unit": "count",
+      "stat": "count",
+      "notes": "no matching lines"
+    },
+    {
+      "name": "journal_rows_written",
+      "value": 6000,
+      "unit": "rows",
+      "stat": "count",
+      "notes": "across 3 runtime session(s) in ONE database"
+    },
+    {
+      "name": "journal_survives_plugin_toggle",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "rows from more than one runtime session in the same sdk.meta.db() prove the plugin database outlives a toggle, so a crash marker written before a toggle is still readable after it. That is the half of ACTIVE-13 a toggle does NOT destroy, and it has to be true for a toggle to be usable as recovery at all"
+    },
+    {
+      "name": "unmitigated_shape_send_cliff",
+      "value": 2000,
+      "unit": "sends",
+      "variant": "retain-control",
+      "stat": "count",
+      "notes": "the precondition for this whole question. SPIKE-04's three variants follow ACTIVE-09's discipline, which IS the mitigation for #2211's live wrapper pressure, so a clean run there cannot distinguish 'no leak' from 'leak successfully mitigated'. This run is byte-identical except that every wrapper is retained. Own fresh instance (20260820T163825Z-24994, 127.0.0.1:8985). Failure mode clean, exit 137."
+    },
+    {
+      "name": "unmitigated_shape_live_wrappers_held",
+      "value": 10000,
+      "unit": "wrappers",
+      "variant": "retain-control",
+      "stat": "max",
+      "notes": "RequestSpec, payload, Request, Response and Body per send, all reachable from a module-level array and never released"
+    },
+    {
+      "name": "unmitigated_shape_latency_drift_x",
+      "value": 0.726,
+      "unit": "x",
+      "variant": "retain-control",
+      "stat": "ratio",
+      "notes": "at or below 1 there is no accumulation signal even in the naive shape"
+    },
+    {
+      "name": "leak_observable_to_reset",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "false means no leak was reachable within the cap in EITHER wrapper shape, so the reset itself could not be observed however the toggle behaves"
+    }
+  ],
+  "probe": {
+    "tier": "raw-zip",
+    "package_version": "0.0.1"
+  },
+  "containment": {
+    "escaped": false,
+    "escape_paths": []
+  },
+  "verdict": {
+    "answer": "Toggling the plugin off and on RE-CREATES the QuickJS runtime: 3 distinct module instantiations across 3 legs, the probe's per-runtime send counter back at 0 each time (True), and togglePlugin returning error:null on every call. The plugin database survives it \u2014 6000 rows spanning 3 sessions in one db \u2014 so a crash marker written before a toggle is still readable after it. 6000 sends completed across the legs against a reference of 2000. The reset of #2211's leak specifically could not be observed, because a control on its own fresh instance running the NAIVE wrapper shape \u2014 every wrapper retained \u2014 also completed 2000 sends cleanly. PLUGIN_TOGGLE_RESETS_LEAK = runtime-recreated-no-leak-observed.",
+    "confidence": "MEDIUM",
+    "thresholds_set": [
+      {
+        "id": "PLUGIN_TOGGLE_RESETS_LEAK",
+        "value": "runtime-recreated-no-leak-observed",
+        "unit": "enum(true|false|runtime-recreated-no-leak-observed)",
+        "confidence": "MEDIUM",
+        "status": "resolved",
+        "rationale": "the toggle DOES tear down and re-create the QuickJS runtime \u2014 three distinct module instantiations across three legs, with the probe's per-runtime send counter back at 0 each time and the plugin database intact throughout \u2014 so the mechanism by which a toggle would discard per-runtime accumulated state is confirmed. What could not be confirmed is the reset of #2211's leak specifically, because that leak never became observable: neither the disciplined shape nor the retain-shape control failed inside the cap. Measured on a fresh instance (20260820T163916Z-20863, 127.0.0.1:8983) across 3 legs of up to 2000 sends with togglePlugin off and on between them, repeated twice so a one-off is distinguishable from a real reset. Distinct runtime session ids observed: 3. Per-runtime send counter reset to 0 at every leg start: True. Plugin database carried 6000 rows across 3 sessions, so the journal survives the toggle. Host exit code 137. Unmitigated-shape control on its own fresh instance: clean at 2000 sends."
+      }
+    ],
+    "if_wrong": "If a toggle does NOT reset the leak, ACTIVE-13's recovery path cannot be 'restart the plugin' \u2014 it has to be a hard per-runtime send budget enforced by DefMiner itself, with the operator asked to restart Caido once it is exhausted, because nothing inside the plugin API can reclaim host-side references. The measurement here says the mechanism exists: the runtime is genuinely rebuilt, so ANY state that lives in the QuickJS runtime is discarded by a toggle. The residual risk is that #2211's references live on the HOST side of the boundary rather than in the runtime, in which case a toggle rebuilds the runtime and leaks exactly as before \u2014 and this run cannot distinguish those two, because it never produced a leak to watch. One consequence is not conditional and should be designed for now: a toggle is only usable while the runtime still responds. SPIKE-01 measured the same mutation against a WEDGED plugin never returning at all, and taking the healthy plugins down with it, so ACTIVE-13 must decide to toggle on a leading indicator rather than after the runtime has already stopped answering."
+  },
+  "requirements_affected": [
+    "SPIKE-04b",
+    "ACTIVE-13",
+    "ACTIVE-01"
+  ],
+  "artifacts": [
+    "probe/tier0-send/backend/script.js",
+    "scripts/spike/send-cliff.sh",
+    "scripts/spike/pick-04b-reference.py",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/04b-legs.jsonl",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/04b-journal.json",
+    ".planning/phases/00-runtime-reality-check/results/spike-04-runs/retain-control-run.json"
+  ],
+  "notes": "Guest-authenticated, so project_persistence is temporary on both instances. The runtime session id is what makes this measurable rather than inferable: the host log's `plugin|executor: Stopping plugin executor` line says an executor stopped, but only a changed session id plus a reset per-runtime counter proves the JS runtime itself was rebuilt. The retain-shape control is recorded HERE rather than in SPIKE-04 because SPIKE-04's three-instance invariant is the check that protects its cliffs from cross-variant pollution, and because 'is there a leak to reset' is this spike's precondition rather than that one's question."
+}

@@ -123,6 +123,12 @@ def main() -> int:
             "fresh": r.get("fresh", True),
             "flags": r.get("flags", []),
             "exit_code": r.get("exit_code"),
+            # Carried through from instance.json when the run recorded it.
+            # SPIKE-04 needs it because a guest instance can hold only TEMPORARY
+            # projects, so "the abort dropped the project" is a claim about a
+            # temporary one and the persistent case is genuinely out of scope.
+            # null means the run did not record it, which the schema permits.
+            "project_persistence": r.get("project_persistence"),
         }
         for r in runs
     ]

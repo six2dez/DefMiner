@@ -19,7 +19,10 @@ function loadJson(path: string): any {
 function resultFiles(): string[] {
   if (!existsSync(RESULTS)) return [];
   return readdirSync(RESULTS)
-    .filter((f) => /^SPIKE-\d\d\.json$/.test(f))
+    // The optional lowercase suffix admits SPIKE-04b, a sub-spike with its own
+    // REQUIREMENTS.md line and its own go-no-go gate. Widened by plan 00-04
+    // rather than left out: an unchecked result file is an ungated one.
+    .filter((f) => /^SPIKE-\d\d[a-z]?\.json$/.test(f))
     .sort()
     .map((f) => join(RESULTS, f));
 }

@@ -23,7 +23,8 @@
     },
     "spike": {
       "type": "string",
-      "pattern": "^SPIKE-[0-9]{2}$"
+      "description": "Phase 0 requirement id. The optional lowercase suffix carries a sub-spike (SPIKE-04b) that has its own requirement line in REQUIREMENTS.md and therefore its own gate in go-no-go.json.",
+      "pattern": "^SPIKE-[0-9]{2}[a-z]?$"
     },
     "status": {
       "enum": [

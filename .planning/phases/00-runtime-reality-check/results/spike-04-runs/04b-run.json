@@ -1,0 +1,19 @@
+{
+  "run_id": "20260820T163916Z-20863",
+  "listen": "127.0.0.1:8983",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T163916Z-20863",
+  "exit_code": 137,
+  "project_persistence": "temporary",
+  "sends_per_leg": 2000,
+  "save_true_reference": 2000,
+  "total_sends_across_legs": 6000,
+  "reference_source": "save-true-floor-no-cliff",
+  "retain_wrappers": false
+}
