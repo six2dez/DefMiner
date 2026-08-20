@@ -1,0 +1,58 @@
+{
+  "spike": "SPIKE-10",
+  "artifact": "progress",
+  "provisional": true,
+  "generated_at": "2026-08-20T12:38:56Z",
+  "question": "What is the content-hash cache hit rate on real browsing?",
+  "why_wall_clock_bound": "The number that matters is the CROSS-DAY rate, which is a property of how sites version and re-serve their bundles across deploys. It cannot be synthesised from a scripted burst and cannot be produced on demand at the end of the phase. That is why the recorder ships in wave 1 and is merely READ in plan 00-04.",
+  "recorder": {
+    "run_id": "recorder-20260820T122300Z",
+    "listen": "127.0.0.1:8998",
+    "data_path": "/Users/six2dez/Tools/DefMiner/.spike/recorder-data",
+    "binary": {
+      "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+      "expected_version": "0.57.1",
+      "reported_version": "0.57.1",
+      "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+    },
+    "long_lived": true,
+    "disposable": false,
+    "note": "The one instance in this phase that is deliberately NOT disposable. Guest-enabled and therefore bound to 127.0.0.1 only, permanently.",
+    "db": ".spike/recorder-data/plugins/73c7e164-4805-4123-b35e-95c2f4af5864/data.db"
+  },
+  "rows": 2268,
+  "distinct_hashes": 1375,
+  "distinct_days": 1,
+  "days": [
+    "2026-08-20"
+  ],
+  "sessions": 1,
+  "total_bytes": 157076610,
+  "rates": {
+    "within_page": 0.0569,
+    "within_session": 0.3937,
+    "cross_day": null,
+    "cross_day_denominator": 0,
+    "cross_day_undefined_reason": "No content hash has been observed on two or more distinct calendar days yet, so the cross-day rate is UNDEFINED \u2014 not zero. Zero would assert that caching measurably never works."
+  },
+  "per_day": [
+    {
+      "day": "2026-08-20",
+      "rows": 2268,
+      "cross_day": null,
+      "cross_day_denominator": 0
+    }
+  ],
+  "stabilised": false,
+  "cross_day_last_delta": null,
+  "collection": {
+    "mode": "scripted",
+    "sites_file": "scripts/spike/sites.json",
+    "passes_per_session": 2,
+    "launch_agent": "com.defminer.spike.recorder",
+    "schedule": "twice daily (10:30, 18:30 local)",
+    "live_mode_available": "The operator may additionally point their real browser at 127.0.0.1:8998 for a normal work session. Higher realism, lower reproducibility. Entirely their choice; the scripted sessions run unattended regardless."
+  },
+  "provisional_note": "PROVISIONAL. The cross-day figure here is computed from whatever has accumulated so far and MUST be re-read by plan 00-04, which owns results/SPIKE-10.json. If cross_day_denominator is 0 the cross-day rate is UNDEFINED, not zero \u2014 plan 00-04 routes that to its inconclusive branch. Do not import this file as a threshold source.",
+  "privacy": "cache_log stores only {ts, url, sha256, bytes, content_type, status}. No bodies, no headers, no cookies, no auth material. .spike/ is gitignored, so neither the database nor any recorded URL enters git."
+}

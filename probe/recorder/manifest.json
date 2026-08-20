@@ -1,0 +1,15 @@
+{
+  "id": "defminer-recorder",
+  "name": "DefMiner SPIKE-10 Recorder",
+  "version": "0.0.1",
+  "description": "Passive content-hash recorder for the SPIKE-10 cache hit rate measurement",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "recorder-backend",
+      "name": "Recorder Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}

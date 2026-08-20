@@ -1,0 +1,22 @@
+{
+  "run_id": "recorder-20260820T122300Z",
+  "pid": 21506,
+  "port": 8998,
+  "listen": "127.0.0.1:8998",
+  "data_path": "/Users/six2dez/Tools/DefMiner/.spike/recorder-data",
+  "fresh": false,
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "started_at": "2026-08-20T12:23:02Z",
+  "exit_code": null
+}
