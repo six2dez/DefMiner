@@ -1,0 +1,15 @@
+{
+  "id": "defminer-tier0-budgets",
+  "name": "DefMiner Tier-0 Budgets Probe",
+  "version": "0.0.1",
+  "description": "Phase 0 plan 00-02 probe: SPIKE-08 body semantics, SPIKE-09 SQLite contracts, SPIKE-12 filesystem containment",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "tier0-budgets-backend",
+      "name": "Tier0 Budgets Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
