@@ -901,6 +901,19 @@ pnpm add    meriyah@7.3.2 acorn@8.18.0 re2js@2.8.6 @jridgewell/sourcemap-codec@1
 
 **Removed for `[SLOP]`:** none. **Flagged `[SUS]`:** `acorn` (heuristic false positive, no checkpoint needed).
 
+### Addendum — the four `[ASSUMED]` harness packages, audited against the npm registry (2026-08-20)
+
+The planner marked plan `00-01` non-autonomous because these four were absent from the table above. Queried directly; all four are canonical and clean:
+
+| Package | Created | Weekly downloads | Repository | Verdict |
+|---|---|---:|---|---|
+| `vitest` | 2021-12-03 | 77,728,812 | github.com/vitest-dev/vitest | Approved |
+| `ajv` | 2015-05-29 | **312,868,386** | github.com/ajv-validator/ajv | Approved |
+| `ajv-formats` | 2020-01-14 | 104,639,294 | github.com/ajv-validator/ajv-formats | Approved |
+| `playwright` | 2015-01-23 | 70,082,199 | github.com/microsoft/playwright | Approved |
+
+Every one publishes a `repository.url` resolving to its canonical GitHub organisation, and all four are long-established with very high volume. Together with `acorn`'s flag being a known heuristic false positive (*"suspiciously close to 'cors'"*), **no package in Phase 0 is genuinely suspicious.** The `00-01` checkpoint remains a policy gate rather than a risk gate — approve it with this table in hand.
+
 The four `@caido/*` and `@caido-community/*` packages have low download counts because they are a niche developer toolchain. All four are named in Caido's official documentation and all resolve to Caido-owned GitHub organisations, so low volume is expected rather than suspicious.
 
 ---
