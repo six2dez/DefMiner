@@ -2,9 +2,9 @@
 gsd_state_version: '1.0'
 status: planning
 progress:
-  total_phases: 8
+  total_phases: 12
   completed_phases: 0
-  total_plans: 35
+  total_plans: 52
   completed_plans: 0
   percent: 0
 ---
@@ -20,10 +20,10 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 0 of 8 (Runtime Reality Check)
+Phase: 0 of 12 (Runtime Reality Check)
 Plan: 0 of 4 in current phase
 Status: Ready to plan
-Last activity: 2026-08-20 — Project initialized; five research tracks complete; requirements and roadmap defined
+Last activity: 2026-08-20 — Project initialized; five research tracks complete; roadmap revised after Codex adversarial review (12 phases, 136 requirements, 5 dependency inversions corrected)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -68,7 +68,13 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 
 ### Cross-AI Review
 
-Codex (`gpt-5.6-sol`, xhigh) is configured as the default GSD reviewer (`review.default_reviewers`). Its independent design research is at `.planning/research/CODEX-CONTRAST.md`. Convergence and divergence with the GSD research tracks are analysed in `.planning/research/SUMMARY.md`.
+Codex (`gpt-5.6-sol`, xhigh) is configured as the default GSD reviewer (`review.default_reviewers`).
+
+- `.planning/research/CODEX-CONTRAST.md` — its independent design research (produced without sight of the other tracks)
+- `.planning/research/CODEX-REVIEW-01.md` — its adversarial review of the plan. Found: 2 blockers, 8 high-severity issues, 5 dependency inversions, a 47-requirement undercount, and one thing all five research tracks missed (the backend filesystem is server-side, not the operator's machine)
+- `.planning/research/SUMMARY.md` — synthesis, including a corrected treatment of what convergence between two LLMs actually proves
+
+**Corrections it forced:** `ACTIVE-03` claimed `sdk.requests.send()` inherits authentication — the SDK documents routing only. `.map` probing on authenticated apps now requires an explicit credential-propagation contract.
 
 ### Pending Todos
 
