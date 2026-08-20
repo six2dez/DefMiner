@@ -1,0 +1,185 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-10",
+  "status": "inconclusive",
+  "recorded_at": "2026-08-20T16:52:26Z",
+  "duration_s": null,
+  "run_ids": [
+    "recorder-20260820T122300Z"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 1.37
+  },
+  "instances": [
+    {
+      "run_id": "recorder-20260820T122300Z",
+      "data_path": "/Users/six2dez/Tools/DefMiner/.spike/recorder-data",
+      "listen": "127.0.0.1:8998",
+      "fresh": false,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": null,
+      "project_persistence": null
+    }
+  ],
+  "method": "A long-lived, deliberately non-disposable recorder instance on 127.0.0.1:8998 with a backend plugin hashing every script-ish proxied response body into a cache_log table in its own sdk.meta.db(), running since wave 1. Sessions were driven by Playwright over a pinned site list, on demand and twice daily via a per-user LaunchAgent. All three rates are computed OFFLINE from cache_log by scripts/spike/cache-rate.py, which emits the cross-day DENOMINATOR explicitly so an undefined rate is distinguishable from a measured zero.",
+  "measurements": [
+    {
+      "name": "cache_hit_rate_within_page",
+      "value": 0.0555,
+      "unit": "ratio",
+      "stat": "ratio",
+      "n": 11393,
+      "notes": "632 of 11393 fetches repeated the same content hash inside a 2 s window. Measures duplicate DELIVERY, not caching across visits"
+    },
+    {
+      "name": "cache_hit_rate_within_session",
+      "value": 0.6304,
+      "unit": "ratio",
+      "stat": "ratio",
+      "n": 11393,
+      "notes": "7182 repeats inside a browsing session, split on a 30-minute inactivity gap. Measures what a warm browser tab saves. This is NOT the number that drives the CPU budget and must never be reported under the cross-day name"
+    },
+    {
+      "name": "cache_hit_rate_cross_day",
+      "value": null,
+      "unit": "ratio",
+      "stat": "ratio",
+      "n": 11393,
+      "valid": false,
+      "notes": "UNDEFINED, not zero: No content hash has been observed on two or more distinct calendar days yet, so the cross-day rate is UNDEFINED \u2014 not zero. Zero would assert that caching measurably never works."
+    },
+    {
+      "name": "cache_sample_days",
+      "value": 1,
+      "unit": "days",
+      "stat": "count",
+      "notes": "distinct calendar days on which the recorder observed traffic: 2026-08-20"
+    },
+    {
+      "name": "cache_cross_day_denominator",
+      "value": 0,
+      "unit": "hashes",
+      "stat": "count",
+      "notes": "count of distinct content hashes observed on two or more distinct calendar days. This is the denominator of the cross-day rate, and a rate with a zero denominator is undefined rather than zero"
+    },
+    {
+      "name": "cache_rows_recorded",
+      "value": 11393,
+      "unit": "rows",
+      "stat": "count",
+      "notes": "1574 distinct content hashes over 762359225 bytes of script-ish responses"
+    },
+    {
+      "name": "cache_distinct_hashes",
+      "value": 1574,
+      "unit": "hashes",
+      "stat": "count"
+    },
+    {
+      "name": "cache_sessions_recorded",
+      "value": 3,
+      "unit": "sessions",
+      "stat": "count",
+      "notes": "split on a 30-minute inactivity gap, so back-to-back scripted runs merge into one session rather than inflating the count"
+    },
+    {
+      "name": "cache_cross_day_stabilised",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "day-over-day change in the cross-day figure: None. Requires at least two days to exist at all"
+    }
+  ],
+  "containment": {
+    "escaped": false,
+    "escape_paths": []
+  },
+  "verdict": {
+    "answer": "Within page load 0.0555, within session 0.6304, over 11393 recorded fetches and 1574 distinct content hashes across 1 calendar day(s). THE CROSS-DAY RATE \u2014 the only one that drives the CPU budget, and the only one a single burst can never produce \u2014 is UNDEFINED, not zero: CACHE_SAMPLE_DAYS=1 and CACHE_CROSS_DAY_DENOMINATOR=0. CACHE_HIT_RATE_CROSS_DAY is therefore null with status inconclusive and a revisit date of 2026-09-03, and CACHE_HIT_RATE_ASSUMED=0.40 is emitted as an explicit pessimistic default for Phase 1's CORE-08 to budget against.",
+    "confidence": "LOW",
+    "thresholds_set": [
+      {
+        "id": "CACHE_HIT_RATE_WITHIN_PAGE",
+        "value": 0.0555,
+        "unit": "ratio",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "632 duplicate-hash deliveries in 11393 recorded fetches within a 2 s window, from real proxied browsing."
+      },
+      {
+        "id": "CACHE_HIT_RATE_WITHIN_SESSION",
+        "value": 0.6304,
+        "unit": "ratio",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "7182 repeats across 3 sessions split on a 30-minute inactivity gap. Answers 'what does a warm tab save', which is a different question from the one that sizes the CPU budget."
+      },
+      {
+        "id": "CACHE_SAMPLE_DAYS",
+        "value": 1,
+        "unit": "days",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "distinct calendar days on which the recorder observed traffic: 2026-08-20. The confidence of the cross-day rate is DERIVED from this number rather than asserted."
+      },
+      {
+        "id": "CACHE_CROSS_DAY_DENOMINATOR",
+        "value": 0,
+        "unit": "content hashes seen on 2+ distinct days",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "of 1574 distinct content hashes recorded, 0 were seen on two or more distinct calendar days. Emitted as a threshold in its own right so the difference between 'too few days' and 'enough days but nothing recurred' survives into the aggregate instead of having to be re-derived from the raw log."
+      },
+      {
+        "id": "CACHE_HIT_RATE_CROSS_DAY",
+        "value": null,
+        "unit": "ratio",
+        "confidence": "LOW",
+        "status": "inconclusive",
+        "revisit_after": "2026-09-03",
+        "rationale": "UNDEFINED, not zero. The cause is fewer than two distinct days sampled: CACHE_SAMPLE_DAYS=1 and CACHE_CROSS_DAY_DENOMINATOR=0. Follow-up implied: keep collecting \u2014 the recorder needs to span more calendar days. Reporting 0.0 here would assert that caching measurably never works, and reporting the within-session rate (0.6304) under this name would assert a number nobody measured \u2014 both mis-size Phase 1's CPU budget by the exact 90%-against-40% factor this spike exists to prevent, silently, across eleven downstream phases."
+      },
+      {
+        "id": "CACHE_HIT_RATE_ASSUMED",
+        "value": 0.4,
+        "unit": "ratio",
+        "confidence": "pessimistic-default",
+        "revisit_after": "2026-09-03",
+        "rationale": "Phase 1's CORE-08 cache design must budget for the WORST CASE until the real number lands. 0.40 is the low end of the range the project brief treats as plausible, where CPU cost is roughly six times what a 90% hit rate would imply. This is not a measurement and must never be cited as one: it is a deliberate placeholder that keeps Phase 1 unblocked without letting it build on a figure nobody observed. Replace it with CACHE_HIT_RATE_CROSS_DAY as soon as two or more days with a non-zero denominator exist."
+      }
+    ],
+    "if_wrong": "The ingestion budget is the thing that moves. At a 90% cross-day hit rate only one bundle in ten needs full analysis and the per-bundle CPU cost \u2014 SPIKE-06 measured 785.8 ms/MB to parse and 102 bytes of RSS per input byte \u2014 is amortised away. At 40% it is six times that, which is the difference between analysing a large SPA inside the 25 ms slice budget and never finishing it. Concretely, if the real rate lands materially below 0.40, CORE-08's cache stops being an optimisation and the admission gate has to shed work instead: Phase 9's degradation ladder becomes the common path rather than the exception, and AST_MAX_BYTES (1,334,405 B) has to come down. If it lands materially above 0.40, the budget has slack and the pessimistic default will simply have made Phase 1 conservative \u2014 which is the cheap direction to be wrong in, and why 0.40 rather than the within-session figure is the honest placeholder."
+  },
+  "requirements_affected": [
+    "SPIKE-10",
+    "CORE-08",
+    "STORE-03",
+    "STORE-04",
+    "OBS-01"
+  ],
+  "artifacts": [
+    "probe/recorder/backend/script.js",
+    "scripts/spike/cache-rate.py",
+    "scripts/spike/recorder-session.sh",
+    "scripts/spike/recorder-agent.sh",
+    ".planning/phases/00-runtime-reality-check/results/SPIKE-10-progress.json"
+  ],
+  "notes": "The reasoning matters more than the number here, because it is the phase's whole thesis in miniature: the job is to replace assumptions with measurements, and a measurement that could not be taken is honest output. Three rates are reported because they answer three different questions, and only the cross-day one sizes the CPU budget \u2014 it is a property of how sites version and re-serve bundles across deploys, which is why it is wall-clock-bound and why the recorder shipped in wave 1 instead of being run on demand at the end. Collection modes that contributed: scripted pinned-site sessions driven by scripts/spike/browse.mjs over scripts/spike/sites.json, run both on demand and by a twice-daily LaunchAgent; 3 session(s) after splitting on a 30-minute inactivity gap. No live operator browsing was recorded \u2014 that mode was available throughout and was not exercised, which is worth knowing because a pinned list under-represents the revisit patterns that produce cross-day recurrence. PRIVACY: cache_log stores only {ts, url, sha256, bytes, content_type, status} \u2014 no bodies, no headers, no cookies, no auth material \u2014 and .spike/ is gitignored, so neither the database nor any recorded URL enters git. Only the aggregate rates and counts are published here. RECORDER LAUNCHAGENT: uninstalled. Database left at .spike/recorder-data/plugins/73c7e164-4805-4123-b35e-95c2f4af5864/data.db."
+}

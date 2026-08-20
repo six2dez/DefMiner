@@ -120,8 +120,10 @@
               "HIGH",
               "MEDIUM",
               "LOW",
-              "PENDING"
-            ]
+              "PENDING",
+              "pessimistic-default"
+            ],
+            "description": "pessimistic-default is NOT a weak measurement \u2014 it is the absence of one. It marks a value nobody measured, deliberately chosen as the worst case so a downstream phase can budget against it without being told a number was observed. Folding it into LOW would erase exactly the distinction a later reader needs."
           },
           "status": {
             "enum": [
@@ -218,6 +220,62 @@
           },
           "revisit_after": {
             "type": "string"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Host and binary the whole phase was measured on, folded in by scripts/spike/aggregate.py after asserting every contributing result agrees. It lives HERE rather than being fetched from the per-spike results by the renderer, so 00-GO-NO-GO.md can be generated from this file ALONE and the render-and-diff check actually proves the prose and the data cannot diverge.",
+      "additionalProperties": false,
+      "properties": {
+        "binary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "expected_version": {
+              "type": "string"
+            },
+            "reported_version": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "os": {
+              "type": "string"
+            },
+            "release": {
+              "type": "string"
+            },
+            "arch": {
+              "type": "string"
+            },
+            "cpu": {
+              "type": "string"
+            },
+            "cores": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ram_gb": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
           }
         }
       }

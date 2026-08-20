@@ -2,7 +2,7 @@
   "$schema": "./spike-result.schema.json",
   "spike": "SPIKE-01",
   "status": "pass",
-  "recorded_at": "2026-08-20T15:55:20Z",
+  "recorded_at": "2026-08-20T16:59:19Z",
   "duration_s": null,
   "run_ids": [
     "20260820T153757Z-11877",
@@ -22,7 +22,7 @@
     "cpu": "Apple M4 Pro",
     "cores": 14,
     "ram_gb": 24.0,
-    "loadavg_1m": 1.68
+    "loadavg_1m": 1.01
   },
   "instances": [
     {

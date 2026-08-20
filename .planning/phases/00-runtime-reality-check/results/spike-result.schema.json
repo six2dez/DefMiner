@@ -307,8 +307,10 @@
             "HIGH",
             "MEDIUM",
             "LOW",
-            "PENDING"
-          ]
+            "PENDING",
+            "pessimistic-default"
+          ],
+          "description": "pessimistic-default is NOT a weak measurement \u2014 it is the absence of one. It marks a value nobody measured, deliberately chosen as the worst case so a downstream phase can budget against it without being told a number was observed. Folding it into LOW would erase exactly the distinction a later reader needs."
         },
         "if_wrong": {
           "type": "string",
@@ -396,8 +398,10 @@
                   "HIGH",
                   "MEDIUM",
                   "LOW",
-                  "PENDING"
-                ]
+                  "PENDING",
+                  "pessimistic-default"
+                ],
+                "description": "pessimistic-default is NOT a weak measurement \u2014 it is the absence of one. It marks a value nobody measured, deliberately chosen as the worst case so a downstream phase can budget against it without being told a number was observed. Folding it into LOW would erase exactly the distinction a later reader needs."
               },
               "status": {
                 "enum": [

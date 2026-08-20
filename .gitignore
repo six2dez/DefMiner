@@ -54,3 +54,6 @@ tier1/*/dist/
 # only URL they carry is the probe's own synthetic target with query values
 # already redacted by the probe.
 .planning/phases/00-runtime-reality-check/results/spike-04-runs/*/*.log
+
+# Byte-compiled Python from importing the spike analysers as modules.
+scripts/spike/__pycache__/

@@ -319,12 +319,21 @@ def main() -> int:
                 notes=(p.get("re2js_error") or "")[:160] or p["source"]))
 
     # ---- provenance -------------------------------------------------------
+    # Regenerate rather than degrade. The registry capture lands under .spike/,
+    # which is gitignored, so on a clean checkout it will be absent — and
+    # emitting "unknown" for the provenance fields would quietly turn a live
+    # registry answer into a shrug that still looks like a measurement.
+    if not os.path.isfile(REGISTRY):
+        rc = os.system("bash scripts/spike/re2js-provenance.sh >/dev/null 2>&1")
+        if rc != 0 or not os.path.isfile(REGISTRY):
+            sys.exit("analyse-spike-01: no registry capture at " + REGISTRY + " and "
+                     "scripts/spike/re2js-provenance.sh could not produce one. Refusing to "
+                     "record provenance fields as 'unknown' — re-run it with network access.")
     reg = {}
-    if os.path.isfile(REGISTRY):
-        for line in open(REGISTRY):
-            if ":" in line:
-                k, _, v = line.partition(":")
-                reg[k.strip()] = v.strip()
+    for line in open(REGISTRY):
+        if ":" in line:
+            k, _, v = line.partition(":")
+            reg[k.strip()] = v.strip()
     measurements.append(m(
         "re2js_registry_repository_field",
         reg.get("repository (version doc)", "unknown").strip(chr(34)),
