@@ -809,31 +809,71 @@ Phase 1's obligation is narrow and cheap: **one `try/catch` around the hook body
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED — all five closed at planning time, 2026-08-20)
+
+> Each question below is answered by a task in a committed plan. Three cross-references in the original text
+> named the wrong plan, because the phase was planned tracer-first and every plan number shifted by one; the
+> plan numbers here are corrected and the recommendations are annotated with their real owner. Nothing was
+> deferred.
 
 1. **What SQLite version does `sdk.meta.db()` expose?**
    - What we know: the driver is a pooled, worker-threaded, WAL-on implementation with `exec`/`prepare`/`Statement.{run,get,all}` and positional-only binding. `PRAGMA` works.
    - What's unclear: `SELECT sqlite_version()` was never run. `ON CONFLICT … DO UPDATE` needs ≥ 3.24 (2018); partial indexes need ≥ 3.8; `STRICT` needs ≥ 3.37; `RETURNING` needs ≥ 3.35.
-   - Recommendation: **make this the first task of plan 01-03.** One `prepare("SELECT sqlite_version() AS v").get()` against a live instance, recorded as an artifact. Every schema decision downstream branches on it, and the upsert strategy has no fallback if it lands below 3.24.
+   - Recommendation: make this the first thing a live instance is asked. One
+     `prepare("SELECT sqlite_version() AS v").get()`, recorded as an artifact. Every schema decision downstream
+     branches on it, and the upsert strategy has no fallback if it lands below 3.24.
+   - **RESOLVED — owner: plan 01-01, tracer task (reads it at `init()`) and task 3 (records and gates it).**
+     *Corrected from "plan 01-03": the phase leads with a tracer, so this lands one plan earlier than the
+     research anticipated and before any schema work depends on it — which is what the recommendation actually
+     asked for.* `tests/phase1-runtime.spec.ts` fails with a message naming plan 01-04 if the measured version
+     is below 3.24.0.
 
 2. **Is a proxied request queryable via `sdk.requests.get(id)` at the instant `onInterceptResponse` fires?**
    - What we know: `get(id): Promise<RequestResponseOpt | undefined>` [VERIFIED: requests.d.ts:779]; proxied traffic is saved so ids are non-zero; SPIKE-03 confirmed Caido queues events and delivers them in bursts *after* a block, which means an event can arrive long after its request completed.
    - What's unclear: whether there is a write lag such that a *freshly* delivered event's request is not yet readable — and, given SPIKE-03's burst behaviour, whether ids remain valid across a long queue delay.
-   - Recommendation: probe it in plan 01-02 with a deliberate delay ladder (0 ms, 100 ms, 1 s, 30 s between event and `get`). If there is a lag, CORE-05's reload model needs a bounded retry, and that changes the consumer's shape. This is cheap to test and expensive to discover late.
+   - Recommendation: probe it with a deliberate delay between event and `get`. If there is a lag, CORE-05's
+     reload model needs a bounded retry, and that changes the consumer's shape. This is cheap to test and
+     expensive to discover late.
+   - **RESOLVED — owner: plan 01-01, task 3 (`scripts/phase1/runtime-answers.sh`).** *Corrected from "plan
+     01-02".* The apparatus is not a synthetic delay ladder but the real condition: a `reload_immediate`
+     scenario and a `reload_after_burst` scenario driving 500 requests through `scripts/spike/load.sh`, because
+     Phase 0 measured Caido delivering 499 events in a single 20 ms burst and that backlog pushes later reloads
+     seconds past their originating event on its own. The gate asserts `reloadMissing === 0` and
+     `reloadHit === processed` in both, and points at CORE-05 needing a bounded retry if it ever fails.
 
 3. **Does the plugin's own `sdk.api.send`/RPC stay responsive under a 200-chunk SPA load, measured from outside?**
    - What we know: the design should hold — 25 ms slices, single consumer, `setTimeout0` yields with a 0.76 service ratio.
    - What's unclear: the *composite* behaviour under real burst delivery plus SQLite awaits plus hashing. No Phase 0 spike ran the whole pipeline.
-   - Recommendation: this **is** success criterion 3 and it needs an external prober, not an internal assertion. Reuse `scripts/spike/instance.sh` + `probe-run.sh` + `load.sh`. Budget it as a real task, not a verification line.
+   - Recommendation: this **is** success criterion 3 and it needs an external prober, not an internal
+     assertion. Reuse `scripts/spike/instance.sh` + `probe-run.sh` + `load.sh`. Budget it as a real task, not a
+     verification line.
+   - **RESOLVED — owner: plan 01-05, task 3 (`scripts/phase1/spa-load.sh`).** Budgeted as a full task as
+     recommended, with a same-machine idle baseline captured first so the loaded distribution has something on
+     this rig to be compared against, and `tests/phase1-load.spec.ts` failing on a `max_slice_ms` of 0 rather
+     than treating it as a perfect score.
 
 4. **Should Phase 1 ship a frontend package at all?**
    - What we know: the backend has no user-visible message channel; the frontend does.
    - What's unclear: whether pulling the Vue/PrimeVue/Tailwind pin cluster forward from Phase 5 is worth a visible version-mismatch toast.
-   - Recommendation: no frontend in Phase 1 (option A above), plus a human-verify checkpoint and a Broken Window entry recording the owed UI. Revisit if the planner disagrees — it is a legitimate trade.
+   - Recommendation: no frontend in Phase 1 (option A above), plus a human-verify checkpoint and a Broken
+     Window entry recording the owed UI. Revisit if the planner disagrees — it is a legitimate trade.
+   - **RESOLVED — accepted as recommended. Decisions P1-D5 and P6-D2.** One deviation: the proposed
+     `checkpoint:human-verify` is not emitted, because `workflow.human_verify_mode` is `end-of-phase`; its
+     substance is a `<verify><human-check>` on plan 01-06 task 3 plus an AUTOMATED leg C that launches the real
+     `caido-cli 0.55.3` and asserts zero artifact rows — stronger than the proposed manual check. The Broken
+     Window entry is written by 01-06 task 3 via `gsd-tools windows append`.
 
 5. **Which port does Phase 1's dev/test Caido use?**
    - What we know: 8998 is occupied by the live recorder, 8999 is `instance.sh`'s default, 8080 is refused unconditionally, 3100 is the `caido-dev` watch port.
-   - Recommendation: allocate a Phase-1 range (e.g. 8990–8997) and record it, so a later phase does not collide with a long-lived instance the way Phase 0 nearly did.
+   - Recommendation: allocate a Phase-1 range and record it, so a later phase does not collide with a
+     long-lived instance the way Phase 0 nearly did.
+   - **RESOLVED — owner: plan 01-01, `scripts/phase1/env.sh`. Range CORRECTED to 8971–8975.** The suggested
+     8990–8997 is wrong: `scripts/spike/instance.sh:96-97` names **8991–8996** (and 8981–8985) as Phase 0's
+     own, so the suggested range overlaps it in six of its eight ports. Verified free this session: 8971, 8972,
+     8973, 8974 and 8975 are all unbound, while 8998 (the live SPIKE-10 recorder) and 8080 (the operator's
+     desktop Caido) are both in LISTEN. `env.sh` allocates the whole block up front — instance, origin, two
+     compatibility legs and one spare — so no later Phase 1 plan edits that file and no two Phase 1 scripts can
+     collide.
 
 ---
 

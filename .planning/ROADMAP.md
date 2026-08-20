@@ -67,16 +67,16 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6 plans
+**Plans**: 6 plans in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel)
 
 Plans:
 
 - [ ] 01-01-PLAN.md — **Tracer**: one proxied JS response hashed and durably remembered, end-to-end on a live Caido, plus the Phase 0 threshold contract and the measured answers to the two open runtime questions — *wave 1*
 - [ ] 01-02-PLAN.md — Two-package pnpm workspace, exact pins and DIST-06 overrides, the DIST-05 allowlist gate and the SDK-free engine boundary — *wave 2*
-- [ ] 01-03-PLAN.md — Ingestion: full admission filter with a named reason per rejection, bounded queue, chunker, temporal yield, wall-clock deadlines, byte-exact encoding — *wave 3*
-- [ ] 01-04-PLAN.md — Persistence: four project-scoped tables, forward-only migration ladder, content-addressed upserts, corpus-version cache, retention, static SQL-discipline gate — *wave 3*
-- [ ] 01-05-PLAN.md — Lifecycle: project-switch cancellation including the null branch, counters, and an EXTERNAL max-slice and RPC-responsiveness measurement under a 200-chunk load — *wave 4*
-- [ ] 01-06-PLAN.md — Compatibility guard and a three-leg SDK smoke test against 0.57.1, 0.58.0 and the below-minimum 0.55.3 — *wave 5*
+- [ ] 01-04-PLAN.md — Persistence: `analyses` and `settings` behind a forward-only migration ladder, content-addressed reads, corpus-version cache, retention, static SQL-discipline gate — *wave 3*
+- [ ] 01-03-PLAN.md — Ingestion: full admission filter with a named reason per rejection, bounded queue, chunker, temporal yield, wall-clock deadlines, byte-exact encoding, and the consumer that wires every store call site — *wave 4*
+- [ ] 01-05-PLAN.md — Lifecycle: project-switch cancellation including the null branch, counters, and an EXTERNAL max-slice and RPC-responsiveness measurement under a 200-chunk load — *wave 5*
+- [ ] 01-06-PLAN.md — Compatibility guard and a three-leg SDK smoke test against 0.57.1, 0.58.0 and the below-minimum 0.55.3 — *wave 6*
 
 ### Phase 2: Error Containment & Observability
 
