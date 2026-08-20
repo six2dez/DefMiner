@@ -24,9 +24,19 @@ export function getDb(sdk: MetaSdk): Promise<Database> {
   return handle;
 }
 
-/** Drop the memoised handle. Plan 01-05 calls this on project change; nothing in
- *  Phase 1's tracer path calls it. Deliberately does not close the pool — the SDK
- *  exposes no close, and Caido owns the lifetime. */
+/**
+ * Drop the memoised handle. Plan 01-05 calls this on project change; nothing in
+ * Phase 1's tracer path calls it. Deliberately does not close the pool — the SDK
+ * exposes no close, and Caido owns the lifetime.
+ *
+ * `@public` because plan 01-03 restored knip's `exports` rule to ERROR (01-02
+ * left that instruction in knip.json), and this is the ONE export left with no
+ * consumer. It is a seam with a named owner one wave away, not dead code — and
+ * tagging it is how that claim gets written down where the next reader is,
+ * instead of being smuggled in by leaving the whole gate at `warn`.
+ *
+ * @public
+ */
 export function resetDbHandle(): void {
   handle = undefined;
 }

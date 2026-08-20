@@ -43,27 +43,40 @@
       ]
     }
   },
-  // WHY `warn` AND NOT `error`.
+  // RESTORED TO `error` BY PLAN 01-03, as plan 01-02 asked for in this file.
   //
-  // knip is here for the DET-03 boundary, and that part stays at ERROR:
+  // knip is here first for the DET-03 boundary, and that part was always ERROR:
   // packages/engine declares NO dependencies at all, so an engine module that
   // reaches for the backend or for any @caido/* package is reported as an
   // unlisted dependency and fails the gate.
   //
-  // Unused EXPORTS are a different matter in Phase 1. Plan 01-01 deliberately
-  // shipped reachable-but-unconsumed seams so later plans would not have to
-  // retrofit them through reviewed code: `resetDbHandle` is named for 01-05,
-  // `resetPassiveForTest`/`isScriptish`/`normaliseObservedUrl`/`cmpCaidoVersion`
-  // are the units 01-03 writes specs against, and `MIGRATIONS` is what 01-04
-  // appends step v2 to. Reporting them as errors today would mean either
-  // deleting seams that are already spoken for or silencing the check entirely.
-  // `warn` keeps them in the output and out of the exit code.
+  // 01-02 set `exports` and `types` to `warn` because plan 01-01 had deliberately
+  // shipped reachable-but-unconsumed seams, and reporting them as errors would
+  // have meant either deleting seams that were already spoken for or silencing
+  // the check entirely. It left a note addressed to this plan. Restoring them
+  // matters because `warn` is not a gate: a genuinely dead export added tomorrow
+  // would print alongside the twenty-six expected ones and change nothing.
   //
-  // PLAN 01-03 SHOULD RESTORE BOTH TO "error" in the same commit that writes the
-  // backend specs — at that point every name above has a consumer, and an
-  // export with no consumer is a genuine finding again.
+  // WHAT IT COST, STATED RATHER THAN BURIED. Two things were needed, and the
+  // first is a real weakening:
+  //
+  //   `ignoreExportsUsedInFile: true` — knip otherwise reports every type that is
+  //   exported but only referenced inside its own module, which in this codebase
+  //   is sixteen of them (AdmitSdk, PassiveDeps, ArtifactRow, MigrationReport and
+  //   so on — types declared next to the function that takes them). THE HOLE: a
+  //   genuinely dead export that happens to be referenced once in its own file is
+  //   now invisible. That is a smaller hole than `warn`, which hides everything,
+  //   but it is not nothing and should be revisited when the frontend in Phase 5
+  //   gives most of these types a cross-module consumer.
+  //
+  //   One `@public` JSDoc tag, on store/db.ts's `resetDbHandle` — the single
+  //   remaining export with no consumer, named for plan 01-05 one wave away. The
+  //   tag puts that claim in the file somebody would edit rather than in a config
+  //   comment they would not read.
+  //
+  "ignoreExportsUsedInFile": true,
   "rules": {
-    "exports": "warn",
-    "types": "warn"
+    "exports": "error",
+    "types": "error"
   }
 }
