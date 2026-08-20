@@ -71,3 +71,12 @@ scripts/spike/__pycache__/
 # from the sources and the tsconfigs, regenerated on every run, and machine- and
 # path-specific — never evidence.
 *.tsbuildinfo
+
+# Caido CLI releases downloaded by scripts/phase1/fetch-caido.sh for the
+# COMPAT-02 smoke test. Regenerable by that script, which verifies the release's
+# published SHA-512 BEFORE extracting anything. A vendored Caido binary must
+# never enter git history: it is ~100 MB of third-party executable, it is not
+# evidence (the evidence is the recorded hash in results/compat-smoke.json and
+# the sidecar release.json), and committing an executable this repo does not
+# build is exactly the supply-chain shape threat T-01-30 is about.
+.caido-bin/
