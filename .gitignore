@@ -26,6 +26,15 @@ tier1/*/dist/
 .planning/phases/00-runtime-reality-check/results/runs/*/token
 .planning/phases/00-runtime-reality-check/results/runs/*/*.log
 
+# The SAME control for Phase 1. The rules above are Phase-0-path-specific, and
+# Phase 1's scripts source the same instance.sh into a DIFFERENT results root —
+# so without these two lines a run that died before teardown could commit a live
+# guest bearer token, and every run would commit host logs carrying the
+# operator's real browsing URLs (threat T-00-14, and T-01-05 here).
+.planning/phases/01-skeleton-persistence-compatibility/results/runs/*/token
+.planning/phases/01-skeleton-persistence-compatibility/results/runs/*/*.log
+.planning/phases/01-skeleton-persistence-compatibility/results/runs/*/raw/*.log
+
 # Per-operation stderr captures copied into runs/*/raw/ by scripts/spike/ladder.sh.
 # The rule above only covers runs/*/*.log, one level up. These are the channel a
 # C-level QuickJS abort would land in, so they are CHECKED — the scan result is
