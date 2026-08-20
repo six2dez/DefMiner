@@ -42,12 +42,29 @@ describe("spike result quality", () => {
     ).toBe(true);
 
     for (const t of d.verdict?.thresholds_set ?? []) {
-      expect(
-        t.value,
-        `${file}: threshold ${t.id} has a null value — a threshold without a ` +
-          `value cannot be folded into go-no-go.json`,
-      ).not.toBeNull();
+      // A threshold value may be null in exactly one sanctioned case: a
+      // measurement that genuinely could not be taken, declared as such.
+      // Anything else null cannot be folded into go-no-go.json.
+      //
+      // This encodes the B8 rule rather than relaxing the assertion. The
+      // alternative — forcing a number into a slot where no measurement
+      // exists — is the fabrication path the whole cross-day gate was
+      // built over three review rounds to close. A sentinel value would
+      // be that same fabrication wearing a different name.
       expect(t.value, `${file}: threshold ${t.id} has an undefined value`).toBeDefined();
+
+      if (t.value === null) {
+        expect(
+          t.status,
+          `${file}: threshold ${t.id} is null but not declared inconclusive — ` +
+            `a null value is only permitted for a measurement that could not be taken`,
+        ).toBe("inconclusive");
+        expect(
+          t.revisit_after,
+          `${file}: threshold ${t.id} is inconclusive but carries no revisit_after — ` +
+            `an unmeasured threshold must name when it gets measured`,
+        ).toBeTruthy();
+      }
     }
   });
 
