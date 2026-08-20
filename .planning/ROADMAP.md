@@ -64,18 +64,19 @@ Plans:
   3. Browsing a 200-chunk SPA leaves the plugin's own UI and RPC responsive throughout, with the maximum observed synchronous slice recorded and under the Phase 0 threshold
   4. Artifacts persist across a Caido restart, are keyed by `project_id`, and identical content served twice is stored and hashed once
   5. Offsets and hashes derive from `toRaw()` bytes; a non-UTF-8 fixture round-trips without corruption
-  6. A CI gate fails the build if the backend bundle imports any Node built-in
+  6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 
-- [ ] 01-01: Monorepo scaffold, pinned dependencies, SDK-free engine workspace, vitest, lint, typecheck, Node-builtin CI assertion
-- [ ] 01-02: Ingestion — admission filter, bounded queue, single CPU consumer, chunker with yield, wall-clock deadlines
-- [ ] 01-03: SQLite layer — schema, migrations, project scoping, content-addressed artifacts, retention
-- [ ] 01-04: Lifecycle — project switch cancellation, restart recovery, slice telemetry
-- [ ] 01-05: Compatibility guard and minimum-version smoke test against current Caido
+- [ ] 01-01-PLAN.md — **Tracer**: one proxied JS response hashed and durably remembered, end-to-end on a live Caido, plus the Phase 0 threshold contract and the measured answers to the two open runtime questions — *wave 1*
+- [ ] 01-02-PLAN.md — Two-package pnpm workspace, exact pins and DIST-06 overrides, the DIST-05 allowlist gate and the SDK-free engine boundary — *wave 2*
+- [ ] 01-03-PLAN.md — Ingestion: full admission filter with a named reason per rejection, bounded queue, chunker, temporal yield, wall-clock deadlines, byte-exact encoding — *wave 3*
+- [ ] 01-04-PLAN.md — Persistence: four project-scoped tables, forward-only migration ladder, content-addressed upserts, corpus-version cache, retention, static SQL-discipline gate — *wave 3*
+- [ ] 01-05-PLAN.md — Lifecycle: project-switch cancellation including the null branch, counters, and an EXTERNAL max-slice and RPC-responsiveness measurement under a 200-chunk load — *wave 4*
+- [ ] 01-06-PLAN.md — Compatibility guard and a three-leg SDK smoke test against 0.57.1, 0.58.0 and the below-minimum 0.55.3 — *wave 5*
 
 ### Phase 2: Error Containment & Observability
 
@@ -355,7 +356,7 @@ Two further ordering changes: error containment and observability moved forward 
 | CHUNK-01 … CHUNK-04, SUPPLY-01 … SUPPLY-05, SEC-07 | Phase 10 |
 | UPGRADE-01/03/04, QUAL-04/05/06, DIST-01/02/03/04/07 | Phase 11 |
 
-**Coverage:** 137 v1 requirements, all mapped. 0 unmapped. 52 plans across 12 phases.
+**Coverage:** 137 v1 requirements, all mapped. 0 unmapped. 53 plans across 12 phases.
 
 ## Deferred to v2
 

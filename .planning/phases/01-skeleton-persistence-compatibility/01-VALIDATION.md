@@ -32,39 +32,51 @@ created: 2026-08-20
 ## Sampling Rate
 
 - **After every task commit:** Run `pnpm vitest run packages --reporter=dot` (no live Caido required)
-- **After every plan wave:** Run `pnpm test` — the full suite **including** `tests/go-no-go.spec.ts`, `tests/spike-results.spec.ts`, `tests/schema.spec.ts`. **Any drop in gate count is a failure.**
-- **Before `/gsd-verify-work`:** Full suite green, plus the two live runs — `compat-smoke.sh` against 0.57.1 **and** 0.58.0, and `spa-load.sh` with a recorded max-slice artifact
-- **Max feedback latency:** 15 seconds
+- **After every plan wave:** Run `pnpm test` — the full suite **including** `tests/go-no-go.spec.ts`, `tests/spike-results.spec.ts`, `tests/schema.spec.ts`. **Any drop in gate count is a failure.** Baseline measured 2026-08-20 before any Phase 1 work: **3 files / 72 assertions**.
+- **From wave 2 onward, per wave:** `pnpm typecheck && pnpm lint && pnpm knip` — the SDK-free engine boundary and the non-async-hook rule are lint/typecheck-enforced, so a wave that skips them can land a violation that only the bundle gate catches later.
+- **Before `/gsd-verify-work`:** Full suite green, plus the four live runs, in this order — `tracer-e2e.sh`, `runtime-answers.sh`, `spa-load.sh`, `compat-smoke.sh` — each followed by its artifact gate (`tests/phase1-runtime.spec.ts`, `tests/phase1-load.spec.ts`, `tests/phase1-compat.spec.ts`).
+- **Max feedback latency:** 15 seconds for the unit tier. The four live runs are a separate, slower tier by necessity — each launches an isolated Caido instance, and `instance.sh` alone allows up to 60 s for readiness.
 
 ---
 
 ## Per-Task Verification Map
 
+> **Plan numbering rebound 2026-08-20 when plans landed.** The phase leads with a `type="tracer"` plan
+> (01-01), so every plan number here is shifted by one from the ROADMAP's original 5-plan sketch. The
+> requirement-to-test mapping below is authoritative; the ROADMAP plan list was updated to match.
+
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| pending | 01-02 | — | CORE-01 | — | Hook callback is non-async and returns synchronously | unit + lint | `pnpm vitest run packages/backend/src/hooks/passive.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-02 | — | Admission rejects by status / size / kind / scope; 304 gets its own reason | unit | `pnpm vitest run packages/backend/src/hooks/admit.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-03 | — | Queue bounded; overflow counted; never grows past cap | unit | `pnpm vitest run packages/engine/src/queue.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-03 | — | Cap is ≥ the measured 500-event burst (constructor throws below 500) | unit | `pnpm vitest run packages/engine/src/queue.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-04 | — | Exactly one consumer in flight under concurrent offers | unit | `pnpm vitest run packages/engine/src/consumer.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-05 | — | Consumer holds no SDK object across an `await` | unit (fake SDK) + type test | `pnpm vitest run packages/backend/src/ingest/consumer.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-06 | — | Yield fires on elapsed time, not chunk count | unit (injected clock) | `pnpm vitest run packages/engine/src/pipeline.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | CORE-07 | — | Deadline expiry produces `partial`, keeps prior work | unit | `pnpm vitest run packages/engine/src/pipeline.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-03 | — | CORE-08 | — | Identical content hashed and stored once | integration (real SQLite) | `pnpm vitest run packages/backend/src/store/artifacts.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-04 | — | CORE-09 | — | `onProjectChange` (incl. `null`) cancels and swaps `project_id` | unit (fake SDK) | `pnpm vitest run packages/backend/src/lifecycle.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-04 | — | CORE-10 | — | Max observed slice recorded and non-zero under load | **manual-only** — needs live Caido + external probing | `bash scripts/phase1/spa-load.sh` | ❌ W0 | ⬜ pending |
-| pending | 01-03 | — | STORE-01/02 | — | Every table has `project_id` in its key | unit — introspect `PRAGMA table_info` for every table | `pnpm vitest run packages/backend/src/store/schema.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | STORE-03 | — | Digest derives from `toRaw()` bytes | unit | `pnpm vitest run packages/engine/src/digest.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-03 | — | STORE-05 | — | Migration ladder runs forward on a **populated** DB | integration | `pnpm vitest run packages/backend/src/store/migrations.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-03 | — | STORE-06 | — | Retention sweep bounds row counts | integration | `pnpm vitest run packages/backend/src/store/retention.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-03 | — | STORE-07 | — | No SQL string contains a named parameter (`:name`, `@name`, `$name`); no `exec` call passes a second argument | static — grep + AST over `store/**` | `pnpm vitest run packages/backend/src/store/sql-discipline.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-05 | — | COMPAT-01 | — | Below-minimum version registers no hooks and yields a reason string | unit (fake `sdk.runtime`) + **live** on `caido-cli 0.55.3` | `pnpm vitest run packages/backend/src/compat.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-05 | — | COMPAT-02 | — | Every SDK surface used is exercised against 0.57.1 **and** 0.58.0 | integration (live instance) | `bash scripts/phase1/compat-smoke.sh` | ❌ W0 | ⬜ pending |
-| pending | 01-02 | — | ENC-01 | — | `sha256(toRaw())` ≠ `sha256(utf8(toText()))` on the non-UTF-8 fixture; offsets map to raw bytes | unit, against `corpus/encoded/nonutf8.js` | `pnpm vitest run packages/engine/src/decode.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-01 | — | DIST-05 | — | Bundle imports ⊆ allowlist, **and** a `zlib`-importing fixture fails the gate | static | `node scripts/ci/check-bundle-imports.mjs && pnpm vitest run scripts/ci/gate.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-01 | — | DIST-06 | — | `pnpm.overrides` pins `primevue@4.1.0` and `tailwindcss@3.4.13`; lockfile agrees | static | `pnpm vitest run tests/pins.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-01 | — | Phase 0 contract | — | Every engine constant equals its `go-no-go.json` value | unit | `pnpm vitest run packages/engine/src/thresholds.spec.ts` | ❌ W0 | ⬜ pending |
-| pending | 01-01 | — | Regression | — | The Phase 0 gates still run and still pass after the workspace conversion | meta | `pnpm test` — assert the same gate names appear | ✅ `tests/go-no-go.spec.ts` exists; the "still runs" assertion does not | ⬜ pending |
+| 01-01/T2 | 01-01 | 1 | CORE-01 | T-01-01 | Hook callback is non-async and returns `undefined`, not a Promise | unit + lint | `pnpm vitest run packages/backend/src/hooks/passive.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T1 | 01-03 | 3 | CORE-02 | T-01-13, T-01-14 | Admission rejects by status / size / kind / scope, first failing axis wins; 304 gets its own reason | unit | `pnpm vitest run packages/backend/src/hooks/admit.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T1 | 01-03 | 3 | CORE-03 | T-01-16 | Queue bounded, FIFO, drop-oldest; overflow counted monotonically; never grows past cap | unit | `pnpm vitest run packages/engine/src/queue.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T1 | 01-03 | 3 | CORE-03 | T-01-16 | Cap is ≥ the measured 500-event burst (constructor throws at 499, succeeds at 500) | unit | `pnpm vitest run packages/engine/src/queue.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T3 | 01-03 | 3 | CORE-04 | — | Exactly one consumer drain loop under concurrent starts | unit (fake SDK) | `pnpm vitest run packages/backend/src/ingest/consumer.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T3 | 01-03 | 3 | CORE-05 | — | Consumer holds no SDK object across an `await`; both `undefined` branches counted separately | unit (fake SDK) + AST assertion | `pnpm vitest run packages/backend/src/ingest/consumer.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T2 | 01-03 | 3 | CORE-06 | T-01-15 | Yield fires on elapsed time, not chunk count — identical yield counts across different window counts | unit (injected clock) | `pnpm vitest run packages/engine/src/pipeline.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T2 | 01-03 | 3 | CORE-07 | T-01-15 | Deadline expiry produces `partial` and keeps prior work; expired at exactly the budget | unit (injected clock) | `pnpm vitest run packages/engine/src/pipeline.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T2 | 01-04 | 3 | CORE-08 | — | Identical content hashed and stored once; no new analysis at the current corpus version | integration (in-process SQLite) | `pnpm vitest run packages/backend/src/store/artifacts.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-05/T1 | 01-05 | 4 | CORE-09 | T-01-25 | `onProjectChange` including the `null` branch cancels, drains, resets the handle and swaps `project_id` | unit (fake SDK) | `pnpm vitest run packages/backend/src/lifecycle.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-05/T2 | 01-05 | 4 | CORE-10 | T-01-27 | Max slice starts at 0, only ever rises, stores the exact float | unit | `pnpm vitest run packages/backend/src/telemetry.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-05/T3 | 01-05 | 4 | CORE-10 | T-01-27 | Max slice under a 200-chunk SPA load measured EXTERNALLY, recorded, ≤ `MAX_SYNC_SLICE_MS`; zero fails | live + artifact gate | `bash scripts/phase1/spa-load.sh && pnpm vitest run tests/phase1-load.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T1 | 01-04 | 3 | STORE-01/02 | T-01-20, T-01-21 | Exact table set; every table has `project_id` in its key by ordinal; column allowlist | unit — key ordinals + column allowlist, non-vacuous | `pnpm vitest run packages/backend/src/store/schema.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-01/T2 | 01-01 | 1 | STORE-03 | — | Digest derives from `toRaw()` bytes; empty input digest asserted | unit | `pnpm vitest run packages/engine/src/digest.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T1 | 01-04 | 3 | STORE-04 | — | Analysis rows key on `detector_set_hash`; a corpus bump creates a new row | integration | `pnpm vitest run packages/backend/src/store/artifacts.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T1 | 01-04 | 3 | STORE-05 | T-01-24 | Migration ladder runs forward on a **populated** DB, loses no row, is a no-op on re-run | integration | `pnpm vitest run packages/backend/src/store/migrations.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T3 | 01-04 | 3 | STORE-06 | T-01-22 | Retention bounds row count AND age, per-pass cap honoured, no orphans, no cross-project effect | integration | `pnpm vitest run packages/backend/src/store/retention.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-04/T3 | 01-04 | 3 | STORE-07 | T-01-19 | No named parameter in any store SQL; no array-as-sole-argument bind; no unbound multi-row query missing `project_id` | static AST over `store/**` | `pnpm vitest run packages/backend/src/store/sql-discipline.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-06/T2 | 01-06 | 5 | COMPAT-01 | T-01-31, T-01-32 | Below-minimum registers no hook and opens no DB; `0.6.0 > 0.57.1`; `0.10.0 > 0.9.0`; absent/empty version never throws | unit (fake `sdk.runtime`) | `pnpm vitest run packages/backend/src/compat.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-06/T3 | 01-06 | 5 | COMPAT-01 | T-01-31 | Below-minimum refusal observed on the REAL `caido-cli 0.55.3` — leg C | live (3-leg) | `bash scripts/phase1/compat-smoke.sh && pnpm vitest run tests/phase1-compat.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-06/T3 | 01-06 | 5 | COMPAT-02 | T-01-35 | Every surface in `REQUIRED_SURFACES` exercised on 0.57.1 **and** 0.58.0; surface sets identical and equal to the export | live (3-leg) + artifact gate | `bash scripts/phase1/compat-smoke.sh && pnpm vitest run tests/phase1-compat.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-03/T3 | 01-03 | 3 | ENC-01 | — | `sha256(toRaw())` ≠ `sha256(utf8(toText()))` on the non-UTF-8 fixture: 222 bytes vs 242; offsets map to raw bytes | unit, against `corpus/encoded/nonutf8.js` | `pnpm vitest run packages/engine/src/decode.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-02/T3 | 01-02 | 2 | DIST-05 | T-01-09 | Bundle imports ⊆ measured allowlist; `zlib`, `node:crypto` and `caido:crypto` fixtures each FAIL the gate | static + fixtures | `node scripts/ci/check-bundle-imports.mjs && pnpm vitest run scripts/ci/check-bundle-imports.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-02/T3 | 01-02 | 2 | DIST-05 (DET-03 precondition) | T-01-11 | No module under `packages/engine/src/` imports `caido:` or `@caido/*`; manifest has no `@caido/*` entry | static AST + manifest | `pnpm vitest run packages/engine/src/boundary.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-02/T2 | 01-02 | 2 | DIST-06 | T-01-10 | `pnpm.overrides` pins `primevue@4.1.0` and `tailwindcss@3.4.13`; lockfile agrees; `allowBuilds` survives | static | `pnpm vitest run tests/pins.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-01/T2 | 01-01 | 1 | Phase 0 contract | T-01-08 | Every measured engine constant is generated from `go-no-go.json`; a hand edit fails CI; policy derivations asserted | unit + regeneration drift gate | `pnpm vitest run packages/engine/src/thresholds.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-01/T3 | 01-01 | 1 | Open Questions 1 & 2 | — | `sqlite_version() >= 3.24` measured inside Caido; `requests.get` reload hit rate 100% immediately AND after a 500-event burst | live + artifact gate | `bash scripts/phase1/runtime-answers.sh && pnpm vitest run tests/phase1-runtime.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-01/T2 | 01-01 | 1 | Tracer (end-to-end) | T-01-01…06 | One proxied JS response becomes one content-addressed row whose digest matches a HOST-computed SHA-256 | live end-to-end | `bash scripts/phase1/tracer-e2e.sh` | ❌ W0 | ⬜ pending |
+| 01-05/T3 | 01-05 | 4 | Success criterion 4 (restart) | — | Artifacts survive a real Caido restart; migration is a no-op on the second boot | live | `bash scripts/phase1/spa-load.sh && pnpm vitest run tests/phase1-load.spec.ts` | ❌ W0 | ⬜ pending |
+| 01-02/T2 | 01-02 | 2 | Regression | T-01-12 | The Phase 0 gates still run and still pass after the workspace conversion — before/after file and assertion counts compared as numbers | meta | `pnpm test` — baseline measured 2026-08-20: **3 files / 72 assertions** | ✅ all three specs exist; the "still runs" comparison does not | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -72,16 +84,26 @@ created: 2026-08-20
 
 ## Wave 0 Requirements
 
-- [ ] `vitest.config.ts` — extend `include` to cover `packages/*/src/**/*.spec.ts` **without dropping** `tests/**/*.spec.ts`; prove it with a before/after test count
-- [ ] `packages/engine/src/thresholds.ts` + `thresholds.spec.ts` — the Phase 0 contract; **write first, before any other Phase 1 code**
-- [ ] `packages/engine/src/*.spec.ts` — queue, deadline, chunker, digest, decode, pipeline
-- [ ] `packages/backend/src/**/*.spec.ts` — admit, consumer, lifecycle, compat, store (schema, migrations, artifacts, retention, sql-discipline)
-- [ ] `packages/backend/test/fixtures/` — a fake `SDK` (`runtime.version`, `projects.getCurrent`, `requests.get`, `requests.inScope`, `meta.db`, `console`, `api`, `events`) so backend logic is unit-testable without Caido
-- [ ] An **in-process SQLite fixture** matching pooled semantics closely enough to be honest. Node 26 has `node:sqlite`, but it is single-connection and **cannot** reproduce the pool-affinity failure mode. Use it for schema/migration/upsert correctness; mark pool-specific behaviours live-only.
-- [ ] `scripts/phase1/compat-smoke.sh` — reuses `scripts/spike/instance.sh` with `EXPECT_VERSION` and `probe-run.sh`
-- [ ] `scripts/phase1/spa-load.sh` — external RPC prober during a synthetic 200-chunk load
-- [ ] `scripts/ci/check-bundle-imports.mjs` + its negative fixture
-- [ ] `tests/pins.spec.ts` — DIST-06 override assertions
+Each item is bound to the plan and task that creates it, so Wave 0 is a checklist against real work rather than a wish list.
+
+- [ ] **01-01/T2** `vitest.config.ts` — extend `include` to cover `packages/*/src/**/*.spec.ts` and `scripts/ci/**/*.spec.ts` **without dropping** `tests/**/*.spec.ts`; no `projects`/`workspace` key (five files resolve the Phase 0 results dir from a bare relative literal)
+- [ ] **01-01/T2** `scripts/ci/gen-thresholds.mjs` + `packages/engine/src/thresholds.generated.ts` + `thresholds.ts` + `thresholds.spec.ts` — the Phase 0 contract as a generate-and-assert-byte-equality drift gate; **on the tracer's critical path, so it is written first**
+- [ ] **01-01/T2** `scripts/phase1/env.sh` — the whole Phase 1 port block (8971 instance, 8972 origin, 8973/8974 compat legs, 8975 spare) so no later plan edits it and no two scripts collide
+- [ ] **01-01/T2** `scripts/phase1/tracer-e2e.sh` — the live end-to-end proof, host-computed digest compared against the row read back
+- [ ] **01-01/T3** `scripts/phase1/runtime-answers.sh` + `tests/phase1-runtime.spec.ts` — Open Questions 1 and 2 measured and gated
+- [ ] **01-02/T2** `tests/pins.spec.ts` — DIST-06 override, exact-pin and `allowBuilds`-survival assertions
+- [ ] **01-02/T3** `scripts/ci/check-bundle-imports.mjs` + `check-bundle-imports.spec.ts` — the DIST-05 allowlist gate with THREE negative fixtures (`zlib`, `node:crypto`, `caido:crypto`)
+- [ ] **01-02/T3** `packages/engine/src/boundary.spec.ts` — DET-03's precondition, AST scan plus manifest assertion
+- [ ] **01-03/T1** `packages/backend/test/fixtures/fake-sdk.ts` — a fake `SDK` (`runtime.version`, `projects.getCurrent`, `requests.get`, `requests.inScope`, `meta.db`, `console`, `api`, `events`) plus fake request/response builders that reproduce both header casings and the array-valued header. Nothing in this repo fakes an SDK today, and four later plans depend on it.
+- [ ] **01-03** `packages/engine/src/*.spec.ts` — queue, chunker, deadline, pipeline, digest, decode
+- [ ] **01-03** `packages/backend/src/hooks/*.spec.ts` and `ingest/consumer.spec.ts`
+- [ ] **01-04/T1** An **in-process SQLite fixture** (`packages/backend/test/fixtures/sqlite-fixture.ts`) wrapping `node:sqlite` in the Caido `Database`/`Statement` async shape. Verified this session: it supports `ON CONFLICT DO UPDATE`, `PRAGMA user_version` and `PRAGMA table_info` with key ordinals. It is single-connection and **cannot** reproduce the pool-affinity failure mode, so pool behaviours are live-only and are exercised by `tracer-e2e.sh`.
+- [ ] **01-04** `packages/backend/src/store/*.spec.ts` — schema (key ordinals + column allowlist), migrations (populated DB), artifacts, retention, sql-discipline
+- [ ] **01-05/T1,T2** `packages/backend/src/lifecycle.spec.ts` and `telemetry.spec.ts`
+- [ ] **01-05/T3** `scripts/phase1/spa-load.sh` + `tests/phase1-load.spec.ts` — external RPC prober with a same-machine baseline during a synthetic 200-chunk load, plus the restart-persistence check
+- [ ] **01-06/T1** `scripts/phase1/fetch-caido.sh` — hash-pinned fetch of the current release, verified before extraction
+- [ ] **01-06/T2** `packages/backend/src/compat.spec.ts`
+- [ ] **01-06/T3** `scripts/phase1/compat-smoke.sh` + `tests/phase1-compat.spec.ts` — three legs (0.57.1, 0.58.0, below-minimum 0.55.3), reusing `scripts/spike/instance.sh` with `CAIDO_BIN` and `EXPECT_VERSION` per leg
 
 ---
 
@@ -89,10 +111,16 @@ created: 2026-08-20
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Max observed synchronous slice under a 200-chunk SPA load stays under the Phase 0 threshold | CORE-10 | A starved thread cannot report that it is starved — the measurement must come from an **external** prober, not from inside the plugin | Start a live Caido instance, run `bash scripts/phase1/spa-load.sh`, and read the recorded max-slice artifact; compare against the `go-no-go.json` threshold |
-| Plugin UI / RPC stays responsive throughout that same load | Success criterion 3 | Same reason — responsiveness is observed from outside | External RPC prober polls during the load; record latency distribution alongside the slice artifact |
-| SDK surface parity against Caido 0.58.0 | COMPAT-02 | 0.58.0 shipped 2026-08-20 and is not installed here; types are byte-identical to 0.57.1 but behaviour is not types | Install 0.58.0, run `bash scripts/phase1/compat-smoke.sh` against both 0.57.1 and 0.58.0 |
-| Below-minimum refusal on a real old binary | COMPAT-01 | Needs a genuinely old runtime, not a faked `sdk.runtime` | Run against the `caido-cli 0.55.3` already on PATH; confirm a clear reason string and zero hooks registered |
+`workflow.human_verify_mode` is `end-of-phase`, so none of these is a mid-flight `checkpoint:human-verify`. Each is
+embedded as a `<verify><human-check>` block on the task that produces it and is harvested into `01-UAT.md` at
+end-of-phase. The automated half of each row runs regardless.
+
+| Behavior | Requirement | Plan / Task | Why Manual | Test Instructions |
+|----------|-------------|-------------|------------|-------------------|
+| Plugin RPC stays responsive throughout the 200-chunk load — no quiet stretch followed by a burst of replies | Success criterion 3, CORE-10 | 01-05 / T3 `<human-check>` | A starved thread cannot report that it is starved, and this runtime exposes no scheduler introspection at all (`perf_hooks`, `process`, `llrt:qjs` all fail to load). The automated gate proves the max slice and a latency tolerance; only a human can spot a stall the tolerance let through. | Run `bash scripts/phase1/spa-load.sh`, then read the baseline and loaded distributions in `results/spa-load.json`. A max-slice number suspiciously close to the budget on every run is the instrument, not the system. |
+| Leg C's refusal message reads as a clear explanation rather than an obscure failure | COMPAT-01 | 01-06 / T3 `<human-check>` | "Clear" is a judgement about prose. The automated gate asserts the message contains both version numbers; whether it explains *why* the difference matters is a human call. | Read the leg C message recorded in `results/compat-smoke.json` as an operator would see it in the host log. |
+| Per-surface outcome DETAIL differs between 0.57.1 and 0.58.0 | COMPAT-02 | 01-06 / T3 `<human-check>` | The automated gate proves every surface was exercised and succeeded on both legs. A behavioural difference in the *detail* — a different row shape, a different error string, a different `sqlite_version` — is exactly what a byte-identical type surface cannot reveal, and it is the phase's top open risk (assumption A1). | Skim leg B's surface matrix against leg A's in `results/compat-smoke.json` before Phase 2 builds on it. |
+| Below-minimum refusal observed on a real old binary rather than a faked version string | COMPAT-01 | 01-06 / T3 (automated leg C) | Listed here because RESEARCH.md proposed it as a manual checkpoint. It is **automated instead**: leg C launches the real `caido-cli 0.55.3` via `instance.sh` with `CAIDO_BIN` passed explicitly, and the gate asserts zero artifact rows plus a refusal-mode field from a closed value set. No human step remains. | `bash scripts/phase1/compat-smoke.sh && pnpm vitest run tests/phase1-compat.spec.ts` |
 
 ---
 
