@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-08-20T20:52:08Z",
+  "question": {
+    "q1": "RESEARCH.md Open Question 1 \u2014 what SQLite version does sdk.meta.db() expose?",
+    "q2": "RESEARCH.md Open Question 2 \u2014 is sdk.requests.get(id) readable at the instant the hook fires, and after a long queue delay?"
+  },
+  "reported_version": "0.57.1",
+  "expected_version": "0.57.1",
+  "caido_version_inside_plugin": "0.57.1",
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "run_id": "20260820T205154Z-32335",
+  "sqlite_version": "3.46.0",
+  "schema_version": 1,
+  "features": {
+    "on_conflict_do_update": true,
+    "on_conflict_do_update_reason": null,
+    "on_conflict_do_update_method": "exercised \u2014 one fixture proxied many times must collapse to a single artifacts row whose seen_count equals the processed count"
+  },
+  "fixture": {
+    "path": "/defminer-runtime-fixture.js",
+    "sha256": "62240110eb8c36e62bbd0252efdf934cd57acbb360cf7deaf7a94156bb19e237",
+    "origin": "scripts/spike/origin.py on 127.0.0.1"
+  },
+  "scenarios": {
+    "reload_immediate": {
+      "scenario": "reload_immediate",
+      "measured": true,
+      "requests_issued": 10,
+      "concurrency": 1,
+      "processed": 10,
+      "reloadHit": 10,
+      "reloadMissing": 0,
+      "reloadEmptyBody": 0,
+      "admitted": 10,
+      "storeErrors": 0,
+      "consumerErrors": 0,
+      "maxEventToReloadMs": 52
+    },
+    "reload_after_burst": {
+      "scenario": "reload_after_burst",
+      "measured": true,
+      "requests_issued": 500,
+      "concurrency": 20,
+      "processed": 500,
+      "reloadHit": 500,
+      "reloadMissing": 0,
+      "reloadEmptyBody": 0,
+      "admitted": 500,
+      "storeErrors": 0,
+      "consumerErrors": 0,
+      "maxEventToReloadMs": 2154,
+      "peakQueueDepth": 323,
+      "peakQueueDepthSamples": 43,
+      "overflow": 0
+    }
+  }
+}

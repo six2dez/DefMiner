@@ -1,0 +1,1 @@
+load: 500 requests, concurrency 20, via proxy 127.0.0.1:8971 -> http://127.0.0.1:8972/defminer-runtime-fixture.js

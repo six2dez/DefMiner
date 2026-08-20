@@ -1,0 +1,1 @@
+{"requests": 500, "concurrency": 20, "url": "http://127.0.0.1:8972/defminer-runtime-fixture.js", "elapsed_s": 1.76, "completed": 500, "ok": 500, "failed": 0, "status_codes": {"200": 500}, "rate_rps": 284.1}
