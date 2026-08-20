@@ -1,0 +1,14 @@
+{
+  "requests_issued": 500,
+  "concurrency": 20,
+  "block_ms": 30000,
+  "error_requests": 5,
+  "baseline_window": [
+    1787238824.574432,
+    1787238825.262068
+  ],
+  "blocked_window": [
+    1787238828.381488,
+    1787238829.096729
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "host_logs": [
+    {
+      "path": "/tmp/defminer-probe-20260820T151340Z-2765/logs/logging.2026-08-20.log",
+      "lines": 22876,
+      "probe_marker_lines": [
+        "2026-08-20T15:13:48.364535Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238828364 qjs=5928.183 mode=block ms=30000 count=1",
+        "2026-08-20T15:14:18.396077Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK BLOCK_RELEASED date=1787238858396 qjs=35959.676 seq=501 ms=30000",
+        "2026-08-20T15:14:23.671350Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238863671 qjs=41234.997 mode=throw-sync ms=0 count=1",
+        "2026-08-20T15:14:23.719440Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK THROW_SYNC_ABOUT_TO_THROW date=1787238863719 qjs=41283.086 seq=1001",
+        "2026-08-20T15:14:29.982287Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238869982 qjs=47545.934 mode=reject-async ms=0 count=1",
+        "2026-08-20T15:14:30.028155Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK REJECT_ASYNC_RETURNING_REJECTION date=1787238870028 qjs=47591.799 seq=1011"
+      ],
+      "handler_error_lines": [],
+      "errish_lines": [
+        "2026-08-20T15:13:40.706397Z  WARN main proxy|main: ",
+        "2026-08-20T15:13:40.706400Z  WARN main proxy|main: *************************************************",
+        "2026-08-20T15:13:40.706404Z  WARN main proxy|main: DANGER: Unauthenticated guests allowed to connect",
+        "2026-08-20T15:13:40.706408Z  WARN main proxy|main: *************************************************",
+        "2026-08-20T15:13:40.706411Z  WARN main proxy|main: ",
+        "2026-08-20T15:13:40.709552Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read api.yml, skipping",
+        "2026-08-20T15:13:40.709558Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read license.yml, skipping",
+        "2026-08-20T15:13:40.709566Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read ca.cert, skipping",
+        "2026-08-20T15:13:40.709573Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration: Unable to delete config directory, skipping",
+        "2026-08-20T15:13:40.709578Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration: Unable to delete keys directory, skipping",
+        "2026-08-20T15:13:40.709611Z  WARN main proxy_config::migrations::migration_2022_09_14_163410_projects_migration::helpers: Unable to read index.yml, skipping",
+        "2026-08-20T15:13:41.730534Z  WARN actix-rt|system:0|arbiter:0 api|graphql: [query] unnamed: query { __typename }",
+        "2026-08-20T15:13:41.743152Z  WARN actix-rt|system:0|arbiter:1 api|graphql: [mutation] unnamed: mutation { loginAsGuest { token { accessToken } } }",
+        "2026-08-20T15:13:42.343297Z  WARN actix-rt|system:0|arbiter:2 api|graphql: [query] unnamed: query { projects { id } }",
+        "2026-08-20T15:13:42.365591Z  WARN actix-rt|system:0|arbiter:3 api|graphql: [mutation] unnamed: mutation { createProject(input: {name: \"spike-03-block\", temporary: true}) { project { id } error { __typename } } }",
+        "2026-08-20T15:13:42.384724Z  WARN actix-rt|system:0|arbiter:4 api|graphql: [mutation] unnamed: mutation { selectProject(id: \"ec6002b2-e1a6-4882-bc7a-1a0a5311f18a\") { error { __typename } } }",
+        "2026-08-20T15:13:42.389414Z  INFO actix-rt|system:0|arbiter:4 database: Running migration: 2022-01-28-011027_replay_entries_error",
+        "2026-08-20T15:14:30.028155Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK REJECT_ASYNC_RETURNING_REJECTION date=1787238870028 qjs=47591.799 seq=1011"
+      ],
+      "errish_count": 18
+    }
+  ],
+  "stdout": {
+    "path": ".planning/phases/00-runtime-reality-check/results/runs/20260820T151340Z-2765/caido.stdout.log",
+    "lines": 22876,
+    "probe_marker_lines": [
+      "2026-08-20T15:13:48.364531Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238828364 qjs=5928.183 mode=block ms=30000 count=1",
+      "2026-08-20T15:14:18.396029Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK BLOCK_RELEASED date=1787238858396 qjs=35959.676 seq=501 ms=30000",
+      "2026-08-20T15:14:23.671345Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238863671 qjs=41234.997 mode=throw-sync ms=0 count=1",
+      "2026-08-20T15:14:23.719434Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK THROW_SYNC_ABOUT_TO_THROW date=1787238863719 qjs=41283.086 seq=1001",
+      "2026-08-20T15:14:29.982282Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK ARM date=1787238869982 qjs=47545.934 mode=reject-async ms=0 count=1",
+      "2026-08-20T15:14:30.028147Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK REJECT_ASYNC_RETURNING_REJECTION date=1787238870028 qjs=47591.799 seq=1011"
+    ],
+    "handler_error_lines": [],
+    "errish_lines": [
+      "2026-08-20T15:13:40.706394Z  WARN main proxy|main: ",
+      "2026-08-20T15:13:40.706398Z  WARN main proxy|main: *************************************************",
+      "2026-08-20T15:13:40.706401Z  WARN main proxy|main: DANGER: Unauthenticated guests allowed to connect",
+      "2026-08-20T15:13:40.706405Z  WARN main proxy|main: *************************************************",
+      "2026-08-20T15:13:40.706409Z  WARN main proxy|main: ",
+      "2026-08-20T15:13:40.709547Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read api.yml, skipping",
+      "2026-08-20T15:13:40.709555Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read license.yml, skipping",
+      "2026-08-20T15:13:40.709562Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration::helpers: Unable to read ca.cert, skipping",
+      "2026-08-20T15:13:40.709569Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration: Unable to delete config directory, skipping",
+      "2026-08-20T15:13:40.709574Z  WARN main proxy_config::migrations::migration_2022_09_14_142704_config_migration: Unable to delete keys directory, skipping",
+      "2026-08-20T15:13:40.709607Z  WARN main proxy_config::migrations::migration_2022_09_14_163410_projects_migration::helpers: Unable to read index.yml, skipping",
+      "2026-08-20T15:13:41.730468Z  WARN actix-rt|system:0|arbiter:0 api|graphql: [query] unnamed: query { __typename }",
+      "2026-08-20T15:13:41.743128Z  WARN actix-rt|system:0|arbiter:1 api|graphql: [mutation] unnamed: mutation { loginAsGuest { token { accessToken } } }",
+      "2026-08-20T15:13:42.343292Z  WARN actix-rt|system:0|arbiter:2 api|graphql: [query] unnamed: query { projects { id } }",
+      "2026-08-20T15:13:42.365586Z  WARN actix-rt|system:0|arbiter:3 api|graphql: [mutation] unnamed: mutation { createProject(input: {name: \"spike-03-block\", temporary: true}) { project { id } error { __typename } } }",
+      "2026-08-20T15:13:42.384720Z  WARN actix-rt|system:0|arbiter:4 api|graphql: [mutation] unnamed: mutation { selectProject(id: \"ec6002b2-e1a6-4882-bc7a-1a0a5311f18a\") { error { __typename } } }",
+      "2026-08-20T15:13:42.389412Z  INFO actix-rt|system:0|arbiter:4 database: Running migration: 2022-01-28-011027_replay_entries_error",
+      "2026-08-20T15:14:30.028147Z  INFO plugin:52cb39d2-8f7e-45a4-84f4-e7ce0e7ee9fb plugin|defminer-tier0-events: MARK REJECT_ASYNC_RETURNING_REJECTION date=1787238870028 qjs=47591.799 seq=1011"
+    ],
+    "errish_count": 18
+  },
+  "stderr": {
+    "path": ".planning/phases/00-runtime-reality-check/results/runs/20260820T151340Z-2765/caido.stderr.log",
+    "lines": 1,
+    "probe_marker_lines": [],
+    "handler_error_lines": [],
+    "errish_lines": [
+      "Error reading the log directory/files: No such file or directory (os error 2)"
+    ],
+    "errish_count": 1
+  }
+}

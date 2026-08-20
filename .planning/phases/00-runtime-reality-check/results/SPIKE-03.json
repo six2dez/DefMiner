@@ -1,0 +1,290 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-03",
+  "status": "pass",
+  "recorded_at": "2026-08-20T15:17:32Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T151340Z-2765"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 3.87
+  },
+  "instances": [
+    {
+      "run_id": "20260820T151340Z-2765",
+      "data_path": "/tmp/defminer-probe-20260820T151340Z-2765",
+      "listen": "127.0.0.1:8995",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    }
+  ],
+  "method": "One fresh guest-enabled instance on 127.0.0.1:8995 launched through scripts/spike/instance.sh with the 0.57.1 assertion intact, run LAST in plan 00-03 and alone, because it wedges the QuickJS thread for thirty seconds. A temporary project was created and SELECTED, and probe/tier0-events installed \u2014 the SAME probe SPIKE-05 and SPIKE-11 used, unmodified, so all three spikes measured identical handler code. A preflight proxied request had to be delivered before the experiment was allowed to start. scripts/spike/block-load.sh then ran the identical 500-request, 20-way rig TWICE against scripts/spike/origin.py on 127.0.0.1:8083: once against an idle handler for the baseline, and once with the handler armed to spin synchronously for 30,000 ms on the first delivered event. Per-request client status AND per-request client latency were captured with curl -w, because elapsed time alone is a trap \u2014 a run where every request failed finishes fastest of all. After the block released the event log was drained to settlement. Then two error-injection modes ran with a handful of requests each \u2014 a synchronous throw and a returned rejected promise, both carrying an error message unique to this run \u2014 followed in each case by a further batch to test whether the plugin kept receiving events. All three log surfaces named in the plan were scanned before teardown: the instance's structured logging.<date>.log, its stdout and its stderr.",
+  "measurements": [
+    {
+      "name": "requests_issued",
+      "value": 500,
+      "unit": "requests",
+      "stat": "count",
+      "variant": "blocked run",
+      "notes": "Exactly 500 proxied requests at 20-way concurrency against the local origin."
+    },
+    {
+      "name": "responses_returned_to_client",
+      "value": 500,
+      "unit": "responses",
+      "stat": "count",
+      "variant": "blocked run",
+      "status_codes": {
+        "200": 500
+      },
+      "notes": "Counted from per-request curl status; a run where everything failed would otherwise be the fastest run of all."
+    },
+    {
+      "name": "events_delivered",
+      "value": 500,
+      "unit": "events",
+      "stat": "count",
+      "variant": "blocked run",
+      "sequence_contiguous": true,
+      "first_seq": 501,
+      "last_seq": 1000,
+      "delivered_during_block": 1,
+      "delivered_after_release": 499,
+      "post_release_burst_ms": 20,
+      "dropped_by_probe": 0,
+      "notes": "The probe's own row cap is 4000, eight times the request count, and its dropped counter stayed at 0 \u2014 so a shortfall here could not have been the probe's doing."
+    },
+    {
+      "name": "requests_issued_baseline",
+      "value": 500,
+      "unit": "requests",
+      "stat": "count",
+      "variant": "baseline run, idle handler"
+    },
+    {
+      "name": "events_delivered_baseline",
+      "value": 500,
+      "unit": "events",
+      "stat": "count",
+      "variant": "baseline run, idle handler",
+      "notes": "The same rig against an idle handler on the SAME instance, so the blocked run is compared against this machine rather than against a number measured elsewhere."
+    },
+    {
+      "name": "block_duration_ms",
+      "value": 30000,
+      "unit": "ms",
+      "stat": "point",
+      "variant": "measured inside the handler",
+      "requested_ms": 30000,
+      "spin_iterations": 803593924,
+      "blocking_seq": 501
+    },
+    {
+      "name": "load_wall_clock_ms",
+      "value": 715.2,
+      "unit": "ms",
+      "stat": "point",
+      "variant": "blocked run",
+      "notes": "The whole 500-request burst finished while the handler was still spinning."
+    },
+    {
+      "name": "load_wall_clock_ms",
+      "value": 687.6,
+      "unit": "ms",
+      "stat": "point",
+      "variant": "baseline run"
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 1.82,
+      "unit": "ms",
+      "stat": "min",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 4.8,
+      "unit": "ms",
+      "stat": "median",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 73.32,
+      "unit": "ms",
+      "stat": "p95",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 225.94,
+      "unit": "ms",
+      "stat": "p99",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 457.49,
+      "unit": "ms",
+      "stat": "max",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 15.56,
+      "unit": "ms",
+      "stat": "mean",
+      "variant": "blocked run",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 1.71,
+      "unit": "ms",
+      "stat": "min",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 4.12,
+      "unit": "ms",
+      "stat": "median",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 49.26,
+      "unit": "ms",
+      "stat": "p95",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 379.17,
+      "unit": "ms",
+      "stat": "p99",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 581.09,
+      "unit": "ms",
+      "stat": "max",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "client_latency_ms",
+      "value": 15.07,
+      "unit": "ms",
+      "stat": "mean",
+      "variant": "baseline run, idle handler",
+      "n": 500
+    },
+    {
+      "name": "handler_error_sync",
+      "value": "swallowed",
+      "unit": "outcome",
+      "stat": "point",
+      "variant": "synchronous throw inside onInterceptResponse",
+      "log_hits": 0,
+      "handler_ran": true,
+      "events_in_injection_batch": 5,
+      "events_after_injection": 5,
+      "host_log_hits": 0,
+      "stdout_hits": 0,
+      "stderr_hits": 0,
+      "notes": "The thrown Error carries a message unique to this run ('defminer-spike-03 ...'), so a single matching line in ANY of the three log surfaces would be unambiguous proof that Caido surfaced it."
+    },
+    {
+      "name": "handler_error_async",
+      "value": "swallowed",
+      "unit": "outcome",
+      "stat": "point",
+      "variant": "rejected promise returned from onInterceptResponse",
+      "log_hits": 0,
+      "handler_ran": true,
+      "events_in_injection_batch": 5,
+      "events_after_injection": 5,
+      "host_log_hits": 0,
+      "stdout_hits": 0,
+      "stderr_hits": 0
+    }
+  ],
+  "verdict": {
+    "answer": "Caido QUEUES. All 500 proxied requests returned 200 to the client in 715 ms while the handler was still spinning, and all 500 events were delivered \u2014 exactly one during the block (the one that caused it) and the remaining 499 in a 20 ms burst after it released, with a CONTIGUOUS sequence range 501-1000 and nothing lost. Client latency did not move: p95 73.32 ms blocked against 49.26 ms on the idle baseline, and the blocked run's p99 and max were actually LOWER than the baseline's. A thirty-second plugin-thread stall is therefore invisible to the proxy's clients. Both a synchronous throw and an asynchronous rejection inside the handler were SWALLOWED: the probe's own marker lines prove each ran, and the unique error text appears in none of the three log surfaces \u2014 host log, stdout or stderr. The plugin kept receiving events after each.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "EVENT_OVERFLOW_BEHAVIOUR",
+        "value": "queue",
+        "unit": "enum(queue|drop|backpressure)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Queue signature met on all three tests. Delivered 500 of 500 responses with a contiguous sequence range (True); 1 arrived during the block and 499 in a 20 ms burst after it; and client latency did not inflate (blocked p95 73.32 ms vs baseline 49.26 ms, blocked max 457.49 ms vs baseline 581.09 ms \u2014 against a 30,000 ms block, so backpressure would have been unmissable). The probe's own row cap was never reached and its dropped counter stayed at 0, so nothing was lost on the plugin side either."
+      },
+      {
+        "id": "EVENTS_DELIVERED_UNDER_BLOCK",
+        "value": 500,
+        "unit": "events",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "500 issued, 500 returned 200 to the client, 500 delivered to a handler that was blocked for 30000 ms. The idle baseline on the same instance also delivered 500 of 500, so the blocked run lost nothing relative to it."
+      },
+      {
+        "id": "HANDLER_ERROR_SURFACED",
+        "value": "neither",
+        "unit": "enum(both|sync|async|neither|partial)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Neither. The probe logged MARK THROW_SYNC_ABOUT_TO_THROW and MARK REJECT_ASYNC_RETURNING_REJECTION immediately before each injection, so both handlers demonstrably ran; the unique error text 'defminer-spike-03' then appears 0 times in the host log, 0 in stdout and 0 in stderr \u2014 0 attributable to the throw and 0 to the rejection. The plugin kept receiving events afterwards (5 and 5 in the follow-up batches), so the handler was not torn down \u2014 the error simply vanished."
+      }
+    ],
+    "if_wrong": "CORE-03's bounded queue is a different object under each of the three answers. Under QUEUE, which is what was measured, Caido's own buffer is unbounded as far as this experiment could see: 499 events survived a thirty-second stall intact. That means the plugin's bounded queue is not protecting Caido from DefMiner \u2014 it is protecting DefMiner's own memory from a backlog Caido will happily hand it all at once, and it must therefore be sized against RSS (SPIKE-06 measured 102 bytes of RSS per input byte) rather than against any assumed upstream limit. It also means the overflow counter is meaningful: anything it drops was genuinely offered. Under DROP the counter would be measuring the wrong thing entirely, because losses would already have happened upstream and invisibly, and 'we scanned everything' could never be a true statement \u2014 DefMiner would have to say 'we scanned everything we were given'. Under BACKPRESSURE the queue would need to be small on purpose, because every slow analysis would be paid for by the operator's own browsing latency, and the plugin would have to shed load rather than buffer it. Separately, because Caido SWALLOWS both a synchronous throw and an asynchronous rejection, ERR-03 and OBS-01 cannot rely on the host for any error visibility whatsoever: every handler must wrap its own body in try/catch and log through sdk.console itself, and any uncaught rejection inside DefMiner will be silent in production. A crash-looping analyser would look, from the outside, exactly like an idle one."
+  },
+  "requirements_affected": [
+    "SPIKE-03",
+    "CORE-01",
+    "CORE-03",
+    "CORE-04",
+    "CORE-10",
+    "ERR-03",
+    "OBS-01"
+  ],
+  "artifacts": [
+    "probe/tier0-events/backend/script.js",
+    "scripts/spike/block-load.sh",
+    "scripts/spike/run-spike-03.sh",
+    ".planning/phases/00-runtime-reality-check/results/runs/20260820T151340Z-2765/raw/drain-blocked.jsonl",
+    ".planning/phases/00-runtime-reality-check/results/runs/20260820T151340Z-2765/raw/error-scan.json"
+  ],
+  "notes": "Log-surface scan: the host log carried 22876 lines, stdout 22876 and stderr 1; 18 error-or-warning-level lines were found across them in total and every one of them is Caido's own startup noise or a GraphQL trace, none within the injection windows. The instance recovered cleanly from the block and answered every subsequent call, confirming the research's claim that the Caido core survives a plugin-thread hang (threat T-00-31, accepted). Teardown was kill -9 as always."
+}
