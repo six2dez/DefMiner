@@ -2,10 +2,10 @@
   "$schema": "./spike-result.schema.json",
   "spike": "SPIKE-07",
   "status": "pass",
-  "recorded_at": "2026-08-20T12:12:14Z",
+  "recorded_at": "2026-08-20T12:18:26Z",
   "duration_s": 0.2,
   "run_ids": [
-    "20260820T121213Z-23662"
+    "20260820T121824Z-31596"
   ],
   "binary": {
     "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
@@ -20,12 +20,12 @@
     "cpu": "Apple M4 Pro",
     "cores": 14,
     "ram_gb": 24.0,
-    "loadavg_1m": 3.15
+    "loadavg_1m": 5.0
   },
   "instances": [
     {
-      "run_id": "20260820T121213Z-23662",
-      "data_path": "/tmp/defminer-probe-20260820T121213Z-23662",
+      "run_id": "20260820T121824Z-31596",
+      "data_path": "/tmp/defminer-probe-20260820T121824Z-31596",
       "listen": "127.0.0.1:8999",
       "fresh": true,
       "flags": [
@@ -40,7 +40,7 @@
   "probe": {
     "tier": "raw-zip",
     "package_version": "0.0.1",
-    "bundle_sha256": "9a7f295ade2930dae95159577dd8a0404ded4935324cfb411e92ae944e712fd9",
+    "bundle_sha256": "80b0afa51a8a4938af2bc4632e659f711017e2cd14753cb369858e6c15cc737e",
     "deps": {}
   },
   "corpus": [],
@@ -67,14 +67,14 @@
     },
     {
       "name": "text_decoder_module",
-      "value": null,
+      "value": "none",
       "unit": "module",
       "stat": "point",
       "notes": "Open question 4 in 00-RESEARCH.md. TextDecoder is not a global; this is which module exports it, if any. ENC-01/ENC-02 depend on it."
     },
     {
       "name": "text_encoder_module",
-      "value": null,
+      "value": "none",
       "unit": "module",
       "stat": "point"
     },
@@ -136,11 +136,11 @@
       },
       {
         "id": "TEXTDECODER_MODULE",
-        "value": null,
+        "value": "none",
         "unit": "module",
         "confidence": "HIGH",
         "status": "resolved",
-        "rationale": "Resolved by enumerating every export of buffer, string_decoder, url and util."
+        "rationale": "Resolved by enumerating every export of buffer, string_decoder, url and util. NO probed module exports TextDecoder and it is not a global. Decoding is still reachable via string_decoder.StringDecoder, buffer.Buffer (toString/from), globalThis.Buffer."
       },
       {
         "id": "TRIVIAL_STACK_DEPTH",
@@ -160,8 +160,8 @@
     "CORE-06"
   ],
   "artifacts": [
-    "runs/20260820T121213Z-23662/raw/capabilities.json",
-    "runs/20260820T121213Z-23662/instance.json"
+    "runs/20260820T121824Z-31596/raw/capabilities.json",
+    "runs/20260820T121824Z-31596/instance.json"
   ],
   "notes": "Loadable modules: buffer, caido:http, crypto, events, fs, os, path, sqlite, string_decoder, url. Failed to load: caido:crypto, llrt:qjs, perf_hooks, process, qjs, stream, util, zlib. performance carries only `now` and `timeOrigin`; timeOrigin is a monotonic boot-relative origin, NOT a wall clock, so timeOrigin + now() is not a timestamp. There is no globalThis.gc, so collection cannot be forced before a measurement. Three module facts later plans depend on: (1) bare `crypto` loads and exports Sha256/createHash, which is what the SPIKE-10 recorder hashes bodies with -- note `caido:crypto` does NOT load, only bare `crypto`; (2) `zlib` does NOT load, so SPIKE-08 cannot decompress in-runtime and must rely on whatever Caido already decoded; (3) `util` and `stream` do NOT load."
 }

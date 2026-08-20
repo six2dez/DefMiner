@@ -1,0 +1,203 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-02",
+  "status": "pass",
+  "recorded_at": "2026-08-20T12:18:37Z",
+  "duration_s": 6.8,
+  "run_ids": [
+    "20260820T121826Z-16681"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 4.85
+  },
+  "instances": [
+    {
+      "run_id": "20260820T121826Z-16681",
+      "data_path": "/tmp/defminer-probe-20260820T121826Z-16681",
+      "listen": "127.0.0.1:8999",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": null
+    }
+  ],
+  "probe": {
+    "tier": "raw-zip",
+    "package_version": "0.0.1",
+    "deps": {}
+  },
+  "corpus": [],
+  "method": "Fixed WALL-CLOCK window per primitive (300 ms) with a 1 ms synchronous slice between yields, and a 4 ms setInterval counting service opportunities; each window reports observed ticks, ticks possible, and a validity flag. A fixed ITERATION count was rejected: it produced a false negative during research by completing in less than one timer period. Per-yield cost of the winning primitive over 48 samples timed around the await alone. Geometry re-run at the real CORE-06 shape \u2014 8388808-byte input, 65536-byte chunks, 4096-byte overlap \u2014 with a representative literal prefilter in each slice, under three policies: no yield (baseline), yield per chunk, and yield when accumulated synchronous time reaches a 25 ms budget. RSS attribution via an external 50 ms ps sampler correlated to in-runtime markers by unix-ms timestamp; there is no in-runtime memory introspection and no gc(), so this is the only method available.",
+  "measurements": [
+    {
+      "name": "timer_service_ratio",
+      "primitive": "setTimeout0",
+      "value": 0.76,
+      "unit": "ratio",
+      "stat": "point",
+      "n": 57,
+      "valid": true,
+      "notes": "49 yields, 57 timer ticks of 75 possible over a 303.9 ms window."
+    },
+    {
+      "name": "timer_service_ratio",
+      "primitive": "setImmediate",
+      "value": 0,
+      "unit": "ratio",
+      "stat": "point",
+      "n": 0,
+      "valid": true,
+      "notes": "300 yields, 0 timer ticks of 75 possible over a 300.4 ms window."
+    },
+    {
+      "name": "timer_service_ratio",
+      "primitive": "promiseResolve",
+      "value": 0,
+      "unit": "ratio",
+      "stat": "point",
+      "n": 0,
+      "valid": true,
+      "notes": "300 yields, 0 timer ticks of 75 possible over a 300.1 ms window."
+    },
+    {
+      "name": "timer_service_ratio",
+      "primitive": "blocking",
+      "value": 0,
+      "unit": "ratio",
+      "stat": "point",
+      "n": 0,
+      "valid": true,
+      "notes": "0 yields, 0 timer ticks of 75 possible over a 300.0 ms window."
+    },
+    {
+      "name": "yield_cost",
+      "primitive": "setTimeout0",
+      "value": 5.029,
+      "unit": "ms",
+      "stat": "median",
+      "p95": 6.042,
+      "n": 48,
+      "notes": "min 4.8870 ms, max 6.0920 ms. Timed around the await alone, with no synchronous work in between."
+    },
+    {
+      "name": "setTimeout_clamp",
+      "primitive": "setTimeout",
+      "unit": "ms",
+      "value": 5.025,
+      "stat": "median",
+      "n": 12,
+      "notes": "setTimeout(fn,0) median 5.025 ms vs setTimeout(fn,1) median 4.987 ms \u2014 indistinguishable: True. Measured, not assumed."
+    },
+    {
+      "name": "geometry_yield_overhead",
+      "variant": "per_chunk",
+      "value": 744.8,
+      "unit": "ms",
+      "stat": "sum",
+      "n": 137,
+      "notes": "yield once per 64KB chunk. 137 yields over 137 chunks of a 8388808-byte input: 970.0 ms total, 225.2 ms of work, 330.7% overhead on top of work."
+    },
+    {
+      "name": "geometry_yield_overhead",
+      "variant": "temporal",
+      "value": 29.5,
+      "unit": "ms",
+      "stat": "sum",
+      "n": 5,
+      "notes": "yield when accumulated sync time reaches the slice budget. 5 yields over 137 chunks of a 8388808-byte input: 168.9 ms total, 139.4 ms of work, 21.2% overhead on top of work."
+    },
+    {
+      "name": "geometry_work_baseline",
+      "value": 115.9,
+      "unit": "ms",
+      "stat": "sum",
+      "n": 137,
+      "notes": "Pure prefilter work over the same 8388808-byte input with NO yielding. Without this baseline the overhead figures are unattributable."
+    },
+    {
+      "name": "rss_attribution_ratio",
+      "variant": "held_32mb",
+      "value": 0.9419,
+      "unit": "ratio",
+      "stat": "point",
+      "notes": "Allocated 33555060 bytes in-runtime; external RSS rose 31604736 bytes."
+    },
+    {
+      "name": "rss_attribution_ratio",
+      "variant": "held_96mb",
+      "value": 1.0207,
+      "unit": "ratio",
+      "stat": "point",
+      "notes": "Allocated 67110812 bytes in-runtime; external RSS rose 68501504 bytes."
+    },
+    {
+      "name": "rss_delta_after_drop",
+      "value": 16384,
+      "unit": "bytes",
+      "stat": "point",
+      "notes": "RSS change after EVERY reference was dropped. A value at or above zero proves RSS is a high-water mark, not a live gauge."
+    }
+  ],
+  "verdict": {
+    "answer": "YES \u2014 `setTimeout0` is the only primitive that genuinely yields the QuickJS event loop. Service ratios over a 300 ms window: setTimeout0=0.76; setImmediate=0.00; promiseResolve=0.00; blocking=0.00. setImmediate and Promise.resolve() starve timers exactly as hard as a fully blocking loop, so neither is a yield. The winner costs 5.03 ms median (p95 6.04 ms) over 48 samples, and setTimeout clamps to ~5.0 ms, making setTimeout(fn,0) and setTimeout(fn,1) indistinguishable. At the real 64KB/4KB geometry over 8.0 MB, yielding once per chunk costs 744.8 ms of pure overhead (330.7% on top of work) across 137 yields, whereas yielding on a 25 ms temporal budget costs 29.5 ms (21.2%) across 5 yields. The yield trigger must therefore be TEMPORAL; the chunk geometry stays only for matching-window reasons. RSS attribution tracks in-runtime allocation (held_32mb 0.94x, held_96mb 1.02x), and RSS did NOT fall when every reference was dropped.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "YIELD_PRIMITIVE",
+        "value": "setTimeout0",
+        "unit": "enum",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Only primitive with a non-zero timer service ratio over a fixed wall-clock window; the other two scored 0.00, equal to the fully blocking baseline."
+      },
+      {
+        "id": "YIELD_COST_MS",
+        "value": 5.029,
+        "unit": "ms",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Median over 48 samples; p95 6.04 ms. Dominated by the ~5.0 ms setTimeout clamp."
+      },
+      {
+        "id": "MAX_SYNC_SLICE_MS",
+        "value": 25,
+        "unit": "ms",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Derived from the real-geometry comparison, not projection: per-chunk yielding cost 330.7% overhead over 137 yields versus 21.2% over 5 yields at a 25 ms temporal budget on the same input."
+      }
+    ],
+    "if_wrong": "If setTimeout(fn,0) did not yield, CORE-06's chunk-and-yield model is invalid and the ingestion execution model must change wholesale \u2014 budget-and-background cannot work, and CORE-07's background pass would have to move out of the runtime entirely. If the yield cost were much lower than 5.03 ms, geometry-driven yielding would become affordable and MAX_SYNC_SLICE_MS would be unnecessary. If RSS attribution did NOT track allocation, SPIKE-06's byte-per-byte budget has no measurement basis and the size ceiling would have to come from crash-boundary bisection alone."
+  },
+  "requirements_affected": [
+    "SPIKE-02",
+    "CORE-06",
+    "CORE-07",
+    "CORE-04",
+    "QUAL-06"
+  ],
+  "artifacts": [
+    "runs/20260820T121826Z-16681/raw/SPIKE-02.jsonl",
+    "runs/20260820T121826Z-16681/raw/yield-experiment.json",
+    "runs/20260820T121826Z-16681/raw/yield-geometry.json",
+    "runs/20260820T121826Z-16681/raw/rss-attribution.json",
+    "runs/20260820T121826Z-16681/rss.csv"
+  ],
+  "notes": "CARRY THIS INTO QUAL-06 (Phase 11): RSS did not fall after every reference was dropped (delta 16384 bytes across the drop). QuickJS's allocator does not return pages to the OS and there is no gc() to force collection, so RSS is a HIGH-WATER MARK, not a live gauge. Any soak assertion of the form 'memory after is at most memory before' is INVALID in this runtime. The correct assertion is that the per-artifact RSS delta converges toward zero across repetitions. Consequently SPIKE-06 must use a fresh instance per size point, or record only the step at each marker. Attribution is excellent on the way UP (held_32mb 0.94x, held_96mb 1.02x) and meaningless on the way down."
+}

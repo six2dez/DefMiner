@@ -40,10 +40,11 @@ measurements = [
               "@caido/quickjs-types declares ~6; never trust the type package as a capability list."},
     {"name": "structured_clone_typeof", "value": sc, "unit": "typeof", "stat": "point"},
     {"name": "webassembly_typeof", "value": wasm, "unit": "typeof", "stat": "point"},
-    {"name": "text_decoder_module", "value": td_mod, "unit": "module", "stat": "point",
+    {"name": "text_decoder_module", "value": td_mod or "none", "unit": "module", "stat": "point",
      "notes": "Open question 4 in 00-RESEARCH.md. TextDecoder is not a global; "
               "this is which module exports it, if any. ENC-01/ENC-02 depend on it."},
-    {"name": "text_encoder_module", "value": cap["text_encoder_module"], "unit": "module", "stat": "point"},
+    {"name": "text_encoder_module", "value": cap["text_encoder_module"] or "none",
+     "unit": "module", "stat": "point"},
     {"name": "trivial_stack_depth", "value": depth, "unit": "frames", "stat": "max",
      "notes": "Trivial 1-argument frame. Real AST-walk frames are far larger, so the "
               "effective depth is much lower — SPIKE-06 measures that with a real parser."},
@@ -129,9 +130,17 @@ body = {
             {"id": "WASM_PRESENT", "value": wasm != "undefined", "unit": "boolean",
              "confidence": "HIGH", "status": "resolved",
              "rationale": "typeof WebAssembly === '%s'. Rules out every wasm-based parser." % wasm},
-            {"id": "TEXTDECODER_MODULE", "value": td_mod, "unit": "module",
+            # "none" is a RESOLVED answer, not a missing one. null would mean
+            # "not measured"; this threshold is measured and the answer is
+            # negative. Conflating the two would let a later phase read an
+            # unmeasured field as a fact.
+            {"id": "TEXTDECODER_MODULE", "value": td_mod or "none", "unit": "module",
              "confidence": "HIGH", "status": "resolved",
-             "rationale": "Resolved by enumerating every export of buffer, string_decoder, url and util."},
+             "rationale": ("Resolved by enumerating every export of buffer, string_decoder, "
+                           "url and util. " +
+                           ("Exported by `%s`." % td_mod if td_mod else
+                            "NO probed module exports TextDecoder and it is not a global. "
+                            "Decoding is still reachable via %s." % (", ".join(decoders) or "nothing")))},
             {"id": "TRIVIAL_STACK_DEPTH", "value": depth, "unit": "frames",
              "confidence": "HIGH", "status": "resolved",
              "rationale": "Upper bound from a 1-argument frame; SPIKE-06 measures the "

@@ -1,0 +1,215 @@
+{"kind": "window", "primitive": "setTimeout0", "duration_ms": 303.881, "yields": 49, "timer_ticks": 57, "expected_ticks_if_free": 75, "timer_service_ratio": 0.76, "valid": true}
+{"kind": "window", "primitive": "setImmediate", "duration_ms": 300.356, "yields": 300, "timer_ticks": 0, "expected_ticks_if_free": 75, "timer_service_ratio": 0, "valid": true}
+{"kind": "window", "primitive": "promiseResolve", "duration_ms": 300.069, "yields": 300, "timer_ticks": 0, "expected_ticks_if_free": 75, "timer_service_ratio": 0, "valid": true}
+{"kind": "window", "primitive": "blocking", "duration_ms": 300.002, "yields": 0, "timer_ticks": 0, "expected_ticks_if_free": 75, "timer_service_ratio": 0, "valid": true}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 0, "ms": 5.751}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 1, "ms": 4.929}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 2, "ms": 4.89}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 3, "ms": 6.092}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 4, "ms": 6.024}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 5, "ms": 4.978}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 6, "ms": 4.988}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 7, "ms": 5.954}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 8, "ms": 5.066}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 9, "ms": 5.019}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 10, "ms": 5.023}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 11, "ms": 4.929}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 12, "ms": 4.916}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 13, "ms": 5.091}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 14, "ms": 5.922}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 15, "ms": 5.075}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 16, "ms": 5.005}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 17, "ms": 4.959}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 18, "ms": 6.042}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 19, "ms": 5.02}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 20, "ms": 4.949}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 21, "ms": 4.987}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 22, "ms": 5.026}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 23, "ms": 5.012}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 24, "ms": 5.909}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 25, "ms": 5.044}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 26, "ms": 5.948}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 27, "ms": 5.094}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 28, "ms": 6.083}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 29, "ms": 5.029}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 30, "ms": 4.887}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 31, "ms": 5.971}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 32, "ms": 5.946}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 33, "ms": 5.068}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 34, "ms": 5.956}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 35, "ms": 4.979}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 36, "ms": 6.032}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 37, "ms": 5.029}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 38, "ms": 5.019}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 39, "ms": 5.023}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 40, "ms": 4.954}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 41, "ms": 6.027}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 42, "ms": 5.986}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 43, "ms": 6.024}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 44, "ms": 4.94}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 45, "ms": 5.04}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 46, "ms": 4.987}
+{"kind": "yield_cost_sample", "primitive": "setTimeout0", "i": 47, "ms": 5.018}
+{"kind": "clamp", "requested": "setTimeout_0", "n": 12, "median": 5.025, "p95": 6.035, "min": 4.92, "max": 6.035}
+{"kind": "clamp", "requested": "setTimeout_1", "n": 12, "median": 4.987, "p95": 6.033, "min": 4.811, "max": 6.033}
+{"kind": "clamp", "requested": "setTimeout_4", "n": 12, "median": 5.038, "p95": 6.071, "min": 4.953, "max": 6.071}
+{"kind": "clamp", "requested": "setTimeout_10", "n": 12, "median": 11.062, "p95": 13.113, "min": 10.896, "max": 13.113}
+{"kind": "geometry", "policy": "baseline", "total_ms": 115.9, "yields": 0}
+{"kind": "geometry", "policy": "per_chunk", "total_ms": 970, "work_ms": 225.2, "yields": 137, "overhead_ms": 744.8, "overhead_pct_of_work": 330.7}
+{"kind": "geometry", "policy": "temporal", "total_ms": 168.9, "work_ms": 139.4, "yields": 5, "overhead_ms": 29.5, "overhead_pct_of_work": 21.2}
+{"kind": "rss_step", "phase": "baseline", "date": 1787228312279, "bytes_allocated": 0, "rss_kb_at_mark": 123472, "rss_kb_after_settle": 123488}
+{"kind": "rss_step", "phase": "held_32mb", "date": 1787228313194, "bytes_allocated": 33555060, "rss_kb_at_mark": 123488, "rss_kb_after_settle": 154352}
+{"kind": "rss_step", "phase": "held_96mb", "date": 1787228314115, "bytes_allocated": 100665872, "rss_kb_at_mark": 154352, "rss_kb_after_settle": 221248}
+{"kind": "rss_step", "phase": "dropped", "date": 1787228315018, "bytes_allocated": 0, "rss_kb_at_mark": 221248, "rss_kb_after_settle": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228308098, "rss_kb": 102656}
+{"kind": "rss_sample", "unix_ms": 1787228308153, "rss_kb": 102656}
+{"kind": "rss_sample", "unix_ms": 1787228308207, "rss_kb": 102656}
+{"kind": "rss_sample", "unix_ms": 1787228308262, "rss_kb": 102656}
+{"kind": "rss_sample", "unix_ms": 1787228308317, "rss_kb": 102752}
+{"kind": "rss_sample", "unix_ms": 1787228308378, "rss_kb": 102752}
+{"kind": "rss_sample", "unix_ms": 1787228308434, "rss_kb": 102752}
+{"kind": "rss_sample", "unix_ms": 1787228308494, "rss_kb": 102752}
+{"kind": "rss_sample", "unix_ms": 1787228308556, "rss_kb": 102672}
+{"kind": "rss_sample", "unix_ms": 1787228308611, "rss_kb": 102672}
+{"kind": "rss_sample", "unix_ms": 1787228308667, "rss_kb": 102672}
+{"kind": "rss_sample", "unix_ms": 1787228308725, "rss_kb": 102672}
+{"kind": "rss_sample", "unix_ms": 1787228308783, "rss_kb": 102672}
+{"kind": "rss_sample", "unix_ms": 1787228308839, "rss_kb": 102640}
+{"kind": "rss_sample", "unix_ms": 1787228308908, "rss_kb": 102640}
+{"kind": "rss_sample", "unix_ms": 1787228308978, "rss_kb": 102640}
+{"kind": "rss_sample", "unix_ms": 1787228309045, "rss_kb": 102640}
+{"kind": "rss_sample", "unix_ms": 1787228309100, "rss_kb": 102640}
+{"kind": "rss_sample", "unix_ms": 1787228309154, "rss_kb": 102976}
+{"kind": "rss_sample", "unix_ms": 1787228309210, "rss_kb": 102976}
+{"kind": "rss_sample", "unix_ms": 1787228309263, "rss_kb": 102976}
+{"kind": "rss_sample", "unix_ms": 1787228309320, "rss_kb": 102976}
+{"kind": "rss_sample", "unix_ms": 1787228309374, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309430, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309484, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309538, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309597, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309656, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309709, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309762, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309816, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309879, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309935, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228309993, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310046, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310102, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310155, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310212, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310269, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310323, "rss_kb": 102992}
+{"kind": "rss_sample", "unix_ms": 1787228310383, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310436, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310496, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310551, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310606, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310666, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310724, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310782, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310840, "rss_kb": 103040}
+{"kind": "rss_sample", "unix_ms": 1787228310907, "rss_kb": 103056}
+{"kind": "rss_sample", "unix_ms": 1787228310969, "rss_kb": 103184}
+{"kind": "rss_sample", "unix_ms": 1787228311022, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311085, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311146, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311200, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311254, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311313, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311367, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311423, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311485, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311549, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311605, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311661, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311719, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311774, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311834, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311889, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228311945, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312001, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312059, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312113, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312167, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312220, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312278, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312341, "rss_kb": 123520}
+{"kind": "rss_sample", "unix_ms": 1787228312399, "rss_kb": 123520}
+{"kind": "rss_sample", "unix_ms": 1787228312456, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312511, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312566, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312626, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312683, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312739, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312794, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312853, "rss_kb": 123472}
+{"kind": "rss_sample", "unix_ms": 1787228312914, "rss_kb": 123488}
+{"kind": "rss_sample", "unix_ms": 1787228312983, "rss_kb": 123488}
+{"kind": "rss_sample", "unix_ms": 1787228313051, "rss_kb": 123488}
+{"kind": "rss_sample", "unix_ms": 1787228313111, "rss_kb": 123488}
+{"kind": "rss_sample", "unix_ms": 1787228313170, "rss_kb": 123488}
+{"kind": "rss_sample", "unix_ms": 1787228313229, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313283, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313338, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313393, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313448, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313505, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313564, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313621, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313675, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313729, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313784, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313842, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313898, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228313954, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228314024, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228314093, "rss_kb": 154352}
+{"kind": "rss_sample", "unix_ms": 1787228314150, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314207, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314262, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314329, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314388, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314457, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314517, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314575, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314635, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314700, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314757, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314815, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314875, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228314936, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315003, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315069, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315135, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315199, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315264, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315329, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315393, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315460, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315529, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315587, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315648, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315713, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315780, "rss_kb": 221248}
+{"kind": "rss_sample", "unix_ms": 1787228315837, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228315898, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228315952, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316006, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316068, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316131, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316184, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316241, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316295, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316350, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316404, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316459, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316516, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316570, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316624, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316678, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316732, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316787, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316842, "rss_kb": 221264}
+{"kind": "rss_sample", "unix_ms": 1787228316898, "rss_kb": 221264}
