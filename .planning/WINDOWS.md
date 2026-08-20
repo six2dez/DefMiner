@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 4
 waived_count: 0
-fixed_count: 1
-total_count: 5
-last_updated: 2026-08-20T17:05:25.014Z
+fixed_count: 2
+total_count: 6
+last_updated: 2026-08-20T18:06:03.807Z
 ---
 
 # Broken Windows Ledger
@@ -19,7 +19,8 @@ last_updated: 2026-08-20T17:05:25.014Z
 | 2 | 00 | deviation | tests/spike-results.spec.ts | 47 | Gate asserts every threshold value is non-null, but spike-result.schema.json permits null for the inconclusive cross-day case. Plan 00-04 must reconcile. | fixed |  | 2026-08-20T12:42:36.735Z | 2026-08-20T12:45:07.474Z |
 | 3 | 00 | unrun-verify | .planning/phases/00-runtime-reality-check/00-04-PLAN.md |  | Task 3 credential-scan <automated> clause scans the filesystem, not git-tracked files; it fires on 106 gitignored raw host logs matching the GraphQL field name accessToken. Zero token-shaped strings anywhere; the git-tracked scan the plan's action text and T-00-45 both specify is clean and ships in tests/go-no-go.spec.ts. | open |  | 2026-08-20T17:05:14.845Z |  |
 | 4 | 00 | deviation | .planning/phases/00-runtime-reality-check/results/SPIKE-04.json |  | SEND_CLIFF_SAVE_TRUE/SAVE_FALSE/FETCH are FLOORS (2000, cap reached) not cliffs — caido/caido#2211 did not reproduce in either wrapper shape. Phase 8 must re-test with real .map bodies and concurrent sends before treating the floor as headroom. | open |  | 2026-08-20T17:05:24.949Z |  |
-| 5 | 00 | deviation | .planning/phases/00-runtime-reality-check/results/SPIKE-10.json |  | CACHE_HIT_RATE_CROSS_DAY is null/inconclusive (1 day sampled, denominator 0) and collection has stopped; Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. Re-install the recorder agent and re-measure after 2026-09-03. | open |  | 2026-08-20T17:05:25.014Z |  |
+| 5 | 00 | deviation | .planning/phases/00-runtime-reality-check/results/SPIKE-10.json |  | CACHE_HIT_RATE_CROSS_DAY is null/inconclusive (1 day sampled, denominator 0) and collection has stopped; Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. Re-install the recorder agent and re-measure after 2026-09-03. | fixed |  | 2026-08-20T17:05:25.014Z | 2026-08-20T18:06:03.807Z |
+| 6 | 00 | unrun-verify | .planning/phases/00-runtime-reality-check/results/go-no-go.json |  | CACHE_HIT_RATE_CROSS_DAY inconclusive, revisit_after 2026-09-03. Recorder RE-ARMED 2026-08-20 (com.defminer.spike.recorder, twice daily) so a second calendar day accrues. Phase 1 CORE-08 must read this threshold from config with the 0.40 pessimistic default, never hard-code it. Close by re-running aggregate.py + render-go-no-go.py once CACHE_SAMPLE_DAYS >= 2. | open |  | 2026-08-20T18:05:34.808Z |  |
 
 ````json
 [
@@ -78,9 +79,21 @@ last_updated: 2026-08-20T17:05:25.014Z
     "file": ".planning/phases/00-runtime-reality-check/results/SPIKE-10.json",
     "line": null,
     "description": "CACHE_HIT_RATE_CROSS_DAY is null/inconclusive (1 day sampled, denominator 0) and collection has stopped; Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. Re-install the recorder agent and re-measure after 2026-09-03.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-20T17:05:25.014Z",
+    "resolved_at": "2026-08-20T18:06:03.807Z"
+  },
+  {
+    "id": 6,
+    "kind": "unrun-verify",
+    "phase": "00",
+    "file": ".planning/phases/00-runtime-reality-check/results/go-no-go.json",
+    "line": null,
+    "description": "CACHE_HIT_RATE_CROSS_DAY inconclusive, revisit_after 2026-09-03. Recorder RE-ARMED 2026-08-20 (com.defminer.spike.recorder, twice daily) so a second calendar day accrues. Phase 1 CORE-08 must read this threshold from config with the 0.40 pessimistic default, never hard-code it. Close by re-running aggregate.py + render-go-no-go.py once CACHE_SAMPLE_DAYS >= 2.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-20T18:05:34.808Z",
     "resolved_at": null
   }
 ]
