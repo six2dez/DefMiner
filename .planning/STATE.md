@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-08-20T20:55:35.701Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-08-20T21:31:40.125Z"
 last_activity: 2026-08-20
 last_activity_desc: Phase 01 execution started
-state_head: 14714dddc250a896f204d757a10b6f8e8559d5a6
+state_head: 524f742f6b6b298a3ce336fb547a5523849050d0
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-08-20 — Phase 01 execution started
 
@@ -56,6 +56,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 00 P03 | 45m | 3 tasks | 46 files |
 | Phase 00 P04 | 92 | 3 tasks | 123 files |
 | Phase 01 P01 | 35 min | 2 tasks | 38 files |
+| Phase 01 P02 | 21 min | 2 tasks | 26 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 0]: togglePlugin genuinely rebuilds the QuickJS runtime (new session id, per-runtime counter reset to 0) and the plugin database survives it, so ACTIVE-13 has a cheap reset primitive — but only while the runtime still answers
 - [Phase 0]: CACHE_HIT_RATE_CROSS_DAY is inconclusive at 1 sampled day and a zero denominator; Phase 1 CORE-08 budgets against CACHE_HIT_RATE_ASSUMED=0.40 until it is re-measured after 2026-09-03
 - [Phase 0]: go-no-go.json is the only Phase 0 artifact later phases may import; every tunable constant must import from it and be asserted equal by a test in the SDK-free engine workspace
+- [Phase 01]: P2-D5 (execution-time correction to where P2-D1's pins live): DIST-06's overrides go in pnpm-workspace.yaml, NOT package.json's `pnpm` key — pnpm 11 no longer reads that field, so a pin written where the plan specified it would have been NO pin at all — Measured during execution: pnpm install printed `The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides"`. tests/pins.spec.ts asserts the overrides in pnpm-workspace.yaml AND in the lockfile, and asserts the dead package.json key has not come back.
+- [Phase 01]: @caido/eslint-config@0.10.0 installed after a human-approved gate="blocking-human" checkpoint on 2026-08-20 — the one Phase 1 package never exercised in Phase 0 (153 weekly downloads), approved with the github.com/caido/typescript-configs 404 known and explicit — Publisher/provenance PASS (last four releases via GitHub Actions OIDC trusted publishing), GitHub org MIXED (caido/typescript-configs and caido/tailwindcss 404 to the API while caido/sdk-js, caido/caido and caido-community/dev return 200 — Caido keeps some config repos private, not a lookalike org), install scripts PASS (none; the tree's only install script is still esbuild's). 01-RESEARCH.md's claim that no new package enters the Phase 1 build was FALSE for this package and is corrected in place.
+- [Phase 01]: P2-D6: pnpm lint gates packages/**, scripts/ci/** and root config only — the Phase 0 harness is excluded BY NAME, because the Caido preset runs prettier as an error and this plan's own acceptance criterion freezes those trees byte-for-byte — Files are listed individually rather than as tests/**, so anything ADDED to tests/ later is linted by default and tests/pins.spec.ts is gated. A later phase allowed to touch the Phase 0 trees can widen the list in the same commit that reformats them.
 
 ### Known Risks Carried Forward
 
@@ -135,8 +139,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T20:55:35.687Z
-**Stopped at:** Completed 01-01-PLAN.md
+**Last session:** 2026-08-20T21:31:25.078Z
+**Stopped at:** Completed 01-02-PLAN.md
 **Resume file:** None
 
 ### Blockers

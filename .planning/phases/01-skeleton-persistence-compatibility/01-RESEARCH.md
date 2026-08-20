@@ -223,7 +223,13 @@ Ran `gsd-tools query package-legitimacy check --ecosystem npm` on the Phase 1 in
 | `@jridgewell/sourcemap-codec` | npm | 2025-08-12 | 171,737,226 | yes | **OK** | Not installed in Phase 1 |
 
 **Packages removed due to [SLOP] verdict:** none.
-**Packages flagged [SUS] requiring a checkpoint:** none that block. Every `too-new` verdict is an artefact of the seam scoring the registry's *latest* publish date rather than the pinned version, and every `low-downloads` verdict is on an official `@caido/*` or `@caido-community/*` package discovered from Caido's own documentation and already executed against a real Caido instance in Phase 0. **No new package enters the build in Phase 1 that was not already installed and exercised in Phase 0.** That is the strongest possible disposition and it means no `checkpoint:human-verify` is warranted here.
+**Packages flagged [SUS] requiring a checkpoint:** one. Every `too-new` verdict is an artefact of the seam scoring the registry's *latest* publish date rather than the pinned version.
+
+> **CORRECTION, recorded during execution of plan 01-02 (2026-08-20).** The sentence that stood here — *"No new package enters the build in Phase 1 that was not already installed and exercised in Phase 0"* — **was false**, and the conclusion drawn from it (*"no `checkpoint:human-verify` is warranted here"*) was wrong. It is corrected rather than deleted, because the shape of the error matters more than the error: a `low-downloads` verdict was generalised into "official `@caido/*`, therefore already exercised", and one package in the set had never been installed at all.
+>
+> **`@caido/eslint-config@0.10.0`** — 153 weekly downloads, published 2026-05-14 — is a genuine low-downloads verdict on a package that, unlike every other `@caido/*` dependency in this repo, was **never installed or exercised during Phase 0**. It is the one new trust decision in Phase 1's dependency set. Plan 01-02 therefore carried a `gate="blocking-human"` `checkpoint:human-verify` before the install, and the operator **approved** it on 2026-08-20 with the full evidence on the table. See `01-02-SUMMARY.md` § "The human-approved package gate" for the four verification steps, their outcomes, and the GitHub 404 the operator approved with knowledge of.
+>
+> Every other package in the table above is unaffected: they were installed and exercised in Phase 0, and this correction does not weaken their disposition.
 
 **Non-negotiable postinstall note:** `esbuild`'s `postinstall` is the only install script in the tree, and `pnpm-workspace.yaml` already gates it explicitly with `allowBuilds: { esbuild: true, sharp: false }`. Phase 1 must **not** convert this to a blanket approval when it adds the `packages:` key — the `allowBuilds` map and the `packages` list are independent and both must survive.
 
