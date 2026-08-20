@@ -70,12 +70,28 @@ Plans:
 **Plans**: 6 plans in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel)
 
 Plans:
+**Wave 1**
 
 - [ ] 01-01-PLAN.md — **Tracer**: one proxied JS response hashed and durably remembered, end-to-end on a live Caido, plus the Phase 0 threshold contract and the measured answers to the two open runtime questions — *wave 1*
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-02-PLAN.md — Two-package pnpm workspace, exact pins and DIST-06 overrides, the DIST-05 allowlist gate and the SDK-free engine boundary — *wave 2*
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-04-PLAN.md — Persistence: `analyses` and `settings` behind a forward-only migration ladder, content-addressed reads, corpus-version cache, retention, static SQL-discipline gate — *wave 3*
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-03-PLAN.md — Ingestion: full admission filter with a named reason per rejection, bounded queue, chunker, temporal yield, wall-clock deadlines, byte-exact encoding, and the consumer that wires every store call site — *wave 4*
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 01-05-PLAN.md — Lifecycle: project-switch cancellation including the null branch, counters, and an EXTERNAL max-slice and RPC-responsiveness measurement under a 200-chunk load — *wave 5*
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 01-06-PLAN.md — Compatibility guard and a three-leg SDK smoke test against 0.57.1, 0.58.0 and the below-minimum 0.55.3 — *wave 6*
 
 ### Phase 2: Error Containment & Observability
