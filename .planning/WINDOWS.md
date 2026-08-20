@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 1
 waived_count: 0
-fixed_count: 0
+fixed_count: 1
 total_count: 2
-last_updated: 2026-08-20T12:42:36.735Z
+last_updated: 2026-08-20T12:45:07.474Z
 ---
 
 # Broken Windows Ledger
@@ -16,7 +16,7 @@ last_updated: 2026-08-20T12:42:36.735Z
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 00 | unrun-verify | scripts/spike/recorder-session.sh |  | Task 3 optional human-check not run: operator has not routed a real browser through 127.0.0.1:8998. Scripted sessions collect regardless. | open |  | 2026-08-20T12:42:36.666Z |  |
-| 2 | 00 | deviation | tests/spike-results.spec.ts | 47 | Gate asserts every threshold value is non-null, but spike-result.schema.json permits null for the inconclusive cross-day case. Plan 00-04 must reconcile. | open |  | 2026-08-20T12:42:36.735Z |  |
+| 2 | 00 | deviation | tests/spike-results.spec.ts | 47 | Gate asserts every threshold value is non-null, but spike-result.schema.json permits null for the inconclusive cross-day case. Plan 00-04 must reconcile. | fixed |  | 2026-08-20T12:42:36.735Z | 2026-08-20T12:45:07.474Z |
 
 ````json
 [
@@ -39,10 +39,10 @@ last_updated: 2026-08-20T12:42:36.735Z
     "file": "tests/spike-results.spec.ts",
     "line": 47,
     "description": "Gate asserts every threshold value is non-null, but spike-result.schema.json permits null for the inconclusive cross-day case. Plan 00-04 must reconcile.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-20T12:42:36.735Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-20T12:45:07.474Z"
   }
 ]
 ````
