@@ -253,11 +253,13 @@ Plans:
 **Requirements**: DET-01 (AST tier), ENDP-02, ENDP-04, ENDP-05
 **Success Criteria** (what must be TRUE):
 
-  1. The Meriyah adapter runs only below the Phase 0 threshold, guards `structuredClone`, pre-scans nesting depth before parsing, and degrades to `acorn.tokenizer()` then regex-only on size, depth, or failure
-  2. Parse failure never suppresses results the lexical and regex tiers already found — proven by a fixture that fails to parse but still yields findings
-  3. Every finding records which tier produced it
-  4. An extracted endpoint carries method, path template, query keys, content type, and headers — enough that one click creates a working Replay request, demonstrated end to end against a live fixture app
-  5. GraphQL operations are extracted and normalised with operation type, name, and variables, and no introspection request is ever issued automatically
+  1. The Meriyah adapter runs only below the Phase 0 measured ceiling (`AST_MAX_BYTES = 1,334,405`, **stall-bound not memory-bound**), guards `structuredClone` (confirmed `undefined`), and pre-scans nesting depth before parsing against the measured `MAX_NESTING_DEPTH = 246`
+  2. Degradation goes to **regex-only**, not through `acorn.tokenizer()`. *(Phase 0 measured the tokenizer at 783 ms/MB against meriyah's 786 — it is a genuine low-memory path but buys nothing in CPU, so it cannot relieve a stall-bound ceiling. Keeping it as the middle rung would add a tier that costs the same as the thing it replaces.)*
+  3. Degradation is treated as the **common case for large bundles, not an edge case** — Cesium at 4.90 MB and Plotly at 4.35 MB are both far above the ceiling, so the degraded path carries real traffic and must produce useful output, not a stub
+  4. Parse failure never suppresses results the lexical and regex tiers already found — proven by a fixture that fails to parse but still yields findings
+  5. Every finding records which tier produced it
+  6. An extracted endpoint carries method, path template, query keys, content type, and headers — enough that one click creates a working Replay request, demonstrated end to end against a live fixture app
+  7. GraphQL operations are extracted and normalised with operation type, name, and variables, and no introspection request is ever issued automatically
 
 **Plans**: 4 plans
 

@@ -25,7 +25,7 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [x] **SPIKE-09**: Verify `PRAGMA` and `BEGIN`/`COMMIT` survive across `exec` calls on the pooled SQLite connection.
 - [ ] **SPIKE-10**: Measure the content-hash cache hit rate on real browsing. *(Biggest single performance lever — at 40% instead of 90%, CPU cost is 6× budget.)*
 - [ ] **SPIKE-11**: Determine whether 304s and cached responses reach the hook at all — decides whether retroactive scanning is optional or mandatory for correctness.
-- [x] **SPIKE-12**: Establish `llrt/fs` containment behaviour with no `realpath` and no `lstat` available.
+- [x] **SPIKE-12**: Establish `llrt/fs` containment behaviour. **ANSWERED, and the premise in this line was half wrong: `lstat` IS available** on 0.57.1 and correctly distinguishes a symlink from its target. `realpath` and `readlink` are not. That materially improves MAP-04's options — a prefix rule can walk components with `lstat` instead of relying on lexical normalisation alone. Measured: of 22 hostile fixtures, 5 escape via `path.resolve` and are caught lexically, but writing through a symlink the lexical rule accepts *does* leave the scratch root. Two collisions were visible only on disk (NFD folded onto NFC; `SRCDIR` onto `srcdir`), so 15 accepted writes produced 13 files. See `SPIKE-12.json`.
 
 ### Ingestion pipeline (CORE)
 
