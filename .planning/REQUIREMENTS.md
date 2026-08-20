@@ -46,13 +46,13 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Persistence (STORE)
 
-- [ ] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences, analyses, entities, evidence, and audit.
-- [ ] **STORE-02**: Every table includes `project_id` in its key. *(`sdk.meta.db()` is plugin-global, not project-scoped — verified against authmatrix.)*
+- [x] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences, analyses, entities, evidence, and audit.
+- [x] **STORE-02**: Every table includes `project_id` in its key. *(`sdk.meta.db()` is plugin-global, not project-scoped — verified against authmatrix.)*
 - [ ] **STORE-03**: Artifacts are content-addressed by digest, decoupling identity from URL.
-- [ ] **STORE-04**: Analysis rows record the detector-corpus version, so a corpus bump invalidates the right cache entries.
-- [ ] **STORE-05**: Schema migrations run forward on upgrade and are tested against a populated database.
+- [x] **STORE-04**: Analysis rows record the detector-corpus version, so a corpus bump invalidates the right cache entries.
+- [x] **STORE-05**: Schema migrations run forward on upgrade and are tested against a populated database.
 - [ ] **STORE-06**: Retention policy bounds database and disk growth.
-- [ ] **STORE-07**: All SQL uses positional `?` parameters. *(Named parameters are unsupported.)*
+- [x] **STORE-07**: All SQL uses positional `?` parameters. *(Named parameters are unsupported.)*
 
 ### Detection engine (DET)
 

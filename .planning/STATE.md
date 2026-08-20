@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-08-20T21:31:40.125Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-08-20T22:09:56.338Z"
 last_activity: 2026-08-20
 last_activity_desc: Phase 01 execution started
-state_head: 524f742f6b6b298a3ce336fb547a5523849050d0
+state_head: 909f31d0e7f2715c04354be5b972636a23f10562
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 3
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-08-20 — Phase 01 execution started
 
@@ -57,6 +57,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 00 P04 | 92 | 3 tasks | 123 files |
 | Phase 01 P01 | 35 min | 2 tasks | 38 files |
 | Phase 01 P02 | 21 min | 2 tasks | 26 files |
+| Phase 01 P04 | 28 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P2-D5 (execution-time correction to where P2-D1's pins live): DIST-06's overrides go in pnpm-workspace.yaml, NOT package.json's `pnpm` key — pnpm 11 no longer reads that field, so a pin written where the plan specified it would have been NO pin at all — Measured during execution: pnpm install printed `The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.overrides"`. tests/pins.spec.ts asserts the overrides in pnpm-workspace.yaml AND in the lockfile, and asserts the dead package.json key has not come back.
 - [Phase 01]: @caido/eslint-config@0.10.0 installed after a human-approved gate="blocking-human" checkpoint on 2026-08-20 — the one Phase 1 package never exercised in Phase 0 (153 weekly downloads), approved with the github.com/caido/typescript-configs 404 known and explicit — Publisher/provenance PASS (last four releases via GitHub Actions OIDC trusted publishing), GitHub org MIXED (caido/typescript-configs and caido/tailwindcss 404 to the API while caido/sdk-js, caido/caido and caido-community/dev return 200 — Caido keeps some config repos private, not a lookalike org), install scripts PASS (none; the tree's only install script is still esbuild's). 01-RESEARCH.md's claim that no new package enters the Phase 1 build was FALSE for this package and is corrected in place.
 - [Phase 01]: P2-D6: pnpm lint gates packages/**, scripts/ci/** and root config only — the Phase 0 harness is excluded BY NAME, because the Caido preset runs prettier as an error and this plan's own acceptance criterion freezes those trees byte-for-byte — Files are listed individually rather than as tests/**, so anything ADDED to tests/ later is linted by default and tests/pins.spec.ts is gated. A later phase allowed to touch the Phase 0 trees can widen the list in the same commit that reformats them.
+- [Phase 01]: P4-D6: STORE-02 non-empty project_id is retrofitted onto the immutable v1 tables by BEFORE INSERT TRIGGERS, not a table rebuild — a rebuild is a multi-statement migration that can fail and would strand an open write transaction on an unreachable pooled connection; a trigger is stored in the schema and binds on every pooled connection
+- [Phase 01]: P4-D7: retention bounds (row count AND age) apply PER TABLE PER PROJECT, not only to artifacts — real traffic upserts one artifact and inserts a new observation on every re-serve, so an artifact-only bound leaves the fastest-growing table unbounded
+- [Phase 01]: P4-D8: failed is a TERMINAL scan_state in Phase 1, so a failed analysis is a cache hit — with no retry policy until ERR-02, a re-analysable failed re-walks the same bytes on every sighting with nothing to break the loop
 
 ### Known Risks Carried Forward
 
@@ -139,8 +143,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T21:31:25.078Z
-**Stopped at:** Completed 01-02-PLAN.md
+**Last session:** 2026-08-20T22:09:34.699Z
+**Stopped at:** Completed 01-04-PLAN.md
 **Resume file:** None
 
 ### Blockers
