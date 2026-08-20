@@ -43,10 +43,10 @@ The differentiators come after that foundation exists, because each is only as g
 **Instance policy (non-negotiable):** every spike runs against `/Applications/Caido.app/Contents/Resources/bin/caido-cli` (0.57.1) with `--data-path` isolation, asserting the reported version before recording anything. Destructive spikes get a fresh instance and are never run on an instance a later step still needs — the failure mode is not a lost instance, it is a silently wrong measurement on a poisoned runtime.
 
 Plans:
-- [ ] 00-01: Shared harness + capability probe (SPIKE-07 regression-assert, SPIKE-02) and **deploy the SPIKE-10 recorder** so cross-day data starts collecting immediately
-- [ ] 00-02: Budgets and persistence — SPIKE-08 first (an "8 MB ceiling" is meaningless until you know if it is compressed), then SPIKE-06, SPIKE-09, SPIKE-12
-- [ ] 00-03: Event matrix — SPIKE-05 and SPIKE-11 share one apparatus; SPIKE-03 runs last because it wedges the thread
-- [ ] 00-04: Destructive spikes on fresh instances — SPIKE-01, then SPIKE-04 across **three separate instances** (one per variant, because #2211 leaks cumulatively), plus the plugin-toggle-resets-the-leak test; read the SPIKE-10 recorder; emit the go/no-go table
+- [ ] 00-01-PLAN.md — Shared harness (version-asserted launcher, probe driver, RSS sampler, hash-gated corpus, origin server, results writer, two JSON Schemas, vitest gates) + capability probe (SPIKE-07 regression-assert) + SPIKE-02, and **deploy the SPIKE-10 recorder** so cross-day data starts collecting immediately — *wave 1*
+- [ ] 00-02-PLAN.md — Budgets and persistence: SPIKE-08 first (an "8 MB ceiling" is meaningless until you know if it is compressed), then SPIKE-06 (fresh instance per size point, crash bisection, Tier-1 build), SPIKE-09, SPIKE-12 — *wave 2*
+- [ ] 00-03-PLAN.md — Event matrix: SPIKE-05 and SPIKE-11 share one apparatus; SPIKE-03 runs last because it wedges the thread — *wave 2*
+- [ ] 00-04-PLAN.md — Destructive spikes on fresh instances: SPIKE-01, then SPIKE-04 across **three separate instances** (one per variant, because #2211 leaks cumulatively), plus SPIKE-04b the plugin-toggle-resets-the-leak test; read the SPIKE-10 recorder; emit `go-no-go.json` and the rendered `00-GO-NO-GO.md` — *wave 3*
 
 ### Phase 1: Skeleton, Persistence & Compatibility
 **Goal**: A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
