@@ -5,9 +5,13 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./chunker": "./src/chunker.ts",
+    "./deadline": "./src/deadline.ts",
     "./digest": "./src/digest.ts",
+    "./pipeline": "./src/pipeline.ts",
     "./queue": "./src/queue.ts",
-    "./thresholds": "./src/thresholds.ts"
+    "./thresholds": "./src/thresholds.ts",
+    "./yield": "./src/yield.ts"
   },
   "license": "UNLICENSED"
 }
