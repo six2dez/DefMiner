@@ -1,0 +1,444 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-05",
+  "status": "pass",
+  "recorded_at": "2026-08-20T15:04:56Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T150258Z-3149"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 2.55
+  },
+  "instances": [
+    {
+      "run_id": "20260820T150258Z-3149",
+      "data_path": "/tmp/defminer-probe-20260820T150258Z-3149",
+      "listen": "127.0.0.1:8995",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    }
+  ],
+  "method": "One fresh guest-enabled instance on 127.0.0.1:8995 launched through scripts/spike/instance.sh with the 0.57.1 assertion intact, a temporary project created and SELECTED (without one the proxy returns `Proxying error: Internal` and the hook never fires at all \u2014 wave 1), and probe/tier0-events installed as an unsigned zip. scripts/spike/event-matrix.mjs drove each surface in turn against scripts/spike/origin.py on 127.0.0.1:8083, every cell carrying a UNIQUE correlation marker in the query string (`?dfm=<marker>`). The probe's delivered-event log was drained to empty before each cell and then polled to settlement after it (six consecutive empty 250 ms polls, 20 s cap), so no event can be attributed to two surfaces. Three independent witnesses run beside the plugin-side count: the origin's own request log (did the request leave Caido at all), the instance's stdout (did the workflow node actually execute), and GraphQL request.source (what Caido labelled the traffic). A CLOSING proxy control cell re-ran after every other cell to prove the hook was still live, so a late not-fired cannot be an artifact of a handler that died mid-run. @caido/sdk-client 0.5.0 drove connect/health, project select, workflow create and run; Automate, Replay and createRequest went over raw GraphQL on the same authenticated endpoint because that SDK version has no Automate or import SDK and its replay.send() never resolves (see notes).",
+  "measurements": [
+    {
+      "name": "cell_proxy",
+      "variant": "curl --proxy; the control cell",
+      "value": "fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "proxy",
+      "flags": null,
+      "marker": "proxy-mt1ngtxd5f52-1",
+      "fired": true,
+      "state": "fired",
+      "deliveries": 1,
+      "delivered_statuses": [
+        200
+      ],
+      "delivered_body_lengths": [
+        457965
+      ],
+      "origin_requests": 1,
+      "caido_sources": [
+        {
+          "request_id": "1",
+          "source": "INTERCEPT"
+        }
+      ],
+      "stray_events": 0,
+      "error": null,
+      "notes": "curl --proxy; the control cell",
+      "action": {
+        "http_code": "200",
+        "curl_ok": true,
+        "stderr": ""
+      }
+    },
+    {
+      "name": "cell_replay",
+      "variant": "createReplaySession(kind: HTTP) + startReplayTask via GraphQ",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "replay",
+      "flags": null,
+      "marker": "replay-mt1ngtxd5f52-2",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "createReplaySession(kind: HTTP) + startReplayTask via GraphQL",
+      "action": {
+        "session_id": "1",
+        "task_id": "1",
+        "entry_id": "2",
+        "entry_error": null
+      }
+    },
+    {
+      "name": "cell_automate",
+      "variant": "createAutomateSession + startAutomateTask via GraphQL",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "automate",
+      "flags": null,
+      "marker": "automate-mt1ngtxd5f52-3",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 2,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "createAutomateSession + startAutomateTask via GraphQL",
+      "action": {
+        "session_id": "1",
+        "task_id": "1"
+      }
+    },
+    {
+      "name": "cell_import",
+      "variant": "createRequest(source: IMPORT) \u2014 the only headless traffic-im",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "import",
+      "flags": null,
+      "marker": "import-mt1ngtxd5f52-4",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 0,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "createRequest(source: IMPORT) \u2014 the only headless traffic-import path in 0.57.1",
+      "action": {
+        "request_id": "6",
+        "response_id": "5",
+        "caido_source": "IMPORT"
+      }
+    },
+    {
+      "name": "cell_workflow",
+      "variant": "active workflow, caido/http-code-js node calling sdk.request",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "workflow",
+      "flags": null,
+      "marker": "workflow-mt1ngtxd5f52-5",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "active workflow, caido/http-code-js node calling sdk.requests.send()",
+      "action": {
+        "workflow_id": "p:1",
+        "task_id": "2",
+        "seed_request_id": "1",
+        "node_log_lines": [
+          "\u001b[2m2026-08-20T15:03:06.986045Z\u001b[0m \u001b[32m INFO\u001b[0m executor:0|arbiter:1 \u001b[2mworkflow|DefMiner SPIKE-05 workflow-mt1ngtxd5f52-5\u001b[0m\u001b[2m:\u001b[0m DFMWF ok marker=workflow-mt1ngtxd5f52-5 status=200"
+        ],
+        "node_ran": true
+      }
+    },
+    {
+      "name": "cell_plugin_send",
+      "variant": "save=True,plugins=True",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "plugin-send",
+      "flags": {
+        "save": true,
+        "plugins": true
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-6",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "sdk.requests.send() from inside the probe",
+      "action": {
+        "ok": true,
+        "options": {
+          "save": true,
+          "plugins": true
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-6",
+        "request_id": "8",
+        "response_id": "7",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 3,
+        "ids_are_zero": false
+      }
+    },
+    {
+      "name": "cell_plugin_send",
+      "variant": "save=True,plugins=False",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "plugin-send",
+      "flags": {
+        "save": true,
+        "plugins": false
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-7",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "sdk.requests.send() from inside the probe",
+      "action": {
+        "ok": true,
+        "options": {
+          "save": true,
+          "plugins": false
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-7",
+        "request_id": "9",
+        "response_id": "8",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 3,
+        "ids_are_zero": false
+      }
+    },
+    {
+      "name": "cell_plugin_send",
+      "variant": "save=False,plugins=True",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "plugin-send",
+      "flags": {
+        "save": false,
+        "plugins": true
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-8",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "sdk.requests.send() from inside the probe",
+      "action": {
+        "ok": true,
+        "options": {
+          "save": false,
+          "plugins": true
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-8",
+        "request_id": "0",
+        "response_id": "0",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 2,
+        "ids_are_zero": true
+      }
+    },
+    {
+      "name": "cell_plugin_send",
+      "variant": "save=False,plugins=False",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "plugin-send",
+      "flags": {
+        "save": false,
+        "plugins": false
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-9",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "sdk.requests.send() from inside the probe",
+      "action": {
+        "ok": true,
+        "options": {
+          "save": false,
+          "plugins": false
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-9",
+        "request_id": "0",
+        "response_id": "0",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 1,
+        "ids_are_zero": true
+      }
+    },
+    {
+      "name": "cell_caido_http_fetch",
+      "variant": "fetch() from the caido:http module inside the probe",
+      "value": "not-fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "caido-http-fetch",
+      "flags": null,
+      "marker": "caidohttpfetch-mt1ngtxd5f52-10",
+      "fired": false,
+      "state": "not-fired",
+      "deliveries": 0,
+      "delivered_statuses": [],
+      "delivered_body_lengths": [],
+      "origin_requests": 1,
+      "caido_sources": [],
+      "stray_events": 0,
+      "error": null,
+      "notes": "fetch() from the caido:http module inside the probe",
+      "action": {
+        "ok": true,
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=caidohttpfetch-mt1ngtxd5f52-10",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 115
+      }
+    },
+    {
+      "name": "cell_proxy",
+      "variant": "curl --proxy; the CLOSING control, proving the hook was stil",
+      "value": "fired",
+      "unit": "state",
+      "stat": "point",
+      "surface": "proxy",
+      "flags": null,
+      "marker": "proxy-mt1ngtxd5f52-11",
+      "fired": true,
+      "state": "fired",
+      "deliveries": 1,
+      "delivered_statuses": [
+        200
+      ],
+      "delivered_body_lengths": [
+        457965
+      ],
+      "origin_requests": 1,
+      "caido_sources": [
+        {
+          "request_id": "10",
+          "source": "INTERCEPT"
+        }
+      ],
+      "stray_events": 0,
+      "error": null,
+      "notes": "curl --proxy; the CLOSING control, proving the hook was still live after every other cell",
+      "action": {
+        "http_code": "200",
+        "curl_ok": true,
+        "stderr": ""
+      }
+    }
+  ],
+  "verdict": {
+    "answer": "onInterceptResponse fires for PROXIED traffic ONLY. Of 11 cells across 7 surfaces, only the proxy control cells delivered an event. Replay, Automate, an active workflow's sdk.requests.send(), the plugin's own sdk.requests.send() in all four save/plugins combinations, and caido:http fetch ALL reached the origin (confirmed in the origin's own log) and delivered NOTHING to the hook. createRequest(source: IMPORT) put a request and response into the project without touching the network and likewise delivered nothing. sdk.requests.send() therefore does NOT re-fire the hook, and neither save:false nor plugins:false changes that, because there is nothing to suppress.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "SEND_REFIRES_INTERCEPT",
+        "value": false,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "sdk.requests.send() with the documented defaults (save:true, plugins:true) reached the origin and returned 200 with a 457,965-byte body, and the hook did not fire. The origin log confirms the request was really made, so this is a delivery decision by Caido and not a send that silently failed."
+      },
+      {
+        "id": "SAVE_FALSE_SUPPRESSES_INTERCEPT",
+        "value": "no-effect",
+        "unit": "boolean-or-no-effect",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "save:false cannot suppress an event that does not happen with save:true. Encoded as the measured negative \"no-effect\" rather than null: null in this schema means UNMEASURED, and this was measured. save:false does have one measured consequence \u2014 the returned request and response ids are both 0 ({\"save=True,plugins=True\": false, \"save=True,plugins=False\": false, \"save=False,plugins=True\": true, \"save=False,plugins=False\": true}), so the plugin holds no handle it can resolve later, which is the fact ACTIVE-12 depends on."
+      },
+      {
+        "id": "PLUGINS_FALSE_SUPPRESSES_INTERCEPT",
+        "value": "no-effect",
+        "unit": "boolean-or-no-effect",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Same reasoning as save:false. RequestSendOptions.plugins governs the UPSTREAM plugin chain, which is a different mechanism from the intercept hook; with the hook not firing at plugins:true there is nothing for plugins:false to turn off."
+      },
+      {
+        "id": "SURFACES_FIRING_INTERCEPT",
+        "value": "proxy",
+        "unit": "surface-list",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Surfaces measured: automate, caido-http-fetch, import, plugin-send, proxy, replay, workflow. Only the proxy fired, and Caido labelled its requests source=INTERCEPT. Every other surface produced traffic that the origin logged and the plugin never saw."
+      }
+    ],
+    "if_wrong": "DefMiner ships fingerprint-based self-suppression at the admission gate REGARDLESS of this answer, because ACTIVE-06 makes the recursion question moot by design. What this spike buys is knowing whether that guard is load-bearing or belt-and-braces: on this measurement it is belt-and-braces, so a bug in it cannot cause an infinite .map-probing loop. If the answer were reversed \u2014 if send() did re-fire the hook \u2014 the guard becomes the only thing standing between ACTIVE-06 and unbounded recursion, and it would need its own test suite and a hard depth counter rather than a fingerprint set. The larger consequence runs the other way and is not conditional: because NOTHING except the proxy reaches the hook, a passive-only DefMiner is blind to every operator-driven surface \u2014 Replay, Automate, workflows and imported traffic. CORE-01 and CORE-02 must therefore treat the intercept hook as ONE ingestion path among several, and Phase 6's retroactive scan over the project's stored requests is the only way that traffic can ever be analysed."
+  },
+  "requirements_affected": [
+    "SPIKE-05",
+    "ACTIVE-06",
+    "ACTIVE-12",
+    "ACTIVE-03",
+    "CORE-01",
+    "CORE-02"
+  ],
+  "artifacts": [
+    "probe/tier0-events/backend/script.js",
+    "scripts/spike/event-matrix.mjs",
+    "scripts/spike/run-spike-05.sh",
+    ".planning/phases/00-runtime-reality-check/results/runs/20260820T150258Z-3149/raw/spike-05-matrix.json"
+  ],
+  "notes": "Matrix completeness: 11 cells, 0 blocked. No cell refused under the guest token, so the PAT retry path at ~/.caido/pat.env was not needed and no credential was read, written or logged (T-00-36). Two @caido/sdk-client 0.5.0 defects were measured on the way and are recorded because a later phase will hit them: replay.sessions.create() does NOT base64-encode requestSource.raw although replay.send() does, so the server rejects it with `Expected input type \"Blob\", found \"GET /ace...\"`; and replay.send() never resolves against 0.57.1 \u2014 it awaits a task-completion subscription that did not arrive in over six minutes on a guest token, while the underlying startReplayTask mutation returns immediately with a created entry and no error. The replay cell therefore uses createReplaySession(kind: HTTP) + startReplayTask directly, which is the same server-side operation. `importData` in 0.57.1 imports tamper rules and findings ONLY; there is no traffic-import mutation, so the import cell uses createRequest(source: IMPORT), which is the path RequestSDK.create maps onto and the only headless way to put externally-obtained traffic into a project."
+}

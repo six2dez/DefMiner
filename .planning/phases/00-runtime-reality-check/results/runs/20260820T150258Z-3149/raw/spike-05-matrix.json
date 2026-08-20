@@ -1,0 +1,498 @@
+{
+  "generated_at": "2026-08-20T15:03:20.646Z",
+  "run_id": "20260820T150258Z-3149",
+  "instance": "http://127.0.0.1:8995",
+  "origin": "127.0.0.1:8083",
+  "corpus_path": "/ace-1.36.5.js",
+  "origin_log": ".planning/phases/00-runtime-reality-check/results/runs/20260820T150258Z-3149/raw/origin.log",
+  "run_tag": "mt1ngtxd5f52",
+  "project": {
+    "id": "99b266b9-f975-415d-b98a-9139d416105c",
+    "name": "spike-05-matrix",
+    "temporary": true
+  },
+  "health": {
+    "name": "caido",
+    "version": "0.57.1"
+  },
+  "probe_status_at_end": {
+    "at": 1787238200646,
+    "mode": "idle",
+    "mode_remaining": 0,
+    "pending_rows": 0,
+    "seq_high_water": 2,
+    "dropped_by_probe": 0
+  },
+  "cells": [
+    {
+      "surface": "proxy",
+      "flags": null,
+      "marker": "proxy-mt1ngtxd5f52-1",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=proxy-mt1ngtxd5f52-1",
+      "notes": "curl --proxy; the control cell",
+      "state": "fired",
+      "fired": true,
+      "deliveries": 1,
+      "statuses": [
+        200
+      ],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "http_code": "200",
+        "curl_ok": true,
+        "stderr": ""
+      },
+      "started_at": "2026-08-20T15:03:00.532Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [
+        457965
+      ],
+      "raw_lengths": [
+        457965
+      ],
+      "request_ids": [
+        "1"
+      ],
+      "waited_ms": 1789,
+      "events": [
+        {
+          "seq": 1,
+          "date": 1787238180543,
+          "qjs": 160.32499998807907,
+          "marker": "proxy-mt1ngtxd5f52-1",
+          "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=proxy-mt1ngtxd5f52-1",
+          "method": "GET",
+          "request_id": "1",
+          "response_id": "1",
+          "status": 200,
+          "body_length": 457965,
+          "raw_length": 457965,
+          "request_headers": {
+            "accept": "*/*",
+            "host": "127.0.0.1:8083",
+            "user-agent": "curl/8.7.1"
+          },
+          "response_headers": {
+            "cache-control": "public, max-age=600",
+            "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+            "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+            "content-length": "457965",
+            "content-type": "application/javascript",
+            "date": "Thu, 20 Aug 2026 15:03:00 GMT",
+            "last-modified": "Thu, 20 Aug 2026 12:20:14 GMT",
+            "x-raw-length": "457965"
+          },
+          "mode_at_delivery": "idle"
+        }
+      ],
+      "caido_sources": [
+        {
+          "request_id": "1",
+          "source": "INTERCEPT"
+        }
+      ],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:02.337Z"
+    },
+    {
+      "surface": "replay",
+      "flags": null,
+      "marker": "replay-mt1ngtxd5f52-2",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=replay-mt1ngtxd5f52-2",
+      "notes": "createReplaySession(kind: HTTP) + startReplayTask via GraphQL",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "session_id": "1",
+        "task_id": "1",
+        "entry_id": "2",
+        "entry_error": null
+      },
+      "started_at": "2026-08-20T15:03:02.337Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1538,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:03.882Z"
+    },
+    {
+      "surface": "automate",
+      "flags": null,
+      "marker": "automate-mt1ngtxd5f52-3",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=automate-mt1ngtxd5f52-3",
+      "notes": "createAutomateSession + startAutomateTask via GraphQL",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "session_id": "1",
+        "task_id": "1"
+      },
+      "started_at": "2026-08-20T15:03:03.883Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1534,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 2,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:05.428Z"
+    },
+    {
+      "surface": "import",
+      "flags": null,
+      "marker": "import-mt1ngtxd5f52-4",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=import-mt1ngtxd5f52-4",
+      "notes": "createRequest(source: IMPORT) — the only headless traffic-import path in 0.57.1",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "request_id": "6",
+        "response_id": "5",
+        "caido_source": "IMPORT"
+      },
+      "started_at": "2026-08-20T15:03:05.428Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1534,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 0,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:06.972Z"
+    },
+    {
+      "surface": "workflow",
+      "flags": null,
+      "marker": "workflow-mt1ngtxd5f52-5",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=workflow-mt1ngtxd5f52-5",
+      "notes": "active workflow, caido/http-code-js node calling sdk.requests.send()",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "workflow_id": "p:1",
+        "task_id": "2",
+        "seed_request_id": "1",
+        "node_log_lines": [
+          "\u001b[2m2026-08-20T15:03:06.986045Z\u001b[0m \u001b[32m INFO\u001b[0m executor:0|arbiter:1 \u001b[2mworkflow|DefMiner SPIKE-05 workflow-mt1ngtxd5f52-5\u001b[0m\u001b[2m:\u001b[0m DFMWF ok marker=workflow-mt1ngtxd5f52-5 status=200"
+        ],
+        "node_ran": true
+      },
+      "started_at": "2026-08-20T15:03:06.972Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1529,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:11.015Z"
+    },
+    {
+      "surface": "plugin-send",
+      "flags": {
+        "save": true,
+        "plugins": true
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-6",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-6",
+      "notes": "sdk.requests.send() from inside the probe",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "ok": true,
+        "options": {
+          "save": true,
+          "plugins": true
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-6",
+        "request_id": "8",
+        "response_id": "7",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 3,
+        "ids_are_zero": false
+      },
+      "started_at": "2026-08-20T15:03:11.015Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1536,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:12.556Z"
+    },
+    {
+      "surface": "plugin-send",
+      "flags": {
+        "save": true,
+        "plugins": false
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-7",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-7",
+      "notes": "sdk.requests.send() from inside the probe",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "ok": true,
+        "options": {
+          "save": true,
+          "plugins": false
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-7",
+        "request_id": "9",
+        "response_id": "8",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 3,
+        "ids_are_zero": false
+      },
+      "started_at": "2026-08-20T15:03:12.556Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1531,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:14.096Z"
+    },
+    {
+      "surface": "plugin-send",
+      "flags": {
+        "save": false,
+        "plugins": true
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-8",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-8",
+      "notes": "sdk.requests.send() from inside the probe",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "ok": true,
+        "options": {
+          "save": false,
+          "plugins": true
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-8",
+        "request_id": "0",
+        "response_id": "0",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 2,
+        "ids_are_zero": true
+      },
+      "started_at": "2026-08-20T15:03:14.096Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1531,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:15.635Z"
+    },
+    {
+      "surface": "plugin-send",
+      "flags": {
+        "save": false,
+        "plugins": false
+      },
+      "marker": "pluginsend-mt1ngtxd5f52-9",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-9",
+      "notes": "sdk.requests.send() from inside the probe",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "ok": true,
+        "options": {
+          "save": false,
+          "plugins": false
+        },
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=pluginsend-mt1ngtxd5f52-9",
+        "request_id": "0",
+        "response_id": "0",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 1,
+        "ids_are_zero": true
+      },
+      "started_at": "2026-08-20T15:03:15.635Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1534,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:17.173Z"
+    },
+    {
+      "surface": "caido-http-fetch",
+      "flags": null,
+      "marker": "caidohttpfetch-mt1ngtxd5f52-10",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=caidohttpfetch-mt1ngtxd5f52-10",
+      "notes": "fetch() from the caido:http module inside the probe",
+      "state": "not-fired",
+      "fired": false,
+      "deliveries": 0,
+      "statuses": [],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "ok": true,
+        "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=caidohttpfetch-mt1ngtxd5f52-10",
+        "status": 200,
+        "body_length": 457965,
+        "elapsed_ms": 115
+      },
+      "started_at": "2026-08-20T15:03:17.173Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [],
+      "raw_lengths": [],
+      "request_ids": [],
+      "waited_ms": 1537,
+      "events": [],
+      "caido_sources": [],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:18.831Z"
+    },
+    {
+      "surface": "proxy",
+      "flags": null,
+      "marker": "proxy-mt1ngtxd5f52-11",
+      "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=proxy-mt1ngtxd5f52-11",
+      "notes": "curl --proxy; the CLOSING control, proving the hook was still live after every other cell",
+      "state": "fired",
+      "fired": true,
+      "deliveries": 1,
+      "statuses": [
+        200
+      ],
+      "stray_events": 0,
+      "error": null,
+      "action": {
+        "http_code": "200",
+        "curl_ok": true,
+        "stderr": ""
+      },
+      "started_at": "2026-08-20T15:03:18.831Z",
+      "leftover_drained_before": 0,
+      "stray_markers": [],
+      "body_lengths": [
+        457965
+      ],
+      "raw_lengths": [
+        457965
+      ],
+      "request_ids": [
+        "10"
+      ],
+      "waited_ms": 1787,
+      "events": [
+        {
+          "seq": 2,
+          "date": 1787238198853,
+          "qjs": 18470.986999988556,
+          "marker": "proxy-mt1ngtxd5f52-11",
+          "url": "http://127.0.0.1:8083/ace-1.36.5.js?dfm=proxy-mt1ngtxd5f52-11",
+          "method": "GET",
+          "request_id": "10",
+          "response_id": "9",
+          "status": 200,
+          "body_length": 457965,
+          "raw_length": 457965,
+          "request_headers": {
+            "host": "127.0.0.1:8083",
+            "user-agent": "curl/8.7.1",
+            "accept": "*/*"
+          },
+          "response_headers": {
+            "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+            "last-modified": "Thu, 20 Aug 2026 12:20:14 GMT",
+            "x-raw-length": "457965",
+            "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+            "date": "Thu, 20 Aug 2026 15:03:18 GMT",
+            "cache-control": "public, max-age=600",
+            "content-type": "application/javascript",
+            "content-length": "457965"
+          },
+          "mode_at_delivery": "idle"
+        }
+      ],
+      "caido_sources": [
+        {
+          "request_id": "10",
+          "source": "INTERCEPT"
+        }
+      ],
+      "origin_requests": 1,
+      "origin_requests_before": 0,
+      "finished_at": "2026-08-20T15:03:20.644Z"
+    }
+  ]
+}

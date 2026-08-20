@@ -1,0 +1,15 @@
+{
+  "id": "defminer-tier0-events",
+  "name": "DefMiner Tier-0 Events Probe",
+  "version": "0.0.1",
+  "description": "Phase 0 plan 00-03 probe: SPIKE-05 event matrix, SPIKE-11 cache/304 delivery, SPIKE-03 blocking handler and error injection",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "tier0-events-backend",
+      "name": "Tier0 Events Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
