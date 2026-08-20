@@ -16,10 +16,11 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [ ] **SPIKE-01**: Determine whether a catastrophic regex hangs the plugin forever inside Caido, and whether `re2js` is a viable escape hatch at acceptable cost. *(Caido installs no QuickJS interrupt handler — `set_interrupt_handler` appears nowhere in `caido/dependency-llrt`, so `lre_check_timeout` is inert.)*
 - [ ] **SPIKE-02**: Confirm `setTimeout(fn, 0)` actually yields the QuickJS event loop. If it does not, budget-and-background does not work and the ingestion design must change.
 - [ ] **SPIKE-03**: Determine what Caido does with `onInterceptResponse` events the plugin cannot consume fast enough — queue unboundedly, drop, or backpressure.
-- [ ] **SPIKE-04**: Reproduce `caido/caido#2211` on the target Caido version; measure the current `sdk.requests.send()` cliff and whether `caido:http` `fetch` shares the leak.
+- [ ] **SPIKE-04**: Reproduce `caido/caido#2211` on **0.57.1 — the exact build it was filed against**, so this is a direct reproduction rather than an extrapolation. Measure the `sdk.requests.send()` cliff across three variants (`save:true`, `save:false`, `caido:http` `fetch`), each on its **own fresh instance** because the leak is cumulative across a runtime's lifetime and would otherwise pollute later variants. Capture stderr and exit code separately — the `gc_decref_child` assertion is a C-level `abort()` under `panic = "abort"` and never reaches the structured log; look for exit code 134.
+- [ ] **SPIKE-04b**: Determine whether toggling the plugin off and on **resets the #2211 leak**. The host log shows a per-plugin executor (`plugin|executor: Stopping plugin executor`), suggesting the QuickJS runtime may be per-plugin and torn down on toggle. If it is, ACTIVE-13's crash recovery gains a far cheaper mitigation than "restart Caido". Ten minutes of work, potentially a large design win.
 - [ ] **SPIKE-05**: Build the event matrix — does `sdk.requests.send()` re-fire `onInterceptResponse`? Do Replay, Automate, imports, and workflows fire it? Does `save:false` or `plugins:false` change it?
 - [ ] **SPIKE-06**: Measure real CPU and RSS budgets inside Caido (not standalone quickjs-ng), and find where the 512 KiB stack actually breaks.
-- [ ] **SPIKE-07**: Confirm `structuredClone` exists in Caido's runtime — `meriyah@7` needs it in `cloneIdentifier()` or ordinary destructuring throws `ReferenceError`.
+- [x] **SPIKE-07**: ~~Confirm `structuredClone` exists in Caido's runtime~~ — **ANSWERED during Phase 0 research: it is `undefined` on 0.57.1.** The `meriyah@7` polyfill guard is therefore mandatory and unconditional, not defensive. Phase 0 need only regression-assert this alongside the other capability probes.
 - [ ] **SPIKE-08**: Determine whether proxied bodies are stored decompressed, and whether `Body.length` equals `toRaw().length`.
 - [ ] **SPIKE-09**: Verify `PRAGMA` and `BEGIN`/`COMMIT` survive across `exec` calls on the pooled SQLite connection.
 - [ ] **SPIKE-10**: Measure the content-hash cache hit rate on real browsing. *(Biggest single performance lever — at 40% instead of 90%, CPU cost is 6× budget.)*
@@ -33,7 +34,7 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [ ] **CORE-03**: The work queue is bounded, with visible overflow. It is never an unbounded array. *(JS-Analyzer's `autoScanQueue` is pushed to and drained by nothing — the failure mode to avoid.)*
 - [ ] **CORE-04**: Exactly one CPU consumer processes the queue. Concurrency is 1, because the runtime is single-threaded and higher concurrency only multiplies peak memory and latency.
 - [ ] **CORE-05**: The consumer reloads work via `sdk.requests.get(id)` rather than retaining SDK objects across `await` points.
-- [ ] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap and yields between chunks, capping the synchronous block at ~27 ms.
+- [ ] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap for **matching-window** purposes, but the **yield trigger is temporal, not geometric**: accumulate synchronous work and yield when elapsed time approaches the slice budget. *(Measured on 0.57.1: `setTimeout(r,0)` is the only primitive that genuinely yields — service ratio 0.76 versus 0.00 for both `setImmediate` and `Promise.resolve()` — and it costs a median 5.67 ms per yield. Yielding per 64 KB chunk would cost 128 yields ≈ 730 ms of pure overhead on an 8 MB bundle. At a 25 ms slice the overhead is 19% instead.)*
 - [ ] **CORE-07**: Wall-clock deadlines are checked between chunks; exceeding budget degrades the result to a recorded partial state rather than freezing.
 - [ ] **CORE-08**: Content identical to something already analysed at the current detector-corpus version is never re-analysed.
 - [ ] **CORE-09**: Project switches cancel in-flight work and never leak results across projects.
@@ -169,7 +170,7 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Encoding correctness (ENC)
 
-- [ ] **ENC-01**: Offsets and hashes are derived from `toRaw()` bytes, never from `toText()`, which replaces invalid characters and is lossy.
+- [ ] **ENC-01**: Offsets and hashes are derived from `toRaw()` bytes, never from `toText()`, which replaces invalid characters and is lossy. *(Note: `TextDecoder` and `TextEncoder` are **not globals** in Caido's QuickJS — they must be imported from a module. Verified on 0.57.1.)*
 - [ ] **ENC-02**: Non-UTF-8 and mixed-encoding bodies round-trip correctly through detection and evidence display.
 - [ ] **ENC-03**: Internationalised domain names are normalised consistently, so a punycode host and its Unicode form are not treated as two different hosts — and homograph forms are not silently equated either.
 - [ ] **ENC-04**: Percent-encoding, unicode escapes, and string concatenation in extracted URLs are normalised before deduplication.
@@ -203,7 +204,7 @@ Caido is client/server. Backend plugins run in the Caido CLI/server process, whi
 - [ ] **QUAL-03**: Both corpora run in CI on every rule change, and a regression fails the build.
 - [ ] **QUAL-04**: The measured false-positive rate is published in the README. *(Core Value is a release gate, not an aspiration.)*
 - [ ] **QUAL-05**: A poison-bundle fixture — adversarial syntax, deep nesting, decompression bombs, catastrophic-regex bait — completes within budget without crashing.
-- [ ] **QUAL-06**: A sustained soak over mixed real bundles shows no growing heap, no stuck jobs, no cross-project leakage, and no duplicate findings.
+- [ ] **QUAL-06**: A sustained soak over mixed real bundles shows **per-artifact RSS delta converging toward zero**, no stuck jobs, no cross-project leakage, and no duplicate findings. *(Reworded because the original was unmeasurable: Caido's QuickJS exposes no memory introspection whatsoever — `llrt:qjs`, `perf_hooks`, and `process` all fail to load, `performance` carries only `now` and `timeOrigin`, and there is no `gc()`. External RSS sampling of the host process is the only method available, and RSS is a high-water mark that never falls, so "no growing heap" can never be observed directly.)*
 
 ### Distribution (DIST)
 
@@ -254,8 +255,8 @@ Tracked, deliberately not in the v1 roadmap.
 Populated during roadmap creation.
 
 **Coverage:**
-- v1 requirements: 136 total
-- Mapped to phases: 136
+- v1 requirements: 137 total
+- Mapped to phases: 137
 - Unmapped: 0
 - Mapped to phases: pending roadmap
 - Unmapped: pending roadmap

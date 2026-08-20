@@ -30,21 +30,23 @@ The differentiators come after that foundation exists, because each is only as g
 ### Phase 0: Runtime Reality Check
 **Goal**: Replace every assumption about Caido's QuickJS with a measurement, and write a go/no-go table that fixes the default size, budget, and degradation thresholds.
 **Depends on**: Nothing (first phase)
-**Requirements**: SPIKE-01 … SPIKE-12
+**Requirements**: SPIKE-01 … SPIKE-12, SPIKE-04b
 **Success Criteria** (what must be TRUE):
   1. A deliberately catastrophic regex is run inside Caido in a disposable instance, and it is recorded whether the plugin thread ever recovers, whether other plugins keep working, and whether `re2js` is fast enough as an escape hatch on the same corpus
   2. A handler that blocks while 500 responses are proxied produces a recorded count of events actually delivered, settling whether Caido queues, drops, or backpressures
   3. `sdk.requests.send()` is looped in increments of ten to failure on the target Caido build, producing the current cliff number, repeated with `save:false` and with `caido:http` `fetch`
   4. An event matrix records, per surface (Proxy, Replay, Automate, import, workflow, plugin-originated), whether `onInterceptResponse` fires and whether `save:false` or `plugins:false` changes it
-  5. Wall-clock and memory are measured inside Caido for decode, hash, lexer, and Meriyah parse at 0.5, 1.5, 3, and 8 MB, and the recursion-depth probe records where the 512 KiB stack breaks and whether it throws or segfaults
-  6. A written go/no-go table states each answer, the threshold it sets, and what changes if it is wrong
+  5. Wall-clock is measured inside Caido via `performance.now()`, and memory is measured **for** Caido via external RSS sampling correlated to in-runtime markers, for decode, hash, lexer, and Meriyah parse at 0.5, 1.5, 3, and 8 MB; the recursion-depth probe records where the stack breaks and whether it throws or segfaults
+  6. A written go/no-go table states each answer, the threshold it sets, and what changes if it is wrong — emitted as machine-checkable JSON, not prose
 **Plans**: 4 plans
 
+**Instance policy (non-negotiable):** every spike runs against `/Applications/Caido.app/Contents/Resources/bin/caido-cli` (0.57.1) with `--data-path` isolation, asserting the reported version before recording anything. Destructive spikes get a fresh instance and are never run on an instance a later step still needs — the failure mode is not a lost instance, it is a silently wrong measurement on a poisoned runtime.
+
 Plans:
-- [ ] 00-01: Disposable probe plugin — capability probe for `structuredClone`, ES level, stack depth, `WebAssembly` absence (SPIKE-07)
-- [ ] 00-02: Regex safety and event-loop spikes (SPIKE-01, -02, -03, -11)
-- [ ] 00-03: Active-request, body-semantics, and filesystem spikes (SPIKE-04, -05, -08, -12)
-- [ ] 00-04: Performance and persistence spikes (SPIKE-06, -09, -10) plus the go/no-go table
+- [ ] 00-01: Shared harness + capability probe (SPIKE-07 regression-assert, SPIKE-02) and **deploy the SPIKE-10 recorder** so cross-day data starts collecting immediately
+- [ ] 00-02: Budgets and persistence — SPIKE-08 first (an "8 MB ceiling" is meaningless until you know if it is compressed), then SPIKE-06, SPIKE-09, SPIKE-12
+- [ ] 00-03: Event matrix — SPIKE-05 and SPIKE-11 share one apparatus; SPIKE-03 runs last because it wedges the thread
+- [ ] 00-04: Destructive spikes on fresh instances — SPIKE-01, then SPIKE-04 across **three separate instances** (one per variant, because #2211 leaks cumulatively), plus the plugin-toggle-resets-the-leak test; read the SPIKE-10 recorder; emit the go/no-go table
 
 ### Phase 1: Skeleton, Persistence & Compatibility
 **Goal**: A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
@@ -290,7 +292,7 @@ Two further ordering changes: error containment and observability moved forward 
 
 | Requirement group | Phase |
 |---|---|
-| SPIKE-01 … SPIKE-12 | Phase 0 |
+| SPIKE-01 … SPIKE-12, SPIKE-04b | Phase 0 |
 | CORE-01 … CORE-10, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06 | Phase 1 |
 | ERR-01 … ERR-04, OBS-01 … OBS-03 | Phase 2 |
 | DET-01 … DET-10, QUAL-01/02/03 | Phase 3 |
@@ -303,7 +305,7 @@ Two further ordering changes: error containment and observability moved forward 
 | CHUNK-01 … CHUNK-04, SUPPLY-01 … SUPPLY-05, SEC-07 | Phase 10 |
 | UPGRADE-01/03/04, QUAL-04/05/06, DIST-01/02/03/04/07 | Phase 11 |
 
-**Coverage:** 136 v1 requirements, all mapped. 0 unmapped. 52 plans across 12 phases.
+**Coverage:** 137 v1 requirements, all mapped. 0 unmapped. 52 plans across 12 phases.
 
 ## Deferred to v2
 

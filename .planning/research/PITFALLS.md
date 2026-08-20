@@ -1,5 +1,21 @@
 # Pitfalls Research
 
+> ## ⚠️ SPIKE IDs IN THIS DOCUMENT ARE NOT AUTHORITATIVE
+>
+> This document numbers its spikes independently of `REQUIREMENTS.md`, and **five of twelve IDs collide with a different meaning**. `STACK.md` uses a third scheme again ("Spike 1–5").
+>
+> **`REQUIREMENTS.md` is the single authority for SPIKE-nn.** Mine the *methods* below — they are good — but discard the *numbers* on sight.
+>
+> | ID | `REQUIREMENTS.md` (authoritative) | This document means |
+> |---|---|---|
+> | SPIKE-02 | `setTimeout(fn,0)` yields? | CPU/RSS budgets *(= REQ SPIKE-06)* |
+> | SPIKE-06 | CPU/RSS budgets + stack | `llrt/fs` containment *(= REQ SPIKE-12)* |
+> | SPIKE-07 | `structuredClone` present? | `PRAGMA`/`BEGIN`/`COMMIT` *(= REQ SPIKE-09)* |
+> | SPIKE-09 | `PRAGMA`/transactions | False-positive corpus *(= REQ QUAL-01…03, Phase 3)* |
+> | SPIKE-10 | Content-hash cache hit rate | Store-policy pre-clearance *(= REQ DIST-03, Phase 11)* |
+>
+> SPIKE-01, -03, -04, -05, -08 agree across both. SPIKE-11 and -12 are absent here.
+
 **Domain:** Offensive-security static-analysis plugin (passive + active JS mining) inside the Caido proxy, running on an embedded QuickJS runtime
 **Researched:** 2026-08-20
 **Confidence:** HIGH on runtime/engine facts (read from quickjs-ng, rquickjs and `caido/dependency-llrt` source), HIGH on Caido SDK contracts (official docs), HIGH on the false-positive economics (peer-reviewed measurement on HTTPArchive), MEDIUM on Caido's undocumented internals (event queueing, plugin supervision, compression) — those are converted into named spikes rather than asserted.
