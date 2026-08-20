@@ -67,12 +67,12 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6 plans in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel)
+**Plans**: 1/6 plans executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel)
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — **Tracer**: one proxied JS response hashed and durably remembered, end-to-end on a live Caido, plus the Phase 0 threshold contract and the measured answers to the two open runtime questions — *wave 1*
+- [x] 01-01-PLAN.md — **Tracer**: one proxied JS response hashed and durably remembered, end-to-end on a live Caido, plus the Phase 0 threshold contract and the measured answers to the two open runtime questions — *wave 1*
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
