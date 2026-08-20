@@ -1,0 +1,538 @@
+// packages/backend/src/store/retention.ts — STORE-06, threat T-01-22.
+//
+// RETENTION IS THE ONLY BOUND ON THIS DATABASE'S GROWTH. Caido never
+// garbage-collects `sdk.meta.db()`, does not delete it when the operator deletes
+// the project, and it survives a force-reinstall (DB_SURVIVES_REINSTALL). Nothing
+// else will ever reclaim a row.
+//
+// ---------------------------------------------------------------------------
+// THIS IS A LIBRARY FUNCTION WITH EXACTLY ONE CALLER, AND THE CALLER IS NOT HERE.
+// ---------------------------------------------------------------------------
+// Plan 01-03 schedules `sweepRetention` from the consumer loop, one bounded pass
+// per RETENTION_SWEEP_EVERY_N processed artifacts (decision P1-D7). An UNCALLED
+// sweep bounds nothing, so the proof that a running plugin actually trims is
+// 01-03's; what this plan owes is a signature 01-03 can call and behaviour that is
+// correct when it does. The signature and the return shape are FIXED HERE and do
+// not change afterwards.
+//
+// The cadence lives in the consumer rather than in a background timer because this
+// runtime has ONE thread and `setTimeout` is the only yield primitive — a
+// long-lived timer would be a design smell, not a scheduler — and because tying
+// the cadence to processed artifacts makes retention pressure scale with the
+// ingest that creates it.
+//
+// ---------------------------------------------------------------------------
+// EVERY DELETE IS ONE STATEMENT. NEVER A BATCH.
+// ---------------------------------------------------------------------------
+// A multi-statement `exec` that fails strands an open write transaction on a
+// pooled connection nothing in the plugin API can reach, and the database is
+// locked for writes until the plugin restarts. That is measured, not feared. So
+// the sweep is a sequence of independent single-statement deletes, each fully
+// bound on a natural key, and a failure of any one of them costs that row and
+// nothing else.
+//
+// Foreign keys are NOT relied upon (decision P4-D3): `PRAGMA foreign_keys` is
+// per-connection and the pool holds up to five connections. The cascade is
+// therefore explicit and runs in dependency order — a digest's observations and
+// analyses go BEFORE the artifact itself, so a pass that runs out of budget
+// halfway leaves a parent with fewer children and never a child with no parent.
+
+import {
+  RETENTION_SWEEP_MAX_ROWS,
+  ROWS_INSERTED_PER_ARTIFACT_MAX,
+} from "@defminer/engine/thresholds";
+import type { Database } from "sqlite";
+
+import type { RetentionBounds } from "./settings";
+
+/**
+ * What one bounded pass did.
+ *
+ * FIXED SHAPE — plan 01-03's call site compiles against exactly this.
+ *
+ * `examined` counts the candidate ROWS this pass identified as eligible for
+ * deletion, BEFORE the per-pass cap was applied. `deleted` is what it actually
+ * removed, and is never greater than {@link RETENTION_SWEEP_MAX_ROWS}. `moreWork`
+ * is true when eligible rows remained when the pass stopped — the caller defers to
+ * the next cadence boundary rather than looping, because the delete rate is above
+ * the insert rate by construction and deferral therefore converges anyway.
+ */
+export type RetentionSweepSummary = {
+  examined: number;
+  deleted: number;
+  moreWork: boolean;
+};
+
+/**
+ * The convergence inequality, restated where the code that depends on it lives.
+ *
+ * A processed artifact inserts at most ROWS_INSERTED_PER_ARTIFACT_MAX rows, and a
+ * sweep runs once per RETENTION_SWEEP_EVERY_N processed artifacts. A pass that
+ * removed fewer rows than the interval inserts would let the database grow
+ * monotonically past the retention ceiling WHILE RUNNING EXACTLY AS DESIGNED —
+ * which is the failure mode this constant exists to make impossible.
+ * `thresholds.spec.ts` asserts the inequality; this module reads the constants
+ * rather than hard-coding either, so the two cannot drift.
+ */
+const MAX_ROWS_PER_PASS = RETENTION_SWEEP_MAX_ROWS;
+
+// Referenced so the derivation above is not merely a comment: a build where
+// ROWS_INSERTED_PER_ARTIFACT_MAX stopped existing would fail here rather than
+// silently losing the reasoning.
+const INSERTED_PER_ARTIFACT = ROWS_INSERTED_PER_ARTIFACT_MAX;
+
+/** How many candidate rows one pass may ENUMERATE. Bounded for the same reason
+ *  the delete count is: an unbounded SELECT over a table with no size ceiling is
+ *  itself a cost the target controls. Two passes' worth, so the pass can always
+ *  see whether work remains beyond its own cap. */
+const CANDIDATE_SCAN_LIMIT = MAX_ROWS_PER_PASS * 2;
+
+// --- candidate selection ----------------------------------------------------
+//
+// Every one of these orders OLDEST FIRST with an explicit tie-break, so a capped
+// pass and the pass that resumes it agree on which rows come next. Without the
+// tie-break, two rows sharing a timestamp could swap between passes and the sweep
+// would be resumable only by luck.
+
+const ARTIFACTS_OVER_AGE_SQL = `
+SELECT sha256 FROM artifacts
+WHERE project_id = ? AND last_seen_at < ?
+ORDER BY last_seen_at ASC, sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_OLDEST_SQL = `
+SELECT sha256 FROM artifacts
+WHERE project_id = ?
+ORDER BY last_seen_at ASC, sha256 ASC
+LIMIT ?
+`;
+
+const COUNT_ARTIFACTS_SQL = `SELECT COUNT(*) AS n FROM artifacts WHERE project_id = ?`;
+const COUNT_OBSERVATIONS_SQL = `SELECT COUNT(*) AS n FROM observations WHERE project_id = ?`;
+const COUNT_ANALYSES_SQL = `SELECT COUNT(*) AS n FROM analyses WHERE project_id = ?`;
+
+const DELETE_OBSERVATIONS_FOR_DIGEST_SQL = `
+DELETE FROM observations WHERE project_id = ? AND sha256 = ?
+`;
+
+const DELETE_ANALYSES_FOR_DIGEST_SQL = `
+DELETE FROM analyses WHERE project_id = ? AND sha256 = ?
+`;
+
+const DELETE_ARTIFACT_SQL = `
+DELETE FROM artifacts WHERE project_id = ? AND sha256 = ?
+`;
+
+// The row-count and age bounds are PER TABLE PER PROJECT, so `observations` and
+// `analyses` are bounded in their own right and not only through the artifact
+// cascade. Without this, a project inside the artifact bound could still hold an
+// unbounded number of sightings of those artifacts — which is precisely the shape
+// real traffic produces, since every re-serve of the same bundle is a new
+// observation row and the artifact row is upserted rather than inserted.
+const OBSERVATIONS_OVER_AGE_SQL = `
+SELECT sha256, request_id FROM observations
+WHERE project_id = ? AND observed_at < ?
+ORDER BY observed_at ASC, request_id ASC
+LIMIT ?
+`;
+
+const OBSERVATIONS_OLDEST_SQL = `
+SELECT sha256, request_id FROM observations
+WHERE project_id = ?
+ORDER BY observed_at ASC, request_id ASC
+LIMIT ?
+`;
+
+const ANALYSES_OVER_AGE_SQL = `
+SELECT sha256, detector_set_hash FROM analyses
+WHERE project_id = ? AND started_at < ?
+ORDER BY started_at ASC, sha256 ASC
+LIMIT ?
+`;
+
+const ANALYSES_OLDEST_SQL = `
+SELECT sha256, detector_set_hash FROM analyses
+WHERE project_id = ?
+ORDER BY started_at ASC, sha256 ASC
+LIMIT ?
+`;
+
+// Orphans: a child whose parent is already gone. The cascade below cannot create
+// one — children go first — but a crash mid-pass in some future version, or a row
+// written before this module existed, can. Cleaning them is cheap and makes "no
+// orphans" a property of the database rather than of this code's control flow.
+const ORPHAN_OBSERVATIONS_SQL = `
+SELECT sha256, request_id FROM observations
+WHERE project_id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE artifacts.project_id = observations.project_id
+      AND artifacts.sha256 = observations.sha256
+  )
+ORDER BY observed_at ASC, request_id ASC
+LIMIT ?
+`;
+
+const DELETE_OBSERVATION_SQL = `
+DELETE FROM observations WHERE project_id = ? AND sha256 = ? AND request_id = ?
+`;
+
+const ORPHAN_ANALYSES_SQL = `
+SELECT sha256, detector_set_hash FROM analyses
+WHERE project_id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE artifacts.project_id = analyses.project_id
+      AND artifacts.sha256 = analyses.sha256
+  )
+ORDER BY started_at ASC, sha256 ASC
+LIMIT ?
+`;
+
+const DELETE_ANALYSIS_SQL = `
+DELETE FROM analyses WHERE project_id = ? AND sha256 = ? AND detector_set_hash = ?
+`;
+
+async function countRows(
+  db: Database,
+  sql: string,
+  projectId: string,
+): Promise<number> {
+  const stmt = await db.prepare(sql);
+  const row = await stmt.get<{ n: number }>(projectId);
+  return Number(row?.n ?? 0);
+}
+
+/**
+ * One bounded retention pass for one project.
+ *
+ * BOTH bounds apply and whichever binds first wins: an artifact is eligible when
+ * it is older than `bounds.maxAgeMs` OR when the project holds more than
+ * `bounds.maxRows` artifacts and this one is among the oldest of the excess. A row
+ * EXACTLY at the age cutoff is KEPT — the predicate is strict — because "older
+ * than 90 days" should not silently mean "90 days or exactly now minus 90 days",
+ * and a boundary that moves with the clock is the kind of thing that deletes a row
+ * a test just wrote.
+ *
+ * Never throws. A failing delete is counted as not-deleted and the pass continues:
+ * one unwritable row must not stop retention for the whole project, and Caido
+ * surfaces neither the throw nor the rejection anyway.
+ */
+export async function sweepRetention(
+  db: Database,
+  projectId: string,
+  bounds: RetentionBounds,
+  nowMs: number,
+): Promise<RetentionSweepSummary> {
+  let examined = 0;
+  let deleted = 0;
+  let moreWork = false;
+
+  // A sweep for the reserved global scope would be a bug: '' is a settings-only
+  // scope and no artifact, observation or analysis can carry it.
+  if (projectId === "") return { examined, deleted, moreWork };
+
+  const budget = (): number => MAX_ROWS_PER_PASS - deleted;
+
+  const cutoff = nowMs - bounds.maxAgeMs;
+
+  try {
+    // --- 1. artifacts eligible under either bound --------------------------
+    const victims: string[] = [];
+    const seen = new Set<string>();
+    const pushVictims = (rows: { sha256: string }[]): void => {
+      for (const r of rows) {
+        const sha = String(r.sha256);
+        if (seen.has(sha)) continue;
+        seen.add(sha);
+        victims.push(sha);
+      }
+    };
+
+    const overAgeStmt = await db.prepare(ARTIFACTS_OVER_AGE_SQL);
+    pushVictims(
+      await overAgeStmt.all<{ sha256: string }>(
+        projectId,
+        cutoff,
+        CANDIDATE_SCAN_LIMIT,
+      ),
+    );
+
+    const artifactCount = await countRows(db, COUNT_ARTIFACTS_SQL, projectId);
+    const excess = artifactCount - bounds.maxRows;
+    if (excess > 0) {
+      const oldestStmt = await db.prepare(ARTIFACTS_OLDEST_SQL);
+      pushVictims(
+        await oldestStmt.all<{ sha256: string }>(
+          projectId,
+          Math.min(excess, CANDIDATE_SCAN_LIMIT),
+        ),
+      );
+    }
+
+    // Each victim costs its observations, its analyses and itself. `examined`
+    // counts eligible ARTIFACT rows plus, below, eligible orphan rows: the units
+    // are rows, and every row counted here is one the pass would delete if the
+    // cap allowed.
+    examined += victims.length;
+
+    for (const sha256 of victims) {
+      if (budget() <= 0) {
+        moreWork = true;
+        break;
+      }
+      // DEPENDENCY ORDER. Children first, parent last, so an exhausted budget
+      // leaves a parent with fewer children and NEVER a child with no parent.
+      deleted += await deleteOne(db, DELETE_OBSERVATIONS_FOR_DIGEST_SQL, [
+        projectId,
+        sha256,
+      ]);
+      deleted += await deleteOne(db, DELETE_ANALYSES_FOR_DIGEST_SQL, [
+        projectId,
+        sha256,
+      ]);
+      deleted += await deleteOne(db, DELETE_ARTIFACT_SQL, [projectId, sha256]);
+    }
+
+    // --- 2. orphans, if any survived an earlier interrupted pass -----------
+    if (budget() > 0) {
+      const orphanObsStmt = await db.prepare(ORPHAN_OBSERVATIONS_SQL);
+      const orphanObs = await orphanObsStmt.all<{
+        sha256: string;
+        request_id: string;
+      }>(projectId, Math.min(budget(), CANDIDATE_SCAN_LIMIT));
+      examined += orphanObs.length;
+      for (const o of orphanObs) {
+        if (budget() <= 0) {
+          moreWork = true;
+          break;
+        }
+        deleted += await deleteOne(db, DELETE_OBSERVATION_SQL, [
+          projectId,
+          String(o.sha256),
+          String(o.request_id),
+        ]);
+      }
+    }
+
+    if (budget() > 0) {
+      const orphanAnaStmt = await db.prepare(ORPHAN_ANALYSES_SQL);
+      const orphanAna = await orphanAnaStmt.all<{
+        sha256: string;
+        detector_set_hash: string;
+      }>(projectId, Math.min(budget(), CANDIDATE_SCAN_LIMIT));
+      examined += orphanAna.length;
+      for (const a of orphanAna) {
+        if (budget() <= 0) {
+          moreWork = true;
+          break;
+        }
+        deleted += await deleteOne(db, DELETE_ANALYSIS_SQL, [
+          projectId,
+          String(a.sha256),
+          String(a.detector_set_hash),
+        ]);
+      }
+    }
+
+    // --- 3. the per-table bounds on the child tables -----------------------
+    if (budget() > 0) {
+      const obs = await trimChildTable(
+        db,
+        projectId,
+        {
+          overAgeSql: OBSERVATIONS_OVER_AGE_SQL,
+          oldestSql: OBSERVATIONS_OLDEST_SQL,
+          countSql: COUNT_OBSERVATIONS_SQL,
+          deleteSql: DELETE_OBSERVATION_SQL,
+          secondKey: "request_id",
+        },
+        bounds,
+        cutoff,
+        budget,
+      );
+      examined += obs.examined;
+      deleted += obs.deleted;
+      if (obs.capped) moreWork = true;
+    }
+
+    if (budget() > 0) {
+      const ana = await trimChildTable(
+        db,
+        projectId,
+        {
+          overAgeSql: ANALYSES_OVER_AGE_SQL,
+          oldestSql: ANALYSES_OLDEST_SQL,
+          countSql: COUNT_ANALYSES_SQL,
+          deleteSql: DELETE_ANALYSIS_SQL,
+          secondKey: "detector_set_hash",
+        },
+        bounds,
+        cutoff,
+        budget,
+      );
+      examined += ana.examined;
+      deleted += ana.deleted;
+      if (ana.capped) moreWork = true;
+    }
+
+    // --- 4. does work remain for the next pass? ----------------------------
+    // Asked by RE-COUNTING rather than by trusting the loop's bookkeeping: the
+    // question is about the database, and the database is right there.
+    if (!moreWork) {
+      moreWork = await workRemains(db, projectId, bounds, cutoff);
+    }
+  } catch (e) {
+    // A sweep that throws is a sweep that silently stops bounding growth, and
+    // Caido surfaces neither the throw nor the rejection. Report what the pass
+    // managed and let the caller schedule another.
+    void e;
+    moreWork = true;
+  }
+
+  return { examined, deleted, moreWork };
+}
+
+/** The four statements and the second key column that describe one child table to
+ *  the trim below. Passed as data so `observations` and `analyses` share one
+ *  bounded, deterministic implementation instead of two that can drift. */
+type ChildTableSpec = {
+  overAgeSql: string;
+  oldestSql: string;
+  countSql: string;
+  deleteSql: string;
+  secondKey: "request_id" | "detector_set_hash";
+};
+
+/** Apply BOTH bounds to one child table, oldest first, within the remaining
+ *  budget. Deleting a child never orphans anything — the artifact is the parent —
+ *  so this runs after the cascade and needs no dependency ordering of its own. */
+async function trimChildTable(
+  db: Database,
+  projectId: string,
+  spec: ChildTableSpec,
+  bounds: RetentionBounds,
+  cutoff: number,
+  budget: () => number,
+): Promise<{ examined: number; deleted: number; capped: boolean }> {
+  const victims: { sha256: string; second: string }[] = [];
+  const seen = new Set<string>();
+  const push = (rows: Record<string, unknown>[]): void => {
+    for (const r of rows) {
+      const sha256 = String(r.sha256);
+      const second = String(r[spec.secondKey]);
+      const id = sha256 + "\u0000" + second;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      victims.push({ sha256, second });
+    }
+  };
+
+  const overAge = await db.prepare(spec.overAgeSql);
+  push(
+    await overAge.all<Record<string, unknown>>(
+      projectId,
+      cutoff,
+      CANDIDATE_SCAN_LIMIT,
+    ),
+  );
+
+  const total = await countRows(db, spec.countSql, projectId);
+  const excess = total - bounds.maxRows;
+  if (excess > 0) {
+    const oldest = await db.prepare(spec.oldestSql);
+    push(
+      await oldest.all<Record<string, unknown>>(
+        projectId,
+        Math.min(excess, CANDIDATE_SCAN_LIMIT),
+      ),
+    );
+  }
+
+  let deleted = 0;
+  let capped = false;
+  for (const v of victims) {
+    if (budget() - deleted <= 0) {
+      capped = true;
+      break;
+    }
+    deleted += await deleteOne(db, spec.deleteSql, [
+      projectId,
+      v.sha256,
+      v.second,
+    ]);
+  }
+  return { examined: victims.length, deleted, capped };
+}
+
+/** One delete, one statement, prepared inside the call, parameters SPREAD.
+ *  Returns the rows it removed, or 0 if it failed — a single unwritable row must
+ *  not stop the pass. */
+async function deleteOne(
+  db: Database,
+  sql: string,
+  params: [string, string] | [string, string, string],
+): Promise<number> {
+  try {
+    const stmt = await db.prepare(sql);
+    const res = await stmt.run(...params);
+    return Number(res.changes);
+  } catch {
+    return 0;
+  }
+}
+
+/** True when either bound still binds, or an orphan is still present. */
+async function workRemains(
+  db: Database,
+  projectId: string,
+  bounds: RetentionBounds,
+  cutoff: number,
+): Promise<boolean> {
+  const overAge = await db.prepare(ARTIFACTS_OVER_AGE_SQL);
+  const stillOld = await overAge.all<{ sha256: string }>(projectId, cutoff, 1);
+  if (stillOld.length > 0) return true;
+
+  const artifactCount = await countRows(db, COUNT_ARTIFACTS_SQL, projectId);
+  if (artifactCount > bounds.maxRows) return true;
+
+  const orphanObs = await db.prepare(ORPHAN_OBSERVATIONS_SQL);
+  if ((await orphanObs.all<object>(projectId, 1)).length > 0) return true;
+
+  const orphanAna = await db.prepare(ORPHAN_ANALYSES_SQL);
+  if ((await orphanAna.all<object>(projectId, 1)).length > 0) return true;
+
+  // The child tables carry the SAME two bounds in their own right.
+  const oldObs = await db.prepare(OBSERVATIONS_OVER_AGE_SQL);
+  if ((await oldObs.all<object>(projectId, cutoff, 1)).length > 0) return true;
+  if ((await countRows(db, COUNT_OBSERVATIONS_SQL, projectId)) > bounds.maxRows)
+    return true;
+
+  const oldAna = await db.prepare(ANALYSES_OVER_AGE_SQL);
+  if ((await oldAna.all<object>(projectId, cutoff, 1)).length > 0) return true;
+  if ((await countRows(db, COUNT_ANALYSES_SQL, projectId)) > bounds.maxRows)
+    return true;
+
+  return false;
+}
+
+/** Row counts per table for one project. Exported for the sweep's own spec and for
+ *  any future health surface — OBS-01 is Phase 2 and will want exactly this. */
+export async function retentionCounts(
+  db: Database,
+  projectId: string,
+): Promise<{ artifacts: number; observations: number; analyses: number }> {
+  return {
+    artifacts: await countRows(db, COUNT_ARTIFACTS_SQL, projectId),
+    observations: await countRows(db, COUNT_OBSERVATIONS_SQL, projectId),
+    analyses: await countRows(db, COUNT_ANALYSES_SQL, projectId),
+  };
+}
+
+/** The per-pass cap and the insert bound it must dominate, surfaced so a spec can
+ *  assert against the SAME numbers the sweep uses rather than re-deriving them. */
+export const RETENTION_PASS_LIMITS = {
+  maxRowsPerPass: MAX_ROWS_PER_PASS,
+  insertedPerArtifact: INSERTED_PER_ARTIFACT,
+} as const;
