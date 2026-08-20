@@ -1,0 +1,968 @@
+// packages/backend/src/ingest/consumer.spec.ts — the four store call sites, each
+// proven from the OUTSIDE.
+//
+// This file drives the real consumer against the real store modules over an
+// in-process SQLite database. Nothing about persistence is mocked, deliberately:
+// a mocked `recordObservation` would prove the consumer CALLS something, which is
+// not the claim. The claim is that a running plugin ends up with the rows, and
+// the only honest way to check that is to count them.
+//
+// The four claims, and how each one FAILS if the wiring is removed:
+//
+//   1. identity + edge  — one reload leaves one `artifacts` row AND one
+//      `observations` row. Delete the `recordObservation` call and the row count
+//      goes to zero: the spec fails rather than passing with fewer rows.
+//   2. CORE-08's skip   — the same digest twice leaves `analyses` at 1 while
+//      `seen_count` reaches 2 and a second observation appears. Proven by ROW
+//      COUNTS, not by a flag the consumer sets itself.
+//   3. the walk         — `max_slice_ms` and `bytes_walked` are non-null and
+//      REAL. Write constants instead and the deadline case fails, because
+//      `bytes_walked` stops tracking the offset reached.
+//   4. STORE-06         — row counts fall with NO call to `sweepRetention` in
+//      this file. That is what makes it a schedule rather than a function.
+//
+// The fixture's honest limit (sqlite-fixture.ts's header) applies: `node:sqlite`
+// is single-connection and cannot reproduce Caido's pool. Nothing here claims to.
+
+/* eslint-disable @typescript-eslint/require-await --
+   Every fake `requests.get` below is `async` WITH NO `await` INSIDE, and that is
+   deliberate rather than an oversight. The SDK declares
+   `get(id): Promise<RequestResponseOpt | undefined>`, and the consumer awaits it;
+   a fake that returned a plain object would type-check through `Promise<unknown>`
+   and then resolve SYNCHRONOUSLY, so every case in this file would exercise an
+   ordering the plugin never sees. `async` is how the fake keeps the SDK's shape
+   with nothing to await. Same reasoning, same disable, as
+   test/fixtures/sqlite-fixture.ts. */
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import { BoundedQueue } from "@defminer/engine/queue";
+import {
+  ARTIFACT_DEADLINE_MS,
+  QUEUE_CAP,
+  RETENTION_SWEEP_EVERY_N,
+} from "@defminer/engine/thresholds";
+import ts from "typescript";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import {
+  type FakeSdkOverrides,
+  makeFakeRequest,
+  makeFakeResponse,
+  makeFakeSdk,
+} from "../../test/fixtures/fake-sdk";
+import {
+  createFixtureDb,
+  type SqliteFixture,
+} from "../../test/fixtures/sqlite-fixture";
+import {
+  type Counters,
+  createCounters,
+  type EnqueueClock,
+} from "../hooks/passive";
+import {
+  countAnalyses,
+  DETECTOR_CORPUS_VERSION,
+  getAnalysis,
+} from "../store/analyses";
+import { getArtifact } from "../store/artifacts";
+import { migrate } from "../store/migrations";
+import { listObservations } from "../store/observations";
+import { retentionCounts } from "../store/retention";
+import {
+  GLOBAL_PROJECT_ID,
+  putSetting,
+  RETENTION_MAX_ROWS_KEY,
+} from "../store/settings";
+
+import {
+  type ConsumerDeps,
+  resetConsumerForTest,
+  startConsumer,
+} from "./consumer";
+
+const PROJECT = "project-one";
+
+let fx: SqliteFixture;
+let queue: BoundedQueue;
+let counters: Counters;
+let enqueuedAt: EnqueueClock;
+
+beforeEach(async () => {
+  resetConsumerForTest();
+  fx = createFixtureDb();
+  const report = await migrate(fx.db);
+  expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+  queue = new BoundedQueue(QUEUE_CAP);
+  counters = createCounters();
+  enqueuedAt = new Map();
+});
+
+afterEach(() => {
+  resetConsumerForTest();
+  fx.close();
+});
+
+/** A body whose bytes are deterministic and whose length is chosen by the case. */
+function body(seed: string, length = 64): Uint8Array {
+  const out = new Uint8Array(length);
+  for (let i = 0; i < length; i += 1) {
+    out[i] = (seed.charCodeAt(i % seed.length) + i) & 0xff;
+  }
+  return out;
+}
+
+/** Offer one entry and register the reload the consumer will perform for it. */
+type Planned = {
+  id: string;
+  url: string;
+  bytes: Uint8Array;
+  status?: number;
+  contentType?: string;
+};
+
+function plan(entries: Planned[]): {
+  overrides: FakeSdkOverrides;
+  offer: () => void;
+} {
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  return {
+    overrides: {
+      get: async (id: string) => {
+        const e = byId.get(id);
+        if (e === undefined) return undefined;
+        return {
+          request: makeFakeRequest({ id: e.id, url: e.url }),
+          response: makeFakeResponse({
+            id: e.id,
+            code: e.status ?? 200,
+            headers: {
+              "content-type": [e.contentType ?? "application/javascript"],
+            },
+            bodyBytes: e.bytes,
+          }),
+        };
+      },
+    },
+    offer: () => {
+      for (const e of entries) {
+        queue.offer({ id: e.id, bytes: e.bytes.length, kind: "js" });
+        enqueuedAt.set(e.id, Date.now());
+      }
+    },
+  };
+}
+
+function deps(over: Partial<ConsumerDeps> = {}): ConsumerDeps {
+  return {
+    queue,
+    counters,
+    db: fx.db,
+    enqueuedAt,
+    getProjectId: () => Promise.resolve(PROJECT),
+    ...over,
+  };
+}
+
+/** Start the consumer, drain to completion, stop. The poll timer never gets a
+ *  chance to fire, so every case is deterministic rather than raced. */
+async function runOnce(
+  overrides: FakeSdkOverrides,
+  over: Partial<ConsumerDeps> = {},
+): Promise<ReturnType<typeof makeFakeSdk>> {
+  const sdk = makeFakeSdk(overrides);
+  const handle = startConsumer(sdk, deps(over));
+  await handle.drainNow();
+  handle.stop();
+  return sdk;
+}
+
+// ===========================================================================
+// 1. IDENTITY AND THE EDGE
+// ===========================================================================
+
+describe("one reloaded entry produces BOTH an artifact and an observation", () => {
+  it("writes exactly one row to each table, in the same iteration", async () => {
+    const bytes = body("alpha");
+    const p = plan([{ id: "r1", url: "https://x.test/app.js?v=1", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const counts = await retentionCounts(fx.db, PROJECT);
+    expect(
+      counts.artifacts,
+      "no artifacts row — the identity write did not happen.",
+    ).toBe(1);
+    expect(
+      counts.observations,
+      "no observations row. An artifact written without its observation records that bytes " +
+        "were seen but not WHERE: the plugin would remember the bundle and be unable to say " +
+        "which request served it. THIS is the assertion that fails if the recordObservation " +
+        "call is removed — it does not pass with fewer rows.",
+    ).toBe(1);
+    expect(counters.processed).toBe(1);
+    expect(counters.reloadHit).toBe(1);
+  });
+
+  it("the observation carries the URL with its query and no fragment", async () => {
+    const p = plan([
+      { id: "r1", url: "https://x.test/app.js?v=8c1f#frag", bytes: body("a") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    expect(rows.length).toBe(1);
+    // The cache-busting query is exactly what makes a re-served bundle a MISS;
+    // dropping it would inflate the hit rate this data exists to measure.
+    expect(rows[0].url).toBe("https://x.test/app.js?v=8c1f");
+    expect(rows[0].status).toBe(200);
+    expect(rows[0].content_type).toBe("application/javascript");
+    expect(rows[0].request_id).toBe("r1");
+  });
+
+  it("the artifact is keyed on the digest of the RAW bytes, with no url column", async () => {
+    const bytes = body("alpha");
+    const p = plan([{ id: "r1", url: "https://x.test/a.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const artifact = await getArtifact(fx.db, PROJECT, rows[0].sha256);
+    expect(artifact).toBeDefined();
+    expect(artifact?.byte_len).toBe(bytes.length);
+    expect(artifact?.kind).toBe("js");
+    expect(Object.keys(artifact as object)).not.toContain("url");
+  });
+
+  it("writes nothing at all when no project is selected", async () => {
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("a") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { getProjectId: () => Promise.resolve("") });
+
+    const counts = await retentionCounts(fx.db, PROJECT);
+    expect(counts.artifacts + counts.observations + counts.analyses).toBe(0);
+    expect(counters.storeErrors).toBe(1);
+    expect(counters.processed).toBe(0);
+  });
+});
+
+// ===========================================================================
+// THE RELOAD CONTRACT — four failures, four DISTINCT counters
+// ===========================================================================
+
+describe("every reload failure has its own counter", () => {
+  it("`get` resolving undefined increments reloadMissing", async () => {
+    queue.offer({ id: "gone", bytes: 10, kind: "js" });
+    await runOnce({ get: async () => undefined });
+    expect(counters.reloadMissing).toBe(1);
+    expect(counters.reloadNoResponse).toBe(0);
+    expect(counters.reloadEmptyBody).toBe(0);
+    expect(counters.consumerErrors).toBe(0);
+    expect(counters.processed).toBe(0);
+  });
+
+  it("a pair whose `response` is undefined increments reloadNoResponse", async () => {
+    // A SEPARATE counter, because the SDK types these as two different
+    // optionality points and conflating them hides which one is happening —
+    // "Caido lost the request" and "Caido has no response for it" call for
+    // different investigations.
+    queue.offer({ id: "noresp", bytes: 10, kind: "js" });
+    await runOnce({
+      get: async (id: string) => ({ request: makeFakeRequest({ id }) }),
+    });
+    expect(counters.reloadNoResponse).toBe(1);
+    expect(counters.reloadMissing).toBe(0);
+    expect(counters.reloadEmptyBody).toBe(0);
+    expect(counters.consumerErrors).toBe(0);
+  });
+
+  it("a zero-length body increments reloadEmptyBody", async () => {
+    queue.offer({ id: "empty", bytes: 10, kind: "js" });
+    await runOnce({
+      get: async (id: string) => ({
+        request: makeFakeRequest({ id }),
+        response: makeFakeResponse({ bodyBytes: new Uint8Array(0) }),
+      }),
+    });
+    expect(counters.reloadEmptyBody).toBe(1);
+    expect(counters.reloadMissing).toBe(0);
+    expect(counters.reloadNoResponse).toBe(0);
+  });
+
+  it("an absent body ALSO increments reloadEmptyBody, and writes nothing", async () => {
+    queue.offer({ id: "nobody", bytes: 10, kind: "js" });
+    await runOnce({
+      get: async (id: string) => ({
+        request: makeFakeRequest({ id }),
+        response: makeFakeResponse({ noBody: true }),
+      }),
+    });
+    expect(counters.reloadEmptyBody).toBe(1);
+    const counts = await retentionCounts(fx.db, PROJECT);
+    expect(counts.artifacts).toBe(0);
+  });
+
+  it("a REJECTING `get` increments consumerErrors and does not stop the loop", async () => {
+    // The property that matters is the second half: one poisoned response must
+    // not stop everything queued behind it, and Caido surfaces neither the throw
+    // nor the rejection, so nothing outside this counter would ever say so.
+    const good = body("good");
+    queue.offer({ id: "boom", bytes: 10, kind: "js" });
+    queue.offer({ id: "ok", bytes: good.length, kind: "js" });
+    const sdk = await runOnce({
+      get: async (id: string) => {
+        if (id === "boom") throw new Error("reload exploded");
+        return {
+          request: makeFakeRequest({ id, url: "https://x.test/ok.js" }),
+          response: makeFakeResponse({ bodyBytes: good }),
+        };
+      },
+    });
+    expect(counters.consumerErrors).toBe(1);
+    expect(counters.processed).toBe(1);
+    expect(sdk.calls.requestsGet).toEqual(["boom", "ok"]);
+    expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(1);
+  });
+
+  it("counts a byte-length disagreement between the hook and the reload", async () => {
+    // BODY_LENGTH_EQUALS_RAW_LENGTH was measured true across 24 round trips, so a
+    // non-zero value here means that measurement no longer holds.
+    const bytes = body("alpha", 64);
+    queue.offer({ id: "r1", bytes: 999, kind: "js" });
+    await runOnce({
+      get: async (id: string) => ({
+        request: makeFakeRequest({ id, url: "https://x.test/a.js" }),
+        response: makeFakeResponse({ bodyBytes: bytes }),
+      }),
+    });
+    expect(counters.byteLenMismatch).toBe(1);
+    expect(counters.processed).toBe(1);
+  });
+});
+
+// ===========================================================================
+// 2. CORE-08's SKIP
+// ===========================================================================
+
+describe("CORE-08 — the corpus-version cache, proven by ROW COUNTS", () => {
+  it("the same digest twice leaves analyses at 1, seen_count at 2, observations at 2", async () => {
+    const bytes = body("same-bundle");
+    const first = plan([{ id: "r1", url: "https://x.test/a.js?v=1", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/a.js?v=2", bytes }]);
+    second.offer();
+    await runOnce(second.overrides);
+
+    const counts = await retentionCounts(fx.db, PROJECT);
+    expect(counts.artifacts).toBe(1);
+    expect(
+      counts.observations,
+      "the second sighting did not write its observation. The edge is written on EVERY " +
+        "iteration, including a cache hit — the same bytes appearing again at a different URL " +
+        "is real information.",
+    ).toBe(2);
+    expect(
+      counts.analyses,
+      "a second analysis row appeared. The corpus version is IN the primary key, so a repeat " +
+        "sighting at the same version must not start a second analysis.",
+    ).toBe(1);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const artifact = await getArtifact(fx.db, PROJECT, rows[0].sha256);
+    expect(artifact?.seen_count).toBe(2);
+    expect(new Set(rows.map((r) => r.request_id))).toEqual(
+      new Set(["r1", "r2"]),
+    );
+    expect(counters.analysisCacheHit).toBe(1);
+    expect(counters.analysisStarted).toBe(1);
+  });
+
+  it("the SAME digest at a DIFFERENT detector_set_hash adds exactly one analysis row", async () => {
+    // The other half of "the cache key carries its own invalidator": a stale-
+    // corpus hit is not expressible, so a new corpus version means new work.
+    const bytes = body("same-bundle");
+    const first = plan([{ id: "r1", url: "https://x.test/a.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+    expect((await retentionCounts(fx.db, PROJECT)).analyses).toBe(1);
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/a.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides, { detectorSetHash: "phase3-corpus-v2" });
+
+    expect((await retentionCounts(fx.db, PROJECT)).analyses).toBe(2);
+    expect(counters.analysisStarted).toBe(2);
+    expect(counters.analysisCacheHit).toBe(0);
+  });
+
+  it("consults the store BEFORE claiming, so a hit starts no analysis", async () => {
+    const bytes = body("cached");
+    const first = plan([{ id: "r1", url: "https://x.test/a.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+    const sha = (await listObservations(fx.db, PROJECT))[0].sha256;
+    const before = await getAnalysis(
+      fx.db,
+      PROJECT,
+      sha,
+      DETECTOR_CORPUS_VERSION,
+    );
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/a.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides);
+
+    const after = await getAnalysis(
+      fx.db,
+      PROJECT,
+      sha,
+      DETECTOR_CORPUS_VERSION,
+    );
+    // Untouched, not merely un-duplicated: a second claim that lost the race
+    // would still have moved `started_at`.
+    expect(after).toEqual(before);
+    expect(await countAnalyses(fx.db, PROJECT)).toBe(1);
+  });
+});
+
+// ===========================================================================
+// 3. THE WALK — real numbers, on both the done and the partial path
+// ===========================================================================
+
+describe("the analysis persists what the WALK returned, not constants", () => {
+  it("a normal iteration writes scan_state done with both columns non-null", async () => {
+    const bytes = body("walk-me", 200_000);
+    const p = plan([{ id: "r1", url: "https://x.test/big.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const sha = (await listObservations(fx.db, PROJECT))[0].sha256;
+    const row = await getAnalysis(fx.db, PROJECT, sha, DETECTOR_CORPUS_VERSION);
+    expect(row?.scan_state).toBe("done");
+    expect(row?.max_slice_ms).not.toBeNull();
+    expect(row?.bytes_walked).not.toBeNull();
+    expect(
+      row?.bytes_walked,
+      "bytes_walked does not equal the artifact's length on a completed walk. Either the walk " +
+        "did not run or a constant was written in its place.",
+    ).toBe(bytes.length);
+    expect(counters.analysisPartial).toBe(0);
+  });
+
+  it("an iteration whose clock crosses ARTIFACT_DEADLINE_MS writes partial, with REAL numbers", async () => {
+    // The negative demonstration for the walk. `bytes_walked` here is the offset
+    // the walk ACTUALLY reached — strictly between 0 and the artifact's length —
+    // so a consumer that wrote constants instead would fail this case while
+    // passing the `done` case above.
+    const bytes = body("walk-me", 200_000);
+    const p = plan([{ id: "r1", url: "https://x.test/big.js", bytes }]);
+    p.offer();
+
+    // Every read advances 5 s against a 30 s budget, so the deadline crosses part
+    // way through the four windows a 200000-byte artifact produces.
+    let t = 0;
+    const now = (): number => {
+      const v = t;
+      t += 5_000;
+      return v;
+    };
+    await runOnce(p.overrides, { now });
+
+    const sha = (await listObservations(fx.db, PROJECT))[0].sha256;
+    const row = await getAnalysis(fx.db, PROJECT, sha, DETECTOR_CORPUS_VERSION);
+    expect(row?.scan_state).toBe("partial");
+    expect(
+      row?.max_slice_ms,
+      "max_slice_ms is NULL on the degraded path. CORE-07's degraded state and the stored half " +
+        "of CORE-10 would be permanently meaningless with every other test still green.",
+    ).not.toBeNull();
+    expect(row?.bytes_walked).not.toBeNull();
+    expect(Number(row?.bytes_walked)).toBeGreaterThan(0);
+    expect(Number(row?.bytes_walked)).toBeLessThan(bytes.length);
+    expect(counters.analysisPartial).toBe(1);
+    // The artifact and its observation still landed: a deadline expiry degrades
+    // the ANALYSIS, it does not discard the sighting.
+    const counts = await retentionCounts(fx.db, PROJECT);
+    expect(counts.artifacts).toBe(1);
+    expect(counts.observations).toBe(1);
+  });
+
+  it("ARTIFACT_DEADLINE_MS is the generated 30 s, so the case above is the real budget", () => {
+    expect(ARTIFACT_DEADLINE_MS).toBe(30_000);
+  });
+});
+
+// ===========================================================================
+// 4. STORE-06's SCHEDULE
+// ===========================================================================
+
+describe("STORE-06 — retention is SCHEDULED from the loop, not merely available", () => {
+  /** Seed artifacts directly, bypassing the write path: this arranges a database
+   *  state rather than exercising anything. */
+  function seedArtifacts(count: number, at: number): void {
+    const stmt = fx.raw.prepare(
+      `INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+    );
+    for (let i = 0; i < count; i += 1) {
+      stmt.run(
+        PROJECT,
+        "seed" + String(i).padStart(60, "0"),
+        10,
+        "js",
+        at,
+        at + i,
+      );
+    }
+  }
+
+  it("row counts FALL with no call to sweepRetention anywhere in this test", async () => {
+    // grep this file for `sweepRetention` — it is imported by nothing here. The
+    // only way the count can fall is if the consumer scheduled the pass itself.
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "40",
+      Date.now(),
+    );
+    seedArtifacts(100, Date.now() - 1_000);
+    expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(100);
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("trigger") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const after = await retentionCounts(fx.db, PROJECT);
+    expect(
+      after.artifacts,
+      "the row count did not fall. sweepRetention exists and works (retention.spec.ts proves " +
+        "that); what this asserts is that a RUNNING PLUGIN invokes it. Until it does, STORE-06's " +
+        "mitigation is a function nobody calls.",
+    ).toBeLessThanOrEqual(41);
+    expect(counters.retentionSweeps).toBe(1);
+    expect(counters.retentionDeleted).toBeGreaterThan(0);
+  });
+
+  it("runs ONE pass on the first iteration after start, and not on the second", async () => {
+    // "Also run one pass on the first iteration after the consumer starts, so a
+    // plugin that ingests slowly still trims rather than growing forever between
+    // bursts" — once, not once per entry.
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("one") },
+      { id: "r2", url: "https://x.test/b.js", bytes: body("two") },
+      { id: "r3", url: "https://x.test/c.js", bytes: body("three") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+    expect(counters.processed).toBe(3);
+    expect(counters.retentionSweeps).toBe(1);
+  });
+
+  it("a single cadence crossing performs EXACTLY ONE pass, not a loop to convergence", async () => {
+    // A pass reporting `moreWork` defers to the next boundary. Looping until it
+    // is false would rebuild the long uninterruptible stretch the bounded pass
+    // exists to prevent — and deferral converges anyway, because the per-pass
+    // delete cap dominates the worst-case insert rate by assertion.
+    const entries: Planned[] = [];
+    for (let i = 0; i < RETENTION_SWEEP_EVERY_N; i += 1) {
+      entries.push({
+        id: "r" + String(i),
+        url: "https://x.test/" + String(i) + ".js",
+        bytes: body("artifact-" + String(i)),
+      });
+    }
+    const p = plan(entries);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.processed).toBe(RETENTION_SWEEP_EVERY_N);
+    // One at the first iteration, one when the counter crossed the cadence.
+    // Exactly two — a loop-to-convergence, or a per-iteration sweep, would be more.
+    expect(
+      counters.retentionSweeps,
+      `${counters.retentionSweeps} sweeps over ${RETENTION_SWEEP_EVERY_N} processed artifacts. ` +
+        `Expected exactly 2: one on the first iteration after start, one at the cadence boundary.`,
+    ).toBe(2);
+  });
+
+  it("does not sweep the reserved global scope", async () => {
+    // '' is a settings-only scope; no artifact, observation or analysis can carry
+    // it, so a sweep for it would be a bug.
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("x") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, {
+      getProjectId: () => Promise.resolve(GLOBAL_PROJECT_ID),
+    });
+    expect(counters.retentionSweeps).toBe(0);
+  });
+});
+
+// ===========================================================================
+// EXACTLY ONE DRAIN LOOP
+// ===========================================================================
+
+describe("CORE-04 — exactly one drain loop, whatever the caller does", () => {
+  it("starting twice with a queue of depth 10 reloads 10 times, not 20", async () => {
+    const entries: Planned[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      entries.push({
+        id: "r" + String(i),
+        url: "https://x.test/" + String(i) + ".js",
+        bytes: body("e" + String(i)),
+      });
+    }
+    const p = plan(entries);
+    p.offer();
+
+    const sdk = makeFakeSdk(p.overrides);
+    const first = startConsumer(sdk, deps());
+    const second = startConsumer(sdk, deps());
+    // The same handle, so a caller that stops what it started stops the real loop.
+    expect(second).toBe(first);
+
+    await Promise.all([first.drainNow(), second.drainNow()]);
+    first.stop();
+
+    expect(
+      sdk.calls.requestsGet.length,
+      `${sdk.calls.requestsGet.length} reloads for 10 queued entries. Two loops means every ` +
+        `artifact is reloaded and hashed twice on the one thread this runtime has.`,
+    ).toBe(10);
+    expect(new Set(sdk.calls.requestsGet).size).toBe(10);
+    expect(counters.processed).toBe(10);
+  });
+
+  it("the IN-FLIGHT latch holds while a drain is still running", async () => {
+    // The latch test proper: a second drain entered WHILE the first is mid-flight
+    // must return immediately rather than interleave. Driven by a reload that
+    // does not resolve until the second call has been made.
+    const entries: Planned[] = [
+      { id: "a", url: "https://x.test/a.js", bytes: body("a") },
+      { id: "b", url: "https://x.test/b.js", bytes: body("b") },
+    ];
+    const p = plan(entries);
+    p.offer();
+
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let firstGetSeen = false;
+
+    const sdk = makeFakeSdk({
+      get: async (id: string) => {
+        if (!firstGetSeen) {
+          firstGetSeen = true;
+          await gate;
+        }
+        return (await p.overrides.get?.(id)) ?? undefined;
+      },
+    });
+
+    const handle = startConsumer(sdk, deps());
+    const inFlight = handle.drainNow();
+    // The first reload is now parked inside the loop. A concurrent drain must be
+    // a no-op — it must NOT take the second entry and process it in parallel.
+    const concurrent = handle.drainNow();
+    await concurrent;
+    expect(queue.depth).toBe(1);
+    expect(sdk.calls.requestsGet.length).toBe(1);
+
+    release?.();
+    await inFlight;
+    handle.stop();
+    expect(sdk.calls.requestsGet.length).toBe(2);
+    expect(counters.processed).toBe(2);
+  });
+
+  it("drops its handle on stop, so a later start is a real start", async () => {
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("a") },
+    ]);
+    p.offer();
+    const sdk = makeFakeSdk(p.overrides);
+    const first = startConsumer(sdk, deps());
+    first.stop();
+    const second = startConsumer(sdk, deps());
+    expect(second).not.toBe(first);
+    await second.drainNow();
+    second.stop();
+    expect(counters.processed).toBe(1);
+  });
+});
+
+// ===========================================================================
+// CORE-05 — nothing from the SDK survives an await, checked over the AST
+// ===========================================================================
+
+/**
+ * Report every identifier bound to a `*.requests.get(...)` result — or derived
+ * from one — that is still referenced after a LATER `await` in the same function.
+ *
+ * Pure over `(fileName, source)` so the FAILING path can be executed against an
+ * inline fixture in this same file. A static gate whose failing path is never run
+ * is a gate nobody has seen work.
+ *
+ * Why a gate at all, when `extract()` already returns plain scalars: the never-
+ * retain rule is a property of the CODE SHAPE, and the shape is one refactor away
+ * from being lost. CORE-05 forbids holding a `Request`, `Response` or `Body`
+ * across an await because those handles pin Caido-side state, and Phase 0 measured
+ * a worst-case event-to-reload delta of 2154 ms under load — 2.1 seconds during
+ * which a retained handle would be alive per queued entry.
+ */
+export function auditNeverRetain(fileName: string, source: string): string[] {
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const violations = new Set<string>();
+
+  /** `<anything>.requests.get(...)` */
+  function isRequestsGetCall(node: ts.Node): boolean {
+    if (!ts.isCallExpression(node)) return false;
+    const callee = node.expression;
+    if (!ts.isPropertyAccessExpression(callee)) return false;
+    if (callee.name.text !== "get") return false;
+    const obj = callee.expression;
+    return ts.isPropertyAccessExpression(obj) && obj.name.text === "requests";
+  }
+
+  /** The identifier an expression is ultimately rooted at, if any. */
+  function rootIdentifier(node: ts.Node): string | undefined {
+    let cur: ts.Node = node;
+    for (;;) {
+      if (ts.isIdentifier(cur)) return cur.text;
+      if (
+        ts.isPropertyAccessExpression(cur) ||
+        ts.isElementAccessExpression(cur) ||
+        ts.isNonNullExpression(cur) ||
+        ts.isParenthesizedExpression(cur) ||
+        ts.isAsExpression(cur) ||
+        ts.isAwaitExpression(cur)
+      ) {
+        cur = cur.expression;
+        continue;
+      }
+      return undefined;
+    }
+  }
+
+  function containsRequestsGet(node: ts.Node): boolean {
+    if (isRequestsGetCall(node)) return true;
+    let found = false;
+    ts.forEachChild(node, (child) => {
+      if (!found && containsRequestsGet(child)) found = true;
+    });
+    return found;
+  }
+
+  function checkBody(body: ts.Node, label: string): void {
+    // name -> end position of the declaration that tainted it
+    const tainted = new Map<string, number>();
+    const collect = (n: ts.Node): void => {
+      if (
+        ts.isVariableDeclaration(n) &&
+        n.initializer !== undefined &&
+        ts.isIdentifier(n.name)
+      ) {
+        if (containsRequestsGet(n.initializer)) {
+          tainted.set(n.name.text, n.end);
+        } else {
+          const root = rootIdentifier(n.initializer);
+          if (root !== undefined && tainted.has(root)) {
+            tainted.set(n.name.text, n.end);
+          }
+        }
+      }
+      ts.forEachChild(n, collect);
+    };
+    collect(body);
+    if (tainted.size === 0) return;
+
+    const awaitEnds: number[] = [];
+    const collectAwaits = (n: ts.Node): void => {
+      if (ts.isAwaitExpression(n)) awaitEnds.push(n.end);
+      ts.forEachChild(n, collectAwaits);
+    };
+    collectAwaits(body);
+
+    const collectRefs = (n: ts.Node): void => {
+      if (ts.isIdentifier(n) && tainted.has(n.text)) {
+        const parent = n.parent as ts.Node | undefined;
+        const isDeclarationName =
+          parent !== undefined &&
+          ts.isVariableDeclaration(parent) &&
+          parent.name === n;
+        if (!isDeclarationName) {
+          const declEnd = tainted.get(n.text) ?? 0;
+          const pos = n.getStart(sf);
+          const blocking = awaitEnds.find((a) => a > declEnd && a < pos);
+          if (blocking !== undefined) {
+            violations.add(
+              `${fileName} ${label}: \`${n.text}\` is bound to a requests.get result and is still ` +
+                `referenced after a later await. CORE-05 forbids holding a Request, Response or ` +
+                `Body across an await — read everything you need synchronously (see extract()).`,
+            );
+          }
+        }
+      }
+      ts.forEachChild(n, collectRefs);
+    };
+    collectRefs(body);
+  }
+
+  const visit = (node: ts.Node): void => {
+    if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isArrowFunction(node) ||
+        ts.isMethodDeclaration(node)) &&
+      node.body !== undefined
+    ) {
+      const name =
+        "name" in node && node.name !== undefined
+          ? node.name.getText(sf)
+          : "<anonymous>";
+      checkBody(node.body, name);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+
+  return [...violations].sort();
+}
+
+describe("CORE-05 — no SDK handle survives an await", () => {
+  const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
+
+  it("consumer.ts holds nothing from requests.get across a later await", () => {
+    const source = readFileSync(CONSUMER, "utf8");
+    expect(auditNeverRetain("consumer.ts", source)).toEqual([]);
+  });
+
+  it("the audit FAILS on the violation, introduced deliberately", () => {
+    // Execute the failing path. Introduced here rather than by editing the real
+    // file, so the demonstration is permanent and runs on every CI pass instead
+    // of having happened once on somebody's laptop.
+    const violation = `
+      async function bad(sdk: any, id: string, db: any) {
+        const rr = await sdk.requests.get(id);
+        const projectId = await db.getProjectId();
+        return rr.response.getCode() + projectId.length;
+      }
+    `;
+    const found = auditNeverRetain("violation.ts", violation);
+    expect(found.length).toBe(1);
+    expect(found[0]).toContain("`rr`");
+    expect(found[0]).toContain("CORE-05");
+  });
+
+  it("the audit ALSO catches an alias derived from the reload result", () => {
+    const violation = `
+      async function bad(sdk: any, id: string, db: any) {
+        const rr = await sdk.requests.get(id);
+        const response = rr.response;
+        await db.something();
+        return response.getCode();
+      }
+    `;
+    const found = auditNeverRetain("violation.ts", violation);
+    expect(found.length).toBe(1);
+    expect(found[0]).toContain("`response`");
+  });
+
+  it("the audit does NOT fire on the legal shape", () => {
+    // Guards the guard from the other side: a gate that reported everything would
+    // pass its own failing-path test and be useless.
+    const legal = `
+      async function good(sdk: any, id: string, db: any) {
+        const rr = await sdk.requests.get(id);
+        const bytes = rr.response.getBody().toRaw();
+        const projectId = await db.getProjectId();
+        return bytes.length + projectId.length;
+      }
+    `;
+    expect(auditNeverRetain("legal.ts", legal)).toEqual([]);
+  });
+
+  it("consumer.ts reads every SDK value inside the synchronous extract()", () => {
+    const source = readFileSync(CONSUMER, "utf8");
+    // `extract` is declared with `function`, not `async function`. A synchronous
+    // function whose return type contains no SDK type CANNOT leak a handle past
+    // an await, which is a stronger guarantee than any convention.
+    expect(source).toContain("function extract(rr: {");
+    expect(source).not.toContain("async function extract");
+  });
+});
+
+// ===========================================================================
+// SHAPE OF THE CALL SITES
+// ===========================================================================
+
+describe("the call sites match the signatures 01-01 and 01-04 froze", () => {
+  const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
+
+  it("upsertArtifact is called with SIX arguments and no url", () => {
+    // `artifacts` has no `url` column (decision P1-D6) — the URL lives on the
+    // observation. A seventh argument here would be silently ignored by the
+    // prepared statement and the URL would simply never be stored.
+    const source = readFileSync(CONSUMER, "utf8");
+    const sf = ts.createSourceFile(
+      "consumer.ts",
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const arities: number[] = [];
+    const visit = (n: ts.Node): void => {
+      if (
+        ts.isCallExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === "upsertArtifact"
+      ) {
+        arities.push(n.arguments.length);
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    expect(arities.length, "consumer.ts never calls upsertArtifact.").toBe(1);
+    expect(arities[0]).toBe(6);
+  });
+
+  it("all four store call sites are present", () => {
+    const source = readFileSync(CONSUMER, "utf8");
+    for (const call of [
+      "upsertArtifact(",
+      "recordObservation(",
+      "isAnalysed(",
+      "claimAnalysis(",
+      "finishAnalysis(",
+      "sweepRetention(",
+      "walk(",
+    ]) {
+      expect(
+        source.includes(call),
+        `consumer.ts does not call ${call}. This file is the ONLY writer in the plugin, so a ` +
+          `store function it does not call is a function nobody calls (decision P3-D4).`,
+      ).toBe(true);
+    }
+  });
+});

@@ -1,30 +1,54 @@
-// packages/backend/src/ingest/consumer.ts — the single CPU consumer.
+// packages/backend/src/ingest/consumer.ts — the single CPU consumer, and the
+// ONLY place in this plugin that writes.
 //
-// EXACTLY ONE drain loop, guarded by an in-flight boolean. `Worker` is `undefined`
-// in this runtime, so "concurrency" would mean interleaved async work on the one
-// thread — which multiplies peak memory and latency and buys nothing.
+// ===========================================================================
+// EVERY STORE CALL SITE LIVES HERE (decision P3-D4)
+// ===========================================================================
+// Four writes, all part of ONE iteration, in this order:
 //
-// This is the only thing in the plugin that WRITES, so it is where every store
-// call site lives.
+//   1. IDENTITY   upsertArtifact   — the content-addressed row.
+//   2. THE EDGE   recordObservation — WHERE those bytes were seen. Never
+//                                     conditional, never skipped on a cache hit.
+//   3. THE SKIP   isAnalysed / claimAnalysis / walk / finishAnalysis (CORE-08).
+//   4. THE SWEEP  sweepRetention, on a cadence (STORE-06).
+//
+// The reason they are all here rather than spread across the modules that would
+// each "own" one: a producer and its only caller owned by different plans is a
+// contract with nobody implementing it. Ownership of the caller and ownership of
+// the wiring are the same thing.
+//
+// ===========================================================================
+// EXACTLY ONE DRAIN LOOP
+// ===========================================================================
+// `Worker` is `undefined` in this runtime, so "concurrency" would mean
+// interleaved async work on the one thread — multiplying peak memory and latency
+// and buying nothing. The latch is MODULE-level, not per-call, because a second
+// `startConsumer(...)` is the realistic way a second loop appears (a re-init, a
+// hot reload) and a per-call flag would not see it.
 
 import { sha256Hex } from "@defminer/engine/digest";
-import type { BoundedQueue } from "@defminer/engine/queue";
+import {
+  type AbortLike,
+  artifactDeadline,
+  walk,
+} from "@defminer/engine/pipeline";
+import type { BoundedQueue, Entry } from "@defminer/engine/queue";
+import { RETENTION_SWEEP_EVERY_N } from "@defminer/engine/thresholds";
+import { yieldToLoop } from "@defminer/engine/yield";
 import type { Database } from "sqlite";
 
 import { contentTypeOf } from "../hooks/admit";
 import type { Counters, EnqueueClock } from "../hooks/passive";
+import {
+  claimAnalysis,
+  DETECTOR_CORPUS_VERSION,
+  finishAnalysis,
+  isAnalysed,
+} from "../store/analyses";
 import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
-
-/**
- * The ONLY primitive that yields this event loop.
- *
- * `setImmediate` and `Promise.resolve()` both scored a 0.00 timer service ratio —
- * identical to a fully blocking loop. `setTimeout(fn, 0)` scored 0.76. It costs
- * 5.03 ms median, which is why yielding is temporal rather than per-item.
- */
-const yieldToLoop = (): Promise<void> =>
-  new Promise<void>((r) => setTimeout(r, 0));
+import { sweepRetention } from "../store/retention";
+import { getRetentionBounds } from "../store/settings";
 
 /**
  * How long to wait before re-checking an EMPTY queue.
@@ -36,6 +60,26 @@ const yieldToLoop = (): Promise<void> =>
  * the reload and hash that follow it.
  */
 const IDLE_POLL_MS = 50;
+
+/**
+ * The monotonic clock the WALK measures elapsed time against.
+ *
+ * `performance.now()` where it exists, `Date.now()` otherwise. The distinction
+ * matters and is not defensive: `performance.now()` is monotonic and cannot jump
+ * backwards when the host clock is adjusted, but it is boot-relative and
+ * `performance.timeOrigin` is not a Unix epoch here — so NO timestamp is ever
+ * computed from it. Every value this module PERSISTS (`observed_at`, `started_at`,
+ * `finished_at`) comes from `Date.now()`; every elapsed figure comes from this.
+ */
+function defaultClock(): () => number {
+  const p = (globalThis as { performance?: { now?: () => number } })
+    .performance;
+  if (p !== undefined && typeof p.now === "function") {
+    const now = p.now.bind(p);
+    return () => now();
+  }
+  return () => Date.now();
+}
 
 export type ConsumerDeps = {
   queue: BoundedQueue;
@@ -51,9 +95,25 @@ export type ConsumerDeps = {
   enqueuedAt: EnqueueClock;
   /** Called with the running maximum event-to-reload delta in ms. */
   onReloadLatency?: (ms: number) => void;
+  /** Monotonic clock for the walk, BY INJECTION — this is what lets a spec drive
+   *  an artifact past ARTIFACT_DEADLINE_MS in microseconds instead of 30 seconds,
+   *  which is the difference between the degraded path being tested and merely
+   *  being written. */
+  now?: () => number;
+  /** Cancellation for in-flight walks. Structural, not `AbortSignal`: that global
+   *  was never enumerated inside this runtime. */
+  signal?: AbortLike;
+  /** The corpus version CORE-08 keys the cache on. Defaults to the Phase 1
+   *  sentinel; Phase 3's real detector-set hash arrives through here. */
+  detectorSetHash?: string;
 };
 
-export type ConsumerHandle = { stop: () => void };
+export type ConsumerHandle = {
+  stop: () => void;
+  /** Run one drain pass to completion. The scheduler calls this on its timer; a
+   *  spec calls it directly so the loop is deterministic rather than raced. */
+  drainNow: () => Promise<void>;
+};
 
 type Extracted = {
   requestId: string;
@@ -62,16 +122,23 @@ type Extracted = {
   url: string;
   status: number;
   contentType: string | null;
+  /** The RAW bytes, retained deliberately for the duration of this iteration
+   *  because the walk has to read them. A `Uint8Array` is not an SDK object — the
+   *  never-retain rule is about `Request`, `Response` and `Body` handles, whose
+   *  liveness pins Caido-side state. These bytes are ours and go out of scope
+   *  when the iteration ends. */
+  bytes: Uint8Array;
 };
 
 /**
  * Everything that touches an SDK object happens HERE, synchronously, and only
- * plain scalars come out.
+ * plain values come out.
  *
  * That is the whole point: CORE-05 forbids holding a `Request`, `Response` or
  * `Body` reference across an `await`, and the cheapest way to guarantee it is to
  * make the extraction a synchronous function whose return type contains no SDK
- * type at all. `raw` goes out of scope when this returns and is never persisted.
+ * type at all. `consumer.spec.ts` re-checks the property over this file's AST, so
+ * the guarantee does not rest on the shape being preserved by convention.
  */
 function extract(rr: {
   request: { getId(): string; getUrl(): string };
@@ -83,9 +150,9 @@ function extract(rr: {
 }): Extracted | { empty: true } {
   const body = rr.response.getBody();
   if (!body) return { empty: true };
-  // Bytes, never `toText()`: SPIKE-08 measured a 222-byte non-UTF-8 fixture
-  // becoming 242 bytes across a toText() round trip with a different digest, so
-  // offsets and hashes derive from raw bytes only (ENC-01).
+  // Bytes, never `toText()`: the 222-byte non-UTF-8 fixture becomes 242 bytes
+  // across a toText() round trip with a different digest, and its anchor moves
+  // 20 bytes. Offsets and hashes derive from raw bytes only (ENC-01).
   const raw = body.toRaw();
   if (!raw || raw.length === 0) return { empty: true };
   return {
@@ -95,7 +162,19 @@ function extract(rr: {
     url: rr.request.getUrl(),
     status: rr.response.getCode(),
     contentType: contentTypeOf(rr.response.getHeaders()),
+    bytes: raw,
   };
+}
+
+/** The one running consumer, if any. Module scope, so a second `startConsumer`
+ *  is a no-op rather than a second loop. */
+let current: ConsumerHandle | undefined;
+
+/** Test seam. Module state is process-global, so a spec that did not reset it
+ *  would inherit the previous case's loop, queue and database. */
+export function resetConsumerForTest(): void {
+  current?.stop();
+  current = undefined;
 }
 
 export function startConsumer(
@@ -105,11 +184,6 @@ export function startConsumer(
   },
   deps: ConsumerDeps,
 ): ConsumerHandle {
-  let stopped = false;
-  let draining = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let maxReloadLatencyMs = 0;
-
   const log = (msg: string): void => {
     try {
       sdk.console.log("[defminer] " + msg.slice(0, 200));
@@ -118,42 +192,113 @@ export function startConsumer(
     }
   };
 
-  async function handleOne(entry: {
-    id: string;
-    bytes: number;
-    kind: string;
-  }): Promise<void> {
+  if (current !== undefined) {
+    // Returning the EXISTING handle rather than a fresh no-op one, so a caller
+    // that stops what it started actually stops the running loop.
+    log("consumer already running; not starting a second drain loop");
+    return current;
+  }
+
+  const clock = deps.now ?? defaultClock();
+  const detectorSetHash = deps.detectorSetHash ?? DETECTOR_CORPUS_VERSION;
+
+  let stopped = false;
+  let draining = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let maxReloadLatencyMs = 0;
+
+  // STORE-06's cadence state. Monotonic for the plugin's lifetime; never reset by
+  // a sweep, or the interval would restart every time it fired.
+  let processedForSweep = 0;
+  let sweptSinceStart = false;
+
+  /**
+   * ONE bounded retention pass. Never a loop to convergence.
+   *
+   * A single pass is bounded (RETENTION_SWEEP_MAX_ROWS) precisely so it cannot
+   * become the long synchronous stretch the sweep exists to prevent — looping
+   * until `moreWork` is false would rebuild exactly that. Deferral converges
+   * anyway, because RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
+   * RETENTION_SWEEP_EVERY_N by assertion: the delete rate is above the worst-case
+   * insert rate, so a backlog DRAINS under sustained ingest rather than merely
+   * failing to grow faster.
+   *
+   * Retention is the ONLY bound on this database. Caido never garbage-collects
+   * it, does not delete it when a project is deleted, and it survives a
+   * force-reinstall — so a sweep that is available but never scheduled closes
+   * nothing at all.
+   */
+  async function runRetentionPass(projectId: string): Promise<void> {
+    try {
+      const bounds = await getRetentionBounds(deps.db, projectId);
+      const summary = await sweepRetention(
+        deps.db,
+        projectId,
+        bounds,
+        Date.now(),
+      );
+      deps.counters.retentionSweeps++;
+      deps.counters.retentionDeleted += summary.deleted;
+      if (summary.moreWork) {
+        // Picked up at the NEXT cadence boundary, deliberately.
+        log(
+          "retention pass deleted " +
+            String(summary.deleted) +
+            " of " +
+            String(summary.examined) +
+            " examined; more remains for the next cadence boundary",
+        );
+      }
+    } catch (e) {
+      // A sweep must never take the loop down with it: the database growing is a
+      // problem, and the plugin stopping is a bigger one.
+      deps.counters.consumerErrors++;
+      log("retention sweep failed: " + String(e).slice(0, 160));
+    }
+  }
+
+  async function handleOne(entry: Entry): Promise<void> {
     const c = deps.counters;
 
-    // TWO undefined branches, not one: `get()` itself may resolve to undefined,
-    // and the pair it resolves to has an OPTIONAL response. Neither may throw —
-    // a missing reload is counted and the loop continues.
+    // TWO undefined branches, not one, with a counter each. The SDK types them as
+    // two different optionality points — `get` returns
+    // `RequestResponseOpt | undefined`, and `RequestResponseOpt.response` is
+    // itself optional — and conflating them hides WHICH one is happening, which is
+    // the only thing that would tell an operator whether Caido lost the request
+    // or never recorded a response for it.
     const rr = (await sdk.requests.get(entry.id)) as
       | { request: any; response?: any }
       | undefined;
-    const response = rr?.response;
-    if (!rr || !response) {
+    if (!rr) {
       c.reloadMissing++;
       return;
     }
+    const response = rr.response;
+    if (!response) {
+      c.reloadNoResponse++;
+      return;
+    }
     c.reloadHit++;
+
+    // `response` rather than `rr` so the narrowing SURVIVES the call: the reload
+    // result types response as optional, and truthiness-narrowing a property does
+    // not make the whole object assignable to a required-response parameter.
+    const got = extract({ request: rr.request, response });
+    // From here on NOTHING references rr, its request, its response or its body —
+    // and `consumer.spec.ts` proves it over the AST rather than trusting this
+    // comment.
+    if ("empty" in got) {
+      c.reloadEmptyBody++;
+      return;
+    }
+    if (got.byteLen !== entry.bytes) c.byteLenMismatch++;
+
     const queuedAt = deps.enqueuedAt.get(entry.id);
     if (queuedAt !== undefined) {
       const latency = Date.now() - queuedAt;
       if (latency > maxReloadLatencyMs) maxReloadLatencyMs = latency;
       deps.onReloadLatency?.(maxReloadLatencyMs);
     }
-
-    // `response` rather than `rr` so the narrowing SURVIVES the call: the reload
-    // result types response as optional, and truthiness-narrowing a property does
-    // not make the whole object assignable to a required-response parameter.
-    const got = extract({ request: rr.request, response });
-    // From here on NOTHING references rr, its request, its response or its body.
-    if ("empty" in got) {
-      c.reloadEmptyBody++;
-      return;
-    }
-    if (got.byteLen !== entry.bytes) c.byteLenMismatch++;
 
     const projectId = await deps.getProjectId();
     if (projectId === "") {
@@ -165,11 +310,12 @@ export function startConsumer(
       return;
     }
 
-    // The two writes are ONE logical step and both are UNCONDITIONAL. They are two
-    // statements because they must be — this driver has no transaction primitive,
-    // and no invariant may require two statements to land together — so a failure
-    // of either is counted and logged rather than silently orphaning the other.
     const now = Date.now();
+
+    // --- 1. IDENTITY --------------------------------------------------------
+    // No `url` argument. The URL lives on the observation (decision P1-D6) —
+    // artifacts are content-addressed and the same bytes served from two paths
+    // are ONE artifact with two observations.
     const a = await upsertArtifact(
       deps.db,
       projectId,
@@ -182,6 +328,16 @@ export function startConsumer(
       c.storeErrors++;
       log("ARTIFACT_WRITE_FAILED " + a.error);
     }
+
+    // --- 2. THE EDGE --------------------------------------------------------
+    // UNCONDITIONAL, and never skipped on a cache hit. An artifact written
+    // without its observation records that bytes were seen but not WHERE, which
+    // is the failure the pairing exists to prevent — the plugin would remember
+    // the bundle and be unable to say which request served it. The two are two
+    // statements because they MUST be (this driver has no transaction primitive
+    // and no invariant may require two statements to land together), so each
+    // reports its own outcome and a failure of either is counted rather than
+    // silently orphaning the other.
     const o = await recordObservation(
       deps.db,
       projectId,
@@ -197,10 +353,96 @@ export function startConsumer(
       log("OBSERVATION_WRITE_FAILED " + o.error);
     }
 
+    // --- 3. CORE-08's SKIP --------------------------------------------------
+    // Consulted BEFORE claiming. Already analysed at this corpus version means
+    // the artifact counters and the observation above still updated — the same
+    // bytes appearing again is real information — but no second analysis starts
+    // and the `analyses` row count does not move. The corpus version is IN the
+    // primary key, so a stale-corpus hit is not expressible.
+    const alreadyAnalysed = await isAnalysed(
+      deps.db,
+      projectId,
+      got.sha256,
+      detectorSetHash,
+    );
+    if (alreadyAnalysed) {
+      c.analysisCacheHit++;
+    } else {
+      const claim = await claimAnalysis(
+        deps.db,
+        projectId,
+        got.sha256,
+        detectorSetHash,
+        now,
+      );
+      if (!claim.ok) {
+        c.storeErrors++;
+        log("ANALYSIS_CLAIM_FAILED " + claim.error);
+      } else if (claim.claimed) {
+        c.analysisStarted++;
+        await analyseAndFinish(projectId, got, detectorSetHash);
+      } else {
+        // Somebody else owns the row. With one loop this is a re-entrant sighting
+        // of an artifact whose analysis is still `pending`, which is NOT a cache
+        // hit — `isAnalysed` returns true only for TERMINAL states.
+        c.analysisCacheHit++;
+      }
+    }
+
     c.processed++;
+    processedForSweep += 1;
+  }
+
+  /**
+   * The Phase 1 "work", and it is not a placeholder.
+   *
+   * `walk` is the sole source of three persisted facts, so they are passed
+   * STRAIGHT THROUGH rather than recomputed or defaulted. A consumer that skipped
+   * the walk and wrote constants would leave `max_slice_ms` and `bytes_walked`
+   * permanently meaningless with every other test in this repo still green — and
+   * `scan_state` would never once say `partial`, so CORE-07's degraded state
+   * would exist only in the schema.
+   *
+   * `visit` is a no-op because no detector exists until Phase 3. The walk's
+   * yielding, its deadline and its offset accounting are all real regardless, and
+   * proving them now is the point: there is nothing to hide behind yet.
+   */
+  async function analyseAndFinish(
+    projectId: string,
+    got: Extracted,
+    detectorHash: string,
+  ): Promise<void> {
+    const deadline = artifactDeadline(clock);
+    const result = await walk(got.bytes, {
+      now: clock,
+      deadline,
+      signal: deps.signal,
+      visit: () => {
+        /* Phase 3 puts the detector here. */
+      },
+    });
+    if (result.partial) deps.counters.analysisPartial++;
+    const finished = await finishAnalysis(
+      deps.db,
+      projectId,
+      got.sha256,
+      detectorHash,
+      result.partial ? "partial" : "done",
+      Date.now(),
+      result.maxSliceMs,
+      result.bytesWalked,
+      null,
+    );
+    if (!finished.ok) {
+      deps.counters.storeErrors++;
+      log("ANALYSIS_FINISH_FAILED " + finished.error);
+    }
   }
 
   async function drain(): Promise<void> {
+    // THE IN-FLIGHT LATCH. Two callers racing here — the poll timer and a direct
+    // `drainNow()`, or two `startConsumer` calls — must produce ONE loop, or every
+    // entry is reloaded and hashed twice.
     if (draining) return;
     draining = true;
     try {
@@ -211,13 +453,33 @@ export function startConsumer(
         try {
           await handleOne(entry);
         } catch (e) {
-          // One bad response must never stop the loop, and Caido would report
-          // nothing if it did.
+          // One poisoned response must never stop everything after it, and Caido
+          // would report nothing if it did: HANDLER_ERROR_SURFACED is "neither",
+          // so this counter and this log line are the entire error surface.
           deps.counters.consumerErrors++;
           log("consumer iteration failed: " + String(e).slice(0, 160));
         } finally {
           deps.enqueuedAt.delete(entry.id);
         }
+
+        // --- 4. STORE-06's SCHEDULE ---------------------------------------
+        // BETWEEN iterations, never inside one. One pass on the first iteration
+        // after start, so a plugin that ingests slowly still trims rather than
+        // growing forever between bursts; then one pass per
+        // RETENTION_SWEEP_EVERY_N processed artifacts, so retention pressure
+        // scales with the ingest that creates it.
+        const due =
+          !sweptSinceStart ||
+          (processedForSweep > 0 &&
+            processedForSweep % RETENTION_SWEEP_EVERY_N === 0);
+        if (due) {
+          const projectId = await deps.getProjectId();
+          if (projectId !== "") {
+            sweptSinceStart = true;
+            await runRetentionPass(projectId);
+          }
+        }
+
         await yieldToLoop();
       }
     } finally {
@@ -237,12 +499,17 @@ export function startConsumer(
     }, IDLE_POLL_MS);
   }
 
-  schedule();
-
-  return {
+  const handle: ConsumerHandle = {
     stop: () => {
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);
+      if (current === handle) current = undefined;
     },
+    drainNow: () => drain(),
   };
+  current = handle;
+
+  schedule();
+
+  return handle;
 }

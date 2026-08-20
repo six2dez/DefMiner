@@ -7,6 +7,7 @@
   "exports": {
     "./chunker": "./src/chunker.ts",
     "./deadline": "./src/deadline.ts",
+    "./decode": "./src/decode.ts",
     "./digest": "./src/digest.ts",
     "./pipeline": "./src/pipeline.ts",
     "./queue": "./src/queue.ts",
