@@ -25,7 +25,6 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [ ] **SPIKE-10**: Measure the content-hash cache hit rate on real browsing. *(Biggest single performance lever — at 40% instead of 90%, CPU cost is 6× budget.)*
 - [ ] **SPIKE-11**: Determine whether 304s and cached responses reach the hook at all — decides whether retroactive scanning is optional or mandatory for correctness.
 - [ ] **SPIKE-12**: Establish `llrt/fs` containment behaviour with no `realpath` and no `lstat` available.
-- [ ] **SPIKE-13**: Design a stable asset identity across deploys. *(Open problem: Next.js `/_next/static/<buildId>/` changes wholesale each deploy, so URL is useless as identity; content hash identifies exactly what changed.)*
 
 ### Ingestion pipeline (CORE)
 
@@ -110,8 +109,15 @@ These run first and can invalidate the design. Each is cheap; several change eve
 ### Active operations (ACTIVE)
 
 - [ ] **ACTIVE-01**: Active `.map` probing is **ON by default and unbudgeted**, matching JSMiner parity. *(Operator decision, taken with the `caido/caido#2211` evidence on the table. Known consequence: on large SPAs the cumulative `sdk.requests.send()` count can abort the Caido process and drop temporary projects.)*
-- [ ] **ACTIVE-02**: A cumulative send counter is surfaced as diagnostics — not a limit — so an abort is attributable rather than mysterious.
-- [ ] **ACTIVE-03**: Target-directed requests use `sdk.requests.send` so they inherit Caido's routing, auth context, and appear in history. Third-party calls use `caido:http` `fetch`.
+- [ ] **ACTIVE-02**: A **write-ahead send journal**, not a volatile counter. Before each send, persist `{runtime_session_id, sequence, project_id, source_request_id, normalized_candidate, reason, started_at}`; on completion add status, result, and timing. Query values and credential headers are redacted in the record. A counter alone disappears with the process — which is exactly the case this exists to explain.
+- [ ] **ACTIVE-13**: Crash-loop marker and restart recovery. On startup, detect an unfinalised send or batch, report "Caido stopped during DefMiner active request N", retain the exact candidate, and do not replay that batch until the operator chooses Resume or Discard. New work stays default-on.
+- [ ] **ACTIVE-14**: An always-visible kill switch with per-runtime and per-origin sent/pending counts in the page chrome. Cancellation prevents the next dispatch even while analysis is busy. Warning is diagnostic, not a cap.
+- [ ] **ACTIVE-03**: Target-directed requests use `sdk.requests.send`, which the SDK documents as respecting **upstream proxy settings — routing only**. It does *not* inherit session or authentication state. Credentials must therefore be propagated explicitly under a written contract: same-origin probes may clone the originating request's auth headers; cross-origin probes are issued clean with all credentials stripped; credentials are never carried across a redirect hop. Third-party calls use `caido:http` `fetch`, which does not route through the proxy at all.
+- [ ] **ACTIVE-08**: Each semantic candidate is attempted once. Deduplicate by resolved URL plus auth/origin context, persist negative results, and never re-probe because a bundle was seen again.
+- [ ] **ACTIVE-09**: Host-backed sends are serialised — one in flight at a time — and `Request`/`Response` wrappers are reduced to primitives immediately rather than retained across `await` points, to limit live wrapper pressure.
+- [ ] **ACTIVE-10**: Circuit breakers on target signals: honour `Retry-After`, pause an origin on 429, and stop an origin after explicit 401/403/WAF responses until the operator resumes. This is error handling, not a request budget.
+- [ ] **ACTIVE-11**: First-run and store-listing disclosure states plainly that installation enables target-directed `.map` requests, that these may generate many 404s, and that on affected Caido builds they may terminate the instance and lose temporary projects. README-only disclosure is insufficient for a default-on outbound action.
+- [ ] **ACTIVE-12**: Speculative probe misses use `save: false` so hundreds of 404s never flood Search. *(The SDK sets request and response IDs to 0 when unsaved — so native Findings must reference the source JS request, never the probe.)*
 - [ ] **ACTIVE-04**: Active operations respect Caido scope.
 - [ ] **ACTIVE-05**: Every active operation is individually toggleable.
 - [ ] **ACTIVE-06**: Self-generated traffic does not re-enter the analysis pipeline as new work.
@@ -135,6 +141,60 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [ ] **FIND-02**: Entropy-only and hint-grade results never project to Findings.
 - [ ] **FIND-03**: Retroactive scanning of already-captured traffic via `sdk.requests.query()` with HTTPQL push-down, page size 20, and a resumable cursor. *(No `includeRaw(false)` on the backend query, so the documented 1000 page size is not usable.)*
 - [ ] **FIND-04**: Retroactive scans report progress and are cancellable.
+
+### Error containment and recovery (ERR)
+
+- [ ] **ERR-01**: A failing detector, parser, or analyser is isolated — it fails that artifact, not the pipeline. One poisoned bundle can never stop analysis of everything after it.
+- [ ] **ERR-02**: Jobs that were in flight when the process died are detected on startup and either resumed or explicitly abandoned, never left permanently `running`.
+- [ ] **ERR-03**: Errors thrown or rejected inside `onInterceptResponse` are caught and logged by us, since it is not established that Caido surfaces them.
+- [ ] **ERR-04**: A per-artifact failure is recorded with its reason and is visible to the operator, so "no findings" and "analysis failed" are never confused.
+
+### Observability (OBS)
+
+- [ ] **OBS-01**: A health surface reporting queue depth, drop count, jobs in flight, maximum observed synchronous slice, and cache hit rate.
+- [ ] **OBS-02**: Consistent terminology for degradation states across the database, the API, and the UI — one vocabulary, defined once.
+- [ ] **OBS-03**: A diagnostics export the operator can attach to a bug report, containing versions, counters, and recent errors, with no secret material.
+
+### Upgrade and reinstall (UPGRADE)
+
+- [ ] **UPGRADE-01**: Installing a newer DefMiner over an existing install preserves prior findings and does not silently drop the database.
+- [ ] **UPGRADE-02**: HMAC key continuity across upgrades — a rotated or lost key must not silently break secret correlation or make stored fingerprints unrevealable. Key loss is detected and reported.
+- [ ] **UPGRADE-03**: A detector-corpus version bump re-analyses affected artifacts rather than leaving stale results that claim to be current.
+- [ ] **UPGRADE-04**: Downgrade or reinstall behaviour is defined and does not corrupt state.
+
+### Caido compatibility (COMPAT)
+
+- [ ] **COMPAT-01**: A declared minimum supported Caido version, checked at runtime, with a clear message rather than an obscure failure when unmet.
+- [ ] **COMPAT-02**: SDK surfaces the plugin depends on are exercised by a smoke test that runs against the current Caido release, so a breaking SDK change is caught by us and not by users.
+
+### Encoding correctness (ENC)
+
+- [ ] **ENC-01**: Offsets and hashes are derived from `toRaw()` bytes, never from `toText()`, which replaces invalid characters and is lossy.
+- [ ] **ENC-02**: Non-UTF-8 and mixed-encoding bodies round-trip correctly through detection and evidence display.
+- [ ] **ENC-03**: Internationalised domain names are normalised consistently, so a punycode host and its Unicode form are not treated as two different hosts — and homograph forms are not silently equated either.
+- [ ] **ENC-04**: Percent-encoding, unicode escapes, and string concatenation in extracted URLs are normalised before deduplication.
+
+### Operator workflow (OPS)
+
+- [ ] **OPS-01**: Findings can be triaged — marked reviewed, false positive, or accepted — and that state persists.
+- [ ] **OPS-02**: A suppression mechanism so a known-benign pattern on a given target stops reappearing, without editing the rule corpus.
+- [ ] **OPS-03**: A failed or partial artifact analysis can be retried on demand.
+- [ ] **OPS-04**: Triage and suppression state survives re-analysis after a corpus version bump.
+
+### Frontend safety (UISEC)
+
+- [ ] **UISEC-01**: All displayed content is target-controlled and is rendered as text, never as markup. No `v-html` on extracted content anywhere.
+- [ ] **UISEC-02**: CSV export neutralises formula injection (`=`, `+`, `-`, `@`, tab, CR leading characters).
+- [ ] **UISEC-03**: Extremely long or adversarial extracted strings are truncated for display without breaking layout or freezing the renderer.
+
+### Deployment reality (DEPLOY)
+
+Caido is client/server. Backend plugins run in the Caido CLI/server process, which may be a remote VPS or a Docker container. `sdk.meta.path()` is **server-side** and may be inaccessible to the operator, and ephemeral without a mounted volume.
+
+- [ ] **DEPLOY-01**: Tested against local desktop, remote CLI, and Docker deployments both with and without a persistent volume.
+- [ ] **DEPLOY-02**: Server-side storage is labelled as such in the UI and never presented as a path on the operator's machine.
+- [ ] **DEPLOY-03**: Operator-facing artifacts — reconstructed source, exports, dumps — are delivered via `sdk.hostedFile` or a bounded authenticated frontend download, with expiry and redaction rules. Not by writing to a path and assuming the operator can reach it.
+- [ ] **DEPLOY-04**: Server disk is treated as shared instance storage with quotas and orphan cleanup; no assumption of host shell access.
 
 ### Signal quality (QUAL)
 
@@ -161,6 +221,7 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 Tracked, deliberately not in the v1 roadmap.
 
+- **SPIKE-13**: Design a stable asset identity across deploys. *(Next.js `/_next/static/<buildId>/` changes wholesale each deploy, so URL is useless as identity; content hash identifies exactly what changed.)* Moved out of v1 — it serves only DIFF-01, which is v2.
 - **DIFF-01**: Cross-deploy diffing — introduced, removed, reintroduced entities across builds. *Blocked on SPIKE-13; asset identity across deploys is an unsolved problem.*
 - **DOM-01**: DOM XSS source/sink hints and `postMessage` handler analysis, labelled as review hints. *Deprioritised: `domloggerpp-caido` already owns this niche with runtime sink hooking, which beats static analysis on minified bundles.*
 - **CSP-01**: Correlating extracted origins against actual response CSP `connect-src`. *Hands off to `csp-auditor`.*
@@ -193,7 +254,9 @@ Tracked, deliberately not in the v1 roadmap.
 Populated during roadmap creation.
 
 **Coverage:**
-- v1 requirements: 89 total
+- v1 requirements: 136 total
+- Mapped to phases: 136
+- Unmapped: 0
 - Mapped to phases: pending roadmap
 - Unmapped: pending roadmap
 

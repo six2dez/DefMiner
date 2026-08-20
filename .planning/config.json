@@ -79,5 +79,13 @@
   "claude_md_path": "./CLAUDE.md",
   "resolve_model_ids": "omit",
   "mode": "yolo",
-  "granularity": "standard"
+  "granularity": "standard",
+  "review": {
+    "default_reviewers": [
+      "codex"
+    ],
+    "models": {
+      "codex": "gpt-5.6-sol"
+    }
+  }
 }

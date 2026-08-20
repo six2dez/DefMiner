@@ -10,11 +10,31 @@ Five independent investigations, deliberately run in parallel so they could not 
 | Pitfalls | GSD researcher | `PITFALLS.md` |
 | Independent design review | **Codex `gpt-5.6-sol`, xhigh** | `CODEX-CONTRAST.md` (666 lines) |
 
-Codex received only the project brief and the JSMiner clone — not the other agents' output, and not this project's PROJECT.md. Where it converges with a GSD agent, two different models reached the same conclusion by different routes. That is the strongest evidence available here, and it is flagged below.
+Codex received only the project brief and the JSMiner clone — not the other agents' output, and not this project's PROJECT.md.
+
+### How much weight convergence actually carries
+
+**Less than the first draft of this document claimed.** Two language models reading the same public SDK reference, the same community repositories, and the same QuickJS family are *not* independent evidence — their errors and omissions are correlated by source selection. Convergence is a good reason to prioritise verification; it does not settle an empirical runtime contract.
+
+This was raised by Codex's own adversarial review of this plan (`CODEX-REVIEW-01.md`), which pointed out the internal contradiction: a section claiming ingestion, storage, parser choice, and concurrency were "decided" sat alongside thirteen Phase 0 spikes, several of which state outright that the design changes if the answer is negative.
+
+The section below is therefore **convergent, not settled**. Each row carries what would falsify it.
 
 ---
 
-## 1. Independent convergence — treat as settled
+## 1. Convergent conclusions — high prior, still falsifiable
+
+| Conclusion | Actual status | What would falsify it |
+|---|---|---|
+| `onInterceptResponse` is asynchronous | **Settled** as a documented 0.57.1 contract | Nothing for the signature. Event overflow and backpressure behaviour remain open (SPIKE-03) |
+| Enqueue-only + `setTimeout(0)` yielding | Enqueue-only is prudent; cooperative background progress is **open** | RPC and timers not getting bounded service under chunk load invalidates CORE-06 and forces a different execution model |
+| Meriyah decisively beats Acorn | **Not settled for deployed Caido.** Both benchmarks ran on standalone quickjs-ng | Meriyah failing syntax, exceeding the memory or time gate, or losing to tokenizer-first behaviour on the real engine |
+| 64 KB / 4 KB chunk geometry | **Not settled** — hard-coded from one machine and one corpus, before Phase 0 measured anything | Any supported machine or rule producing a >50 ms slice, or a legitimate match wider than the overlap |
+| SQLite is the source of truth | Sound product decision; transaction, migration, corruption, and restart behaviour are **open** | Failure injection showing non-convergent partial writes or unrecoverable migrations |
+| ReDoS hangs forever | Source-supported, but the shipped binary still needs the destructive probe in a disposable instance | A host interrupt or watchdog that terminates the regex and restores later RPC and events |
+| Never persist raw secrets | The **policy** is settled; HMAC key lifecycle and raw export are not | Upgrade or key-loss tests revealing correlation loss, unrevealable data, or plaintext spill |
+
+### Where two models did converge, and by what route
 
 These were reached separately by Codex and at least one GSD researcher, with independent methods.
 
@@ -30,7 +50,7 @@ These were reached separately by Codex and at least one GSD researcher, with ind
 | **ReDoS is a first-class risk — QuickJS is ECMAScript regex, not RE2** | Noted JSMiner deliberately used RE2/J | Traced to source: quickjs-ng's `lre_check_timeout` is inert because `set_interrupt_handler` appears nowhere in `caido/dependency-llrt` |
 | **Never persist raw secrets** | HMAC fingerprint + redacted preview; reveal by reloading the original request and re-verifying the body hash | Independently reached via the "Findings are permanent" argument |
 
-**Read:** the architecture is not in doubt. Ingestion, storage, parser choice, and concurrency model are decided.
+**Read:** these are the strongest priors available, and they are what the design builds on — but Phase 0 exists precisely because several of them can still be wrong on the deployed engine. Treat the table above, not this list, as the authority on what is actually settled.
 
 ---
 
@@ -157,6 +177,14 @@ Consolidated and deduplicated across tracks. These are cheap and several can inv
 
 ---
 
-## 9. Open problem with no answer yet
+## 9. Open problems
 
 **Asset identity across deploys.** Cross-deploy diffing needs a stable key for "the same bundle, new build". Next.js serves from `/_next/static/<buildId>/…` and the buildId changes wholesale every deploy, so the URL is useless as identity. Content hash identifies the *content*, which is exactly what changed. No track solved this; it gates the diffing feature and needs a design spike of its own.
+
+**The filesystem is often not on the operator's machine.** Surfaced only by the adversarial review, and missed by all five research tracks plus the first draft of all three planning documents.
+
+Caido is client/server. Backend plugins run in the Caido CLI/server process, which is routinely a remote VPS or a Docker container driven from a local browser or desktop client. Therefore `sdk.meta.path()` and every "dump reconstructed source to disk" path are **server-side** — potentially inaccessible to the operator, and potentially ephemeral, since Caido's own remote-hosting documentation states project data is not persisted across container restarts without a mounted host volume.
+
+Every document up to this point reasoned as though a file written by the backend lands on the operator's machine. It does not. This breaks the static-dump parity feature outright, makes any "choose an output directory" UX meaningless, and changes retention, confidentiality, quota, and cleanup behaviour.
+
+The backend SDK exposes `sdk.hostedFile` (`HostedFileSDK`), which none of the research considered. Operator-facing artifacts should be delivered through Hosted Files or a bounded authenticated frontend download — not by writing to a path and hoping the operator can reach it. Server disk must be treated as shared instance storage with quotas and orphan cleanup, and the three deployment shapes (local desktop, remote CLI, Docker with and without a volume) each need testing.
