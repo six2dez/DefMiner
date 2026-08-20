@@ -1,0 +1,259 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-11",
+  "status": "pass",
+  "recorded_at": "2026-08-20T15:11:08Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T150935Z-23976"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 2.19
+  },
+  "instances": [
+    {
+      "run_id": "20260820T150935Z-23976",
+      "data_path": "/tmp/defminer-probe-20260820T150935Z-23976",
+      "listen": "127.0.0.1:8996",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    }
+  ],
+  "method": "One fresh guest-enabled instance on 127.0.0.1:8996 launched through scripts/spike/instance.sh with the 0.57.1 assertion intact, a temporary project created and SELECTED, and probe/tier0-events installed UNMODIFIED from SPIKE-05. Playwright Chromium (the one plan 00-01 installed) ran on a throwaway persistent profile so the DISK cache survives between scenarios, proxied through the instance with `--proxy-bypass-list=<-loopback>` \u2014 load-bearing, because Chromium bypasses a configured proxy for loopback addresses by default and without it the browser would reach the origin directly and every scenario would read not-fired for a reason unrelated to caching. The origin is scripts/spike/origin.py (unmodified) serving a purpose-built web root: four `no-store` HTML wrappers and two copies of the same 457,965-byte bundle, one with `Cache-Control: public, max-age=600` and one with `no-cache`, both carrying a strong ETag and Last-Modified. Per-path behaviour comes from origin.py's --headers sidecar, so no plan 00-01 file was edited. Scenario 2 navigates to a DIFFERENT page referencing the same resource rather than calling page.reload(), because Chromium treats a same-URL navigation as a reload and attaches `Cache-Control: max-age=0`, which would silently convert the freshness scenario into the revalidation one. Three independent witnesses per scenario: CDP (requestWillBeSent, requestServedFromCache, and responseReceivedExtraInfo \u2014 the ONLY place the on-the-wire 304 is visible, since responseReceived reports the revalidated 200 the page sees), the origin's own request log, and the plugin's delivered-event log drained to empty before each scenario and polled to settlement after it.",
+  "measurements": [
+    {
+      "name": "scenario_cold",
+      "variant": "empty browser profile, first ever fetch of the resource",
+      "value": "hook-fired-200",
+      "unit": "outcome",
+      "stat": "point",
+      "scenario": "cold",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p1.html?dfm=page1-3dc59575f5",
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "date": "Thu, 20 Aug 2026 15:09:37 GMT",
+        "content-type": "application/javascript",
+        "content-length": "457965",
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "cache-control": "public, max-age=600",
+        "x-raw-length": "457965",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\""
+      },
+      "page_hook_fired": true,
+      "error": null
+    },
+    {
+      "name": "scenario_cached_fresh",
+      "variant": "second page referencing the same resource while still within Cache-Control max-age",
+      "value": "served-from-browser-cache",
+      "unit": "outcome",
+      "stat": "point",
+      "scenario": "cached-fresh",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+      "browser_issued_request": false,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 1,
+      "browser_wire_statuses": [],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 0,
+      "hook_fired": false,
+      "hook_deliveries": 0,
+      "delivered_status": null,
+      "delivered_body_length": null,
+      "delivered_raw_length": null,
+      "delivered_response_headers": null,
+      "page_hook_fired": true,
+      "error": null
+    },
+    {
+      "name": "scenario_revalidate_prime",
+      "variant": "first fetch of the no-cache resource \u2014 puts ETag and Last-Modified in the browser cache",
+      "value": "hook-fired-200",
+      "unit": "outcome",
+      "stat": "point",
+      "scenario": "revalidate-prime",
+      "resource_url": "http://127.0.0.1:8083/revalidate.js?dfm=revalres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p3.html?dfm=page3-3dc59575f5",
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "content-length": "457965",
+        "content-type": "application/javascript",
+        "cache-control": "no-cache",
+        "x-raw-length": "457965",
+        "date": "Thu, 20 Aug 2026 15:09:42 GMT",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT"
+      },
+      "page_hook_fired": true,
+      "error": null
+    },
+    {
+      "name": "scenario_revalidate_304",
+      "variant": "no-cache resource with a valid validator: browser must revalidate, origin answers 304",
+      "value": "hook-fired-304",
+      "unit": "outcome",
+      "stat": "point",
+      "scenario": "revalidate-304",
+      "resource_url": "http://127.0.0.1:8083/revalidate.js?dfm=revalres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p4.html?dfm=page4-3dc59575f5",
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_wire_statuses": [
+        304
+      ],
+      "browser_page_visible_statuses": [
+        304
+      ],
+      "origin_requests": 1,
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 304,
+      "delivered_body_length": 0,
+      "delivered_raw_length": 0,
+      "delivered_response_headers": {
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "cache-control": "no-cache",
+        "content-length": "0",
+        "date": "Thu, 20 Aug 2026 15:09:45 GMT",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\""
+      },
+      "page_hook_fired": true,
+      "error": null
+    },
+    {
+      "name": "scenario_hard_reload",
+      "variant": "CDP Page.reload({ignoreCache:true}) \u2014 cache bypassed, full 200 with body",
+      "value": "hook-fired-200",
+      "unit": "outcome",
+      "stat": "point",
+      "scenario": "hard-reload",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "content-type": "application/javascript",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "date": "Thu, 20 Aug 2026 15:09:48 GMT",
+        "cache-control": "public, max-age=600",
+        "x-raw-length": "457965",
+        "content-length": "457965"
+      },
+      "page_hook_fired": true,
+      "error": null
+    }
+  ],
+  "verdict": {
+    "answer": "A browser-cache hit NEVER reaches the plugin, and a 304 does reach it but carries no body. In the cached-fresh scenario Chromium served the resource from its own cache (requestServedFromCache), put nothing on the wire, the origin logged nothing, and the hook did not fire \u2014 while the no-store HTML wrapper in the SAME window did fire, proving the hook was alive. In the revalidate scenario the browser revalidated, the origin answered 304, and the hook DID fire with status 304 and Body.length == toRaw().length == 0 and no content-type header at all. Cold load and hard reload both delivered the full 457,965-byte body, so the apparatus was working before and after. On a repeat visit the bundle is therefore invisible to the passive path twice over: when the cache is fresh nothing leaves the browser, and when it revalidates the plugin is handed an empty 304.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "CACHED_RESPONSES_REACH_HOOK",
+        "value": false,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "cached-fresh: browser_issued_request=false, requestServedFromCache=1, origin_requests=0, hook_fired=False, while page_hook_fired=True in the same window. Nothing left the browser, so the proxy never saw it and no behaviour of Caido's could have delivered it."
+      },
+      {
+        "id": "STATUS_304_REACHES_HOOK",
+        "value": true,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "revalidate-304: on-the-wire status [304], hook delivered status 304 with Body.length=0 and toRaw().length=0. The delivered headers carry etag, last-modified, cache-control and content-length: 0 \u2014 and NO content-type at all, so any admission gate keyed on content-type will classify a 304 as non-script. That matters to CORE-02 independently of the caching question."
+      },
+      {
+        "id": "RETROACTIVE_SCAN_MANDATORY",
+        "value": true,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Decided by the `cached-fresh` scenario. A returning visitor's bundle is left unanalysed on BOTH realistic repeat-visit paths: a fresh cache hit never leaves the browser (so the bundle is not merely missed by the hook \u2014 it does not enter Caido at all), and a revalidation delivers a 304 whose body is zero bytes. Passive-only analysis therefore has a permanent blind spot on exactly the traffic an operator generates most. Note the scope this sets for FIND-03: retroactively scanning the project's STORED requests recovers a bundle only if it was captured with a body at some earlier point. It cannot recover one that was only ever served from the browser cache, which is why FIND-04's cache-busting or active re-fetch is the complement rather than the alternative."
+      }
+    ],
+    "if_wrong": "If a returning visitor's bundles are invisible to the passive path \u2014 and they are \u2014 Phase 6 changes in three ways. FIND-03's retroactive scan over the project's already-captured requests stops being a convenience and becomes the only mechanism by which previously-seen bundles get analysed at all; it has to run on plugin start and on project switch, not just on demand. FIND-04 has to resolve a stored 304 back to the 200 that carried the body, keyed on URL plus ETag, or it will index an empty response and record a false negative. And because a fresh cache hit never enters Caido in any form, retroactive scanning alone is still not sufficient: the bundle has to be re-fetched actively \u2014 which is the ACTIVE-06 path SPIKE-05 just proved is invisible to the hook, so the re-fetch must feed the analyser DIRECTLY rather than expecting its own traffic to come back around. If the measurement were reversed and cached responses did reach the hook, all three of those become optional and Phase 6 could ship passive-only."
+  },
+  "requirements_affected": [
+    "SPIKE-11",
+    "FIND-03",
+    "FIND-04",
+    "CORE-02",
+    "CORE-08"
+  ],
+  "artifacts": [
+    "scripts/spike/cache-browse.mjs",
+    "scripts/spike/run-spike-11.sh",
+    ".planning/phases/00-runtime-reality-check/results/runs/20260820T150935Z-23976/raw/spike-11-cache.json"
+  ],
+  "notes": "Cold load and hard reload both delivered the full body (457965 and 457965 bytes), so the apparatus demonstrably worked at the start and at the end of the run and no not-fired result can be attributed to a handler that stopped. The instance CA was fetched (660 bytes) and Chromium launched with --ignore-certificate-errors so an HTTPS origin would work through this proxy; the origin here is HTTP because scripts/spike/origin.py is owned by plan 00-01 and serves HTTP only, and Chromium's HTTP cache, its freshness arithmetic and its revalidation path are all scheme-independent, so the cache decision under test is unchanged. Threat T-00-33: throwaway Chromium profile under the run directory, local origin only, no real site, no operator credentials and no logged-in session; the profile and the instance data path are both removed at teardown."
+}

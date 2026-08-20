@@ -1,0 +1,8 @@
+{
+  "/p1.html": {"content_type": "text/html; charset=utf-8", "cache_control": "no-store"},
+  "/p2.html": {"content_type": "text/html; charset=utf-8", "cache_control": "no-store"},
+  "/p3.html": {"content_type": "text/html; charset=utf-8", "cache_control": "no-store"},
+  "/p4.html": {"content_type": "text/html; charset=utf-8", "cache_control": "no-store"},
+  "/fresh.js": {"content_type": "application/javascript", "cache_control": "public, max-age=600"},
+  "/revalidate.js": {"content_type": "application/javascript", "cache_control": "no-cache"}
+}

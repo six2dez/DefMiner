@@ -32,3 +32,13 @@ tier1/*/dist/
 # recorded inside the spike result itself — but like every other raw host log
 # they do not ship (threats T-00-14, T-00-26).
 .planning/phases/00-runtime-reality-check/results/runs/*/raw/*.log
+
+# SPIKE-11's browsing apparatus, built fresh by scripts/spike/run-spike-11.sh on
+# every run. The web root is two copies of a corpus bundle (corpus/ is already
+# ignored) plus four generated HTML wrappers; the Chromium profile is a 3.4 MB
+# throwaway holding the very disk cache the spike manipulates; the per-run CA is
+# minted by the instance and dies with it. All three are regenerable and none is
+# evidence — everything the result quotes is extracted into spike-11-cache.json.
+.planning/phases/00-runtime-reality-check/results/runs/*/raw/webroot/
+.planning/phases/00-runtime-reality-check/results/runs/*/raw/chromium-profile/
+.planning/phases/00-runtime-reality-check/results/runs/*/raw/*.crt

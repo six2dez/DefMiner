@@ -1,0 +1,298 @@
+{
+  "generated_at": "2026-08-20T15:09:51.605Z",
+  "run_id": "20260820T150935Z-23976",
+  "instance": "http://127.0.0.1:8996",
+  "origin": "127.0.0.1:8083",
+  "profile": ".planning/phases/00-runtime-reality-check/results/runs/20260820T150935Z-23976/raw/chromium-profile",
+  "origin_log": ".planning/phases/00-runtime-reality-check/results/runs/20260820T150935Z-23976/raw/origin.log",
+  "instance_ca_bytes": 660,
+  "project_id": "9f40f027-4d18-4fe0-a0bb-835acd8701c5",
+  "markers": {
+    "fresh": "freshres-3dc59575f5",
+    "reval": "revalres-3dc59575f5",
+    "p1": "page1-3dc59575f5",
+    "p2": "page2-3dc59575f5",
+    "p3": "page3-3dc59575f5",
+    "p4": "page4-3dc59575f5"
+  },
+  "urls": {
+    "fresh": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+    "reval": "http://127.0.0.1:8083/revalidate.js?dfm=revalres-3dc59575f5",
+    "p1": "http://127.0.0.1:8083/p1.html?dfm=page1-3dc59575f5",
+    "p2": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+    "p3": "http://127.0.0.1:8083/p3.html?dfm=page3-3dc59575f5",
+    "p4": "http://127.0.0.1:8083/p4.html?dfm=page4-3dc59575f5"
+  },
+  "probe_status_at_end": {
+    "at": 1787238591584,
+    "mode": "idle",
+    "mode_remaining": 0,
+    "pending_rows": 0,
+    "seq_high_water": 10,
+    "dropped_by_probe": 0
+  },
+  "scenarios": [
+    {
+      "scenario": "cold",
+      "description": "empty browser profile, first ever fetch of the resource",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p1.html?dfm=page1-3dc59575f5",
+      "started_at": "2026-08-20T15:09:37.311Z",
+      "finished_at": "2026-08-20T15:09:39.934Z",
+      "error": null,
+      "action": {
+        "navigated": "http://127.0.0.1:8083/p1.html?dfm=page1-3dc59575f5"
+      },
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_from_disk_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "origin_lines": [
+        "127.0.0.1 - \"GET /fresh.js?dfm=freshres-3dc59575f5 HTTP/1.1\" 200 -"
+      ],
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "date": "Thu, 20 Aug 2026 15:09:37 GMT",
+        "content-type": "application/javascript",
+        "content-length": "457965",
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "cache-control": "public, max-age=600",
+        "x-raw-length": "457965",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\""
+      },
+      "delivered_request_headers": {
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+        "sec-ch-ua-mobile": "?0",
+        "sec-fetch-mode": "no-cors",
+        "referer": "http://127.0.0.1:8083/p1.html?dfm=page1-3dc59575f5",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "sec-fetch-dest": "script",
+        "host": "127.0.0.1:8083",
+        "sec-fetch-site": "same-origin",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "accept": "*/*"
+      },
+      "page_hook_fired": true,
+      "page_hook_deliveries": 1,
+      "total_events_in_window": 2
+    },
+    {
+      "scenario": "cached-fresh",
+      "description": "second page referencing the same resource while still within Cache-Control max-age",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+      "started_at": "2026-08-20T15:09:39.936Z",
+      "finished_at": "2026-08-20T15:09:42.544Z",
+      "error": null,
+      "action": {
+        "navigated": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5"
+      },
+      "browser_issued_request": false,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 1,
+      "browser_from_disk_cache": 0,
+      "browser_wire_statuses": [],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 0,
+      "origin_lines": [],
+      "hook_fired": false,
+      "hook_deliveries": 0,
+      "delivered_status": null,
+      "delivered_body_length": null,
+      "delivered_raw_length": null,
+      "delivered_response_headers": null,
+      "delivered_request_headers": null,
+      "page_hook_fired": true,
+      "page_hook_deliveries": 1,
+      "total_events_in_window": 1
+    },
+    {
+      "scenario": "revalidate-prime",
+      "description": "first fetch of the no-cache resource — puts ETag and Last-Modified in the browser cache",
+      "resource_url": "http://127.0.0.1:8083/revalidate.js?dfm=revalres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p3.html?dfm=page3-3dc59575f5",
+      "started_at": "2026-08-20T15:09:42.547Z",
+      "finished_at": "2026-08-20T15:09:45.162Z",
+      "error": null,
+      "action": {
+        "navigated": "http://127.0.0.1:8083/p3.html?dfm=page3-3dc59575f5"
+      },
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_from_disk_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "origin_lines": [
+        "127.0.0.1 - \"GET /revalidate.js?dfm=revalres-3dc59575f5 HTTP/1.1\" 200 -"
+      ],
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "content-length": "457965",
+        "content-type": "application/javascript",
+        "cache-control": "no-cache",
+        "x-raw-length": "457965",
+        "date": "Thu, 20 Aug 2026 15:09:42 GMT",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT"
+      },
+      "delivered_request_headers": {
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "host": "127.0.0.1:8083",
+        "accept": "*/*",
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-dest": "script",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "referer": "http://127.0.0.1:8083/p3.html?dfm=page3-3dc59575f5",
+        "sec-fetch-mode": "no-cors"
+      },
+      "page_hook_fired": true,
+      "page_hook_deliveries": 1,
+      "total_events_in_window": 2
+    },
+    {
+      "scenario": "revalidate-304",
+      "description": "no-cache resource with a valid validator: browser must revalidate, origin answers 304",
+      "resource_url": "http://127.0.0.1:8083/revalidate.js?dfm=revalres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p4.html?dfm=page4-3dc59575f5",
+      "started_at": "2026-08-20T15:09:45.165Z",
+      "finished_at": "2026-08-20T15:09:47.770Z",
+      "error": null,
+      "action": {
+        "navigated": "http://127.0.0.1:8083/p4.html?dfm=page4-3dc59575f5"
+      },
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_from_disk_cache": 0,
+      "browser_wire_statuses": [
+        304
+      ],
+      "browser_page_visible_statuses": [
+        304
+      ],
+      "origin_requests": 1,
+      "origin_lines": [
+        "127.0.0.1 - \"GET /revalidate.js?dfm=revalres-3dc59575f5 HTTP/1.1\" 304 -"
+      ],
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 304,
+      "delivered_body_length": 0,
+      "delivered_raw_length": 0,
+      "delivered_response_headers": {
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "cache-control": "no-cache",
+        "content-length": "0",
+        "date": "Thu, 20 Aug 2026 15:09:45 GMT",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\""
+      },
+      "delivered_request_headers": {
+        "accept": "*/*",
+        "if-modified-since": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "host": "127.0.0.1:8083",
+        "sec-fetch-site": "same-origin",
+        "if-none-match": "\"519c9f3866177fe911c7a065a5f30868\"",
+        "sec-fetch-mode": "no-cors",
+        "sec-ch-ua-mobile": "?0",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "sec-fetch-dest": "script",
+        "referer": "http://127.0.0.1:8083/p4.html?dfm=page4-3dc59575f5",
+        "accept-encoding": "gzip, deflate, br, zstd"
+      },
+      "page_hook_fired": true,
+      "page_hook_deliveries": 1,
+      "total_events_in_window": 2
+    },
+    {
+      "scenario": "hard-reload",
+      "description": "CDP Page.reload({ignoreCache:true}) — cache bypassed, full 200 with body",
+      "resource_url": "http://127.0.0.1:8083/fresh.js?dfm=freshres-3dc59575f5",
+      "page_url": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+      "started_at": "2026-08-20T15:09:48.587Z",
+      "finished_at": "2026-08-20T15:09:51.582Z",
+      "error": null,
+      "action": {
+        "hard_reloaded": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5"
+      },
+      "browser_issued_request": true,
+      "browser_request_events": 1,
+      "browser_served_from_cache": 0,
+      "browser_from_disk_cache": 0,
+      "browser_wire_statuses": [
+        200
+      ],
+      "browser_page_visible_statuses": [
+        200
+      ],
+      "origin_requests": 1,
+      "origin_lines": [
+        "127.0.0.1 - \"GET /fresh.js?dfm=freshres-3dc59575f5 HTTP/1.1\" 200 -"
+      ],
+      "hook_fired": true,
+      "hook_deliveries": 1,
+      "delivered_status": 200,
+      "delivered_body_length": 457965,
+      "delivered_raw_length": 457965,
+      "delivered_response_headers": {
+        "content-type": "application/javascript",
+        "etag": "\"519c9f3866177fe911c7a065a5f30868\"",
+        "last-modified": "Thu, 20 Aug 2026 15:09:36 GMT",
+        "server": "DefMinerSpikeOrigin/1.0 Python/3.14.7",
+        "date": "Thu, 20 Aug 2026 15:09:48 GMT",
+        "cache-control": "public, max-age=600",
+        "x-raw-length": "457965",
+        "content-length": "457965"
+      },
+      "delivered_request_headers": {
+        "host": "127.0.0.1:8083",
+        "sec-ch-ua": "\"Not=A?Brand\";v=\"99\", \"HeadlessChrome\";v=\"151\", \"Chromium\";v=\"151\"",
+        "sec-ch-ua-platform": "\"macOS\"",
+        "sec-fetch-site": "same-origin",
+        "accept": "*/*",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
+        "sec-fetch-mode": "no-cors",
+        "sec-fetch-dest": "script",
+        "referer": "http://127.0.0.1:8083/p2.html?dfm=page2-3dc59575f5",
+        "cache-control": "no-cache",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "sec-ch-ua-mobile": "?0",
+        "pragma": "no-cache"
+      },
+      "page_hook_fired": true,
+      "page_hook_deliveries": 1,
+      "total_events_in_window": 2
+    }
+  ]
+}
