@@ -1,7 +1,7 @@
 {
   "$schema": "./go-no-go.schema.json",
   "caido_version": "0.57.1",
-  "generated_at": "2026-08-20T16:59:19Z",
+  "generated_at": "2026-08-20T17:04:57Z",
   "provenance": {
     "binary": {
       "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",

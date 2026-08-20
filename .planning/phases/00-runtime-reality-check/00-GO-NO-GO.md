@@ -19,7 +19,7 @@ Every threshold below was measured against **Caido 0.57.1** on this machine. Thi
 | Host | darwin 25.6.0 / arm64 |
 | CPU | Apple M4 Pro (14 cores) |
 | RAM | 24.0 GB |
-| Generated | `2026-08-20T16:59:19Z` |
+| Generated | `2026-08-20T17:04:57Z` |
 
 Bare `caido-cli` on this machine resolves to a stale 0.55.3. Every measurement here was taken through the absolute app-bundle path above, asserted before the run rather than checked afterwards.
 

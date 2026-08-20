@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 0
 current_phase_name: Runtime Reality Check
 status: executing
-stopped_at: Completed 00-03-PLAN.md
-last_updated: "2026-08-20T15:26:22.911Z"
+stopped_at: Completed 00-04-PLAN.md — Phase 0 complete
+last_updated: "2026-08-20T17:04:38.806Z"
 last_activity: 2026-08-20
 last_activity_desc: "00-03 complete: SPIKE-05, -11, -03 answered on Caido 0.57.1. onInterceptResponse is a PROXY-ONLY hook — replay, automate, workflows, sdk.requests.send() in all four save/plugins combinations and caido:http fetch all reached the origin and delivered nothing. A browser-cache hit never enters Caido; a 304 arrives with a zero-length body and no content-type, so RETROACTIVE_SCAN_MANDATORY is true. Caido QUEUES: 500/500 events survived a 30 s handler block with the proxy never stalling. Handler throws and rejections are both swallowed with no trace in any log surface."
-state_head: d7a0fc3a160da37f4f12158c8109462195f669a1
+state_head: 23bd89d534947821fda74a0b063005b8d45542d3
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 0 of 12 (Runtime Reality Check)
-Plan: 3 of 4 complete in current phase (00-01, 00-02, 00-03)
+Plan: 4 of 4 complete in current phase (00-01, 00-02, 00-03)
 Status: Ready to execute
 Last activity: 2026-08-20 — 00-03 complete: SPIKE-05, -11, -03 answered on Caido 0.57.1. onInterceptResponse is a PROXY-ONLY hook — replay, automate, workflows, sdk.requests.send() in all four save/plugins combinations and caido:http fetch all reached the origin and delivered nothing. A browser-cache hit never enters Caido; a 304 arrives with a zero-length body and no content-type, so RETROACTIVE_SCAN_MANDATORY is true. Caido QUEUES: 500/500 events survived a 30 s handler block with the proxy never stalling. Handler throws and rejections are both swallowed with no trace in any log surface.
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 00 P01 | 33m | 3 tasks | 45 files |
 | Phase 00 P02 | 105m | 3 tasks | 53 files |
 | Phase 00 P03 | 45m | 3 tasks | 46 files |
+| Phase 00 P04 | 92 | 3 tasks | 123 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,14 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 0]: A browser-cache hit never enters Caido at all and a 304 arrives with a zero-length body and no content-type — RETROACTIVE_SCAN_MANDATORY is true
 - [Phase 0]: Caido QUEUES intercept events: 499 survived a 30 s handler block and arrived in a 20 ms burst, contiguous, nothing lost; the proxy never stalled
 - [Phase 0]: Caido surfaces neither a synchronous throw nor an async rejection from a handler — ERR-03/OBS-01 must do all error visibility themselves
+- [Phase 0]: SPIKE-01: a catastrophic regex hangs the QuickJS thread with no interrupt and no in-runtime recovery — SIGKILL is the only way out, and attempting togglePlugin against a wedged plugin takes every OTHER plugin's RPC down with it
+- [Phase 0]: re2js adopted for generic-shaped rules only (adopt-generic): 59.7x slower in aggregate but FASTER than native on 7 of 13 literal-anchored rules; runs inside DET-06's bounded windows, native keeps the whole-body prefilter
+- [Phase 0]: caido/caido#2211 did not reproduce at 2,000 sends in either wrapper shape, so SEND_CLIFF_* are FLOORS not cliffs; Phase 8 must re-test with real .map bodies and concurrent sends before treating the floor as headroom
+- [Phase 0]: ACTIVE-02's write-ahead journal validated against four real abrupt host deaths: 2 caught the exact in-flight send, 2 correctly left no open row, 0 false positives
+- [Phase 0]: last_insert_rowid() is unusable on sdk.meta.db()'s pooled connection — STORE-01..07 must key writes on a natural key
+- [Phase 0]: togglePlugin genuinely rebuilds the QuickJS runtime (new session id, per-runtime counter reset to 0) and the plugin database survives it, so ACTIVE-13 has a cheap reset primitive — but only while the runtime still answers
+- [Phase 0]: CACHE_HIT_RATE_CROSS_DAY is inconclusive at 1 sampled day and a zero denominator; Phase 1 CORE-08 budgets against CACHE_HIT_RATE_ASSUMED=0.40 until it is re-measured after 2026-09-03
+- [Phase 0]: go-no-go.json is the only Phase 0 artifact later phases may import; every tunable constant must import from it and be asserted equal by a test in the SDK-free engine workspace
 
 ### Known Risks Carried Forward
 
@@ -125,6 +134,10 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T15:26:12.239Z
-**Stopped at:** Completed 00-03-PLAN.md
+**Last session:** 2026-08-20T17:04:12.623Z
+**Stopped at:** Completed 00-04-PLAN.md — Phase 0 complete
 **Resume file:** None
+
+### Blockers
+
+- SPIKE-10 cross-day cache hit rate is UNDEFINED (1 day sampled, denominator 0) and collection has STOPPED — the recorder LaunchAgent was uninstalled and the 8998 instance killed per plan 00-04's teardown responsibility. Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. To re-measure: bash scripts/spike/recorder-agent.sh install, let it span 2+ calendar days, then re-run analyse-spike-10.py + aggregate.py + render-go-no-go.py. Revisit after 2026-09-03.
