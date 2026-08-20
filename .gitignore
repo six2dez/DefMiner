@@ -25,3 +25,10 @@ tier1/*/dist/
 # Result JSON, rss.csv and raw/*.jsonl ARE committed; these two are not.
 .planning/phases/00-runtime-reality-check/results/runs/*/token
 .planning/phases/00-runtime-reality-check/results/runs/*/*.log
+
+# Per-operation stderr captures copied into runs/*/raw/ by scripts/spike/ladder.sh.
+# The rule above only covers runs/*/*.log, one level up. These are the channel a
+# C-level QuickJS abort would land in, so they are CHECKED — the scan result is
+# recorded inside the spike result itself — but like every other raw host log
+# they do not ship (threats T-00-14, T-00-26).
+.planning/phases/00-runtime-reality-check/results/runs/*/raw/*.log

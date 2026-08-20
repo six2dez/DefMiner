@@ -1,0 +1,65 @@
+{
+  "phase": "C",
+  "label": "hardmax-32mb",
+  "input": ".spike/big/big-32mb.js",
+  "run_id": "20260820T140001Z-18646",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8993",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T140001Z-18646",
+  "bytes": 41626780,
+  "result": {
+    "path": "/Users/six2dez/Tools/DefMiner/.spike/big/big-32mb.js",
+    "bytes": 41626780,
+    "chars": 41622740,
+    "read_ok": true,
+    "decode_ok": true,
+    "parse_ok": true,
+    "parse_mode": "script",
+    "parse_error": null,
+    "parse_error_catchable": false,
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 3.5460000038146973,
+        "start_date": 1787234402909,
+        "end_date": 1787234402913,
+        "start_qjs": 66.0009999871254,
+        "end_qjs": 69.5469999909401,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 54.69999998807907,
+        "start_date": 1787234402913,
+        "end_date": 1787234402967,
+        "start_qjs": 69.58399999141693,
+        "end_qjs": 124.283999979496,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 31725.577000021935,
+        "start_date": 1787234402967,
+        "end_date": 1787234434693,
+        "start_qjs": 124.43899995088577,
+        "end_qjs": 31850.01599997282,
+        "ok": true,
+        "err": null
+      }
+    ]
+  },
+  "extra": {
+    "target_mb": 32
+  }
+}

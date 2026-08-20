@@ -1,0 +1,126 @@
+{
+  "phase": "A",
+  "label": "ladder-composite8mb",
+  "input": "corpus/big/composite-8mb-parsable.js",
+  "run_id": "20260820T135711Z-28432",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8992",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T135711Z-28432",
+  "bytes": 8325353,
+  "result": {
+    "input": {
+      "path": "/Users/six2dez/Tools/DefMiner/corpus/big/composite-8mb-parsable.js",
+      "bytes": 8325353,
+      "sha256": "b081971104cbec03c4950f2cc97caf4ec72922337633b760d403b64e1a8d6ddd"
+    },
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 0.8199999928474426,
+        "start_date": 1787234232882,
+        "end_date": 1787234232883,
+        "start_qjs": 66.40400004386902,
+        "end_qjs": 67.22400003671646,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 10.964999973773956,
+        "start_date": 1787234232883,
+        "end_date": 1787234232894,
+        "start_qjs": 67.2480000257492,
+        "end_qjs": 78.21299999952316,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "hash",
+        "elapsed_ms": 13.22900003194809,
+        "start_date": 1787234232894,
+        "end_date": 1787234232908,
+        "start_qjs": 78.35600000619888,
+        "end_qjs": 91.58500003814697,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "hash_js_loop",
+        "elapsed_ms": 720.5810000300407,
+        "start_date": 1787234232908,
+        "end_date": 1787234233628,
+        "start_qjs": 91.59600001573563,
+        "end_qjs": 812.1770000457764,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "vlq_decode",
+        "elapsed_ms": 167.20199996232986,
+        "start_date": 1787234233796,
+        "end_date": 1787234233964,
+        "start_qjs": 980.432000041008,
+        "end_qjs": 1147.6340000033379,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "tokenize",
+        "elapsed_ms": 6168.683999955654,
+        "start_date": 1787234233964,
+        "end_date": 1787234240132,
+        "start_qjs": 1147.6860000491142,
+        "end_qjs": 7316.370000004768,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 6139.554000020027,
+        "start_date": 1787234240132,
+        "end_date": 1787234246272,
+        "start_qjs": 7316.419000029564,
+        "end_qjs": 13455.973000049591,
+        "ok": true,
+        "err": null
+      }
+    ],
+    "structured_clone_polyfilled": true,
+    "meriyah_options": {
+      "ranges": true,
+      "next": true,
+      "webcompat": true
+    },
+    "parse": {
+      "mode": "script",
+      "top_level_nodes": 14,
+      "ok": true,
+      "err": null
+    },
+    "tokens": 3171873,
+    "vlq": {
+      "mappings_chars": 1044954,
+      "segments_encoded": 208133,
+      "segments_decoded": 208133
+    },
+    "hash": {
+      "native_sha256": "b081971104cbec03c4950f2cc97caf4ec72922337633b760d403b64e1a8d6ddd",
+      "js_loop": "99ed01e685cad8d2",
+      "native_ms": 13.22900003194809,
+      "js_loop_ms": 720.5810000300407,
+      "js_loop_slowdown": 54.469801065071785
+    }
+  },
+  "extra": {
+    "size_point": "composite8mb"
+  }
+}

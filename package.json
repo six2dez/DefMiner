@@ -1,7 +1,7 @@
 {
   "name": "defminer",
   "version": "1.0.0",
-  "description": "DefMiner \u2014 Phase 0 runtime reality check harness",
+  "description": "DefMiner — Phase 0 runtime reality check harness",
   "scripts": {
     "test": "vitest run --reporter=dot",
     "test:watch": "vitest"
@@ -27,6 +27,7 @@
     "meriyah": "7.3.2",
     "playwright": "^1.62.1",
     "re2js": "2.8.6",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "private": true

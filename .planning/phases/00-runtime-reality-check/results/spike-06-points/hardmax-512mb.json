@@ -1,0 +1,23 @@
+{
+  "phase": "C",
+  "label": "hardmax-512mb",
+  "input": ".spike/big/big-512mb.js",
+  "run_id": "20260820T141108Z-3997",
+  "call_rc": 1,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8993",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T141108Z-3997",
+  "bytes": 541148140,
+  "result": null,
+  "extra": {
+    "target_mb": 512
+  }
+}

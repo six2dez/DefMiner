@@ -1,0 +1,10 @@
+{
+  "last_good_mb": 256,
+  "first_bad_mb": 512,
+  "last_good_bytes": 274736748,
+  "first_bad_bytes": 541148140,
+  "bisected": false,
+  "why_not_bisected": "The escalation never reached a MEMORY ceiling. Every size from 8 MB to 274 MB parsed to completion; the 541 MB step was cut off by the 900 s call budget with the host still alive, no QuickJS assertion on stderr, and MARK_START parse recorded in the host log with no matching MARK_END. Bisecting that boundary would have measured the call-timeout constant rather than any property of the runtime, and each additional step drove the host into swap (free pages fell to 3,587 of 16 KB each, i.e. ~57 MB) — pressure that is host-wide and therefore NOT confined to the disposable instance the way threat T-00-22 assumed. The escalation bracket is reported as-is and HARD_MAX_BYTES is labelled time-bound.",
+  "evidence_run_id_last_good": "20260820T140404Z-7023",
+  "evidence_run_id_first_bad": "20260820T141108Z-3997"
+}

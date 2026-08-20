@@ -1,0 +1,14 @@
+{
+  "last_good": 246,
+  "first_bad": 250,
+  "by_shape": {
+    "brackets": {
+      "last_good": 710,
+      "first_bad": 718
+    },
+    "parens": {
+      "last_good": 246,
+      "first_bad": 250
+    }
+  }
+}

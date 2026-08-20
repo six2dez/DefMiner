@@ -1,0 +1,66 @@
+{
+  "phase": "B",
+  "label": "nest-parens-250",
+  "input": "corpus/nesting/parens-250.js",
+  "run_id": "20260820T135905Z-30669",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8992",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T135905Z-30669",
+  "bytes": 511,
+  "result": {
+    "path": "/Users/six2dez/Tools/DefMiner/corpus/nesting/parens-250.js",
+    "bytes": 511,
+    "chars": 511,
+    "read_ok": true,
+    "decode_ok": true,
+    "parse_ok": false,
+    "parse_mode": null,
+    "parse_error": "RangeError: RangeError: Maximum call stack size exceeded",
+    "parse_error_catchable": true,
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 0.057000041007995605,
+        "start_date": 1787234347313,
+        "end_date": 1787234347313,
+        "start_qjs": 67.2490000128746,
+        "end_qjs": 67.3060000538826,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 0.013000011444091797,
+        "start_date": 1787234347313,
+        "end_date": 1787234347313,
+        "start_qjs": 67.31700003147125,
+        "end_qjs": 67.33000004291534,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 0.902999997138977,
+        "start_date": 1787234347313,
+        "end_date": 1787234347314,
+        "start_qjs": 67.3390000462532,
+        "end_qjs": 68.24200004339218,
+        "ok": false,
+        "err": "RangeError: RangeError: Maximum call stack size exceeded"
+      }
+    ]
+  },
+  "extra": {
+    "n": 250,
+    "kind": "parens"
+  }
+}

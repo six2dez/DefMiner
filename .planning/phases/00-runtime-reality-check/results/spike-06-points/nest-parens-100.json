@@ -1,0 +1,66 @@
+{
+  "phase": "B",
+  "label": "nest-parens-100",
+  "input": "corpus/nesting/parens-100.js",
+  "run_id": "20260820T135859Z-30866",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8992",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T135859Z-30866",
+  "bytes": 211,
+  "result": {
+    "path": "/Users/six2dez/Tools/DefMiner/corpus/nesting/parens-100.js",
+    "bytes": 211,
+    "chars": 211,
+    "read_ok": true,
+    "decode_ok": true,
+    "parse_ok": true,
+    "parse_mode": "script",
+    "parse_error": null,
+    "parse_error_catchable": false,
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 0.05799996852874756,
+        "start_date": 1787234340780,
+        "end_date": 1787234340780,
+        "start_qjs": 64.51399999856949,
+        "end_qjs": 64.57199996709824,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 0.012999951839447021,
+        "start_date": 1787234340780,
+        "end_date": 1787234340781,
+        "start_qjs": 64.58300000429153,
+        "end_qjs": 64.59599995613098,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 0.28999996185302734,
+        "start_date": 1787234340781,
+        "end_date": 1787234340781,
+        "start_qjs": 64.60600000619888,
+        "end_qjs": 64.89599996805191,
+        "ok": true,
+        "err": null
+      }
+    ]
+  },
+  "extra": {
+    "n": 100,
+    "kind": "parens"
+  }
+}

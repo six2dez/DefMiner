@@ -1,0 +1,66 @@
+{
+  "phase": "B",
+  "label": "nest-brackets-710",
+  "input": "corpus/nesting/brackets-710.js",
+  "run_id": "20260820T135857Z-14088",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8992",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T135857Z-14088",
+  "bytes": 1430,
+  "result": {
+    "path": "/Users/six2dez/Tools/DefMiner/corpus/nesting/brackets-710.js",
+    "bytes": 1430,
+    "chars": 1430,
+    "read_ok": true,
+    "decode_ok": true,
+    "parse_ok": true,
+    "parse_mode": "script",
+    "parse_error": null,
+    "parse_error_catchable": false,
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 0.050000011920928955,
+        "start_date": 1787234339141,
+        "end_date": 1787234339141,
+        "start_qjs": 72.10600000619888,
+        "end_qjs": 72.15600001811981,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 0.013000011444091797,
+        "start_date": 1787234339141,
+        "end_date": 1787234339141,
+        "start_qjs": 72.16699999570847,
+        "end_qjs": 72.18000000715256,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 1.6449999809265137,
+        "start_date": 1787234339141,
+        "end_date": 1787234339142,
+        "start_qjs": 72.18900001049042,
+        "end_qjs": 73.83399999141693,
+        "ok": true,
+        "err": null
+      }
+    ]
+  },
+  "extra": {
+    "n": 710,
+    "kind": "brackets"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "phase": "B",
+  "label": "nest-brackets-1000",
+  "input": "corpus/nesting/brackets-1000.js",
+  "run_id": "20260820T135847Z-22619",
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8992",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260820T135847Z-22619",
+  "bytes": 2010,
+  "result": {
+    "path": "/Users/six2dez/Tools/DefMiner/corpus/nesting/brackets-1000.js",
+    "bytes": 2010,
+    "chars": 2010,
+    "read_ok": true,
+    "decode_ok": true,
+    "parse_ok": false,
+    "parse_mode": null,
+    "parse_error": "RangeError: RangeError: Maximum call stack size exceeded",
+    "parse_error_catchable": true,
+    "ops": [
+      {
+        "label": "read",
+        "elapsed_ms": 0.05399996042251587,
+        "start_date": 1787234329340,
+        "end_date": 1787234329340,
+        "start_qjs": 65.67599999904633,
+        "end_qjs": 65.72999995946884,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "decode",
+        "elapsed_ms": 0.013000011444091797,
+        "start_date": 1787234329340,
+        "end_date": 1787234329340,
+        "start_qjs": 65.7509999871254,
+        "end_qjs": 65.76399999856949,
+        "ok": true,
+        "err": null
+      },
+      {
+        "label": "parse",
+        "elapsed_ms": 1.6979999542236328,
+        "start_date": 1787234329340,
+        "end_date": 1787234329342,
+        "start_qjs": 65.77300000190735,
+        "end_qjs": 67.47099995613098,
+        "ok": false,
+        "err": "RangeError: RangeError: Maximum call stack size exceeded"
+      }
+    ]
+  },
+  "extra": {
+    "n": 1000,
+    "kind": "brackets"
+  }
+}
