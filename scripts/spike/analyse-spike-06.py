@@ -464,8 +464,9 @@ def main() -> int:
          "confidence": "HIGH" if smallest_bad else "MEDIUM",
          "status": "resolved",
          "rationale": (
-             f"Located by ESCALATION AND BISECTION on fresh instances, not by "
-             f"extrapolating the RSS curve. Largest input that parsed: {largest_ok} "
+             f"Located by ESCALATION{' AND BISECTION' if hardmax.get('bisected') else ' ONLY — the boundary was deliberately NOT bisected; see why_not_bisected in _hardmax-boundary.json'} "
+             f"on fresh instances, not by extrapolating the RSS curve. "
+             f"Largest input that parsed: {largest_ok} "
              f"bytes. Smallest that failed: {smallest_bad} bytes, as {bad_classes}. "
              f"Resolution is one repetition of the 8.33 MB composite fixture, because "
              f"the escalation input is built from whole repetitions — a JavaScript file "
