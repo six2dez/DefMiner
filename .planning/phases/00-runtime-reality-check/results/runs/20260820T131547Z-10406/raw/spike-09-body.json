@@ -1,0 +1,220 @@
+{
+  "method": "A Tier-0 probe drove sdk.meta.db() directly. PRAGMA user_version (header scoped) and PRAGMA cache_size (connection scoped) were each set in one exec and read back in a separate exec, so a surviving value can be attributed to persistence rather than to the pool happening to reuse a connection. BEGIN, INSERT and COMMIT were issued as three separate execs and the table read from a fourth; the same split was then repeated with ROLLBACK, which is the decisive case because a split commit looks identical to an autocommit. A single exec string containing BEGIN, three valid inserts, a UNIQUE-violating insert and COMMIT tested whether one exec is atomic, followed by a bare COMMIT to detect a transaction left open on the pooled connection. journal_mode was read back rather than assumed. A write and a read were then fired without awaiting the write. Finally a sentinel row was written, the package force-reinstalled, the row re-read, the package UNINSTALLED outright via uninstallPluginPackage, reinstalled, and the row re-read again. All binding uses positional `?` parameters through prepare()/run(); db.exec() accepts no bind values.",
+  "probe": {
+    "tier": "raw-zip",
+    "package_version": "0.0.1",
+    "deps": {}
+  },
+  "measurements": [
+    {
+      "name": "pragma_user_version_readback",
+      "value": 4242,
+      "unit": "int",
+      "stat": "point",
+      "n": 1,
+      "notes": "set to 4242 in one exec, read back in a separate exec; header-scoped"
+    },
+    {
+      "name": "pragma_cache_size_readback",
+      "value": -8000,
+      "unit": "int",
+      "stat": "point",
+      "n": 1,
+      "notes": "set to -8000 in one exec, read back in a separate exec; connection-scoped"
+    },
+    {
+      "name": "journal_mode",
+      "value": "wal",
+      "unit": "enum",
+      "stat": "point",
+      "n": 1
+    },
+    {
+      "name": "rows_after_split_begin_insert_commit",
+      "value": 1,
+      "unit": "count",
+      "stat": "point",
+      "n": 1
+    },
+    {
+      "name": "rows_after_split_begin_insert_rollback",
+      "value": 2,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "the decisive test: 1 means BEGIN spanned the execs, 2 means it did not"
+    },
+    {
+      "name": "second_begin_in_next_exec_rejected",
+      "value": false,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1,
+      "notes": "SQLite refuses a second BEGIN only while a transaction is active, so this is the decisive test that row counting cannot supply. error=None"
+    },
+    {
+      "name": "second_consecutive_rollback_succeeded",
+      "value": true,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1,
+      "notes": "true means more than one transaction was open at once across the pool"
+    },
+    {
+      "name": "rows_after_failed_multistatement_exec_fresh_pool",
+      "value": 0,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "counted after a plugin restart tore down the connection pool \u2014 the only unconfounded count, because within the original run the batch's connection still held an open write transaction"
+    },
+    {
+      "name": "next_write_after_failed_batch_locked",
+      "value": true,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1,
+      "notes": "Error: error returned from database: (code: 5) database is locked"
+    },
+    {
+      "name": "rows_after_failed_multistatement_exec_settled",
+      "value": 0,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "BEGIN + 3 good inserts + 1 UNIQUE violation + COMMIT in ONE exec string; immediate=0, polled=[0, 0, 0, 0, 0]"
+    },
+    {
+      "name": "multistatement_exec_threw",
+      "value": true,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1
+    },
+    {
+      "name": "failed_batch_left_transaction_open",
+      "value": true,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1,
+      "notes": "bare COMMIT afterwards succeeded=False, bare ROLLBACK afterwards succeeded=False"
+    },
+    {
+      "name": "rows_visible_after_batch_poisoning",
+      "value": 0,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "one row written to a table created BEFORE the batch, then read straight back; 0 means the write is stranded on a connection the reader cannot see"
+    },
+    {
+      "name": "pool_read_after_awaited_write",
+      "value": 1,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "write awaited to completion, then read \u2014 the baseline case"
+    },
+    {
+      "name": "pool_read_saw_unawaited_write",
+      "value": 1,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "a write and a read fired without awaiting the write first"
+    },
+    {
+      "name": "sentinel_rows_after_force_reinstall",
+      "value": 1,
+      "unit": "count",
+      "stat": "point",
+      "n": 1
+    },
+    {
+      "name": "sentinel_rows_after_uninstall_reinstall",
+      "value": 0,
+      "unit": "count",
+      "stat": "point",
+      "n": 1
+    },
+    {
+      "name": "backend_uuid_changed_by_uninstall",
+      "value": true,
+      "unit": "bool",
+      "stat": "point",
+      "n": 1,
+      "notes": "a49bbf32-03af-4d3a-9cbf-b18185b366dd -> 00b7d6c9-b930-42de-8c16-19ec3732ab49"
+    },
+    {
+      "name": "plugin_dirs_after_uninstall",
+      "value": 0,
+      "unit": "count",
+      "stat": "point",
+      "n": 1,
+      "notes": "directories under <data-path>/plugins/ immediately after the uninstall mutation returned"
+    }
+  ],
+  "verdict": {
+    "answer": "PRAGMA: connection-scoped and file-scoped PRAGMAs both survived (user_version=4242, cache_size=-8000). Transactions: BEGIN does NOT span exec calls. A second BEGIN issued in the very next exec SUCCEEDED, which SQLite permits only when no transaction is active. Consistently, a split BEGIN/INSERT/ROLLBACK left 2 row(s) \u2014 the insert had already autocommitted. Note that BEGIN, COMMIT and ROLLBACK all returned SUCCESS throughout: the failure is SILENT, so code that looks transactional would pass every test and provide no atomicity whatsoever. A second consecutive ROLLBACK also succeeded, so more than one transaction was open at once \u2014 the statements are landing on different pooled connections. Single exec: A single exec containing BEGIN, three good inserts, a UNIQUE-violating insert and COMMIT left ZERO rows when counted from a FRESH CONNECTION POOL after a plugin restart, so one exec is an atomic unit. Within the original run the same count also read zero (immediate=0, polled=[0, 0, 0, 0, 0]) but that was not proof on its own: the batch's own pooled connection still held an open write transaction, and the very next write failed with SQLITE_BUSY ('Error: error returned from database: (code: 5) database is locked'), so other connections could not have seen uncommitted rows either way. CONNECTION POISONING, and this is the finding with the sharpest edge for Phase 1: the failed batch left an open WRITE transaction on its pooled connection. The next write attempt failed with 'Error: error returned from database: (code: 5) database is locked' and a follow-up read saw 0 row(s). Neither a bare COMMIT (succeeded=False) nor a bare ROLLBACK (succeeded=False) could clear it, because those land on other connections. Nothing in the plugin API can reach the stuck connection, so the database stays locked for writes until the plugin restarts. journal_mode=wal. Plugin database across a genuine uninstall/reinstall: survives force-reinstall only (0 sentinel row(s) after; backend UUID changed).",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "PRAGMA_PERSISTS_ACROSS_EXEC",
+        "value": "connection-scoped and file-scoped PRAGMAs both survived",
+        "unit": "enum",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "user_version read back as 4242 (expected 4242) and cache_size as -8000 (expected -8000) from execs separate from the ones that set them. user_version is stored in the database header and survives a connection switch regardless; cache_size is per-connection and only survives if the pool reused the connection, so the pair separates persistence from luck."
+      },
+      {
+        "id": "TRANSACTION_PERSISTS_ACROSS_EXEC",
+        "value": false,
+        "unit": "bool",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "BEGIN does NOT span exec calls. A second BEGIN issued in the very next exec SUCCEEDED, which SQLite permits only when no transaction is active. Consistently, a split BEGIN/INSERT/ROLLBACK left 2 row(s) \u2014 the insert had already autocommitted. Note that BEGIN, COMMIT and ROLLBACK all returned SUCCESS throughout: the failure is SILENT, so code that looks transactional would pass every test and provide no atomicity whatsoever. A second consecutive ROLLBACK also succeeded, so more than one transaction was open at once \u2014 the statements are landing on different pooled connections."
+      },
+      {
+        "id": "MULTISTATEMENT_EXEC_ATOMIC",
+        "value": true,
+        "unit": "bool",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "A single exec containing BEGIN, three good inserts, a UNIQUE-violating insert and COMMIT left ZERO rows when counted from a FRESH CONNECTION POOL after a plugin restart, so one exec is an atomic unit. Within the original run the same count also read zero (immediate=0, polled=[0, 0, 0, 0, 0]) but that was not proof on its own: the batch's own pooled connection still held an open write transaction, and the very next write failed with SQLITE_BUSY ('Error: error returned from database: (code: 5) database is locked'), so other connections could not have seen uncommitted rows either way. CONNECTION POISONING, and this is the finding with the sharpest edge for Phase 1: the failed batch left an open WRITE transaction on its pooled connection. The next write attempt failed with 'Error: error returned from database: (code: 5) database is locked' and a follow-up read saw 0 row(s). Neither a bare COMMIT (succeeded=False) nor a bare ROLLBACK (succeeded=False) could clear it, because those land on other connections. Nothing in the plugin API can reach the stuck connection, so the database stays locked for writes until the plugin restarts."
+      },
+      {
+        "id": "WAL_ENABLED",
+        "value": true,
+        "unit": "bool",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "PRAGMA journal_mode read back as 'wal'."
+      },
+      {
+        "id": "DB_SURVIVES_REINSTALL",
+        "value": "survives force-reinstall only",
+        "unit": "enum",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "A sentinel row was written, then read back after a force:true reinstall (1 row(s)) and again after an outright uninstallPluginPackage followed by a fresh install (0 row(s), table_exists=False). Backend UUID a49bbf32-03af-4d3a-9cbf-b18185b366dd -> 00b7d6c9-b930-42de-8c16-19ec3732ab49."
+      }
+    ],
+    "if_wrong": "If BEGIN/COMMIT do not span exec calls, Phase 1's storage layer has no transaction primitive at all: STORE-01 through STORE-07 must be redesigned around single-statement idempotent upserts, every multi-row invariant has to be expressed as one statement or abandoned, and there is no way to roll back a partially written finding set. If a single multi-statement exec is not atomic either, then no batching strategy is safe and a crash mid-batch leaves the database in a state no migration can distinguish from a completed write. If the plugin database does not survive an uninstall, UPGRADE-01 and UPGRADE-04 cannot rely on it for state that must outlive a version change and an export/import path becomes mandatory rather than optional."
+  },
+  "requirements_affected": [
+    "SPIKE-09",
+    "STORE-01",
+    "STORE-02",
+    "STORE-05",
+    "STORE-07",
+    "UPGRADE-01",
+    "UPGRADE-04"
+  ],
+  "artifacts": [
+    "raw/spike-09-contracts.json",
+    "raw/spike-09-after-force.json",
+    "raw/spike-09-after-uninstall.json",
+    "raw/spike-09-identity.json"
+  ],
+  "notes": "db.exec(sql) accepts NO bind parameters \u2014 passing an array is silently ignored (measured in plan 00-01). Binding requires prepare() then Statement.run(...params) SPREAD; named parameters are unsupported. Every statement here follows that shape."
+}

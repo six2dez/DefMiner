@@ -200,92 +200,115 @@ async function safe(fn) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function sqliteContracts(sdk) {
   mark(sdk, "SQLITE_START");
   const db = await sdk.meta.db();
   const out = { steps: [] };
-  const step = (name, r) => {
+  const step = async (name, fn) => {
+    const r = await safe(fn);
     out.steps.push(Object.assign({ step: name }, r));
     return r;
   };
+  const count = (table) =>
+    safe(async () => (await db.prepare("SELECT COUNT(*) AS n FROM " + table)).get());
+  const n = (r) => (r.ok && r.value ? r.value.n : null);
 
-  // Fresh tables per call so a re-run is not confounded by the previous one.
-  await safe(() => db.exec("DROP TABLE IF EXISTS tx_probe"));
-  await safe(() => db.exec("DROP TABLE IF EXISTS batch_probe"));
-  await step(
-    "create_tx_probe",
-    await safe(() =>
-      db.exec("CREATE TABLE tx_probe (id INTEGER PRIMARY KEY, tag TEXT NOT NULL UNIQUE)"),
-    ),
-  );
+  // Every table is created UP FRONT, before any experiment can leave a
+  // transaction open. An earlier version created pool_probe after the batch
+  // experiment and its CREATE landed inside the batch's dangling transaction —
+  // the table then read back as "no such table" and the measurement was lost.
+  for (const t of ["tx_probe", "batch_probe", "pool_probe", "post_batch_probe"]) {
+    await step("drop_" + t, () => db.exec("DROP TABLE IF EXISTS " + t));
+  }
+  await step("create_tx_probe", () =>
+    db.exec("CREATE TABLE tx_probe (id INTEGER PRIMARY KEY, tag TEXT NOT NULL UNIQUE)"));
+  await step("create_batch_probe", () =>
+    db.exec("CREATE TABLE batch_probe (id INTEGER PRIMARY KEY, tag TEXT NOT NULL UNIQUE)"));
+  await step("create_pool_probe", () =>
+    db.exec("CREATE TABLE pool_probe (id INTEGER PRIMARY KEY, tag TEXT)"));
+  await step("create_post_batch_probe", () =>
+    db.exec("CREATE TABLE post_batch_probe (id INTEGER PRIMARY KEY, tag TEXT)"));
 
   // ---- Q1: does a PRAGMA set in one exec survive into the next? -----------
-  // user_version is a real persisted header field, so if the pool hands the
-  // second exec a DIFFERENT connection the value still survives (it lives in
-  // the database file). cache_size is per-CONNECTION, so it does NOT survive a
-  // connection switch. Reading BOTH is what distinguishes "PRAGMA persisted"
-  // from "same connection happened to be reused".
-  await step("pragma_set_user_version", await safe(() => db.exec("PRAGMA user_version = 4242")));
-  const uv = await safe(async () => (await db.prepare("PRAGMA user_version")).get());
-  step("pragma_read_user_version", uv);
+  // user_version is a real persisted header field, so it survives even if the
+  // pool hands the second exec a DIFFERENT connection. cache_size is
+  // per-CONNECTION and does NOT. Reading BOTH is what distinguishes "the PRAGMA
+  // persisted" from "the pool happened to reuse the connection".
+  await step("pragma_set_user_version", () => db.exec("PRAGMA user_version = 4242"));
+  const uv = await step("pragma_read_user_version", async () =>
+    (await db.prepare("PRAGMA user_version")).get());
   out.pragma_user_version = uv.ok && uv.value ? uv.value.user_version : null;
 
-  await step("pragma_set_cache_size", await safe(() => db.exec("PRAGMA cache_size = -8000")));
-  const cs = await safe(async () => (await db.prepare("PRAGMA cache_size")).get());
-  step("pragma_read_cache_size", cs);
+  await step("pragma_set_cache_size", () => db.exec("PRAGMA cache_size = -8000"));
+  const cs = await step("pragma_read_cache_size", async () =>
+    (await db.prepare("PRAGMA cache_size")).get());
   out.pragma_cache_size = cs.ok && cs.value ? cs.value.cache_size : null;
 
-  // journal_mode: is WAL on? The type declaration says the pool opens with
-  // wal:true by default, but sdk.meta.db() does not expose the open options, so
-  // the only honest answer is to read it back.
-  const jm = await safe(async () => (await db.prepare("PRAGMA journal_mode")).get());
-  step("pragma_read_journal_mode", jm);
+  const jm = await step("pragma_read_journal_mode", async () =>
+    (await db.prepare("PRAGMA journal_mode")).get());
   out.journal_mode = jm.ok && jm.value ? jm.value.journal_mode : null;
 
-  // ---- Q2: does BEGIN in one exec reach COMMIT in another? ----------------
-  const begin = await safe(() => db.exec("BEGIN"));
-  step("tx_begin", begin);
-  const ins = await safe(() =>
-    db.exec("INSERT INTO tx_probe (id, tag) VALUES (1, 'in-transaction')"),
-  );
-  step("tx_insert", ins);
-  const commit = await safe(() => db.exec("COMMIT"));
-  step("tx_commit", commit);
-  const afterCommit = await safe(async () =>
-    (await db.prepare("SELECT COUNT(*) AS n FROM tx_probe")).get(),
-  );
-  step("tx_read_after_commit", afterCommit);
-  out.rows_after_split_commit =
-    afterCommit.ok && afterCommit.value ? afterCommit.value.n : null;
+  // ---- Q2a: THE DECISIVE TEST — is the transaction still open next call? ---
+  // Row counting cannot distinguish "the transaction spanned the calls" from
+  // "the insert autocommitted", but SQLite itself can: a second BEGIN while a
+  // transaction is active fails with "cannot start a transaction within a
+  // transaction". So issue BEGIN in one exec and BEGIN again in the next. An
+  // ERROR means the transaction survived; SUCCESS means it did not.
+  await step("nested_begin_first", () => db.exec("BEGIN"));
+  const nested = await step("nested_begin_second", () => db.exec("BEGIN"));
+  out.nested_begin_rejected = !nested.ok;
+  out.nested_begin_error = nested.ok ? null : nested.error;
+  await step("nested_rollback_1", () => db.exec("ROLLBACK"));
+  const rb2 = await step("nested_rollback_2", () => db.exec("ROLLBACK"));
+  // A SECOND rollback that also succeeds means more than one transaction was
+  // open, i.e. they are living on different pooled connections.
+  out.second_rollback_succeeded = rb2.ok;
 
-  // And the mirror image: does a ROLLBACK in a later exec undo an insert from
-  // an earlier one? If BEGIN did not survive, the insert is already durable and
-  // the ROLLBACK errors with "cannot rollback - no transaction is active".
-  const begin2 = await safe(() => db.exec("BEGIN"));
-  step("tx2_begin", begin2);
-  const ins2 = await safe(() =>
-    db.exec("INSERT INTO tx_probe (id, tag) VALUES (2, 'should-roll-back')"),
-  );
-  step("tx2_insert", ins2);
-  const rb = await safe(() => db.exec("ROLLBACK"));
-  step("tx2_rollback", rb);
-  const afterRb = await safe(async () =>
-    (await db.prepare("SELECT COUNT(*) AS n FROM tx_probe")).get(),
-  );
-  step("tx2_read_after_rollback", afterRb);
-  out.rows_after_split_rollback = afterRb.ok && afterRb.value ? afterRb.value.n : null;
+  // ---- Q2b: split BEGIN / INSERT / COMMIT, then / ROLLBACK ---------------
+  await step("tx_begin", () => db.exec("BEGIN"));
+  await step("tx_insert", () =>
+    db.exec("INSERT INTO tx_probe (id, tag) VALUES (1, 'in-transaction')"));
+  await step("tx_commit", () => db.exec("COMMIT"));
+  const afterCommit = await count("tx_probe");
+  out.steps.push(Object.assign({ step: "tx_read_after_commit" }, afterCommit));
+  out.rows_after_split_commit = n(afterCommit);
 
-  // ---- Q3: is a multi-statement SINGLE exec atomic? -----------------------
-  // begin, three good inserts, one that violates a UNIQUE constraint, commit —
-  // all in ONE exec string. If the whole batch rolls back, the count is 0 and
-  // one exec is an atomic unit. If the good rows survive, it is not, and
-  // Phase 1 cannot lean on it.
-  await step(
-    "create_batch_probe",
-    await safe(() =>
-      db.exec("CREATE TABLE batch_probe (id INTEGER PRIMARY KEY, tag TEXT NOT NULL UNIQUE)"),
-    ),
-  );
+  await step("tx2_begin", () => db.exec("BEGIN"));
+  await step("tx2_insert", () =>
+    db.exec("INSERT INTO tx_probe (id, tag) VALUES (2, 'should-roll-back')"));
+  await step("tx2_rollback", () => db.exec("ROLLBACK"));
+  const afterRb = await count("tx_probe");
+  out.steps.push(Object.assign({ step: "tx2_read_after_rollback" }, afterRb));
+  out.rows_after_split_rollback = n(afterRb);
+
+  // ---- Q3: pool visibility, measured BEFORE anything poisons a connection --
+  const seqWrite = await step("pool_sequential_write", async () =>
+    (await db.prepare("INSERT INTO pool_probe (id, tag) VALUES (?, ?)")).run(1, "sequential"));
+  const seqRead = await count("pool_probe");
+  out.steps.push(Object.assign({ step: "pool_sequential_read" }, seqRead));
+  out.pool_read_after_awaited_write = n(seqRead);
+  out.pool_sequential_write_ok = seqWrite.ok;
+
+  const writeP = db
+    .prepare("INSERT INTO pool_probe (id, tag) VALUES (?, ?)")
+    .then((st) => st.run(2, "concurrent"));
+  const readP = db.prepare("SELECT COUNT(*) AS n FROM pool_probe").then((st) => st.get());
+  const settled = await step("pool_interleave", () => Promise.all([writeP, readP]));
+  out.pool_read_saw_unawaited_write =
+    settled.ok && settled.value && settled.value[1] ? settled.value[1].n : null;
+
+  // ---- Q4: is a multi-statement SINGLE exec atomic? ----------------------
+  // LAST, because a batch that aborts mid-way can leave a transaction open on
+  // whichever pooled connection ran it, and that connection then hides its own
+  // uncommitted rows from every other connection.
+  //
+  // A single count immediately after the failure is NOT evidence of atomicity:
+  // zero rows is equally consistent with "the batch rolled back" and with "the
+  // rows are still uncommitted on a connection this reader cannot see". So the
+  // count is taken repeatedly, before and after an explicit ROLLBACK, and the
+  // SETTLED value is what the verdict rests on.
   const batch =
     "BEGIN;" +
     "INSERT INTO batch_probe (id, tag) VALUES (1, 'a');" +
@@ -294,37 +317,36 @@ async function sqliteContracts(sdk) {
     "INSERT INTO batch_probe (id, tag) VALUES (4, 'a');" + // forced UNIQUE failure
     "INSERT INTO batch_probe (id, tag) VALUES (5, 'e');" +
     "COMMIT;";
-  const batchRes = await safe(() => db.exec(batch));
-  step("batch_exec", batchRes);
+  const batchRes = await step("batch_exec", () => db.exec(batch));
   out.batch_threw = !batchRes.ok;
-  const batchCount = await safe(async () =>
-    (await db.prepare("SELECT COUNT(*) AS n FROM batch_probe")).get(),
-  );
-  step("batch_count", batchCount);
-  out.batch_rows = batchCount.ok && batchCount.value ? batchCount.value.n : null;
+  out.batch_error = batchRes.ok ? null : batchRes.error;
 
-  // A failed batch can leave a transaction open on whichever pooled connection
-  // ran it, which would poison every later statement on that connection.
-  // Recording whether a bare COMMIT now succeeds says whether that happened.
-  const dangling = await safe(() => db.exec("COMMIT"));
-  step("batch_dangling_commit", dangling);
-  out.batch_left_transaction_open = dangling.ok;
-  if (dangling.ok) await safe(() => db.exec("ROLLBACK"));
+  const immediate = await count("batch_probe");
+  out.steps.push(Object.assign({ step: "batch_count_immediate" }, immediate));
+  out.batch_rows_immediate = n(immediate);
 
-  // ---- Q4: pool concurrency across two rapid calls ------------------------
-  // Fire a write and a read without awaiting the write first. On a pool these
-  // can land on different connections; what matters is whether the read can
-  // observe a write that has not resolved yet.
-  await safe(() => db.exec("DROP TABLE IF EXISTS pool_probe"));
-  await safe(() => db.exec("CREATE TABLE pool_probe (id INTEGER PRIMARY KEY, tag TEXT)"));
-  const writeP = db
-    .prepare("INSERT INTO pool_probe (id, tag) VALUES (?, ?)")
-    .then((s) => s.run(1, "concurrent"));
-  const readP = db.prepare("SELECT COUNT(*) AS n FROM pool_probe").then((s) => s.get());
-  const settled = await safe(() => Promise.all([writeP, readP]));
-  step("pool_interleave", settled);
-  out.pool_read_saw_unawaited_write =
-    settled.ok && settled.value && settled.value[1] ? settled.value[1].n : null;
+  const dangCommit = await step("batch_dangling_commit", () => db.exec("COMMIT"));
+  out.batch_left_transaction_open_commit = dangCommit.ok;
+  const dangRollback = await step("batch_dangling_rollback", () => db.exec("ROLLBACK"));
+  out.batch_left_transaction_open_rollback = dangRollback.ok;
+
+  const polls = [];
+  for (let i = 0; i < 5; i++) {
+    await sleep(120);
+    const c = await count("batch_probe");
+    polls.push(n(c));
+  }
+  out.batch_rows_polled = polls;
+  out.batch_rows_settled = polls.length ? polls[polls.length - 1] : null;
+
+  // Did the batch poison a connection for everything after it? An insert into a
+  // table created BEFORE the batch, read straight back.
+  const postWrite = await step("post_batch_write", async () =>
+    (await db.prepare("INSERT INTO post_batch_probe (id, tag) VALUES (?, ?)")).run(1, "after"));
+  const postRead = await count("post_batch_probe");
+  out.steps.push(Object.assign({ step: "post_batch_read" }, postRead));
+  out.post_batch_write_ok = postWrite.ok;
+  out.post_batch_rows = n(postRead);
 
   mark(sdk, "SQLITE_END");
   return out;
@@ -352,16 +374,43 @@ async function sqliteSentinelWrite(sdk, tag) {
 
 async function sqliteSentinelRead(sdk) {
   const db = await sdk.meta.db();
+  const out = {};
+
   // A missing table is the interesting answer, not an error: it means the
   // reinstall handed the plugin a brand new database.
   try {
     const rows = await (
       await db.prepare("SELECT tag, ts FROM reinstall_sentinel ORDER BY id")
     ).all();
-    return { table_exists: true, rows: rows, row_count: rows.length };
+    out.table_exists = true;
+    out.rows = rows;
+    out.row_count = rows.length;
   } catch (e) {
-    return { table_exists: false, rows: [], row_count: 0, error: String(e).slice(0, 300) };
+    out.table_exists = false;
+    out.rows = [];
+    out.row_count = 0;
+    out.error = String(e).slice(0, 300);
   }
+
+  // THE DECISIVE ATOMICITY READ.
+  //
+  // Inside the run that executed the failing multi-statement batch, the batch's
+  // pooled connection still held an open WRITE transaction — proven by the very
+  // next write failing with SQLITE_BUSY "database is locked" — so a zero row
+  // count from any OTHER connection was equally consistent with "rolled back"
+  // and with "still uncommitted over there". A plugin restart tears down the
+  // whole pool and SQLite recovers the WAL, so a count taken here, on a fresh
+  // pool against the same database file, is unconfounded.
+  for (const t of ["batch_probe", "tx_probe", "pool_probe", "post_batch_probe"]) {
+    try {
+      const r = await (await db.prepare("SELECT COUNT(*) AS n FROM " + t)).get();
+      out[t + "_rows"] = r ? r.n : null;
+    } catch (e) {
+      out[t + "_rows"] = null;
+      out[t + "_error"] = String(e).slice(0, 200);
+    }
+  }
+  return out;
 }
 
 // ===========================================================================
@@ -476,6 +525,22 @@ async function fsContainment(sdk, scratchRoot, linkTarget) {
   const root = String(scratchRoot);
   const outside = String(linkTarget);
 
+  // MEASURED: the named export `path.sep` reads back as undefined on this build
+  // even though `sep` IS listed among the module's exports. An earlier run built
+  // its containment predicate from `root + path.sep`, which produced the literal
+  // string "<root>undefined", so the prefix rule rejected EVERY fixture and not
+  // one write was attempted — a silently empty measurement that still looked
+  // like a clean pass. Resolve it explicitly and RECORD which source answered,
+  // because a containment rule built on an undefined separator is exactly the
+  // bug MAP-04 must not ship.
+  const sepNamed = typeof path.sep === "string" && path.sep.length ? path.sep : null;
+  const sepDefault =
+    path.default && typeof path.default.sep === "string" && path.default.sep.length
+      ? path.default.sep
+      : null;
+  const sep = sepNamed || sepDefault || "/";
+  const sepSource = sepNamed ? "path.sep" : sepDefault ? "path.default.sep" : "hardcoded-fallback";
+
   try {
     fs.mkdirSync(root, { recursive: true });
     fs.mkdirSync(outside, { recursive: true });
@@ -516,7 +581,7 @@ async function fsContainment(sdk, scratchRoot, linkTarget) {
     // strategy MAP-04 would adopt: resolve, then require the result to be the
     // root itself or to start with root + sep. It is purely lexical — no
     // realpath, no lstat — which is the point.
-    const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+    const rootWithSep = root.charAt(root.length - 1) === sep ? root : root + sep;
     r.contained_by_prefix_rule =
       r.resolved !== null && (r.resolved === root || r.resolved.indexOf(rootWithSep) === 0);
     // path.resolve DISCARDS everything before an absolute segment, so an
@@ -645,7 +710,10 @@ async function fsContainment(sdk, scratchRoot, linkTarget) {
     root: root,
     outside_root: outside,
     outside_listing: outsideListing,
-    sep: path.sep,
+    sep: sep,
+    sep_named: sepNamed,
+    sep_default: sepDefault,
+    sep_source: sepSource,
     results: results,
     symlink: symlink,
     scratch_listing: listing,

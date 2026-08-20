@@ -1,0 +1,18 @@
+{
+  "backend_uuid_initial": "a49bbf32-03af-4d3a-9cbf-b18185b366dd",
+  "backend_uuid_after_force_reinstall": "a49bbf32-03af-4d3a-9cbf-b18185b366dd",
+  "backend_uuid_after_uninstall_reinstall": "00b7d6c9-b930-42de-8c16-19ec3732ab49",
+  "package_id_initial": "d9343c92-f20c-4c3d-a9af-de6c62d77141",
+  "package_id_after_force_reinstall": "d9343c92-f20c-4c3d-a9af-de6c62d77141",
+  "package_id_after_uninstall_reinstall": "948bd341-86ae-4225-9978-a2fc5a0124fb",
+  "plugin_dirs_initial": [
+    "a49bbf32-03af-4d3a-9cbf-b18185b366dd"
+  ],
+  "plugin_dirs_after_force_reinstall": [
+    "a49bbf32-03af-4d3a-9cbf-b18185b366dd"
+  ],
+  "plugin_dirs_after_uninstall": [],
+  "plugin_dirs_after_reinstall": [
+    "00b7d6c9-b930-42de-8c16-19ec3732ab49"
+  ]
+}

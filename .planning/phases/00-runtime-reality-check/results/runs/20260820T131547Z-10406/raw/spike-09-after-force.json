@@ -1,0 +1,1 @@
+{"table_exists": true, "rows": [{"tag": "sentinel-original", "ts": 1787231760294}], "row_count": 1, "batch_probe_rows": 0, "tx_probe_rows": 2, "pool_probe_rows": 2, "post_batch_probe_rows": 0}
