@@ -1,0 +1,16 @@
+# pnpm 11 settings file. NOT a workspace definition — there is no `packages:` key
+# and this repo is deliberately single-package (see 00-01-PLAN.md task 1).
+#
+# Dependency build scripts are allowlisted EXPLICITLY rather than blanket-approved,
+# because Phase 0 gated its install set through a package-legitimacy checkpoint
+# (00-01 task 0). Every entry below is a deliberate true/false decision.
+allowBuilds:
+  # true — required by vite/vitest (the test framework this phase's gates run on)
+  # and by tsup inside @caido-community/dev. Its install script fetches only the
+  # matching @esbuild/<platform> binary already pinned in pnpm-lock.yaml.
+  esbuild: true
+
+  # false — transitive via @caido-community/dev, used for plugin ICON processing
+  # only. Tier-0 probes never build icons. Declined explicitly, not silently
+  # ignored. If a Tier-1 build in plan 00-04 needs it, that plan revisits this.
+  sharp: false

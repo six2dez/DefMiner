@@ -1,4 +1,27 @@
 node_modules/
 dist/
 .DS_Store
-*.log
+
+# --- Phase 0 spike harness -------------------------------------------------
+# Corpus bundles are fetched by scripts/spike/fetch-corpus.sh and verified
+# against SHA-256 hashes committed in that script. The script and hashes are
+# the reproducible artifact; the 22 MB of vendor JS is not.
+corpus/
+
+# Long-lived recorder state, including the SPIKE-10 cache_log database. That
+# database records URLs from the operator's real proxied browsing and must
+# never enter git history.
+.spike/
+
+# Built probe packages — regenerated from probe/<name>/ on every run.
+probe/*.zip
+tier1/*/dist/
+
+# CREDENTIAL AND PRIVACY CONTROL (threat T-00-14).
+# Guest bearer tokens and raw host logs live under results/runs/. The logs can
+# contain the operator's real browsing URLs; the token is live credential
+# material. Anything a result legitimately needs from a log is extracted into
+# the result JSON by scripts/spike/record-result.py — the raw log never ships.
+# Result JSON, rss.csv and raw/*.jsonl ARE committed; these two are not.
+.planning/phases/00-runtime-reality-check/results/runs/*/token
+.planning/phases/00-runtime-reality-check/results/runs/*/*.log

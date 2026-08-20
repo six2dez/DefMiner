@@ -1,0 +1,167 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-07",
+  "status": "pass",
+  "recorded_at": "2026-08-20T12:12:14Z",
+  "duration_s": 0.2,
+  "run_ids": [
+    "20260820T121213Z-23662"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 3.15
+  },
+  "instances": [
+    {
+      "run_id": "20260820T121213Z-23662",
+      "data_path": "/tmp/defminer-probe-20260820T121213Z-23662",
+      "listen": "127.0.0.1:8999",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": null
+    }
+  ],
+  "probe": {
+    "tier": "raw-zip",
+    "package_version": "0.0.1",
+    "bundle_sha256": "9a7f295ade2930dae95159577dd8a0404ded4935324cfb411e92ae944e712fd9",
+    "deps": {}
+  },
+  "corpus": [],
+  "method": "Installed an unsigned Tier-0 zip via the installPluginPackage multipart GraphQL mutation (force:true) onto a fresh --data-path instance on 127.0.0.1:8999, then called `capabilities` over POST /plugin/backend/<uuid>/function. The probe ENUMERATES Object.getOwnPropertyNames(globalThis) rather than testing a hardcoded list, typeof-probes a named candidate set, attempts dynamic import() of every candidate module capturing error text on failure, measures trivial recursion depth and whether the failure is catchable, and measures the smallest observable non-zero performance.now() delta over 200k samples.",
+  "measurements": [
+    {
+      "name": "globals_count",
+      "value": 100,
+      "unit": "count",
+      "stat": "point",
+      "notes": "Enumerated from Object.getOwnPropertyNames(globalThis). @caido/quickjs-types declares ~6; never trust the type package as a capability list."
+    },
+    {
+      "name": "structured_clone_typeof",
+      "value": "undefined",
+      "unit": "typeof",
+      "stat": "point"
+    },
+    {
+      "name": "webassembly_typeof",
+      "value": "undefined",
+      "unit": "typeof",
+      "stat": "point"
+    },
+    {
+      "name": "text_decoder_module",
+      "value": null,
+      "unit": "module",
+      "stat": "point",
+      "notes": "Open question 4 in 00-RESEARCH.md. TextDecoder is not a global; this is which module exports it, if any. ENC-01/ENC-02 depend on it."
+    },
+    {
+      "name": "text_encoder_module",
+      "value": null,
+      "unit": "module",
+      "stat": "point"
+    },
+    {
+      "name": "trivial_stack_depth",
+      "value": 1021,
+      "unit": "frames",
+      "stat": "max",
+      "notes": "Trivial 1-argument frame. Real AST-walk frames are far larger, so the effective depth is much lower \u2014 SPIKE-06 measures that with a real parser."
+    },
+    {
+      "name": "stack_failure_catchable",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "Error class: RangeError"
+    },
+    {
+      "name": "perf_now_min_delta",
+      "value": 0.0009999871253967285,
+      "unit": "ms",
+      "stat": "min",
+      "notes": "Smallest observable non-zero performance.now() delta over 200k samples."
+    },
+    {
+      "name": "reachable_decoders",
+      "value": "string_decoder.StringDecoder, buffer.Buffer (toString/from), globalThis.Buffer",
+      "unit": "enum",
+      "stat": "point",
+      "notes": "TextDecoder is absent, but UTF-8 decoding is still reachable through these. ENC-01/ENC-02 do NOT need to hand-roll a decoder."
+    },
+    {
+      "name": "globals_count_vs_research",
+      "value": 20,
+      "unit": "count",
+      "stat": "point",
+      "notes": "00-RESEARCH.md recorded 80 globals; this run enumerated 100. The measurement stands. 4 of them are Caido-injected SDK globals (Body, RequestSpec, RequestSpecRaw, ResponseSpec) that a probe enumerating at a different plugin-lifecycle point might not observe; the remainder are quickjs-ng built-ins. Either way, NEVER trust a hardcoded capability list \u2014 @caido/quickjs-types declares ~6."
+    }
+  ],
+  "verdict": {
+    "answer": "REGRESSION ASSERTION, not a discovery: structuredClone is `undefined` on Caido 0.57.1, confirming the Phase 0 research finding. The meriyah@7 polyfill guard is therefore mandatory and unconditional, not defensive. WebAssembly is `undefined`, so oxc/swc and mappings.wasm are structurally impossible. 100 globals are actually present against the ~6 the type package declares. TextDecoder is reachable from NO module probed (buffer, string_decoder, url, util) and is not a global. Trivial recursion reaches 1021 frames and fails with a CATCHABLE RangeError. Memory introspection is absent entirely (llrt:qjs, qjs, perf_hooks, process all fail to load), which is what forces external RSS sampling for every memory spike.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "STRUCTURED_CLONE_PRESENT",
+        "value": false,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "typeof structuredClone === 'undefined' on 0.57.1."
+      },
+      {
+        "id": "WASM_PRESENT",
+        "value": false,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "typeof WebAssembly === 'undefined'. Rules out every wasm-based parser."
+      },
+      {
+        "id": "TEXTDECODER_MODULE",
+        "value": null,
+        "unit": "module",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Resolved by enumerating every export of buffer, string_decoder, url and util."
+      },
+      {
+        "id": "TRIVIAL_STACK_DEPTH",
+        "value": 1021,
+        "unit": "frames",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "Upper bound from a 1-argument frame; SPIKE-06 measures the effective depth with a real parser frame."
+      }
+    ],
+    "if_wrong": "If structuredClone were present, meriyah@7's polyfill guard would be optional and the ingestion path could clone AST fragments directly. If WebAssembly were present, the entire parser selection in Phase 3 reopens \u2014 oxc and swc become candidates and the meriyah/acorn decision is moot. TextDecoder is unreachable, but that does NOT force a hand-rolled decoder: string_decoder.StringDecoder and buffer.Buffer are both importable, so ENC-01 and ENC-02 bind to those instead. If a future build were to drop them too, decoding becomes hand-rolled JS and the cost model for every non-identity Content-Encoding in SPIKE-08 changes."
+  },
+  "requirements_affected": [
+    "SPIKE-07",
+    "ENC-01",
+    "ENC-02",
+    "CORE-06"
+  ],
+  "artifacts": [
+    "runs/20260820T121213Z-23662/raw/capabilities.json",
+    "runs/20260820T121213Z-23662/instance.json"
+  ],
+  "notes": "Loadable modules: buffer, caido:http, crypto, events, fs, os, path, sqlite, string_decoder, url. Failed to load: caido:crypto, llrt:qjs, perf_hooks, process, qjs, stream, util, zlib. performance carries only `now` and `timeOrigin`; timeOrigin is a monotonic boot-relative origin, NOT a wall clock, so timeOrigin + now() is not a timestamp. There is no globalThis.gc, so collection cannot be forced before a measurement. Three module facts later plans depend on: (1) bare `crypto` loads and exports Sha256/createHash, which is what the SPIKE-10 recorder hashes bodies with -- note `caido:crypto` does NOT load, only bare `crypto`; (2) `zlib` does NOT load, so SPIKE-08 cannot decompress in-runtime and must rely on whatever Caido already decoded; (3) `util` and `stream` do NOT load."
+}

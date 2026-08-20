@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defminer.local/schemas/go-no-go.schema.json",
+  "title": "Phase 0 go/no-go aggregate",
+  "description": "The ONLY Phase 0 artifact later phases may import. Assembled in plan 00-04 from the per-spike result files.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "caido_version",
+    "generated_at",
+    "source_runs",
+    "thresholds",
+    "gates",
+    "unresolved"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "caido_version": {
+      "type": "string",
+      "const": "0.57.1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_runs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "array"
+        ]
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "REDOS_INTERRUPTIBLE",
+          "REDOS_RECOVERY",
+          "RE2JS_THROUGHPUT_RATIO",
+          "RE2JS_VERDICT",
+          "YIELD_PRIMITIVE",
+          "YIELD_COST_MS",
+          "MAX_SYNC_SLICE_MS",
+          "EVENT_OVERFLOW_BEHAVIOUR",
+          "EVENTS_DELIVERED_UNDER_BLOCK",
+          "HANDLER_ERROR_SURFACED",
+          "SEND_CLIFF_SAVE_TRUE",
+          "SEND_CLIFF_SAVE_FALSE",
+          "SEND_CLIFF_FETCH",
+          "SEND_FAILURE_MODE",
+          "PLUGIN_TOGGLE_RESETS_LEAK",
+          "SEND_REFIRES_INTERCEPT",
+          "SAVE_FALSE_SUPPRESSES_INTERCEPT",
+          "PLUGINS_FALSE_SUPPRESSES_INTERCEPT",
+          "SURFACES_FIRING_INTERCEPT",
+          "AST_MAX_BYTES",
+          "HARD_MAX_BYTES",
+          "MAX_NESTING_DEPTH",
+          "STACK_FAILURE_MODE",
+          "PARSE_MS_PER_MB",
+          "RSS_BYTES_PER_INPUT_BYTE",
+          "STRUCTURED_CLONE_PRESENT",
+          "WASM_PRESENT",
+          "TEXTDECODER_MODULE",
+          "TRIVIAL_STACK_DEPTH",
+          "BODY_STORED_DECOMPRESSED",
+          "BODY_LENGTH_EQUALS_RAW_LENGTH",
+          "SIZE_GATE_SOURCE",
+          "PRAGMA_PERSISTS_ACROSS_EXEC",
+          "TRANSACTION_PERSISTS_ACROSS_EXEC",
+          "MULTISTATEMENT_EXEC_ATOMIC",
+          "WAL_ENABLED",
+          "DB_SURVIVES_REINSTALL",
+          "CACHE_HIT_RATE_WITHIN_PAGE",
+          "CACHE_HIT_RATE_WITHIN_SESSION",
+          "CACHE_HIT_RATE_CROSS_DAY",
+          "CACHE_HIT_RATE_ASSUMED",
+          "CACHE_SAMPLE_DAYS",
+          "CACHE_CROSS_DAY_DENOMINATOR",
+          "CACHED_RESPONSES_REACH_HOOK",
+          "STATUS_304_REACHES_HOOK",
+          "RETROACTIVE_SCAN_MANDATORY",
+          "FS_HAS_REALPATH",
+          "FS_HAS_LSTAT",
+          "FS_CONTAINMENT_STRATEGY"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "value",
+          "unit",
+          "spike",
+          "confidence"
+        ],
+        "properties": {
+          "value": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Nullable ONLY to carry the single inconclusive case plan 00-04 task 3 defines for the cross-day cache rate. Every other threshold in the phase must resolve to a real value."
+          },
+          "unit": {
+            "type": "string"
+          },
+          "spike": {
+            "type": "string",
+            "pattern": "^SPIKE-[0-9]{2}$"
+          },
+          "confidence": {
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "PENDING"
+            ]
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "inconclusive",
+              "pending"
+            ]
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "revisit_after": {
+            "type": "string"
+          }
+        },
+        "if": {
+          "properties": {
+            "status": {
+              "const": "inconclusive"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "then": {
+          "required": [
+            "revisit_after"
+          ]
+        }
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "spike",
+          "question",
+          "answer",
+          "status",
+          "blocks",
+          "changes_if_wrong"
+        ],
+        "properties": {
+          "spike": {
+            "type": "string",
+            "pattern": "^SPIKE-[0-9]{2}$"
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "answer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "inconclusive",
+              "blocked"
+            ]
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "changes_if_wrong": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "why"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          },
+          "revisit_after": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "defminer",
+  "version": "1.0.0",
+  "description": "DefMiner \u2014 Phase 0 runtime reality check harness",
+  "scripts": {
+    "test": "vitest run --reporter=dot",
+    "test:watch": "vitest"
+  },
+  "license": "UNLICENSED",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.22.0",
+      "onFail": "download"
+    }
+  },
+  "type": "module",
+  "devDependencies": {
+    "@caido-community/dev": "0.1.7",
+    "@caido/quickjs-types": "0.26.0",
+    "@caido/sdk-backend": "0.57.1",
+    "@caido/sdk-client": "0.5.0",
+    "@jridgewell/sourcemap-codec": "1.5.5",
+    "acorn": "8.18.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "meriyah": "7.3.2",
+    "playwright": "^1.62.1",
+    "re2js": "2.8.6",
+    "vitest": "^4.1.11"
+  },
+  "private": true
+}

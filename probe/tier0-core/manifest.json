@@ -1,0 +1,15 @@
+{
+  "id": "defminer-tier0-core",
+  "name": "DefMiner Tier-0 Core Probe",
+  "version": "0.0.1",
+  "description": "Disposable Phase 0 runtime probe: capability enumeration and event-loop yield experiments",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "tier0-core-backend",
+      "name": "Tier0 Core Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
