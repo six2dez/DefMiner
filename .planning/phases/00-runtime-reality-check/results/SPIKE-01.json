@@ -1,0 +1,537 @@
+{
+  "$schema": "./spike-result.schema.json",
+  "spike": "SPIKE-01",
+  "status": "pass",
+  "recorded_at": "2026-08-20T15:55:20Z",
+  "duration_s": null,
+  "run_ids": [
+    "20260820T153757Z-11877",
+    "20260820T154036Z-6118",
+    "20260820T153836Z-32643"
+  ],
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.57.1",
+    "reported_version": "0.57.1",
+    "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cpu": "Apple M4 Pro",
+    "cores": 14,
+    "ram_gb": 24.0,
+    "loadavg_1m": 1.68
+  },
+  "instances": [
+    {
+      "run_id": "20260820T153757Z-11877",
+      "data_path": "/tmp/defminer-probe-20260820T153757Z-11877",
+      "listen": "127.0.0.1:8981",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": null
+    },
+    {
+      "run_id": "20260820T154036Z-6118",
+      "data_path": "/tmp/defminer-probe-20260820T154036Z-6118",
+      "listen": "127.0.0.1:8982",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": null
+    },
+    {
+      "run_id": "20260820T153836Z-32643",
+      "data_path": "/tmp/defminer-probe-20260820T153836Z-32643",
+      "listen": "127.0.0.1:8983",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137,
+      "project_persistence": null
+    }
+  ],
+  "method": "Three stages on three fresh version-asserted instances (8981 recoverable, 8982 terminal, 8983 clean), driven by scripts/spike/redos.sh with the Tier-1 redos probe built through caido-dev so the build pipeline is part of what is measured. Stage 1 escalated n=20..26 and computed the growth constant from its own numbers. Stage 2 fired n=40 and held a bounded observation window, probing from OUTSIDE the wedged thread: host liveness, GraphQL latency, a proxied request, a SECOND installed package's RPC, the wedged plugin's own RPC, and one attempt each at togglePlugin and installPluginPackage(force:true) with no retry loop. Stage 3 benchmarked re2js against native RegExp on the same rules over the same corpus. Every stage torn down with SIGKILL and its exit code recorded.",
+  "measurements": [
+    {
+      "name": "redos_elapsed_ms",
+      "value": 51.816,
+      "unit": "ms",
+      "primitive": "native-RegExp",
+      "variant": "n=20",
+      "stat": "point",
+      "notes": "/(a+)+$/ against \"a\".repeat(20)+\"b\"; matched=False"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 204.569,
+      "unit": "ms",
+      "primitive": "native-RegExp",
+      "variant": "n=22",
+      "stat": "point",
+      "notes": "/(a+)+$/ against \"a\".repeat(22)+\"b\"; matched=False"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 805.315,
+      "unit": "ms",
+      "primitive": "native-RegExp",
+      "variant": "n=24",
+      "stat": "point",
+      "notes": "/(a+)+$/ against \"a\".repeat(24)+\"b\"; matched=False"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 3278.911,
+      "unit": "ms",
+      "primitive": "native-RegExp",
+      "variant": "n=26",
+      "stat": "point",
+      "notes": "/(a+)+$/ against \"a\".repeat(26)+\"b\"; matched=False"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 0.205,
+      "unit": "ms",
+      "primitive": "re2js",
+      "variant": "n=20",
+      "stat": "point",
+      "notes": "same pattern and payload through re2js"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 0.176,
+      "unit": "ms",
+      "primitive": "re2js",
+      "variant": "n=22",
+      "stat": "point",
+      "notes": "same pattern and payload through re2js"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 0.188,
+      "unit": "ms",
+      "primitive": "re2js",
+      "variant": "n=24",
+      "stat": "point",
+      "notes": "same pattern and payload through re2js"
+    },
+    {
+      "name": "redos_elapsed_ms",
+      "value": 0.19,
+      "unit": "ms",
+      "primitive": "re2js",
+      "variant": "n=26",
+      "stat": "point",
+      "notes": "same pattern and payload through re2js"
+    },
+    {
+      "name": "growth_factor",
+      "value": 3.9849,
+      "unit": "x per +2 chars",
+      "stat": "mean",
+      "n": 3,
+      "notes": "geometric mean of successive ratios measured on THIS run: 3.948, 3.937, 4.072"
+    },
+    {
+      "name": "re2js_growth_factor",
+      "value": 0.975,
+      "unit": "x per +2 chars",
+      "stat": "mean",
+      "n": 3,
+      "notes": "re2js on the same escalation: flat, which is the linear-time guarantee"
+    },
+    {
+      "name": "redos_elapsed_ms_second_shape",
+      "value": 1480.808,
+      "unit": "ms",
+      "primitive": "native-RegExp",
+      "variant": "(a|a)+$ n=24",
+      "stat": "point",
+      "notes": "a SECOND catastrophic shape, so the finding is about the class rather than about one regex"
+    },
+    {
+      "name": "extrapolated_completion_s_at_n40",
+      "value": 52321.8,
+      "unit": "s",
+      "stat": "point",
+      "notes": "3278.9 ms at n=26 x 3.985^7; ~14.5 hours"
+    },
+    {
+      "name": "observation_window_s",
+      "value": 660.0,
+      "unit": "s",
+      "stat": "point",
+      "notes": "bounded observation window held on the wedged instance. The 'never recovers' claim is stated as what it is: no recovery mechanism engaged within a window 79x shorter than the extrapolated completion time"
+    },
+    {
+      "name": "observation_window_vs_completion_ratio",
+      "value": 79.3,
+      "unit": "x",
+      "stat": "ratio",
+      "notes": "how many times shorter the observation window is than the extrapolated completion of the same computation"
+    },
+    {
+      "name": "hang_call_returned",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "did the wedged plugin function call ever return within the window"
+    },
+    {
+      "name": "core_alive_during_hang",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 13,
+      "notes": "GraphQL answered on 13 of 13 samples across the window"
+    },
+    {
+      "name": "core_alive_during_hang_graphql_ms",
+      "value": 0.59,
+      "unit": "ms",
+      "stat": "median",
+      "n": 13,
+      "p95": 0.65,
+      "notes": "idle baseline on the same instance before the hang: 0.43 ms"
+    },
+    {
+      "name": "proxy_alive_during_hang",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 13,
+      "notes": "13 of 13 proxied requests returned 200 through the wedged instance; baseline before the hang was 200"
+    },
+    {
+      "name": "second_plugin_alive_during_hang",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 13,
+      "notes": "a SECOND package (probe/tier0-core, its own executor) answered on 4 of 13 samples"
+    },
+    {
+      "name": "second_plugin_alive_before_lifecycle_attempt",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 4,
+      "notes": "samples up to t=81.7s, before any lifecycle operation was requested against the wedged plugin"
+    },
+    {
+      "name": "second_plugin_alive_after_lifecycle_attempt",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 9,
+      "notes": "measured separately because a lifecycle operation requested against the WEDGED plugin changes what the HEALTHY one can do. The host log shows why: `service|plugin: Stopping plugin` is accepted and then never completes, and from that moment every plugin's RPC stops at the shared plugin service \u2014 the `api|controller: Calling plugin` line still appears but the matching `plugin|executor: Calling method` line does not"
+    },
+    {
+      "name": "lifecycle_attempt_poisons_healthy_plugins",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "derived from the two regimes above: the healthy plugin answered on every pre-attempt sample and on none afterwards. Attempting recovery is what spreads the damage from one plugin to all of them"
+    },
+    {
+      "name": "wedged_plugin_rpc_answered_during_hang",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "n": 13,
+      "notes": "the hung plugin's own RPC answered on 0 of 13 samples"
+    },
+    {
+      "name": "toggle_plugin_returned_during_hang",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "togglePlugin(enabled:false) curl rc=28 after 90036.3 ms against a 90s budget (rc 28 == the request never returned)"
+    },
+    {
+      "name": "force_reinstall_returned_during_hang",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "installPluginPackage(force:true), the operation devtools hot reload performs: curl rc=0 after 25.4 ms against a 120s budget"
+    },
+    {
+      "name": "force_reinstall_succeeded_during_hang",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "THE RETURN IS NOT THE RECOVERY. The mutation came back in 25.4 ms with package=None and error=OtherUserError, and no plugin answered afterwards. A hot reload against a wedged runtime fails FAST with a generic error, which reads like a transient hiccup rather than an unrecoverable runtime"
+    },
+    {
+      "name": "interrupt_signals_in_logs",
+      "value": 0,
+      "unit": "count",
+      "stat": "count",
+      "notes": "stdout, stderr and the structured host log across all three stages, 2433 lines scanned"
+    },
+    {
+      "name": "timeout_signals_in_logs",
+      "value": 0,
+      "unit": "count",
+      "stat": "count"
+    },
+    {
+      "name": "abort_signals_in_logs",
+      "value": 0,
+      "unit": "count",
+      "stat": "count",
+      "notes": "a C-level QuickJS assertion would land on stderr and nowhere else"
+    },
+    {
+      "name": "re2js_slowdown_x",
+      "value": 59.711,
+      "unit": "x",
+      "stat": "ratio",
+      "n": 13,
+      "notes": "13 rules over 2958663 bytes of real corpus: native 790.139 ms, re2js 47180.113 ms. >1 means re2js is SLOWER"
+    },
+    {
+      "name": "native_regex_mb_per_s",
+      "value": 3.571,
+      "unit": "MB/s",
+      "stat": "ratio"
+    },
+    {
+      "name": "re2js_mb_per_s",
+      "value": 0.0598,
+      "unit": "MB/s",
+      "stat": "ratio"
+    },
+    {
+      "name": "re2js_match_counts_agree",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "both engines found identical match counts on every rule and file, so the ratio compares equal work rather than two different scans"
+    },
+    {
+      "name": "re2js_slowdown_x_by_shape",
+      "value": 19.625,
+      "unit": "x",
+      "stat": "ratio",
+      "variant": "provider",
+      "notes": "provider-shaped rules: native 346.7 ms, re2js 6805.0 ms"
+    },
+    {
+      "name": "re2js_slowdown_x_by_shape",
+      "value": 91.059,
+      "unit": "x",
+      "stat": "ratio",
+      "variant": "generic",
+      "notes": "generic-shaped rules: native 443.4 ms, re2js 40375.1 ms"
+    },
+    {
+      "name": "re2js_rules_faster_than_native",
+      "value": 7,
+      "unit": "count",
+      "stat": "count",
+      "notes": "rules where re2js BEAT native RegExp: github_oauth, github_pat, google_api_key, jwt, private_key_header, sendgrid_key, slack_token"
+    },
+    {
+      "name": "re2js_rules_over_10x_slower",
+      "value": 5,
+      "unit": "count",
+      "stat": "count",
+      "notes": "rules where re2js was more than 10x slower: base64_blob, generic_api_key, hex_32, stripe_key, url_credentials"
+    },
+    {
+      "name": "re2js_supports_lookbehind",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "RE2 rejects lookbehind by construction; it is what makes linear-time matching possible. Stated here so Phase 3 knows before it writes rules"
+    },
+    {
+      "name": "re2js_supports_backreference",
+      "value": false,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "likewise rejected. A RE2-clean corpus makes Gitleaks rules directly portable, which is arguably a benefit rather than only a constraint"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": false,
+      "unit": "boolean",
+      "variant": "lookahead_positive",
+      "stat": "point",
+      "notes": "RE2JSSyntaxException: error parsing regexp: invalid or unsupported Perl syntax: `(?=`"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": true,
+      "unit": "boolean",
+      "variant": "named_group",
+      "stat": "point",
+      "notes": "(?<word>[a-z]+)"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": true,
+      "unit": "boolean",
+      "variant": "unicode_class",
+      "stat": "point",
+      "notes": "\\p{L}+"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": true,
+      "unit": "boolean",
+      "variant": "word_boundary",
+      "stat": "point",
+      "notes": "\\bfoo\\b"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": true,
+      "unit": "boolean",
+      "variant": "lazy_quantifier",
+      "stat": "point",
+      "notes": "a+?b"
+    },
+    {
+      "name": "re2js_construct_supported",
+      "value": true,
+      "unit": "boolean",
+      "variant": "nested_quantifier",
+      "stat": "point",
+      "notes": "(a+)+$"
+    },
+    {
+      "name": "re2js_registry_repository_field",
+      "value": "github:le0pard/re2js",
+      "unit": "string",
+      "stat": "point",
+      "notes": "queried live from registry.npmjs.org. npm's SHORTHAND string form; tooling that reads repository.url as an object sees a string and reports the field as absent \u2014 which is how the gap was reported"
+    },
+    {
+      "name": "re2js_registry_trusted_publisher",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "_npmUser: {\"name\": \"GitHub Actions\", \"email\": \"npm-oidc-no-reply@github.com\", \"trustedPublisher\": {\"id\": \"github\", \"oidcConfigId\": \"oidc:254766bc-aadb-42dc-9f3d-d561e53057b7\"}}"
+    },
+    {
+      "name": "re2js_registry_install_scripts",
+      "value": true,
+      "unit": "boolean",
+      "stat": "point",
+      "notes": "no install-time script; published scripts are build/test/lint only"
+    },
+    {
+      "name": "re2js_registry_runtime_dependencies",
+      "value": 0,
+      "unit": "count",
+      "stat": "count",
+      "notes": "dependencies: null"
+    }
+  ],
+  "corpus": [
+    {
+      "name": "ace-1.36.5.js",
+      "bytes": 457965,
+      "sha256": "519c9f3866177fe911c7a065a5f30868892a970b69a79b52a98b01fb441f680e",
+      "source": "scripts/spike/fetch-corpus.sh"
+    },
+    {
+      "name": "echarts-5.5.1.js",
+      "bytes": 1030855,
+      "sha256": "e84270bd0cd5bdf60fefc26d00c2a391cb2e81f4d26a7a9ee16185a54773a3cf",
+      "source": "scripts/spike/fetch-corpus.sh"
+    },
+    {
+      "name": "tfjs-4.22.0.js",
+      "bytes": 1469843,
+      "sha256": "300dfae273d20b4046f46a06d735688f03675a807561e9bcb5f664eb2f3d2831",
+      "source": "scripts/spike/fetch-corpus.sh"
+    }
+  ],
+  "probe": {
+    "tier": "caido-dev-build",
+    "package_version": "0.0.1",
+    "deps": {
+      "re2js": "2.8.6"
+    }
+  },
+  "containment": {
+    "escaped": false,
+    "escape_paths": []
+  },
+  "verdict": {
+    "answer": "YES \u2014 a catastrophic regex hangs the plugin with no interrupt, no timeout and no in-runtime recovery. Native /(a+)+$/ grew 3.985x per two added characters on this build (52 ms at n=20 to 3279 ms at n=26), extrapolating n=40 to 14.5 hours. n=40 was fired and had not returned 660.0 s later \u2014 a window 79x shorter than completion \u2014 with 0 interrupt signals in 2433 log lines. Throughout, the Caido core answered GraphQL in 0.59 ms median and the proxy returned 200 on 13/13 requests, so the host stays diagnosable; but togglePlugin never returned and installPluginPackage(force:true) returned in 25.4 ms with package=null and error=OtherUserError rather than reloading anything, so SIGKILL is the only recovery. Worse, a SECOND package with its own executor answered normally for the first 4 samples and on none of the 9 after the toggle was requested \u2014 attempting recovery is what spreads the damage. re2js is flat on the same escalation and 59.711x slower on the real rule set, split 19.625x provider / 91.059x generic \u2014 verdict adopt-generic.",
+    "confidence": "HIGH",
+    "thresholds_set": [
+      {
+        "id": "REDOS_INTERRUPTIBLE",
+        "value": false,
+        "unit": "boolean",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "n=40 was fired on a dedicated instance and the call had not returned 660.0 s later. Across 2433 lines of stdout, stderr and the structured host log over all three stages there were 0 interrupt signals and 0 timeout signals. Caido installs no QuickJS interrupt handler, so lre_check_timeout is inert and the engine's own timeout mechanism cannot fire. Measured, not inferred."
+      },
+      {
+        "id": "REDOS_RECOVERY",
+        "value": "kill",
+        "unit": "enum(none|throw|kill)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "togglePlugin(enabled:false) never came back (curl rc=28 after 90036.3 ms; rc 28 is a client-side timeout, and the host log shows `Stopping plugin` accepted and never completed). installPluginPackage(force:true) \u2014 the operation devtools hot reload performs \u2014 DID return, in 25.4 ms, but with package=null and error=OtherUserError: it failed rather than recovering, and no plugin answered afterwards. So neither lifecycle operation is a recovery path, and they fail in two different ways that both look survivable from outside. SIGKILL was the only teardown that worked; the instance exited 137 (137 == our own SIGKILL)."
+      },
+      {
+        "id": "RE2JS_THROUGHPUT_RATIO",
+        "value": 59.711,
+        "unit": "x (re2js elapsed / native elapsed; >1 = re2js slower)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "13 provider- and generic-shaped rules over 2958663 bytes of the real corpus, both engines counting every match and agreeing on every count. The aggregate hides a bimodal split: 19.625x on provider-shaped rules and 91.059x on generic-shaped ones, with re2js FASTER than native on 7 of 13 rules."
+      },
+      {
+        "id": "RE2JS_VERDICT",
+        "value": "adopt-generic",
+        "unit": "enum(adopt-all|adopt-generic|reject)",
+        "confidence": "HIGH",
+        "status": "resolved",
+        "rationale": "adopt-all is refused by the data: at 59.711x aggregate, a whole-body scan of an AST_MAX_BYTES (1,334,405 B) bundle would cost roughly 21.3 s against a 1,000 ms single-block stall budget. reject is equally refused: re2js compiled every rule in the set, was faster than native on 7 of them, and is flat where native is exponential. So it is adopted for the rule class that can backtrack catastrophically, run inside DET-06's bounded windows rather than across whole bodies, with native RegExp keeping the whole-body prefilter pass."
+      }
+    ],
+    "if_wrong": "If an interrupt DOES in fact fire on some build or configuration, the hang becomes a thrown error mid-scan instead. That is better but it is still a scan failure, so ERR-01's per-artifact isolation has to handle it either way and the design does not collapse in either direction. What DOES change: DET-05's static ReDoS check would drop from load-bearing to defence-in-depth, and re2js could be deferred entirely. Conversely, if RE2JS_THROUGHPUT_RATIO is materially worse on a different corpus \u2014 the ratio is dominated by unanchored rules, and a rule set with more of them would push it up \u2014 then re2js cannot be afforded even inside bounded windows, and DET-05 plus a hard per-rule match budget become the only defence. Re-measure this ratio against the actual Phase 3 rule corpus before committing to it."
+  },
+  "requirements_affected": [
+    "SPIKE-01",
+    "DET-04",
+    "DET-05",
+    "DET-06",
+    "ERR-01",
+    "QUAL-05"
+  ],
+  "artifacts": [
+    "scripts/spike/redos.sh",
+    "tier1/redos/src/index.ts",
+    ".planning/phases/00-runtime-reality-check/results/spike-01-stages/stage1-points.jsonl",
+    ".planning/phases/00-runtime-reality-check/results/spike-01-stages/stage2-observations.jsonl",
+    ".planning/phases/00-runtime-reality-check/results/spike-01-stages/stage3-bench.json"
+  ],
+  "notes": "Three fresh instances, one per stage, because the failure modes are incompatible: stage 2 leaves a runtime that can never be measured again and stage 3 needs a clean one. Stage 2's second-plugin result changed regime mid-window and that is the sharpest finding in the spike: a second package with its own executor answered normally while the first was wedged, and STOPPED answering once a lifecycle operation was requested against the wedged plugin. Attempting recovery is what spreads the damage. re2js provenance was re-queried live against registry.npmjs.org: the repository field IS published, in npm's shorthand string form ('github:le0pard/re2js') rather than the {type,url} object form, which is why tooling reading repository.url reported it absent. 2.8.6 was published by npm trusted publishing via GitHub Actions OIDC, carries zero runtime dependencies and no install-time script. There is no provenance gap; Phase 3 should re-audit at adoption time as normal hygiene, not to close a gap."
+}

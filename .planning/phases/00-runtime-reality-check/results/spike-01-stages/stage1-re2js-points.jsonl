@@ -1,0 +1,4 @@
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 20, "engine": "re2js", "payload_length": 21, "matched": false, "error": null, "elapsed_ms": 0.205, "returned_at": 1787240285015}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 22, "engine": "re2js", "payload_length": 23, "matched": false, "error": null, "elapsed_ms": 0.176, "returned_at": 1787240285058}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 24, "engine": "re2js", "payload_length": 25, "matched": false, "error": null, "elapsed_ms": 0.188, "returned_at": 1787240285137}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 26, "engine": "re2js", "payload_length": 27, "matched": false, "error": null, "elapsed_ms": 0.19, "returned_at": 1787240285181}

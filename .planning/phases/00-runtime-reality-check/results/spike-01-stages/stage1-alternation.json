@@ -1,0 +1,1 @@
+{"ok": true, "pattern": "alternation", "source": "(a|a)+$", "n": 24, "engine": "native", "payload_length": 25, "matched": false, "error": null, "elapsed_ms": 1480.808, "returned_at": 1787240284971}

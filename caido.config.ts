@@ -29,8 +29,13 @@ export default defineConfig({
   author: { name: "DefMiner" },
   watch: { port: 3100 },
   plugins: [
-    // Plan 00-04 adds its re2js probe as a second entry in this array — one
-    // line, same shape, a different `id` and `root`.
     { kind: "backend", id: "parse-probe", name: "Parse Probe", root: "tier1/parse" },
+    // Plan 00-04's SPIKE-01 probe. Tier 1 for the same reason `parse-probe` is:
+    // `re2js` is a real npm dependency and the build pipeline is part of what is
+    // under test. Both backends ship in ONE package, so installing it installs
+    // both — which is fine here because SPIKE-01's "does a SECOND plugin keep
+    // working during the hang" question is answered with `probe/tier0-core`, a
+    // separate package with its own executor.
+    { kind: "backend", id: "redos-probe", name: "ReDoS Probe", root: "tier1/redos" },
   ],
 });

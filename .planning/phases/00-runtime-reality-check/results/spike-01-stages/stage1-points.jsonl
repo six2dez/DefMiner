@@ -1,0 +1,4 @@
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 20, "engine": "native", "payload_length": 21, "matched": false, "error": null, "elapsed_ms": 51.816, "returned_at": 1787240279030}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 22, "engine": "native", "payload_length": 23, "matched": false, "error": null, "elapsed_ms": 204.569, "returned_at": 1787240279276}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 24, "engine": "native", "payload_length": 25, "matched": false, "error": null, "elapsed_ms": 805.315, "returned_at": 1787240280124}
+{"ok": true, "pattern": "nested_quantifier", "source": "(a+)+$", "n": 26, "engine": "native", "payload_length": 27, "matched": false, "error": null, "elapsed_ms": 3278.911, "returned_at": 1787240283447}

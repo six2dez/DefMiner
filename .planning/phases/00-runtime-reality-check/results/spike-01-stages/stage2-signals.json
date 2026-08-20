@@ -1,0 +1,40 @@
+{
+  "run_dir": ".planning/phases/00-runtime-reality-check/results/runs/20260820T154036Z-6118",
+  "files_scanned": [
+    "caido.stderr.log",
+    "caido.stdout.log",
+    "logging.2026-08-20.log"
+  ],
+  "lines_scanned": 1595,
+  "per_file_lines": {
+    "caido.stderr.log": 1,
+    "caido.stdout.log": 797,
+    "logging.2026-08-20.log": 797
+  },
+  "hits": {
+    "interrupt": {
+      "count": 0,
+      "samples": []
+    },
+    "timeout": {
+      "count": 0,
+      "samples": []
+    },
+    "regexp_error": {
+      "count": 0,
+      "samples": []
+    },
+    "stack_overflow": {
+      "count": 0,
+      "samples": []
+    },
+    "abort_assertion": {
+      "count": 0,
+      "samples": []
+    },
+    "out_of_memory": {
+      "count": 0,
+      "samples": []
+    }
+  }
+}

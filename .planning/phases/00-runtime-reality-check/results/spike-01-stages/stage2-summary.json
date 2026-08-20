@@ -1,0 +1,1 @@
+{"observation_window_s": 660.0, "baseline_graphql_ms": 0.43, "baseline_proxy_code": "200", "hang_started_at_ms": 1787240438535, "hang_call_returned": false, "n": 40}
