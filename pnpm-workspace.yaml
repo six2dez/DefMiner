@@ -1,6 +1,33 @@
-# pnpm 11 settings file. NOT a workspace definition — there is no `packages:` key
-# and this repo is deliberately single-package (see 00-01-PLAN.md task 1).
+# pnpm 11 settings file AND, since plan 01-02 (2026-08-20), the workspace
+# definition. It carried no `packages:` key through all of Phase 0 because that
+# phase was deliberately single-package (see 00-01-PLAN.md task 1); Phase 1's
+# DET-03 needs `packages/engine` to be a real package with its own manifest —
+# a path alias is a convention, a separate package.json plus knip is a boundary.
 #
+# `packages` and `allowBuilds` are INDEPENDENT controls. Adding the first must
+# not disturb the second, and tests/pins.spec.ts asserts both survive every
+# install.
+packages:
+  - packages/*
+
+# DIST-06's two dependency traps, disarmed BEFORE anything can install a bad
+# transitive version. Neither package is installed today — the pins exist so a
+# Phase 5 frontend cannot resolve a version that breaks its consumer:
+#   primevue     — @caido/primevue peer-depends on EXACTLY 4.1.0
+#   tailwindcss  — @caido/tailwindcss hard-depends on 3.4.13 and uses a v3 API
+#                  that v4 removed
+#
+# These live HERE and not under a `pnpm.overrides` key in package.json:
+# pnpm 11 NO LONGER READS package.json's `pnpm` field and ignores it with a
+# warning (measured this session — the install printed
+# `The "pnpm" field in package.json is no longer read by pnpm. The following
+# keys were ignored: "pnpm.overrides"`). A pin in the old location is not a
+# weaker pin, it is NO pin, which is worse than none because it reads as
+# protection. tests/pins.spec.ts asserts them here and in the lockfile.
+overrides:
+  primevue: 4.1.0
+  tailwindcss: 3.4.13
+
 # Dependency build scripts are allowlisted EXPLICITLY rather than blanket-approved,
 # because Phase 0 gated its install set through a package-legitimacy checkpoint
 # (00-01 task 0). Every entry below is a deliberate true/false decision.

@@ -1,0 +1,8 @@
+{
+  // Solution file. `pnpm typecheck` runs `tsc --build` against these references.
+  // No `files` of its own — every source file belongs to exactly one package
+  // project, so a file that belongs to neither is invisible to the typecheck and
+  // that is a bug worth noticing.
+  "files": [],
+  "references": [{ "path": "packages/engine" }, { "path": "packages/backend" }]
+}

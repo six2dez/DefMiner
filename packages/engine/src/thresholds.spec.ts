@@ -25,22 +25,26 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
-import * as GENERATED from "./thresholds.generated";
+import { THRESHOLD_IDS } from "../../../scripts/ci/gen-thresholds.mjs";
+
 import * as T from "./thresholds";
+import * as GENERATED from "./thresholds.generated";
 // The generator's DECLARED id list. Importing it is what makes gate 2 mechanical:
 // an id added to the generator without being added here — or the reverse — cannot
 // pass. The module has no import-time side effects.
-import { THRESHOLD_IDS } from "../../../scripts/ci/gen-thresholds.mjs";
 
 // Resolved from THIS FILE, explicitly, rather than by copying the bare relative
 // literal the three Phase 0 specs use: those run from the repo root by
 // construction, and this one lives three directories down.
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
-const GO_NO_GO = REPO_ROOT + ".planning/phases/00-runtime-reality-check/results/go-no-go.json";
+const GO_NO_GO =
+  REPO_ROOT + ".planning/phases/00-runtime-reality-check/results/go-no-go.json";
 const GENERATOR = REPO_ROOT + "scripts/ci/gen-thresholds.mjs";
-const GENERATED_FILE = REPO_ROOT + "packages/engine/src/thresholds.generated.ts";
+const GENERATED_FILE =
+  REPO_ROOT + "packages/engine/src/thresholds.generated.ts";
 
 const REGEN = "re-run `node scripts/ci/gen-thresholds.mjs`";
 
@@ -69,8 +73,12 @@ describe("gate 1 — the generated file has not drifted from the generator", () 
   });
 
   it("the generator is deterministic across runs", () => {
-    const a = execFileSync(process.execPath, [GENERATOR, "--stdout"], { encoding: "utf8" });
-    const b = execFileSync(process.execPath, [GENERATOR, "--stdout"], { encoding: "utf8" });
+    const a = execFileSync(process.execPath, [GENERATOR, "--stdout"], {
+      encoding: "utf8",
+    });
+    const b = execFileSync(process.execPath, [GENERATOR, "--stdout"], {
+      encoding: "utf8",
+    });
     expect(
       a,
       "scripts/ci/gen-thresholds.mjs produced different bytes on two consecutive runs — " +
@@ -104,7 +112,10 @@ describe("gate 2 — every measured export traces to go-no-go.json", () => {
 
   it.each(THRESHOLD_IDS)("%s equals go-no-go.json", (id: string) => {
     const t = G.thresholds?.[id];
-    expect(t, `go-no-go.json has no threshold "${id}" — re-run scripts/spike/aggregate.py`).toBeDefined();
+    expect(
+      t,
+      `go-no-go.json has no threshold "${id}" — re-run scripts/spike/aggregate.py`,
+    ).toBeDefined();
     expect(
       (GENERATED as Record<string, unknown>)[id],
       `${id} does not match go-no-go.json's measured value. ${REGEN}.`,
@@ -185,7 +196,9 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
         `deletes fewer rows per interval than the interval inserts bounds NOTHING: past ` +
         `the retention ceiling the database grows monotonically while the sweep runs ` +
         `exactly as designed (decision P1-D7).`,
-    ).toBeGreaterThanOrEqual(T.ROWS_INSERTED_PER_ARTIFACT_MAX * T.RETENTION_SWEEP_EVERY_N);
+    ).toBeGreaterThanOrEqual(
+      T.ROWS_INSERTED_PER_ARTIFACT_MAX * T.RETENTION_SWEEP_EVERY_N,
+    );
   });
 
   it("one retention sweep pass stays a bounded piece of work", () => {

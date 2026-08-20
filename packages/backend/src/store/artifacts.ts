@@ -15,7 +15,9 @@ import type { Database } from "sqlite";
  *  be completely invisible — no row, no error, nothing in any log. The rejection
  *  is caught at the write, truncated, and handed back so the caller can count it
  *  and still attempt the paired write rather than silently orphaning it. */
-export type StoreWriteResult = { ok: true; changes: number } | { ok: false; error: string };
+export type StoreWriteResult =
+  | { ok: true; changes: number }
+  | { ok: false; error: string };
 
 // Positional `?` ONLY.
 //
@@ -72,7 +74,10 @@ export async function upsertArtifact(
 /** Rows for one project, ordered deterministically. `ORDER BY` is explicit and
  *  never relies on insertion or rowid order, so a result set is stable across runs
  *  and across a re-created database. */
-export async function listArtifacts(db: Database, projectId: string): Promise<object[]> {
+export async function listArtifacts(
+  db: Database,
+  projectId: string,
+): Promise<object[]> {
   const stmt = await db.prepare(
     `SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
      FROM artifacts WHERE project_id = ? ORDER BY sha256 ASC`,

@@ -1,0 +1,15 @@
+{
+  "name": "@defminer/backend",
+  "version": "1.0.0",
+  "description": "DefMiner Caido backend plugin — the only package permitted to touch the Caido SDK",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@defminer/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@caido/quickjs-types": "0.26.0",
+    "@caido/sdk-backend": "0.57.1"
+  },
+  "license": "UNLICENSED"
+}

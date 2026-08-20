@@ -1,0 +1,18 @@
+{
+  // @defminer/backend — the ONLY package permitted to touch the Caido SDK.
+  //
+  // Both type sets are needed and both are load-bearing:
+  //   @caido/quickjs-types — declares `sqlite` (store/*.ts imports `Database`
+  //                          from it) and the Caido globals.
+  //   node                 — the build externalises Node built-ins and Caido's
+  //                          QuickJS resolves a MEASURED SUBSET of them
+  //                          (see scripts/ci/check-bundle-imports.mjs). The type
+  //                          layer therefore has to know `crypto` exists;
+  //                          WHICH built-ins may actually ship is decided by the
+  //                          DIST-05 allowlist gate, not by this list.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "@caido/quickjs-types"]
+  },
+  "include": ["src/**/*.ts"]
+}

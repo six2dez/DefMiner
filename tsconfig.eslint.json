@@ -1,0 +1,29 @@
+{
+  // Type-information program for ESLint ONLY. @caido/eslint-config@0.10.0 turns
+  // on typed typescript-eslint rules (await-thenable and friends), which need a
+  // TS program covering every linted file — including this repo's plain .mjs
+  // gates, the Phase 0 specs and the root config files, none of which belong to
+  // a package project.
+  //
+  // This is NOT the typecheck. `pnpm typecheck` runs `tsc --build` against
+  // packages/engine and packages/backend with their own narrow `types` arrays,
+  // and THAT is where the DET-03 boundary is enforced. This file deliberately
+  // carries both type sets and `allowJs`, because its only job is to give the
+  // linter a program; loosening it cannot loosen the boundary.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "@caido/quickjs-types"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": [
+    "packages/**/*.ts",
+    "tests/pins.spec.ts",
+    "scripts/ci/**/*.ts",
+    "scripts/ci/**/*.mjs",
+    "scripts/ci/**/*.mts",
+    "*.ts",
+    "*.js",
+    "*.mjs"
+  ]
+}

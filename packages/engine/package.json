@@ -1,0 +1,13 @@
+{
+  "name": "@defminer/engine",
+  "version": "1.0.0",
+  "description": "DefMiner analysis engine — SDK-FREE by construction (DET-03)",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./digest": "./src/digest.ts",
+    "./queue": "./src/queue.ts",
+    "./thresholds": "./src/thresholds.ts"
+  },
+  "license": "UNLICENSED"
+}

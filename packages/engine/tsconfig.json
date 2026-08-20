@@ -1,0 +1,25 @@
+{
+  // @defminer/engine — SDK-FREE (DET-03).
+  //
+  // `types: ["node"]` and NOTHING else. @caido/quickjs-types is absent on
+  // purpose, so `caido:*` module specifiers do not resolve here; and
+  // @caido/sdk-backend is not a dependency of this package and is not a root
+  // dependency either (it moved to packages/backend in this plan), so
+  // `import type { SDK } from "@caido/sdk-backend"` in any file below fails to
+  // resolve. The engine must run under plain vitest on Node with no Caido
+  // present — Node types are exactly the right surface, and bare `crypto`
+  // (DET-07's mandatory native hash) resolves through them.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // thresholds.spec.ts imports THRESHOLD_IDS from scripts/ci/gen-thresholds.mjs
+    // — that import is what makes gate 2 mechanical, since an id added to the
+    // generator without being added to the declared list cannot pass. Under
+    // `strict` a plain .mjs import is an implicit `any` (TS7016), so the
+    // generator is type-INFERRED instead. `checkJs` stays off: the .mjs is a
+    // Phase 0 exit-contract artifact, not TypeScript under maintenance.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src/**/*.ts"]
+}

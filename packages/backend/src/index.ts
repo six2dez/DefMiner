@@ -16,32 +16,32 @@
 //   8. ONLY THEN register onInterceptResponse — events arrive before init()
 //      finishes awaiting, and the `ready` latch is what makes that safe.
 
+import { BoundedQueue } from "@defminer/engine/queue";
+import { QUEUE_CAP } from "@defminer/engine/thresholds";
+import type { Database } from "sqlite";
+
 import { checkCompat, MIN_CAIDO } from "./compat";
 import {
   configurePassive,
+  type Counters,
   createCounters,
+  type EnqueueClock,
   onResponse,
   setPassiveReady,
-  type Counters,
-  type EnqueueClock,
 } from "./hooks/passive";
 import { startConsumer } from "./ingest/consumer";
 import { listArtifacts } from "./store/artifacts";
 import { getDb } from "./store/db";
 import { migrate, SCHEMA_VERSION } from "./store/migrations";
 import { listObservations } from "./store/observations";
-import { BoundedQueue } from "../../engine/src/queue";
-import { QUEUE_CAP } from "../../engine/src/thresholds";
-
-import type { Database } from "sqlite";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
 // durable failure recording is ERR-04 and the health surface is OBS-01, both
 // Phase 2. Phase 1's obligation is only that these exist and are REACHABLE, so
 // Phase 2 does not have to retrofit them through reviewed code.
-let counters: Counters = createCounters();
+const counters: Counters = createCounters();
 let queue: BoundedQueue | undefined;
-let enqueuedAt: EnqueueClock = new Map();
+const enqueuedAt: EnqueueClock = new Map();
 let db: Database | undefined;
 let sqliteVersion: string | null = null;
 let projectId = "";
@@ -96,7 +96,8 @@ export async function init(sdk: any): Promise<void> {
 
   // 1 — the version guard, before anything else has a side effect.
   const compat = checkCompat(sdk);
-  const caidoVersion = typeof sdk?.runtime?.version === "string" ? sdk.runtime.version : null;
+  const caidoVersion =
+    typeof sdk?.runtime?.version === "string" ? sdk.runtime.version : null;
   if (!compat.ok) {
     compatible = false;
     compatReason = compat.reason;
@@ -119,9 +120,14 @@ export async function init(sdk: any): Promise<void> {
     // 4 — the measurement RESEARCH.md Open Question 1 asks for. Read once, cached,
     // and surfaced on getStatus so scripts/phase1/runtime-answers.sh can record it
     // as data rather than anyone assuming it.
-    const v = await (await db.prepare("SELECT sqlite_version() AS v")).get<{ v: string }>();
+    const v = await (
+      await db.prepare("SELECT sqlite_version() AS v")
+    ).get<{ v: string }>();
     sqliteVersion = v?.v ?? null;
-    log(sdk, "sqlite " + String(sqliteVersion) + " schema v" + String(schemaVersion));
+    log(
+      sdk,
+      "sqlite " + String(sqliteVersion) + " schema v" + String(schemaVersion),
+    );
 
     // 5 — the project scope every write is keyed on.
     await resolveProjectId(sdk);

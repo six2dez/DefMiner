@@ -7,14 +7,14 @@
 // This is the only thing in the plugin that WRITES, so it is where every store
 // call site lives.
 
-import { sha256Hex } from "../../../engine/src/digest";
-import type { BoundedQueue } from "../../../engine/src/queue";
+import { sha256Hex } from "@defminer/engine/digest";
+import type { BoundedQueue } from "@defminer/engine/queue";
+import type { Database } from "sqlite";
+
 import type { Counters, EnqueueClock } from "../hooks/passive";
+import { contentTypeOf } from "../hooks/passive";
 import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
-import { contentTypeOf } from "../hooks/passive";
-
-import type { Database } from "sqlite";
 
 /**
  * The ONLY primitive that yields this event loop.
@@ -23,7 +23,8 @@ import type { Database } from "sqlite";
  * identical to a fully blocking loop. `setTimeout(fn, 0)` scored 0.76. It costs
  * 5.03 ms median, which is why yielding is temporal rather than per-item.
  */
-const yieldToLoop = (): Promise<void> => new Promise<void>((r) => setTimeout(r, 0));
+const yieldToLoop = (): Promise<void> =>
+  new Promise<void>((r) => setTimeout(r, 0));
 
 /**
  * How long to wait before re-checking an EMPTY queue.
@@ -117,7 +118,11 @@ export function startConsumer(
     }
   };
 
-  async function handleOne(entry: { id: string; bytes: number; kind: string }): Promise<void> {
+  async function handleOne(entry: {
+    id: string;
+    bytes: number;
+    kind: string;
+  }): Promise<void> {
     const c = deps.counters;
 
     // TWO undefined branches, not one: `get()` itself may resolve to undefined,
@@ -126,7 +131,8 @@ export function startConsumer(
     const rr = (await sdk.requests.get(entry.id)) as
       | { request: any; response?: any }
       | undefined;
-    if (!rr || !rr.response) {
+    const response = rr?.response;
+    if (!rr || !response) {
       c.reloadMissing++;
       return;
     }
@@ -138,7 +144,10 @@ export function startConsumer(
       deps.onReloadLatency?.(maxReloadLatencyMs);
     }
 
-    const got = extract(rr);
+    // `response` rather than `rr` so the narrowing SURVIVES the call: the reload
+    // result types response as optional, and truthiness-narrowing a property does
+    // not make the whole object assignable to a required-response parameter.
+    const got = extract({ request: rr.request, response });
     // From here on NOTHING references rr, its request, its response or its body.
     if ("empty" in got) {
       c.reloadEmptyBody++;
@@ -161,7 +170,14 @@ export function startConsumer(
     // and no invariant may require two statements to land together — so a failure
     // of either is counted and logged rather than silently orphaning the other.
     const now = Date.now();
-    const a = await upsertArtifact(deps.db, projectId, got.sha256, got.byteLen, entry.kind, now);
+    const a = await upsertArtifact(
+      deps.db,
+      projectId,
+      got.sha256,
+      got.byteLen,
+      entry.kind,
+      now,
+    );
     if (!a.ok) {
       c.storeErrors++;
       log("ARTIFACT_WRITE_FAILED " + a.error);

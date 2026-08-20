@@ -1,0 +1,34 @@
+{
+  // Shared compiler options for every DefMiner package.
+  //
+  // The repo had NO tsconfig.json at all until plan 01-02, so this INTRODUCES
+  // typechecking rather than changing it — nothing here can regress a gate that
+  // did not exist. `typescript` is pinned to exactly 5.8.3 (decision P2-D2)
+  // because knip@5.86.0 declares `typescript >=5.0.4 <7`.
+  //
+  // `types` is deliberately NOT set here. Each package sets its own, and that is
+  // the whole point: the engine gets Node types only, so a Caido type leaking
+  // into `packages/engine/src/` is a TYPECHECK error and not merely a lint
+  // warning (DET-03).
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023"],
+    "module": "esnext",
+    // "bundler" is correct for both packages: the backend is bundled by tsup
+    // inside @caido-community/dev, and the engine is loaded by vitest/esbuild.
+    // Neither is ever consumed by raw Node ESM resolution, so extensionless
+    // relative imports (which the existing sources use) must keep resolving.
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "declaration": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}

@@ -79,7 +79,9 @@ CREATE INDEX IF NOT EXISTS idx_observations_observed_at
  * `IF NOT EXISTS`.
  */
 export async function migrate(db: Database): Promise<number> {
-  const row = await (await db.prepare("PRAGMA user_version")).get<{ user_version: number }>();
+  const row = await (
+    await db.prepare("PRAGMA user_version")
+  ).get<{ user_version: number }>();
   const current = row?.user_version ?? 0;
   let applied = current;
   for (const m of MIGRATIONS) {
@@ -94,4 +96,4 @@ export async function migrate(db: Database): Promise<number> {
 /** The highest step this build knows about. A database reporting a HIGHER
  *  user_version was written by a newer DefMiner; the ladder is forward-only and
  *  simply does nothing, rather than attempting a downgrade. */
-export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.v;
+export const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].v;

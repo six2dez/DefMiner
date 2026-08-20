@@ -6,6 +6,7 @@
 // discarded (decisions P1-D1, P1-D6).
 
 import type { Database } from "sqlite";
+
 import type { StoreWriteResult } from "./artifacts";
 
 /** `content_type` is TARGET-CONTROLLED. Truncated to a bounded length so a
@@ -32,7 +33,7 @@ ON CONFLICT (project_id, sha256, request_id) DO UPDATE SET
  * fragment never reaches an origin and carries no server-side meaning.
  */
 export function normaliseObservedUrl(url: string): string {
-  return String(url).split("#")[0]!.slice(0, URL_MAX);
+  return String(url).split("#")[0].slice(0, URL_MAX);
 }
 
 /**
@@ -63,7 +64,9 @@ export async function recordObservation(
       requestId,
       normaliseObservedUrl(url),
       status,
-      contentType === null ? null : String(contentType).slice(0, CONTENT_TYPE_MAX),
+      contentType === null
+        ? null
+        : String(contentType).slice(0, CONTENT_TYPE_MAX),
       observedAt,
     );
     return { ok: true, changes: res.changes };
@@ -74,7 +77,10 @@ export async function recordObservation(
 
 /** Deterministic order: sha256 then request_id, both ascending, so the end-to-end
  *  script can assert on a stable sequence rather than on insertion order. */
-export async function listObservations(db: Database, projectId: string): Promise<object[]> {
+export async function listObservations(
+  db: Database,
+  projectId: string,
+): Promise<object[]> {
   const stmt = await db.prepare(
     `SELECT project_id, sha256, request_id, url, status, content_type, observed_at
      FROM observations WHERE project_id = ? ORDER BY sha256 ASC, request_id ASC`,

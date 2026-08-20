@@ -13,8 +13,8 @@
 // `hooks/admit.ts`. The tracer needs only enough gate to admit one JavaScript
 // response and reject an oversized, empty or non-script one.
 
-import { BoundedQueue } from "../../../engine/src/queue";
-import { PASSIVE_MAX_BYTES } from "../../../engine/src/thresholds";
+import { type BoundedQueue } from "@defminer/engine/queue";
+import { PASSIVE_MAX_BYTES } from "@defminer/engine/thresholds";
 
 /**
  * In-memory counters. PROVISIONAL BY DESIGN: plan 01-05 moves this object to
@@ -95,11 +95,20 @@ export function createCounters(): Counters {
   };
 }
 
-const SCRIPTISH = ["javascript", "ecmascript", "application/x-javascript", "text/js", "module"];
+const SCRIPTISH = [
+  "javascript",
+  "ecmascript",
+  "application/x-javascript",
+  "text/js",
+  "module",
+];
 
 /** Content type first, extension second. The extension check strips the query AND
  *  the fragment before looking at the suffix, or `/app.js?v=2` would miss. */
-export function isScriptish(contentType: string | null, url: string | null): boolean {
+export function isScriptish(
+  contentType: string | null,
+  url: string | null,
+): boolean {
   if (contentType) {
     const ct = String(contentType).toLowerCase();
     for (const needle of SCRIPTISH) {
@@ -107,7 +116,7 @@ export function isScriptish(contentType: string | null, url: string | null): boo
     }
   }
   if (url) {
-    const bare = String(url).split("#")[0]!.split("?")[0]!.toLowerCase();
+    const bare = String(url).split("#")[0].split("?")[0].toLowerCase();
     if (bare.endsWith(".js") || bare.endsWith(".mjs")) return true;
   }
   return false;
@@ -121,7 +130,9 @@ export function isScriptish(contentType: string | null, url: string | null): boo
  * `Record<string, Array<string>>`, but the production recorder found BOTH shapes
  * in the field against real traffic.
  */
-export function contentTypeOf(headers: Record<string, unknown> | undefined): string | null {
+export function contentTypeOf(
+  headers: Record<string, unknown> | undefined,
+): string | null {
   if (!headers) return null;
   const raw = headers["content-type"] ?? headers["Content-Type"];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -143,11 +154,20 @@ export function contentTypeOf(headers: Record<string, unknown> | undefined): str
  */
 export type EnqueueClock = Map<string, number>;
 
-export type PassiveDeps = { queue: BoundedQueue; counters: Counters; enqueuedAt: EnqueueClock };
+export type PassiveDeps = {
+  queue: BoundedQueue;
+  counters: Counters;
+  enqueuedAt: EnqueueClock;
+};
 
 /** Record the arrival instant, evicting the oldest when the map outgrows the
  *  queue that feeds it. Map iteration is insertion-ordered, so this is O(1). */
-export function stampEnqueued(clock: EnqueueClock, id: string, cap: number, nowMs: number): void {
+export function stampEnqueued(
+  clock: EnqueueClock,
+  id: string,
+  cap: number,
+  nowMs: number,
+): void {
   if (clock.size >= cap) {
     const oldest = clock.keys().next();
     if (!oldest.done) clock.delete(oldest.value);

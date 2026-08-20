@@ -26,8 +26,10 @@ import { fileURLToPath } from "node:url";
 // from the repo root by pnpm, from a spec file by vitest, and potentially from a
 // package directory by a future script. Only the file-relative path is stable.
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
-export const GO_NO_GO_PATH = REPO_ROOT + ".planning/phases/00-runtime-reality-check/results/go-no-go.json";
-export const OUT_PATH = REPO_ROOT + "packages/engine/src/thresholds.generated.ts";
+export const GO_NO_GO_PATH =
+  REPO_ROOT + ".planning/phases/00-runtime-reality-check/results/go-no-go.json";
+export const OUT_PATH =
+  REPO_ROOT + "packages/engine/src/thresholds.generated.ts";
 
 // THE DECLARED ID LIST. The generated file exports exactly these names and no
 // others; thresholds.spec.ts asserts the export-name set equals this list, so
@@ -77,7 +79,9 @@ function literal(value, id) {
     case "string":
       return JSON.stringify(value);
     default:
-      throw new Error(`${id}: unsupported threshold value type ${typeof value}`);
+      throw new Error(
+        `${id}: unsupported threshold value type ${typeof value}`,
+      );
   }
 }
 
@@ -134,6 +138,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     process.stdout.write(out);
   } else {
     writeFileSync(OUT_PATH, out);
-    process.stderr.write(`wrote ${OUT_PATH} (${THRESHOLD_IDS.length} thresholds)\n`);
+    process.stderr.write(
+      `wrote ${OUT_PATH} (${THRESHOLD_IDS.length} thresholds)\n`,
+    );
   }
 }

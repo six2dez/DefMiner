@@ -66,3 +66,8 @@ tier1/*/dist/
 
 # Byte-compiled Python from importing the spike analysers as modules.
 scripts/spike/__pycache__/
+
+# Incremental typecheck state written by `tsc --build` (plan 01-02). Derived
+# from the sources and the tsconfigs, regenerated on every run, and machine- and
+# path-specific — never evidence.
+*.tsbuildinfo

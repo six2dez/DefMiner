@@ -1,0 +1,69 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "caido.config.ts",
+        "packages/caido.config.ts",
+        "scripts/ci/*.mjs",
+        "scripts/ci/**/*.spec.ts",
+        "scripts/spike/*.mjs",
+        "tests/**/*.spec.ts",
+        "tier1/*/src/index.ts"
+      ],
+      "project": [
+        "scripts/ci/**/*.{ts,mjs}",
+        "scripts/spike/**/*.mjs",
+        "tests/**/*.ts",
+        "tier1/*/src/**/*.ts",
+        "*.{ts,js}"
+      ]
+    },
+    "packages/engine": {
+      "project": ["src/**/*.ts"],
+      "entry": ["src/**/*.spec.ts"]
+    },
+    "packages/backend": {
+      "entry": ["src/index.ts", "src/**/*.spec.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [
+        // Declared so the backend OWNS the Caido SDK surface (and so it is
+        // absent from packages/engine's resolution path, which is what makes
+        // `import type { SDK } from "@caido/sdk-backend"` a TYPECHECK error in
+        // the engine). No source imports it yet: plan 01-06's SDK-surface probe
+        // is what will, and until Phase 0's measurement of how badly the type
+        // packages under-declare the runtime is revisited, `sdk: any` at the
+        // boundary is the honest annotation.
+        "@caido/sdk-backend",
+        // Provided BY THE RUNTIME, never installed. `sqlite` is one of the ten
+        // specifiers the Phase 0 capability probe loaded successfully inside
+        // Caido 0.57.1, it is externalised by the build, and it is typed by
+        // @caido/quickjs-types. See scripts/ci/check-bundle-imports.mjs.
+        "sqlite"
+      ]
+    }
+  },
+  // WHY `warn` AND NOT `error`.
+  //
+  // knip is here for the DET-03 boundary, and that part stays at ERROR:
+  // packages/engine declares NO dependencies at all, so an engine module that
+  // reaches for the backend or for any @caido/* package is reported as an
+  // unlisted dependency and fails the gate.
+  //
+  // Unused EXPORTS are a different matter in Phase 1. Plan 01-01 deliberately
+  // shipped reachable-but-unconsumed seams so later plans would not have to
+  // retrofit them through reviewed code: `resetDbHandle` is named for 01-05,
+  // `resetPassiveForTest`/`isScriptish`/`normaliseObservedUrl`/`cmpCaidoVersion`
+  // are the units 01-03 writes specs against, and `MIGRATIONS` is what 01-04
+  // appends step v2 to. Reporting them as errors today would mean either
+  // deleting seams that are already spoken for or silencing the check entirely.
+  // `warn` keeps them in the output and out of the exit code.
+  //
+  // PLAN 01-03 SHOULD RESTORE BOTH TO "error" in the same commit that writes the
+  // backend specs — at that point every name above has a consumer, and an
+  // export with no consumer is a genuine finding again.
+  "rules": {
+    "exports": "warn",
+    "types": "warn"
+  }
+}

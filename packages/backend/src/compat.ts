@@ -47,7 +47,9 @@ export function cmpCaidoVersion(a: string, b: string): number {
  * throw nor an async rejection from plugin code (HANDLER_ERROR_SURFACED =
  * "neither"), so that TypeError would be completely invisible.
  */
-export function checkCompat(sdk: { runtime?: { version?: string } }): CompatResult {
+export function checkCompat(sdk: {
+  runtime?: { version?: string };
+}): CompatResult {
   const reported = sdk?.runtime?.version;
   if (typeof reported !== "string" || reported.length === 0) {
     return {
