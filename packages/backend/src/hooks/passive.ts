@@ -48,6 +48,15 @@ export type Counters = {
   rejected: Record<RejectReason, number>;
   /** Entries the queue dropped because it was at cap (CORE-03 visible overflow). */
   queueOverflow: number;
+  /** Proxied responses observed while NO project was active, so nothing could be
+   *  admitted. Not a reject reason: `admit.ts`'s union is closed and describes
+   *  the RESPONSE, whereas this describes the plugin's own state (CORE-09). */
+  noProjectSelected: number;
+  /** Iterations abandoned part-way because a project change landed while the
+   *  consumer was mid-`await`. The work already written belongs to the previous
+   *  project and is correctly attributed; what is refused is every write AFTER
+   *  the change (CORE-09, T-01-25). */
+  abandonedOnProjectChange: number;
   /** Throws caught inside the hook. Caido surfaces none of them itself. */
   hookErrors: number;
   /** Entries the consumer drained to completion. */
@@ -93,6 +102,8 @@ export function createCounters(): Counters {
     admitted: 0,
     rejected,
     queueOverflow: 0,
+    noProjectSelected: 0,
+    abandonedOnProjectChange: 0,
     hookErrors: 0,
     processed: 0,
     reloadHit: 0,
@@ -129,6 +140,16 @@ export type PassiveDeps = {
   queue: BoundedQueue;
   counters: Counters;
   enqueuedAt: EnqueueClock;
+  /**
+   * CORE-09's gate at the mouth of the pipeline: false while no project is
+   * active, so no entry can be queued that a later write would have to refuse.
+   *
+   * REQUIRED, not optional-with-a-permissive-default. A default of "allow" is
+   * invisible when `init()` forgets to wire it — the plugin would work, and the
+   * isolation would simply not be there. Making it required turns that mistake
+   * into a compile error.
+   */
+  admissionAllowed: () => boolean;
   /** Optional so `init()` need not restate the default. */
   admitConfig?: AdmitConfig;
 };
@@ -199,6 +220,16 @@ export function onResponse(
   try {
     const c = deps.counters;
     c.proxiedResponsesObserved++;
+
+    // CORE-09's gate, BEFORE the admission decision. With no project active
+    // there is no id to key a write on, and an entry queued now would either be
+    // refused downstream or — worse — land under whatever is selected next.
+    // Counted separately from every reject reason because this is a fact about
+    // the PLUGIN's state, not about the response.
+    if (!deps.admissionAllowed()) {
+      c.noProjectSelected++;
+      return;
+    }
 
     const decision = admit(
       sdk,

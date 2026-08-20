@@ -106,6 +106,20 @@ export type ConsumerDeps = {
   /** The corpus version CORE-08 keys the cache on. Defaults to the Phase 1
    *  sentinel; Phase 3's real detector-set hash arrives through here. */
   detectorSetHash?: string;
+  /**
+   * How many project changes have been applied (CORE-09).
+   *
+   * An iteration captures this ONCE, next to the project id it resolves, and
+   * re-checks it before every subsequent write. That is what closes the window
+   * this loop otherwise has: `handleOne` resolves the project id and then awaits
+   * four times, and a change landing at any of those suspension points would
+   * otherwise let the remaining writes land under a project the operator has
+   * already left (T-01-25).
+   *
+   * Optional, defaulting to a constant, so a spec that is not about the
+   * lifecycle need not wire one. `lifecycle.spec.ts` drives the real thing.
+   */
+  projectEpoch?: () => number;
 };
 
 export type ConsumerHandle = {
@@ -260,6 +274,16 @@ export function startConsumer(
   async function handleOne(entry: Entry): Promise<void> {
     const c = deps.counters;
 
+    // CORE-09. Captured BEFORE the reload, not after: this entry was admitted
+    // under whatever project was active when the queue took it, and the reload
+    // that follows is an `await`. If a project change lands during it, the entry
+    // belongs to the PREVIOUS project — writing it under the new one would
+    // import one client's traffic into another's view, which is precisely the
+    // failure the isolation exists to prevent (T-01-25, decision P5-D2).
+    const epochAtEntry = deps.projectEpoch?.() ?? 0;
+    const stillCurrent = (): boolean =>
+      (deps.projectEpoch?.() ?? 0) === epochAtEntry;
+
     // TWO undefined branches, not one, with a counter each. The SDK types them as
     // two different optionality points — `get` returns
     // `RequestResponseOpt | undefined`, and `RequestResponseOpt.response` is
@@ -300,6 +324,12 @@ export function startConsumer(
       deps.onReloadLatency?.(maxReloadLatencyMs);
     }
 
+    if (!stillCurrent()) {
+      c.abandonedOnProjectChange++;
+      log("project changed during the reload; dropping " + entry.id);
+      return;
+    }
+
     const projectId = await deps.getProjectId();
     if (projectId === "") {
       // No project selected means no row may be written: `project_id` is part of
@@ -307,6 +337,12 @@ export function startConsumer(
       // rather than leaking across projects (STORE-02).
       c.storeErrors++;
       log("no project selected; dropping " + got.sha256.slice(0, 12));
+      return;
+    }
+
+    if (!stillCurrent()) {
+      c.abandonedOnProjectChange++;
+      log("project changed before the identity write; dropping " + entry.id);
       return;
     }
 
@@ -338,6 +374,12 @@ export function startConsumer(
     // and no invariant may require two statements to land together), so each
     // reports its own outcome and a failure of either is counted rather than
     // silently orphaning the other.
+    if (!stillCurrent()) {
+      c.abandonedOnProjectChange++;
+      log("project changed mid-iteration; not writing the observation");
+      return;
+    }
+
     const o = await recordObservation(
       deps.db,
       projectId,
@@ -359,6 +401,12 @@ export function startConsumer(
     // bytes appearing again is real information — but no second analysis starts
     // and the `analyses` row count does not move. The corpus version is IN the
     // primary key, so a stale-corpus hit is not expressible.
+    if (!stillCurrent()) {
+      c.abandonedOnProjectChange++;
+      log("project changed mid-iteration; not starting an analysis");
+      return;
+    }
+
     const alreadyAnalysed = await isAnalysed(
       deps.db,
       projectId,
@@ -380,7 +428,7 @@ export function startConsumer(
         log("ANALYSIS_CLAIM_FAILED " + claim.error);
       } else if (claim.claimed) {
         c.analysisStarted++;
-        await analyseAndFinish(projectId, got, detectorSetHash);
+        await analyseAndFinish(projectId, got, detectorSetHash, stillCurrent);
       } else {
         // Somebody else owns the row. With one loop this is a re-entrant sighting
         // of an artifact whose analysis is still `pending`, which is NOT a cache
@@ -411,6 +459,7 @@ export function startConsumer(
     projectId: string,
     got: Extracted,
     detectorHash: string,
+    stillCurrent: () => boolean,
   ): Promise<void> {
     const deadline = artifactDeadline(clock);
     const result = await walk(got.bytes, {
@@ -422,6 +471,11 @@ export function startConsumer(
       },
     });
     if (result.partial) deps.counters.analysisPartial++;
+    if (!stillCurrent()) {
+      deps.counters.abandonedOnProjectChange++;
+      log("project changed during the walk; not finishing the analysis row");
+      return;
+    }
     const finished = await finishAnalysis(
       deps.db,
       projectId,

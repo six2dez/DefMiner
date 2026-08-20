@@ -10,7 +10,10 @@
 //   4. SELECT sqlite_version() — read once and cached. RESEARCH.md Open Question 1:
 //                     `ON CONFLICT ... DO UPDATE` needs SQLite >= 3.24 and this
 //                     upsert strategy has NO fallback below it.
-//   5. the current project id.
+//   5. installLifecycle — resolve the current project AND register
+//                     onProjectChange, before anything can be admitted. CORE-09's
+//                     isolation is a gate at the mouth of the pipeline, so it has
+//                     to be in force before the mouth opens.
 //   6. start the consumer.
 //   7. ready = true.
 //   8. ONLY THEN register onInterceptResponse — events arrive before init()
@@ -30,6 +33,13 @@ import {
   setPassiveReady,
 } from "./hooks/passive";
 import { startConsumer } from "./ingest/consumer";
+import {
+  admissionAllowed,
+  currentProjectId,
+  currentSignal,
+  installLifecycle,
+  projectEpoch,
+} from "./lifecycle";
 import { listArtifacts } from "./store/artifacts";
 import { getDb, readSqliteVersion } from "./store/db";
 import { migrate } from "./store/migrations";
@@ -44,7 +54,6 @@ let queue: BoundedQueue | undefined;
 const enqueuedAt: EnqueueClock = new Map();
 let db: Database | undefined;
 let sqliteVersion: string | null = null;
-let projectId = "";
 let compatible = false;
 let compatReason: string | null = null;
 let schemaVersion: number | null = null;
@@ -58,22 +67,6 @@ function log(sdk: any, msg: string): void {
   }
 }
 
-/** Resolve the project id lazily and cache the first non-empty answer.
- *
- *  `init()` can legitimately run before a project is selected — and with none
- *  selected, Caido's proxy fails every request and the hook never fires anyway, so
- *  there is nothing to lose by resolving late. */
-async function resolveProjectId(sdk: any): Promise<string> {
-  if (projectId !== "") return projectId;
-  try {
-    const p = await sdk.projects.getCurrent();
-    projectId = p ? String(p.getId()) : "";
-  } catch {
-    projectId = "";
-  }
-  return projectId;
-}
-
 function status(): Record<string, unknown> {
   return {
     compatible,
@@ -82,7 +75,9 @@ function status(): Record<string, unknown> {
     caidoVersion: null as string | null,
     sqliteVersion,
     schemaVersion,
-    projectId,
+    // NULL, not "". An empty string is a project id that happens to be blank,
+    // which is a different claim from "there is no project selected".
+    projectId: currentProjectId(),
     counters,
     queueDepth: queue ? queue.depth : 0,
     queueCap: queue ? queue.cap : 0,
@@ -155,18 +150,33 @@ export async function init(sdk: any): Promise<void> {
       "sqlite " + String(sqliteVersion) + " schema v" + String(schemaVersion),
     );
 
-    // 5 — the project scope every write is keyed on.
-    await resolveProjectId(sdk);
+    // 5 — the project scope every write is keyed on, plus the listener that
+    // swaps it. The queue is constructed FIRST because the lifecycle drains it.
+    queue = new BoundedQueue(QUEUE_CAP);
+    await installLifecycle(sdk, {
+      queue,
+      enqueuedAt,
+      log: (msg) => {
+        sdk.console.log(msg);
+      },
+    });
 
     // 6 — exactly one consumer.
-    queue = new BoundedQueue(QUEUE_CAP);
-    configurePassive({ queue, counters, enqueuedAt });
+    configurePassive({ queue, counters, enqueuedAt, admissionAllowed });
     startConsumer(sdk, {
       queue,
       counters,
       db,
       enqueuedAt,
-      getProjectId: () => resolveProjectId(sdk),
+      getProjectId: () => Promise.resolve(currentProjectId() ?? ""),
+      projectEpoch,
+      // A GETTER, not a captured value. `analyseAndFinish` reads `deps.signal`
+      // once per walk, so this hands each walk the token that is in force when
+      // it starts — which is what lets a project change abort the walk already
+      // running without also cancelling everything started afterwards.
+      get signal() {
+        return currentSignal();
+      },
       onReloadLatency: (ms) => {
         maxEventToReloadMs = ms;
       },
@@ -174,12 +184,14 @@ export async function init(sdk: any): Promise<void> {
 
     sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
     sdk.api.register("getArtifacts", async () => {
-      if (!db || projectId === "") return [];
-      return listArtifacts(db, projectId);
+      const pid = currentProjectId();
+      if (!db || pid === null) return [];
+      return listArtifacts(db, pid);
     });
     sdk.api.register("getObservations", async () => {
-      if (!db || projectId === "") return [];
-      return listObservations(db, projectId);
+      const pid = currentProjectId();
+      if (!db || pid === null) return [];
+      return listObservations(db, pid);
     });
 
     // 7, 8 — latch, THEN register. Not the other way round.

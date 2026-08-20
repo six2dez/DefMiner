@@ -46,7 +46,15 @@ function wire(ready = true): void {
   queue = new BoundedQueue(QUEUE_CAP);
   counters = createCounters();
   enqueuedAt = new Map();
-  configurePassive({ queue, counters, enqueuedAt });
+  // `admissionAllowed` is REQUIRED on PassiveDeps (CORE-09). Always-true here:
+  // every case in this file is about the hook, not about the lifecycle, and
+  // lifecycle.spec.ts drives the false branch against the real gate.
+  configurePassive({
+    queue,
+    counters,
+    enqueuedAt,
+    admissionAllowed: () => true,
+  });
   setPassiveReady(ready);
 }
 
@@ -177,7 +185,12 @@ describe("counters", () => {
     queue = new BoundedQueue(500);
     counters = createCounters();
     enqueuedAt = new Map();
-    configurePassive({ queue, counters, enqueuedAt });
+    configurePassive({
+      queue,
+      counters,
+      enqueuedAt,
+      admissionAllowed: () => true,
+    });
     setPassiveReady(true);
     const sdk = makeFakeSdk();
     for (let i = 0; i < 501; i += 1) {

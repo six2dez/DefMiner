@@ -201,6 +201,55 @@ export function makeFake304(init: { id?: string } = {}): FakeResponse {
   });
 }
 
+// --- projects ---------------------------------------------------------------
+
+/**
+ * A `Project` as `caido:utils` declares one.
+ *
+ * `getStatus()` returns the three-member union `ready | restoring | error`, and
+ * it is here rather than omitted because the SDK declares it: a fixture that
+ * only produced the fields today's code reads would silently stop matching the
+ * type the moment somebody read one more.
+ */
+export type FakeProject = {
+  getId(): string;
+  getName(): string;
+  getPath(): string;
+  getVersion(): string;
+  getStatus(): "ready" | "restoring" | "error";
+};
+
+export function makeFakeProject(
+  id: string,
+  init: { name?: string; status?: "ready" | "restoring" | "error" } = {},
+): FakeProject {
+  return {
+    getId: () => id,
+    getName: () => init.name ?? id,
+    getPath: () => "/tmp/fake-projects/" + id,
+    getVersion: () => "1.0.0",
+    getStatus: () => init.status ?? "ready",
+  };
+}
+
+/**
+ * Drive every registered `onProjectChange` callback.
+ *
+ * `null` is a FIRST-CLASS argument here, not an edge case a caller has to
+ * contrive: the SDK's own doc comment says the project can be null because the
+ * user deleted the currently selected one, and that branch has never run against
+ * a real Caido in this repo. Awaits each callback, because the SDK types the
+ * return as `MaybePromise<void>`.
+ */
+export async function emitProjectChange(
+  sdk: FakeSdk,
+  project: FakeProject | null,
+): Promise<void> {
+  for (const fn of sdk.calls.projectChangeHandlers) {
+    await fn(sdk, project);
+  }
+}
+
 // --- the sdk ----------------------------------------------------------------
 
 /** Everything the fake recorded, so a spec can assert what was INVOKED and not
@@ -211,6 +260,13 @@ export type FakeSdkCalls = {
   inScope: unknown[];
   apiRegister: string[];
   interceptResponseHandlers: Array<(...args: unknown[]) => unknown>;
+  /** Every `onProjectChange` callback the code under test registered. Recorded
+   *  rather than swallowed so {@link emitProjectChange} can DRIVE the event —
+   *  no probe in this repo has ever registered one, so there is no live
+   *  observation of it to fall back on. */
+  projectChangeHandlers: Array<
+    (sdk: unknown, project: FakeProject | null) => unknown
+  >;
   projectsGetCurrent: number;
   metaDb: number;
 };
@@ -227,6 +283,9 @@ export type FakeSdk = {
   api: { register(name: string, fn: unknown): void };
   events: {
     onInterceptResponse(fn: (...args: unknown[]) => unknown): void;
+    onProjectChange(
+      fn: (sdk: unknown, project: FakeProject | null) => unknown,
+    ): void;
   };
   calls: FakeSdkCalls;
 };
@@ -262,6 +321,7 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
     inScope: [],
     apiRegister: [],
     interceptResponseHandlers: [],
+    projectChangeHandlers: [],
     projectsGetCurrent: 0,
     metaDb: 0,
   };
@@ -277,8 +337,8 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
       getCurrent: async () => {
         calls.projectsGetCurrent += 1;
         if (overrides.getCurrent !== undefined) return overrides.getCurrent();
-        if (projectId === null) return undefined;
-        return { getId: () => projectId };
+        if (projectId === null) return null;
+        return makeFakeProject(projectId);
       },
     },
     requests: {
@@ -319,6 +379,11 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
     events: {
       onInterceptResponse: (fn: (...args: unknown[]) => unknown) => {
         calls.interceptResponseHandlers.push(fn);
+      },
+      onProjectChange: (
+        fn: (sdk: unknown, project: FakeProject | null) => unknown,
+      ) => {
+        calls.projectChangeHandlers.push(fn);
       },
     },
     calls,
