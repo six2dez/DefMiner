@@ -29,9 +29,13 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Ingestion pipeline (CORE)
 
+> **MEASURED CONSTRAINT — `onInterceptResponse` IS A PROXY-ONLY HOOK.** SPIKE-05 tested 11 cells across 7 surfaces on 0.57.1. Replay, Automate, an active workflow's `sdk.requests.send()`, the plugin's own `send()` in **all four** `save`/`plugins` combinations, and `caido:http` `fetch` **all reached the origin** — proven by the origin's own log, each receiving a 200 with the full 457,965-byte body — and **delivered nothing to the hook**. A closing proxy control fired after every negative, so none was a dead handler.
+>
+> Two consequences. **Good:** `SEND_REFIRES_INTERCEPT=false`, so plugin-generated traffic cannot re-enter the pipeline and ACTIVE-06's recursion guard becomes trivial. **Bad, and unconditional:** a passive-only DefMiner is **blind to every operator-driven surface**. Traffic a hunter sends through Replay or Automate is invisible to it. This is a product limitation, not a bug to fix — it is the shape of the platform.
+
 - [ ] **CORE-01**: `onInterceptResponse` handler is non-async, applies cheap admission gates, enqueues the request ID, and returns. It never analyses inline.
 - [ ] **CORE-02**: Admission filter gates on content type, URL extension, response size, and Caido scope before anything is enqueued.
-- [ ] **CORE-03**: The work queue is bounded, with visible overflow. It is never an unbounded array. *(JS-Analyzer's `autoScanQueue` is pushed to and drained by nothing — the failure mode to avoid.)*
+- [ ] **CORE-03**: The work queue is bounded, with visible overflow. It is never an unbounded array. *(JS-Analyzer's `autoScanQueue` is pushed to and drained by nothing — the failure mode to avoid.)* **SPIKE-03 measured Caido's side: it queues generously and loses nothing.** 500 responses issued while the handler spun; all 500 returned 200 to the client in 715 ms — the proxy never stalled — and all 500 were delivered, 1 during the block and 499 in a 20 ms burst after release, sequence contiguous. Blocked p99 and max were *lower* than the idle baseline. So back-pressure is ours to impose: Caido will happily hand us everything, and an unbounded queue is our failure, not one it protects us from.
 - [ ] **CORE-04**: Exactly one CPU consumer processes the queue. Concurrency is 1, because the runtime is single-threaded and higher concurrency only multiplies peak memory and latency.
 - [ ] **CORE-05**: The consumer reloads work via `sdk.requests.get(id)` rather than retaining SDK objects across `await` points.
 - [ ] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap for **matching-window** purposes, but the **yield trigger is temporal, not geometric**: accumulate synchronous work and yield when elapsed time approaches the slice budget. *(Measured on 0.57.1: `setTimeout(r,0)` is the only primitive that genuinely yields — service ratio 0.76 versus 0.00 for both `setImmediate` and `Promise.resolve()` — and it costs a median 5.67 ms per yield. Yielding per 64 KB chunk would cost 128 yields ≈ 730 ms of pure overhead on an 8 MB bundle. At a 25 ms slice the overhead is 19% instead.)*
@@ -140,14 +144,14 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 - [ ] **FIND-01**: Native Caido Findings are created for high-signal results only, with stable `dedupeKey`s. *(Findings cannot be updated or deleted — every false positive is permanent.)*
 - [ ] **FIND-02**: Entropy-only and hint-grade results never project to Findings.
-- [ ] **FIND-03**: Retroactive scanning of already-captured traffic via `sdk.requests.query()` with HTTPQL push-down, page size 20, and a resumable cursor. *(No `includeRaw(false)` on the backend query, so the documented 1000 page size is not usable.)*
+- [ ] **FIND-03**: Retroactive scanning of already-captured traffic via `sdk.requests.query()` with HTTPQL push-down, page size 20, and a resumable cursor. **SPIKE-11 promoted this from convenience to correctness (`RETROACTIVE_SCAN_MANDATORY=true`).** A returning visitor's bundle is invisible twice over: on a cached-fresh hit Chromium serves from its own cache, nothing crosses the wire, the origin sees nothing and the hook stays silent — the bundle *never enters Caido at all* — while a `no-store` HTML wrapper in the same window does fire. And a 304 that does reach the hook arrives with `Body.length == toRaw().length == 0` and **no `content-type` header whatsoever**. Without retroactive scan, DefMiner sees nothing on any target the operator has visited before. *(No `includeRaw(false)` on the backend query, so the documented 1000 page size is not usable.)*
 - [ ] **FIND-04**: Retroactive scans report progress and are cancellable.
 
 ### Error containment and recovery (ERR)
 
 - [ ] **ERR-01**: A failing detector, parser, or analyser is isolated — it fails that artifact, not the pipeline. One poisoned bundle can never stop analysis of everything after it.
 - [ ] **ERR-02**: Jobs that were in flight when the process died are detected on startup and either resumed or explicitly abandoned, never left permanently `running`.
-- [ ] **ERR-03**: Errors thrown or rejected inside `onInterceptResponse` are caught and logged by us, since it is not established that Caido surfaces them.
+- [ ] **ERR-03**: Errors thrown or rejected inside `onInterceptResponse` are caught and logged by us. **No longer a precaution — measured on 0.57.1:** a synchronous `throw` and an async rejection are *both silently swallowed*. SPIKE-03 searched 22,876 host-log lines plus stdout and stderr for the run's unique error text and found **zero traces**, while the plugin kept receiving events normally. If we do not catch our own errors, nobody does and nothing shows.
 - [ ] **ERR-04**: A per-artifact failure is recorded with its reason and is visible to the operator, so "no findings" and "analysis failed" are never confused.
 
 ### Observability (OBS)
