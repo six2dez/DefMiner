@@ -897,7 +897,7 @@ pnpm add    meriyah@7.3.2 acorn@8.18.0 re2js@2.8.6 @jridgewell/sourcemap-codec@1
 
 ¹ `acorn` was flagged *"suspiciously close to 'cors'"* — a heuristic false positive. 209 M weekly downloads, 14 years old, canonical ESTree parser, already a transitive dependency of most of the toolchain. Approved with the flag recorded.
 
-² `re2js` publishes no `repository.url` field on npm; its source is at `github.com/le0pard/re2js` (identified in `PITFALLS.md`). 4.5 M weekly downloads. **Not a blocker for SPIKE-01, where it is a measurement subject rather than shipped code** — but if SPIKE-01 recommends shipping it, Phase 3 should re-audit including the provenance gap.
+² **CORRECTED 2026-08-20 at the Task 0 gate — this footnote was wrong.** `re2js` *does* publish a repository field: `"repository": "github:le0pard/re2js"`, in npm's shorthand string form rather than the `{type, url}` object form. Tooling that reads `repository.url` sees a string and reports the field as absent. Homepage `https://github.com/le0pard/re2js#readme` agrees, maintainer is `leopard_me`, and its published `scripts` are build/test/lint only — nothing that runs on consumer install. **There is no provenance gap.** 4.5 M weekly downloads. **Not a blocker for SPIKE-01, where it is a measurement subject rather than shipped code** — if SPIKE-01 recommends shipping it, Phase 3 should re-audit as normal — but not for a provenance gap, which does not exist.
 
 **Removed for `[SLOP]`:** none. **Flagged `[SUS]`:** `acorn` (heuristic false positive, no checkpoint needed).
 
