@@ -1,0 +1,32 @@
+{
+  "note": "Read from the plugin's REAL database inside a live Caido 0.57.1 after two proxied sightings of the same 2574-byte fixture. One analyses row for two sightings is CORE-08's skip; max_slice_ms and bytes_walked are what walk() returned, not constants; bytes_walked equals the artifact's byte_len exactly.",
+  "counts": {
+    "artifacts": 1,
+    "observations": 2,
+    "analyses": 1,
+    "settings": 0
+  },
+  "artifacts": [
+    {
+      "sha256": "cec8f86026513c30a2c5068010eb8bde477050101bb30257f88d7c6bdfdf6d44",
+      "byte_len": 2574,
+      "kind": "js",
+      "seen_count": 2
+    }
+  ],
+  "analyses": [
+    {
+      "project_id": "741b27bf-8f52-420c-ab5b-9bf84d1f4b44",
+      "sha256": "cec8f86026513c30a2c5068010eb8bde477050101bb30257f88d7c6bdfdf6d44",
+      "detector_set_hash": "phase1-no-corpus",
+      "scan_state": "done",
+      "max_slice_ms": 0.023000001907348633,
+      "bytes_walked": 2574,
+      "started_at": 1787266206256,
+      "finished_at": 1787266206257,
+      "error": null
+    }
+  ],
+  "reader_sqlite_version": "3.53.4",
+  "reader_note": "This is the HOST python3 sqlite3 that READ the file, not the SQLite inside Caido. Caido's own is 3.46.0 and is recorded in status.json alongside this file \u2014 the distinction matters because the ON CONFLICT DO UPDATE upsert needs >= 3.24 on the runtime that WRITES, and a reader version proves nothing about that."
+}

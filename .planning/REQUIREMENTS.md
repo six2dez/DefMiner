@@ -34,13 +34,13 @@ These run first and can invalidate the design. Each is cheap; several change eve
 > Two consequences. **Good:** `SEND_REFIRES_INTERCEPT=false`, so plugin-generated traffic cannot re-enter the pipeline and ACTIVE-06's recursion guard becomes trivial. **Bad, and unconditional:** a passive-only DefMiner is **blind to every operator-driven surface**. Traffic a hunter sends through Replay or Automate is invisible to it. This is a product limitation, not a bug to fix — it is the shape of the platform.
 
 - [x] **CORE-01**: `onInterceptResponse` handler is non-async, applies cheap admission gates, enqueues the request ID, and returns. It never analyses inline.
-- [ ] **CORE-02**: Admission filter gates on content type, URL extension, response size, and Caido scope before anything is enqueued.
-- [ ] **CORE-03**: The work queue is bounded, with visible overflow. It is never an unbounded array. *(JS-Analyzer's `autoScanQueue` is pushed to and drained by nothing — the failure mode to avoid.)* **SPIKE-03 measured Caido's side: it queues generously and loses nothing.** 500 responses issued while the handler spun; all 500 returned 200 to the client in 715 ms — the proxy never stalled — and all 500 were delivered, 1 during the block and 499 in a 20 ms burst after release, sequence contiguous. Blocked p99 and max were *lower* than the idle baseline. So back-pressure is ours to impose: Caido will happily hand us everything, and an unbounded queue is our failure, not one it protects us from.
-- [ ] **CORE-04**: Exactly one CPU consumer processes the queue. Concurrency is 1, because the runtime is single-threaded and higher concurrency only multiplies peak memory and latency.
-- [ ] **CORE-05**: The consumer reloads work via `sdk.requests.get(id)` rather than retaining SDK objects across `await` points.
-- [ ] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap for **matching-window** purposes, but the **yield trigger is temporal, not geometric**: accumulate synchronous work and yield when elapsed time approaches the slice budget. *(Measured on 0.57.1: `setTimeout(r,0)` is the only primitive that genuinely yields — service ratio 0.76 versus 0.00 for both `setImmediate` and `Promise.resolve()` — and it costs a median 5.67 ms per yield. Yielding per 64 KB chunk would cost 128 yields ≈ 730 ms of pure overhead on an 8 MB bundle. At a 25 ms slice the overhead is 19% instead.)*
-- [ ] **CORE-07**: Wall-clock deadlines are checked between chunks; exceeding budget degrades the result to a recorded partial state rather than freezing.
-- [ ] **CORE-08**: Content identical to something already analysed at the current detector-corpus version is never re-analysed.
+- [x] **CORE-02**: Admission filter gates on content type, URL extension, response size, and Caido scope before anything is enqueued.
+- [x] **CORE-03**: The work queue is bounded, with visible overflow. It is never an unbounded array. *(JS-Analyzer's `autoScanQueue` is pushed to and drained by nothing — the failure mode to avoid.)* **SPIKE-03 measured Caido's side: it queues generously and loses nothing.** 500 responses issued while the handler spun; all 500 returned 200 to the client in 715 ms — the proxy never stalled — and all 500 were delivered, 1 during the block and 499 in a 20 ms burst after release, sequence contiguous. Blocked p99 and max were *lower* than the idle baseline. So back-pressure is ours to impose: Caido will happily hand us everything, and an unbounded queue is our failure, not one it protects us from.
+- [x] **CORE-04**: Exactly one CPU consumer processes the queue. Concurrency is 1, because the runtime is single-threaded and higher concurrency only multiplies peak memory and latency.
+- [x] **CORE-05**: The consumer reloads work via `sdk.requests.get(id)` rather than retaining SDK objects across `await` points.
+- [x] **CORE-06**: Analysis is chunked at 64 KB with 4 KB overlap for **matching-window** purposes, but the **yield trigger is temporal, not geometric**: accumulate synchronous work and yield when elapsed time approaches the slice budget. *(Measured on 0.57.1: `setTimeout(r,0)` is the only primitive that genuinely yields — service ratio 0.76 versus 0.00 for both `setImmediate` and `Promise.resolve()` — and it costs a median 5.67 ms per yield. Yielding per 64 KB chunk would cost 128 yields ≈ 730 ms of pure overhead on an 8 MB bundle. At a 25 ms slice the overhead is 19% instead.)*
+- [x] **CORE-07**: Wall-clock deadlines are checked between chunks; exceeding budget degrades the result to a recorded partial state rather than freezing.
+- [x] **CORE-08**: Content identical to something already analysed at the current detector-corpus version is never re-analysed.
 - [ ] **CORE-09**: Project switches cancel in-flight work and never leak results across projects.
 - [ ] **CORE-10**: Telemetry records the maximum synchronous slice actually observed in the field, so the budget is provable rather than asserted.
 
@@ -48,10 +48,10 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 - [x] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences, analyses, entities, evidence, and audit.
 - [x] **STORE-02**: Every table includes `project_id` in its key. *(`sdk.meta.db()` is plugin-global, not project-scoped — verified against authmatrix.)*
-- [ ] **STORE-03**: Artifacts are content-addressed by digest, decoupling identity from URL.
+- [x] **STORE-03**: Artifacts are content-addressed by digest, decoupling identity from URL.
 - [x] **STORE-04**: Analysis rows record the detector-corpus version, so a corpus bump invalidates the right cache entries.
 - [x] **STORE-05**: Schema migrations run forward on upgrade and are tested against a populated database.
-- [ ] **STORE-06**: Retention policy bounds database and disk growth.
+- [x] **STORE-06**: Retention policy bounds database and disk growth.
 - [x] **STORE-07**: All SQL uses positional `?` parameters. *(Named parameters are unsupported.)*
 
 ### Detection engine (DET)
@@ -174,7 +174,7 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Encoding correctness (ENC)
 
-- [ ] **ENC-01**: Offsets and hashes are derived from `toRaw()` bytes, never from `toText()`, which replaces invalid characters and is lossy. *(Note: `TextDecoder` and `TextEncoder` are **not globals** in Caido's QuickJS — they must be imported from a module. Verified on 0.57.1.)*
+- [x] **ENC-01**: Offsets and hashes are derived from `toRaw()` bytes, never from `toText()`, which replaces invalid characters and is lossy. *(Note: `TextDecoder` and `TextEncoder` are **not globals** in Caido's QuickJS — they must be imported from a module. Verified on 0.57.1.)*
 - [ ] **ENC-02**: Non-UTF-8 and mixed-encoding bodies round-trip correctly through detection and evidence display.
 - [ ] **ENC-03**: Internationalised domain names are normalised consistently, so a punycode host and its Unicode form are not treated as two different hosts — and homograph forms are not silently equated either.
 - [ ] **ENC-04**: Percent-encoding, unicode escapes, and string concatenation in extracted URLs are normalised before deduplication.

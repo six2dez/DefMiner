@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-08-20T22:09:56.338Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-08-20T22:55:45.566Z"
 last_activity: 2026-08-20
 last_activity_desc: Phase 01 execution started
-state_head: 909f31d0e7f2715c04354be5b972636a23f10562
+state_head: 54c912d2cd67c0e278c8aa3ca0bafd1b753b5910
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-08-20 — Phase 01 execution started
 
@@ -58,6 +58,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P01 | 35 min | 2 tasks | 38 files |
 | Phase 01 P02 | 21 min | 2 tasks | 26 files |
 | Phase 01 P04 | 28 min | 3 tasks | 15 files |
+| Phase 01 P03 | 37 min | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P4-D6: STORE-02 non-empty project_id is retrofitted onto the immutable v1 tables by BEFORE INSERT TRIGGERS, not a table rebuild — a rebuild is a multi-statement migration that can fail and would strand an open write transaction on an unreachable pooled connection; a trigger is stored in the schema and binds on every pooled connection
 - [Phase 01]: P4-D7: retention bounds (row count AND age) apply PER TABLE PER PROJECT, not only to artifacts — real traffic upserts one artifact and inserts a new observation on every re-serve, so an artifact-only bound leaves the fastest-growing table unbounded
 - [Phase 01]: P4-D8: failed is a TERMINAL scan_state in Phase 1, so a failed analysis is a cache hit — with no retry policy until ERR-02, a re-analysable failed re-walks the same bytes on every sighting with nothing to break the loop
+- [Phase 01]: P3-D4 held: all four store call sites (upsertArtifact, recordObservation, the CORE-08 skip, the STORE-06 sweep) live in consumer.ts, each with a negative demonstration that was EXECUTED against the real source rather than described
+- [Phase 01]: The consumer in-flight latch is MODULE-scoped, not per-call: a closure-local flag cannot see a second startConsumer(), which is the realistic way a second drain loop appears
+- [Phase 01]: reloadMissing split into reloadMissing and reloadNoResponse — the SDK types these as two different optionality points and they call for different investigations
+- [Phase 01]: walk() takes its abort surface structurally ({aborted, reason?}) rather than as AbortSignal, because Phase 0 never enumerated AbortController in this runtime
+- [Phase 01]: knip's exports/types rules restored to error (01-02's instruction to this plan), at the cost of ignoreExportsUsedInFile — a documented hole to revisit in Phase 5
 
 ### Known Risks Carried Forward
 
@@ -143,8 +149,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T22:09:34.699Z
-**Stopped at:** Completed 01-04-PLAN.md
+**Last session:** 2026-08-20T22:55:33.153Z
+**Stopped at:** Completed 01-03-PLAN.md
 **Resume file:** None
 
 ### Blockers
