@@ -63,7 +63,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 | `setTimeout(fn, 0)` may not yield the event loop, invalidating budget-and-background | Gated on SPIKE-02 |
 | `caido/caido#2211` — cumulative `sdk.requests.send()` aborts the process | Gated on SPIKE-04; accepted for `.map` default |
 | Content-hash cache hit rate is the biggest performance lever; 40% instead of 90% means 6× the CPU budget | Gated on SPIKE-10 |
-| Asset identity across deploys is unsolved; blocks cross-deploy diffing | Gated on SPIKE-13; DIFF-01 deferred to v2 |
+| Asset identity across deploys is unsolved; blocks cross-deploy diffing | SPIKE-13 and DIFF-01 both moved to v2 — the spike served only the deferred feature |
 | No memory limit is set — OOM aborts the host rather than throwing | Size ceilings enforced by us, set in Phase 0 |
 
 ### Cross-AI Review
