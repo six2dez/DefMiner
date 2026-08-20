@@ -69,6 +69,24 @@ export class BoundedQueue {
     return this.#buf.shift();
   }
 
+  /**
+   * Take up to `n` entries, FIFO, in one call.
+   *
+   * Returns FEWER than `n` when the queue holds fewer — never blocks, never
+   * pads, never throws. `n <= 0` returns an empty array rather than draining
+   * everything, because "drain zero" is the honest reading of a computed bound
+   * that came out non-positive and silently draining the whole queue instead is
+   * how a bound stops binding.
+   *
+   * Does NOT touch {@link overflowCount}: an overflow is a fact about what the
+   * queue DISCARDED, and a read path that adjusted it would make the number mean
+   * two different things depending on when you looked.
+   */
+  drain(n: number): Entry[] {
+    if (!(n > 0)) return [];
+    return this.#buf.splice(0, Math.min(n, this.#buf.length));
+  }
+
   get depth(): number {
     return this.#buf.length;
   }

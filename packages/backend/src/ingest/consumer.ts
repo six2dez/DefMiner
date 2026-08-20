@@ -11,8 +11,8 @@ import { sha256Hex } from "@defminer/engine/digest";
 import type { BoundedQueue } from "@defminer/engine/queue";
 import type { Database } from "sqlite";
 
+import { contentTypeOf } from "../hooks/admit";
 import type { Counters, EnqueueClock } from "../hooks/passive";
-import { contentTypeOf } from "../hooks/passive";
 import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
 

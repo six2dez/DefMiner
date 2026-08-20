@@ -1,25 +1,33 @@
-// packages/backend/src/hooks/passive.ts — the CORE-01/CORE-02 admission gate.
+// packages/backend/src/hooks/passive.ts — the CORE-01 hook, and nothing else.
 //
-// The whole contract of this file: be NON-ASYNC, do integer and header
-// comparisons only, enqueue an id, and return. Everything expensive happens in the
-// consumer, on the other side of the queue.
+// This file is WIRING now. The admission decision moved to `admit.ts` in plan
+// 01-03, so what is left is exactly the shape CORE-01 describes: latch, count,
+// ask `admit`, either increment a named reject counter or offer an entry to the
+// queue, return.
 //
-// `MaybePromise<void>` makes an `async` callback type-legal, and that is exactly
-// the shape that looks fine and starves the one thread this runtime has. CORE-01
-// says non-async; the `<verify>` for this plan asserts the registered callback
-// returns `undefined` rather than a Promise.
-//
-// Plan 01-03 replaces the gate below with the full CORE-02 admission semantics in
-// `hooks/admit.ts`. The tracer needs only enough gate to admit one JavaScript
-// response and reject an oversized, empty or non-script one.
+// STILL NOT ASYNC, and that is type-legal to get wrong: the SDK declares the
+// callback as returning `MaybePromise<void>`, so nothing in the type system
+// objects to `async` — it is simply the shape that starves the one thread this
+// runtime has. Caido QUEUES intercept events (499 survived a 30 s handler block
+// and arrived in a 20 ms burst), so an async handler does not drop traffic
+// visibly; it silently accumulates backlog until something else breaks.
+// `passive.spec.ts` asserts the registered callback returns `undefined` rather
+// than a Promise, and eslint.config.js's PROJECT RULE 2 catches the source shape.
 
 import { type BoundedQueue } from "@defminer/engine/queue";
-import { PASSIVE_MAX_BYTES } from "@defminer/engine/thresholds";
+
+import {
+  admit,
+  type AdmitConfig,
+  DEFAULT_ADMIT_CONFIG,
+  REJECT_REASONS,
+  type RejectReason,
+} from "./admit";
 
 /**
  * In-memory counters. PROVISIONAL BY DESIGN: plan 01-05 moves this object to
- * `telemetry.ts` and rewires both this file and the consumer onto it, keeping the
- * key names. Write increments so that swapping the import is the whole of that
+ * `telemetry.ts` and rewires this file and the consumer onto it, keeping the key
+ * names. Write increments so that swapping the import is the whole of that
  * change, and do not add a second counter object anywhere.
  *
  * NAMING (OBS-02's decision, made here because it is expensive to change later):
@@ -35,20 +43,38 @@ export type Counters = {
   proxiedResponsesObserved: number;
   /** Admitted to the queue. */
   admitted: number;
-  /** Rejected, by reason. */
+  /** Rejected, by reason. Keyed on `admit.ts`'s closed union, so a counter for a
+   *  reason that does not exist is a compile error rather than a silent zero. */
   rejected: Record<RejectReason, number>;
   /** Entries the queue dropped because it was at cap (CORE-03 visible overflow). */
   queueOverflow: number;
   /** Throws caught inside the hook. Caido surfaces none of them itself. */
   hookErrors: number;
-  /** Entries the consumer drained. */
+  /** Entries the consumer drained to completion. */
   processed: number;
   /** `sdk.requests.get(id)` returned a usable request+response. */
   reloadHit: number;
-  /** `sdk.requests.get(id)` returned undefined, or the pair had no response. */
+  /** `sdk.requests.get(id)` itself resolved `undefined`. */
   reloadMissing: number;
+  /** `sdk.requests.get(id)` resolved a pair whose `response` was `undefined`.
+   *  A SEPARATE counter from {@link reloadMissing} on purpose: the SDK types
+   *  those as two different optionality points (`get` returns
+   *  `RequestResponseOpt | undefined`, and `RequestResponseOpt.response` is
+   *  itself optional) and conflating them hides which one is happening. */
+  reloadNoResponse: number;
   /** Reloaded but the body was absent or zero-length. */
   reloadEmptyBody: number;
+  /** Artifacts skipped because this digest was already analysed at the current
+   *  DETECTOR_CORPUS_VERSION (CORE-08). */
+  analysisCacheHit: number;
+  /** Analyses this consumer claimed and walked. */
+  analysisStarted: number;
+  /** Walks that hit ARTIFACT_DEADLINE_MS and persisted a `partial` state. */
+  analysisPartial: number;
+  /** Retention sweep passes actually run from the consumer loop (STORE-06). */
+  retentionSweeps: number;
+  /** Rows those passes deleted. */
+  retentionDeleted: number;
   /** Store writes that reported a failure. */
   storeErrors: number;
   /** Throws caught inside a consumer iteration. */
@@ -58,23 +84,6 @@ export type Counters = {
    *  non-zero value here means that measurement no longer holds. */
   byteLenMismatch: number;
 };
-
-export type RejectReason =
-  | "status"
-  | "revalidation"
-  | "empty_body"
-  | "oversize"
-  | "not_script"
-  | "no_body";
-
-const REJECT_REASONS: RejectReason[] = [
-  "status",
-  "revalidation",
-  "empty_body",
-  "oversize",
-  "not_script",
-  "no_body",
-];
 
 export function createCounters(): Counters {
   const rejected = {} as Record<RejectReason, number>;
@@ -88,55 +97,17 @@ export function createCounters(): Counters {
     processed: 0,
     reloadHit: 0,
     reloadMissing: 0,
+    reloadNoResponse: 0,
     reloadEmptyBody: 0,
+    analysisCacheHit: 0,
+    analysisStarted: 0,
+    analysisPartial: 0,
+    retentionSweeps: 0,
+    retentionDeleted: 0,
     storeErrors: 0,
     consumerErrors: 0,
     byteLenMismatch: 0,
   };
-}
-
-const SCRIPTISH = [
-  "javascript",
-  "ecmascript",
-  "application/x-javascript",
-  "text/js",
-  "module",
-];
-
-/** Content type first, extension second. The extension check strips the query AND
- *  the fragment before looking at the suffix, or `/app.js?v=2` would miss. */
-export function isScriptish(
-  contentType: string | null,
-  url: string | null,
-): boolean {
-  if (contentType) {
-    const ct = String(contentType).toLowerCase();
-    for (const needle of SCRIPTISH) {
-      if (ct.indexOf(needle) !== -1) return true;
-    }
-  }
-  if (url) {
-    const bare = String(url).split("#")[0].split("?")[0].toLowerCase();
-    if (bare.endsWith(".js") || bare.endsWith(".mjs")) return true;
-  }
-  return false;
-}
-
-/**
- * Resolve the content type from Caido's header map.
- *
- * BOTH casings are checked rather than assuming which spelling Caido normalises
- * to, and an array value is unwrapped: the SDK types headers as
- * `Record<string, Array<string>>`, but the production recorder found BOTH shapes
- * in the field against real traffic.
- */
-export function contentTypeOf(
-  headers: Record<string, unknown> | undefined,
-): string | null {
-  if (!headers) return null;
-  const raw = headers["content-type"] ?? headers["Content-Type"];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  return value === undefined || value === null ? null : String(value);
 }
 
 /**
@@ -158,6 +129,8 @@ export type PassiveDeps = {
   queue: BoundedQueue;
   counters: Counters;
   enqueuedAt: EnqueueClock;
+  /** Optional so `init()` need not restate the default. */
+  admitConfig?: AdmitConfig;
 };
 
 /** Record the arrival instant, evicting the oldest when the map outgrows the
@@ -190,76 +163,64 @@ export function setPassiveReady(value: boolean): void {
   ready = value;
 }
 
-/** Test seam only: plan 01-03's specs need a clean module between cases. */
+/** Test seam. Module state is process-global, so a spec that did not reset it
+ *  would inherit the previous case's queue and counters. */
 export function resetPassiveForTest(): void {
   deps = undefined;
   ready = false;
 }
+
+export type PassiveSdk = {
+  console: { log(msg: string): void };
+  requests: { inScope(request: unknown): boolean };
+};
+
+export type PassiveRequest = {
+  getId(): string;
+  getUrl(): string;
+};
+
+export type PassiveResponse = {
+  getCode(): number;
+  getHeaders(): Record<string, unknown>;
+  getBody(): { readonly length: number } | undefined;
+};
 
 /**
  * The registered `onInterceptResponse` callback. NOT async — it returns
  * `undefined`, never a Promise.
  */
 export function onResponse(
-  sdk: { console: { log(msg: string): void } },
-  request: { getId(): string; getUrl(): string },
-  response: {
-    getCode(): number;
-    getHeaders(): Record<string, unknown>;
-    getBody(): { readonly length: number } | undefined;
-  },
+  sdk: PassiveSdk,
+  request: PassiveRequest,
+  response: PassiveResponse,
 ): void {
   if (!ready || deps === undefined) return;
   try {
     const c = deps.counters;
     c.proxiedResponsesObserved++;
 
-    const status = response.getCode();
-    // STATUS FIRST, and 304 is its OWN outcome rather than a content-type miss.
-    // A 304 reaches this hook with a zero-length body and NO content-type header
-    // whatsoever, so a gate keyed on content type would silently file every
-    // revalidation of a JS bundle under "not JS" and hand the Phase 6 retroactive
-    // scanner a dishonest number (Pitfall 4).
-    if (status === 304) {
-      c.rejected.revalidation++;
-      return;
-    }
-    if (status < 200 || status >= 300) {
-      c.rejected.status++;
+    const decision = admit(
+      sdk,
+      request,
+      response,
+      deps.admitConfig ?? DEFAULT_ADMIT_CONFIG,
+    );
+    if (!decision.ok) {
+      c.rejected[decision.reason]++;
       return;
     }
 
-    const url = request.getUrl();
-    const contentType = contentTypeOf(response.getHeaders());
-    if (!isScriptish(contentType, url)) {
-      c.rejected.not_script++;
-      return;
-    }
-
-    const body = response.getBody();
-    if (!body) {
-      c.rejected.no_body++;
-      return;
-    }
-    // `length` is a readonly property that costs NO decode. `toRaw()` and
-    // `toText()` are both forbidden in this hook: materialising megabytes here
-    // happens on the one thread that also serves the plugin's RPC and every timer.
-    const bytes = body.length;
-    // Zero-length is rejected HERE, before any store write, so no artifact row can
-    // ever carry the SHA-256 of the empty byte string.
-    if (bytes <= 0) {
-      c.rejected.empty_body++;
-      return;
-    }
-    if (bytes > PASSIVE_MAX_BYTES) {
-      c.rejected.oversize++;
-      return;
-    }
-
-    // The hook's only side effect besides counters. The entry holds SCALARS only —
-    // no Request, Response or Body reference survives this call (CORE-05).
+    // The hook's only side effect besides counters. The entry holds SCALARS only,
+    // and EXACTLY the three keys `Entry` declares — no Request, Response or Body
+    // reference survives this call (CORE-05), and the memory argument for
+    // QUEUE_CAP evaporates the moment somebody adds a fourth key here.
     const id = request.getId();
-    const accepted = deps.queue.offer({ id, bytes, kind: "js" });
+    const accepted = deps.queue.offer({
+      id,
+      bytes: decision.bytes,
+      kind: decision.kind,
+    });
     if (!accepted) c.queueOverflow++;
     stampEnqueued(deps.enqueuedAt, id, deps.queue.cap, Date.now());
     c.admitted++;
