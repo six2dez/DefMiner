@@ -61,7 +61,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 |---|---|
 | ReDoS is unrecoverable — Caido installs no QuickJS interrupt handler, so `lre_check_timeout` is inert | Gated on SPIKE-01 |
 | `setTimeout(fn, 0)` may not yield the event loop, invalidating budget-and-background | Gated on SPIKE-02 |
-| `caido/caido#2211` — cumulative `sdk.requests.send()` aborts the process | Gated on SPIKE-04; accepted for `.map` default |
+| `caido/caido#2211` — cumulative `sdk.requests.send()` aborts the process | Filed against **0.57.1 — the exact target build**, so SPIKE-04 is a direct reproduction, not an extrapolation. Accepted for the `.map` default |
 | Content-hash cache hit rate is the biggest performance lever; 40% instead of 90% means 6× the CPU budget | Gated on SPIKE-10 |
 | Asset identity across deploys is unsolved; blocks cross-deploy diffing | SPIKE-13 and DIFF-01 both moved to v2 — the spike served only the deferred feature |
 | No memory limit is set — OOM aborts the host rather than throwing | Size ceilings enforced by us, set in Phase 0 |

@@ -111,6 +111,7 @@ That gap — an analysis pipeline that runs unattended, persists, aggregates, an
 
 ## Constraints
 
+- **Target Caido version**: **0.57.1**, the operator's actual build. Note there are two `caido-cli` binaries on the dev machine — `/Applications/Caido.app/Contents/Resources/bin/caido-cli` is 0.57.1, while `~/.caido/caido-cli` is a stale 0.55.3 **and is the one on `PATH`**. Every script must use the absolute app path and assert the reported version before recording a measurement, or it will silently produce numbers for a build nobody runs.
 - **Runtime**: Backend logic runs in QuickJS, not Node.js — no native modules, no worker threads, constrained CPU and memory. Every library considered for bundling (AST parsers, sourcemap decoders) must be verified to run there before it is designed in.
 - **Performance**: Passive analysis fires on every proxied response, in the request path. Modern SPA bundles are routinely 2–10 MB of minified JS. Analysis must be budgeted and backgrounded so it can never stall the proxy — this is the single hardest engineering constraint in the project.
 - **Tech stack**: TypeScript throughout, no `any`. Backend `@caido/sdk-backend`, frontend `@caido/sdk-frontend` + Vue 3 + PrimeVue, pnpm monorepo, scaffolded from `pnpm create @caido-community/plugin`.
