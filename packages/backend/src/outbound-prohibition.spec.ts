@@ -547,12 +547,22 @@ describe("the gate's own failure paths", () => {
 });
 
 describe("the rule set is data, not logic to trace", () => {
-  it("FORBIDDEN_OUTBOUND enumerates exactly the four surfaces CORE-01 names", () => {
+  it("FORBIDDEN_OUTBOUND enumerates exactly the six surfaces CORE-11 names", () => {
+    // WHY THE SET GREW FROM FOUR TO SIX on 2026-08-21, so the next reader does
+    // not read it as drift. Four rules covered the surfaces CORE-01's sentence
+    // listed by name. CORE-11 says "of any kind", and the verifier's 22-shape
+    // probe found two whole CLASSES outside the named four: a construction of an
+    // outbound global (`new WebSocket`), and — worse — a construct the walk could
+    // not READ, which the round-1 gate silently treated as clean. The second is
+    // not a surface at all; it is the admission that a gate which cannot see
+    // something must say so rather than pass it.
     expect(FORBIDDEN_OUTBOUND.map((f) => f.rule)).toEqual([
       "outbound-send",
       "outbound-net",
       "outbound-fetch",
       "outbound-import",
+      "outbound-global-ctor",
+      "outbound-unanalysable",
     ]);
     // Every entry carries a consequence, because that is what the failure text is
     // built from. An entry with an empty `why` would produce a bare rule id.
@@ -560,5 +570,272 @@ describe("the rule set is data, not logic to trace", () => {
       expect(f.why.length, `${f.rule} carries no reason`).toBeGreaterThan(40);
       expect(f.surface.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE VERIFIER'S 22-SHAPE PROBE, RE-RUN AS EXECUTED CASES
+// ---------------------------------------------------------------------------
+// 01-VERIFICATION.md:150-171 imported `auditSource` and probed it with 22 shapes.
+// Eight were caught and FOURTEEN were missed — several of them the idiomatic way
+// to write the call. That probe lived in a verification document, where it could
+// not fail a build; here it is the suite, so a regression that reopens any of the
+// fourteen is a red test rather than a paragraph somebody has to re-read.
+//
+// The controls come first for the reason the verifier gave: a MISSED row cannot
+// be read as the probe being broken if the CAUGHT rows still pass beside it.
+describe("the 22-shape gate-reach probe from 01-VERIFICATION.md", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  /** The eight the round-1 gate caught. Every one must STILL be caught: this is
+   *  the half of the probe that says the widening broke nothing. */
+  const CAUGHT: ReadonlyArray<readonly [string, string]> = [
+    ["sdk.requests.send(q)", "await sdk.requests.send(req);"],
+    [
+      "const r = sdk.requests; r.send(q)",
+      "const r = sdk.requests;\nawait r.send(req);",
+    ],
+    [
+      "const { send } = sdk.requests; send(q)",
+      "const { send } = sdk.requests;\nawait send(req);",
+    ],
+    ["fetch(u) bare", "const res = await fetch(url);"],
+    ['import ... from "caido:http"', 'import { fetch } from "caido:http";'],
+    ["sdk.net.connect(h,p)", "await sdk.net.connect(host, port);"],
+    ["this.sdk.requests.send(q)", "await this.sdk.requests.send(req);"],
+    ["sdk.requests.send?.(q)", "await sdk.requests.send?.(req);"],
+  ];
+
+  /** The fourteen it missed. Each row is the shape verbatim from the probe
+   *  table, so the before/after comparison is one artifact and not two. */
+  const MISSED: ReadonlyArray<readonly [string, string]> = [
+    ["globalThis.fetch(u)", "await globalThis.fetch(url);"],
+    ["(globalThis as any).fetch(u)", "await (globalThis as any).fetch(url);"],
+    ["window.fetch(u)", "await window.fetch(url);"],
+    [
+      "const { requests } = sdk; requests.send(q)",
+      "const { requests } = sdk;\nawait requests.send(req);",
+    ],
+    [
+      "let r; r = sdk.requests; r.send(q)",
+      "let r;\nr = sdk.requests;\nawait r.send(req);",
+    ],
+    [
+      "sdk.requests.send.call(...)",
+      "await sdk.requests.send.call(sdk.requests, req);",
+    ],
+    [
+      "sdk.requests.send.apply(...)",
+      "await sdk.requests.send.apply(sdk.requests, [req]);",
+    ],
+    [
+      "Reflect.apply(sdk.requests.send, ...)",
+      "await Reflect.apply(sdk.requests.send, sdk.requests, [req]);",
+    ],
+    [
+      "const s = sdk.requests.send; s(q)",
+      "const s = sdk.requests.send;\nawait s(req);",
+    ],
+    [
+      'const m = "send"; sdk.requests[m](q)',
+      'const m = "send";\nawait sdk.requests[m](req);',
+    ],
+    [
+      'const r = "requests"; sdk[r].send(q)',
+      'const r = "requests";\nawait sdk[r].send(req);',
+    ],
+    ["sdk.requests.sendRaw(q)", "await sdk.requests.sendRaw(req);"],
+    [
+      'await import("caido:" + "http")',
+      'const m = await import("caido:" + "http");',
+    ],
+    [
+      "new XMLHttpRequest() ... .send()",
+      "const x = new XMLHttpRequest();\nx.send(body);",
+    ],
+    [
+      'new WebSocket("wss://...")',
+      'const ws = new WebSocket("wss://cdn.test/s");',
+    ],
+  ];
+
+  it.each(CAUGHT)("control — %s is still caught", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} is no longer caught`).not.toEqual([]);
+  });
+
+  it.each(MISSED)("previously MISSED — %s now reports", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} still reports clean`).not.toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE EVASIONS, ENUMERATED BEFORE THE RULE THAT CATCHES THEM
+// ---------------------------------------------------------------------------
+// Round 1's gate passed every fixture it had and missed fourteen of twenty-two
+// shapes, because the fixtures were written by the same reasoning that wrote the
+// rule. These were written and confirmed RED against the round-1 walk before a
+// line of that walk was touched.
+describe("the global fetch, in every reachable spelling", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    ["globalThis.fetch", "await globalThis.fetch(url);"],
+    ["globalThis['fetch']", 'await globalThis["fetch"](url);'],
+    ["(globalThis as any).fetch", "await (globalThis as any).fetch(url);"],
+    ["window.fetch", "await window.fetch(url);"],
+    ["self.fetch", "await self.fetch(url);"],
+    ["global.fetch", "await global.fetch(url);"],
+    ["const f = fetch", "const f = fetch;\nawait f(url);"],
+    [
+      "const f = globalThis.fetch",
+      "const f = globalThis.fetch;\nawait f(url);",
+    ],
+    [
+      "const { fetch: f } = globalThis",
+      "const { fetch: f } = globalThis;\nawait f(url);",
+    ],
+  ])("outbound-fetch fires on %s", (_shape, src) => {
+    expect(rulesOf(src)).toContain("outbound-fetch");
+  });
+});
+
+describe("an outbound receiver, however it was bound", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("fires on a DESTRUCTURED requests receiver", () => {
+    expect(
+      rulesOf("const { requests } = sdk;\nawait requests.send(req);"),
+    ).toContain("outbound-send");
+  });
+
+  it("fires on a DESTRUCTURED net receiver", () => {
+    expect(rulesOf("const { net } = sdk;\nawait net.connect(h, p);")).toContain(
+      "outbound-net",
+    );
+  });
+
+  it("fires on an ASSIGNMENT alias", () => {
+    expect(rulesOf("let r;\nr = sdk.requests;\nawait r.send(req);")).toContain(
+      "outbound-send",
+    );
+  });
+
+  it("fires on a CONDITIONAL initializer", () => {
+    expect(
+      rulesOf(
+        "const r = flag ? sdk.requests : sdk.requests;\nawait r.send(req);",
+      ),
+    ).toContain("outbound-send");
+  });
+
+  it("fires on a receiver resolved through a single-hop const string", () => {
+    expect(rulesOf('const r = "requests";\nawait sdk[r].send(req);')).toContain(
+      "outbound-send",
+    );
+  });
+});
+
+describe("any non-allowlisted member of a positively identified receiver", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    ["sendRaw", "await sdk.requests.sendRaw(req);"],
+    ["replay", "await sdk.requests.replay(req);"],
+    [".call", "await sdk.requests.send.call(sdk.requests, req);"],
+    [".apply", "await sdk.requests.send.apply(sdk.requests, [req]);"],
+    [
+      "Reflect.apply",
+      "await Reflect.apply(sdk.requests.send, sdk.requests, [req]);",
+    ],
+    ["an aliased member", "const s = sdk.requests.send;\nawait s(req);"],
+    [
+      "a member returned from an arrow",
+      "const g = () => sdk.requests.send;\nawait g()(req);",
+    ],
+    ["a computed member", 'const m = "send";\nawait sdk.requests[m](req);'],
+  ])("outbound-send fires on %s", (_shape, src) => {
+    expect(rulesOf(src)).toContain("outbound-send");
+  });
+});
+
+describe("a module specifier the walk can resolve, and one it cannot", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("outbound-import fires on a specifier resolved one hop", () => {
+    expect(
+      rulesOf('const spec = "caido:http";\nconst m = await import(spec);'),
+    ).toContain("outbound-import");
+  });
+
+  it("outbound-unanalysable fires on an ASSEMBLED specifier", () => {
+    expect(rulesOf('const m = await import("caido:" + "http");')).toContain(
+      "outbound-unanalysable",
+    );
+  });
+
+  it("outbound-unanalysable fires on a computed member of an identified receiver", () => {
+    expect(
+      rulesOf(
+        "export function go(sdk, key, req) {\n  return sdk.requests[key](req);\n}",
+      ),
+    ).toContain("outbound-unanalysable");
+  });
+});
+
+describe('the outbound globals CORE-11 "of any kind" covers', () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    ["XMLHttpRequest", "const x = new XMLHttpRequest();\nx.send(body);"],
+    ["WebSocket", 'const ws = new WebSocket("wss://cdn.test/s");'],
+    ["EventSource", 'const es = new EventSource("https://cdn.test/e");'],
+  ])("outbound-global-ctor fires on new %s", (_shape, src) => {
+    expect(rulesOf(src)).toContain("outbound-global-ctor");
+  });
+});
+
+describe("the shapes that MUST stay quiet — each one real in or adjacent to this codebase", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    [
+      "sdk.requests.get — the CORE-05 reload",
+      "const rr = await sdk.requests.get(id);",
+    ],
+    ["sdk.requests.query", "await sdk.requests.query();"],
+    ["sdk.requests.inScope", "await sdk.requests.inScope(request);"],
+    ["sdk.requests.matches", "sdk.requests.matches(r);"],
+    [
+      "an allowlisted method through an alias",
+      "const r = sdk.requests;\nconst rr = await r.get(id);",
+    ],
+    [
+      "the telemetry.ts globalThis.performance idiom",
+      "const p = (globalThis as { performance?: { now?: () => number } }).performance;",
+    ],
+    ["cache.fetch", "const res = await cache.fetch(url);"],
+    ["client.fetch", "client.fetch(u);"],
+    ["logger.send", "logger.send(line);"],
+    [
+      "a send destructured from a logger",
+      "const { send } = logger;\nsend(line);",
+    ],
+    [
+      "an identifier merely NAMED net",
+      "const net = { port: 443 };\nreturn net.port;",
+    ],
+    ["a crypto import", 'import { createHash } from "crypto";'],
+    ["a local re-export", 'export { x } from "./telemetry";'],
+    ["a node:fs dynamic import", 'const m = await import("node:fs");'],
+    ["a sqlite require", 'const m = require("sqlite");'],
+  ])("%s reports ZERO violations", (_shape, src) => {
+    expect(rulesOf(src)).toEqual([]);
   });
 });
