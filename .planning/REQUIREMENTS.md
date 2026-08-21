@@ -46,13 +46,14 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Persistence (STORE)
 
-- [x] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences, analyses, entities, evidence, and audit.
+- [x] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences (`observations`), analyses, and plugin settings. *(Re-scoped 2026-08-21 during Phase 1 UAT: the original wording also named `entities`, `evidence` and `audit`, which have no writer until the detector and secrets phases. Those three moved to STORE-08 so this requirement has one owner and an honest status.)*
 - [x] **STORE-02**: Every table includes `project_id` in its key. *(`sdk.meta.db()` is plugin-global, not project-scoped — verified against authmatrix.)*
 - [x] **STORE-03**: Artifacts are content-addressed by digest, decoupling identity from URL.
 - [x] **STORE-04**: Analysis rows record the detector-corpus version, so a corpus bump invalidates the right cache entries.
 - [x] **STORE-05**: Schema migrations run forward on upgrade and are tested against a populated database.
 - [x] **STORE-06**: Retention policy bounds database and disk growth.
 - [x] **STORE-07**: All SQL uses positional `?` parameters. *(Named parameters are unsupported.)*
+- [ ] **STORE-08**: Schema coverage for `entities`, `evidence` and `audit`, added by forward migration steps when their writers land. *(Split out of STORE-01 on 2026-08-21. `entities` and `evidence` are owned by Phase 4 (SEC-*); `audit` by Phase 5. Building them empty in Phase 1 would ship three tables with no writer.)*
 
 ### Detection engine (DET)
 
