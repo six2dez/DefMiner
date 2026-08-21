@@ -96,7 +96,7 @@ Plans:
 
 **Wave 7** *(gap closure — UAT 2026-08-21; blocked on Wave 6)*
 
-- [ ] 01-07-PLAN.md — **Gap 1**: `observations.url` redacts query-string values at the write path; every error-shaped render in the store layer goes through `describeError`, including the line that writes `analyses.error`; plan 01-01's `must_have` truth #2 amended to match — *wave 7*
+- [x] 01-07-PLAN.md — **Gap 1**: `observations.url` redacts query-string values at the write path; every error-shaped render in the store layer goes through `describeError`, including the line that writes `analyses.error`; plan 01-01's `must_have` truth #2 amended to match — *wave 7*
 
 **Wave 8** *(blocked on 01-07 — needs its redactor)*
 

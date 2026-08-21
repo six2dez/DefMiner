@@ -1,19 +1,19 @@
 ---
 gsd_state_version: 1.0
 milestone: v2
-current_phase: 1
+current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-08-21T09:26:16.402Z"
-last_activity: 2026-08-20
-last_activity_desc: Phase 01 execution started
-state_head: 1b067043f7261f1383b8ba937fc8e1cbd66ad813
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-08-21T10:29:08.394Z"
+last_activity: 2026-08-21
+last_activity_desc: 01-07 gap closure — write-path query redaction, store error-render gate, live tracer proof
+state_head: 4940ede0e5643e26721eeba9d8139c6713d0fab8
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -27,12 +27,18 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 1 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 6 of 6
-Status: Ready to execute
-Last activity: 2026-08-20 — Phase 01 execution started
+Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
+Plan: 7 of 9 complete — next is 01-08 (gap 1's one-way half)
+Status: Ready to execute 01-08
+Last activity: 2026-08-21 — 01-07 executed: write-path query redaction, store error-render gate, live tracer proof
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [███████░░░] 78% of phase 01 (7 of 9 plans)
+
+> The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
+> returned `progress percent withheld by buildStateFrontmatter` on this run, and the
+> previous value (8%) was already stale — it read 8% both at 0 and at 6 completed
+> plans. The figure above is the phase-local one, stated with its basis rather than
+> as an unexplained number.
 
 ## Performance Metrics
 
@@ -61,6 +67,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P03 | 37 min | 3 tasks | 22 files |
 | Phase 01 P05 | 35 min | 3 tasks | 14 files |
 | Phase 01 P06 | 24 min | 3 tasks | 37 files |
+| Phase 01 P07 | 49 min | 3 tasks | 35 files |
 
 ## Accumulated Context
 
@@ -122,6 +129,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: [Phase 01] COMPAT-02 CLOSED by measurement: all 16 REQUIRED_SURFACES exercised on both Caido 0.57.1 and 0.58.0, matrices differ in exactly 3 fields (two fresh project UUIDs and the version under test). SQLite 3.46.0 on both. No behavioural difference.
 - [Phase 01]: [Phase 01] The plan's cmpCaidoVersion(0.6.0, 0.57.1) POSITIVE criterion was INVERTED — Caido's minor runs 55/57/58, so 0.6.0 is ancient and must compare NEGATIVE. POSITIVE is what the string-compare trap produces. Implementing it as written would have accepted builds from before the measured minimum.
 
+- [Phase 01]: P7-D1: a query VALUE is replaced WHOLE, carrying no length, no hash and no fingerprint — a length leaks a token's scheme, and an unsalted digest of a low-entropy value (`?debug=true`, `?user=alice`) is a rainbow-table lookup. The keyed fingerprint is SEC-04's HMAC and belongs to Phase 4; 01-RESEARCH.md's security domain says Phase 1 must not create a key it will then have to migrate. Idempotence falls out for free
+- [Phase 01]: P7-D2: QUERY_NAME_MAX=64 bounds a RETAINED parameter name. A segment with no `=` is syntactically a NAME, so a values-only rule would pass a bare pasted token through verbatim (T-01-31). Residual, named rather than left to be found: a secret shorter than 64 chars used as a bare parameter name still survives
+- [Phase 01]: P7-D3: the store redaction gate carries a FOURTH rule, `unredacted-persisted-error`, over error-shaped function PARAMETERS. The three catch-scoped rules cannot reach `analyses.ts:194` by construction — its binding is a parameter, not a caught exception — and :194 is the ONE line in the store layer that writes the `analyses.error` column. A catch-scoped-only gate would have had a hole one line below a site it does cover
+- [Phase 01]: P7-D4 (execution-time correction to plan 01-07): the plan's stated rationale for the redact-before-truncate test is WRONG FOR THIS REDACTOR. Because a value is replaced whole regardless of length and URL_MAX truncation removes only a tail, the first `=` of every segment is stable — so truncate-first cannot expose a value either, and the assertion the plan asked for would have passed under BOTH orderings. The ordering case instead asserts the difference that IS observable (parameter names past the cut survive redact-first, are lost truncate-first) and fails under the mutation. The ordering stays load-bearing: any future redactor that preserves a length, a prefix or a fingerprint makes truncate-first leak immediately
+- [Phase 01]: P7-D5 (operator decision at a blocking-human checkpoint, 2026-08-21): P1_EXPECT_VERSION moved 0.57.1 -> 0.58.0. An AUTHORISED EVIDENCE-CONTRACT CHANGE, not a version bump — 0.57.1 is unobtainable (the app bundle auto-upgraded in place; no PINNED_SHA512 entry; P6-D5 recorded api.caido.io 404s every non-`latest` version). COMPATIBLE IS NOT RE-MEASURED: 01-06 proved the 16 SDK surfaces behave identically, which is a claim about surface BEHAVIOUR, not timing or memory. Every go-no-go.json threshold was measured on 0.57.1 and none has been re-measured — a phase wanting to trust a Phase 0 NUMBER on 0.58.0 must re-measure first. Fail-closed tripwire verified in place: tests/phase1-load.spec.ts and tests/phase1-runtime.spec.ts still hard-code EXPECTED_CAIDO_VERSION "0.57.1", so re-running spa-load.sh or runtime-answers.sh FAILS loudly rather than contaminating a threshold artifact
+
 ### Known Risks Carried Forward
 
 | Risk | Status |
@@ -162,8 +175,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T00:05:06.177Z
-**Stopped at:** Completed 01-06-PLAN.md
+**Last session:** 2026-08-21T10:29:08.357Z
+**Stopped at:** Completed 01-07-PLAN.md
 **Resume file:** None
 
 ### Blockers
