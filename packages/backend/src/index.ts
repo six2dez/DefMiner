@@ -20,6 +20,10 @@
 //                     onProjectChange, before anything can be admitted. CORE-09's
 //                     isolation is a gate at the mouth of the pipeline, so it has
 //                     to be in force before the mouth opens.
+//  5b. and if that registration FAILED, refuse exactly as step 1 refuses. An
+//                     unarmed lifecycle cannot notice a switch, which makes every
+//                     epoch re-check downstream a constant `true` and turns the
+//                     plugin into a cross-project writer.
 //   6. start the consumer.
 //   7. ready = true.
 //   8. ONLY THEN register onInterceptResponse — events arrive before init()
@@ -92,6 +96,18 @@ function log(sdk: any, msg: string): void {
     /* sdk.console.log can throw during teardown; nothing left to do */
   }
 }
+
+/**
+ * Why the plugin refuses to observe anything when CORE-09's listener is missing.
+ *
+ * A CONSTANT rather than an inline string: `lifecycle.spec.ts` asserts the
+ * operator is told the reason on the RPC, and a sentence that exists in two
+ * places drifts in one of them.
+ */
+const ISOLATION_UNAVAILABLE_REASON =
+  "project isolation unavailable: sdk.events.onProjectChange could not be " +
+  "registered, so a project switch would go unnoticed and this plugin would " +
+  "write one project's traffic under another's id. Ingestion is DISABLED.";
 
 function status(): Record<string, unknown> {
   return {
@@ -229,13 +245,35 @@ export async function init(sdk: any): Promise<void> {
     // 5 — the project scope every write is keyed on, plus the listener that
     // swaps it. The queue is constructed FIRST because the lifecycle drains it.
     queue = new BoundedQueue(QUEUE_CAP);
-    await installLifecycle(sdk, {
+    const lifecycle = await installLifecycle(sdk, {
       queue,
       enqueuedAt,
       log: (msg) => {
         sdk.console.log(msg);
       },
     });
+
+    // 5b — ISOLATION IS A PRECONDITION FOR INGESTING, NOT A FEATURE OF IT.
+    //
+    // With no `onProjectChange` registration the plugin can never learn that the
+    // operator switched project. The active id stays pinned to whatever boot
+    // resolved, the epoch never moves, and every epoch re-check the consumer
+    // makes is a constant `true` — so a plugin that carried on here would write
+    // project B's bundles and B's URLs keyed on project A, and then serve A's
+    // filter back to an operator working in B. That is the Information
+    // Disclosure CORE-09 exists to prevent, and it arrives with every downstream
+    // guard still looking healthy.
+    //
+    // So this refuses exactly the way an unmeasured build is refused: no hook,
+    // no consumer, no ready latch, and the reason on getStatus().
+    if (!lifecycle.projectChangeArmed) {
+      compatible = false;
+      compatReason = ISOLATION_UNAVAILABLE_REASON;
+      log(sdk, "INCOMPATIBLE: " + compatReason);
+      sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
+      sdk.api.register("getCompat", () => compatReport(caidoVersion));
+      return;
+    }
 
     // 6 — exactly one consumer.
     configurePassive({ queue, enqueuedAt, admissionAllowed });

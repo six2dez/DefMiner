@@ -501,17 +501,81 @@ describe("init() with no project selected", () => {
     expect(sdk.calls.projectsGetCurrent).toBe(1);
   });
 
-  it("does not take init() down when onProjectChange cannot be registered", async () => {
+  it("DISARMS ingestion when onProjectChange cannot be registered", async () => {
+    // The previous version of this case asserted the opposite — that the plugin
+    // carried on with the id boot resolved. That is the cross-project writer:
+    // with no change event the active id is pinned, `epoch` never moves, and
+    // every epoch re-check in the consumer is a constant `true`, so project B's
+    // bundles land keyed on project A.
     const sdk = makeFakeSdk({ projectId: A });
     sdk.events.onProjectChange = (): never => {
       throw new Error("no such event on this build");
     };
-    await expect(installLifecycle(sdk, deps())).resolves.toBeTruthy();
+
+    const installed = await installLifecycle(sdk, deps());
+
+    expect(
+      installed.projectChangeArmed,
+      "installLifecycle resolved without telling its caller that isolation is " +
+        "absent. A log line is not a control-flow signal: init() can only " +
+        "refuse if it is told.",
+    ).toBe(false);
     expect(
       currentProjectId(),
-      "a plugin that cannot notice a switch is still useful for the project it " +
-        "resolved; a plugin that refused to start is not.",
-    ).toBe(A);
+      "the active id survived a failed isolation install. Every write keys on " +
+        "it and nothing can ever correct it, so it is not an id — it is a " +
+        "guess that looks like one.",
+    ).toBeNull();
+    expect(admissionAllowed()).toBe(false);
+    expect(
+      currentSignal().aborted,
+      "the in-flight token was left live, so a walk already running would " +
+        "finish and write under the pinned id.",
+    ).toBe(true);
+    expect(installed.next).toBeNull();
+  });
+
+  it("writes NO row under the stale id after a change the plugin never saw", async () => {
+    // The whole failure, end to end, through the real init(): registration
+    // fails, the operator switches project, and the plugin — which cannot see
+    // the switch — is handed a response. Nothing may be written under either id.
+    const registered: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId: A,
+      db: async () => fx.db,
+      register: (name: string, fn: unknown) => {
+        registered[name] = fn as (...a: unknown[]) => unknown;
+      },
+      get: async (id: string) => ({
+        request: makeFakeRequest({ id, url: "https://b.test/" + id + ".js" }),
+        response: makeFakeResponse({ id, bodyBytes: body(id) }),
+      }),
+    });
+    sdk.events.onProjectChange = (): never => {
+      throw new Error("no such event on this build");
+    };
+
+    await init(sdk);
+
+    expect(
+      sdk.calls.interceptResponseHandlers.length,
+      "onInterceptResponse was registered on a build with no project " +
+        "isolation. Every response it delivers becomes a row keyed on an id " +
+        "nothing can ever correct.",
+    ).toBe(0);
+    const st = registered.getStatus() as Record<string, unknown>;
+    expect(st.compatible).toBe(false);
+    expect(String(st.reason)).toContain("project isolation unavailable");
+    expect(st.projectId).toBeNull();
+
+    // The operator switches to B. The plugin never learns — that is the point.
+    onResponse(sdk, makeFakeRequest({ id: "z1" }), makeFakeResponse());
+    expect(queue.depth).toBe(0);
+
+    expect(await listArtifacts(fx.db, A)).toEqual([]);
+    expect(await listArtifacts(fx.db, B)).toEqual([]);
+    expect(await listObservations(fx.db, A)).toEqual([]);
+    expect(await listObservations(fx.db, B)).toEqual([]);
   });
 });
 

@@ -43,6 +43,24 @@
 // version of this function would have to defend against interleaving at every
 // step; a synchronous one cannot be interleaved at all.
 //
+// ===========================================================================
+// ISOLATION IS NOT OPTIONAL, SO ITS INSTALLATION IS NOT BEST-EFFORT
+// ===========================================================================
+// If `sdk.events.onProjectChange` cannot be registered, this file cannot ever
+// learn that the operator switched project. `activeProjectId` stays pinned to
+// whatever boot resolved, `epoch` never moves, and EVERY re-check the consumer
+// makes against it becomes a constant `true` — so the plugin keeps writing, and
+// writes project B's bundles and URLs keyed on project A. That is the exact
+// Information Disclosure this file exists to prevent, arrived at by a route that
+// leaves every downstream guard looking healthy.
+//
+// So a failed registration DISARMS the pipeline rather than degrading it: the
+// active id goes to `null` (admissionAllowed() -> false), the current token is
+// aborted, and `projectChangeArmed: false` comes back so `init()` can refuse to
+// register the hook at all and say why on getStatus(). A plugin that cannot
+// notice a switch is not "still useful for the project it resolved" — it cannot
+// tell whether that project is still the current one.
+//
 // NOT DONE HERE, DELIBERATELY: a `scan_state` row left `running` or `pending` by
 // a killed runtime is NOT reconciled. That is ERR-02 in Phase 2, which owns
 // stale-job detection; the column already exists, and Phase 1's restart
@@ -53,6 +71,11 @@ import type { BoundedQueue } from "@defminer/engine/queue";
 
 import type { EnqueueClock } from "./hooks/passive";
 import { resetDbHandle } from "./store/db";
+// Redact-then-truncate. Error text on this path routinely quotes the thing the
+// plugin was working on, and the thing this pipeline works on is a target URL
+// (T-01-26). The host log is a channel the threat model covers too, not only the
+// RPC projection.
+import { describeError } from "./telemetry";
 
 /**
  * The narrow slice of `Project` this file reads.
@@ -96,6 +119,18 @@ export type ProjectChangeSummary = {
   next: string | null;
   /** Queue entries thrown away because they belong to `previous`. */
   discarded: number;
+};
+
+/**
+ * What `installLifecycle` resolved, plus the ONE fact `init()` has to branch on.
+ *
+ * `projectChangeArmed` is false when `sdk.events.onProjectChange` could not be
+ * registered. It is returned rather than logged because a log line is not a
+ * control-flow signal: the caller has to REFUSE, and it can only refuse if it is
+ * told. See this file's header for what an unarmed lifecycle costs.
+ */
+export type LifecycleInstallation = ProjectChangeSummary & {
+  projectChangeArmed: boolean;
 };
 
 /** A cancellation token in the shape `walk()` reads.
@@ -236,7 +271,7 @@ export function applyProjectChange(
 export async function installLifecycle(
   sdk: LifecycleSdk,
   d: LifecycleDeps,
-): Promise<ProjectChangeSummary> {
+): Promise<LifecycleInstallation> {
   deps = d;
 
   // The initial resolution goes through applyProjectChange, so `init()` on an
@@ -248,11 +283,12 @@ export async function installLifecycle(
   } catch (e) {
     // A failed read is "no project", not a crash: with none selected the proxy
     // fails every request anyway, so the honest state is the null one.
-    log("projects.getCurrent() failed: " + String(e).slice(0, 160));
+    log("projects.getCurrent() failed: " + describeError(e));
     initial = null;
   }
   const summary = applyProjectChange(initial);
 
+  let projectChangeArmed = true;
   try {
     sdk.events.onProjectChange((_sdk: unknown, project: ProjectOrNull) => {
       const applied = applyProjectChange(project);
@@ -267,23 +303,36 @@ export async function installLifecycle(
       );
     });
   } catch (e) {
-    // Registration failing must NOT take init() down and mark the plugin
-    // incompatible. The plugin still works for the project it resolved above;
-    // what it loses is the ability to notice a switch, and saying so is more
-    // useful than a dead plugin.
+    // Registration failing must not take init() down — but it must not be
+    // downgraded to a log line either. Without this event the active id can
+    // silently become the WRONG id: nothing here would learn about a switch,
+    // `epoch` would never move, and every epoch re-check in the consumer would
+    // be a constant `true` while the pipeline wrote the new project's traffic
+    // under the old project's key.
+    //
+    // So ISOLATION FAILING DISARMS INGESTION, in this exact order:
+    projectChangeArmed = false;
+    activeProjectId = null; // admissionAllowed() -> false
+    controller.aborted = true;
+    controller.reason = "project isolation could not be installed";
     log(
       "onProjectChange could not be registered (" +
-        String(e).slice(0, 120) +
-        ") — a project switch will NOT be noticed by this plugin",
+        describeError(e) +
+        ") — ingestion is DISABLED because project isolation cannot be " +
+        "maintained",
     );
   }
 
   log(
-    "lifecycle installed; active project " +
-      (summary.next ?? "<none>") +
-      (summary.next === null
-        ? " — nothing will be admitted until a project is selected"
-        : ""),
+    projectChangeArmed
+      ? "lifecycle installed; active project " +
+          (summary.next ?? "<none>") +
+          (summary.next === null
+            ? " — nothing will be admitted until a project is selected"
+            : "")
+      : "lifecycle NOT installed; ingestion disabled",
   );
-  return summary;
+  // `next` reports where the plugin ACTUALLY ended up, which on the disarmed
+  // path is `null` and not the id boot happened to resolve.
+  return { ...summary, next: activeProjectId, projectChangeArmed };
 }
