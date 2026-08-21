@@ -170,7 +170,20 @@ function backendFiles(): string[] {
  * nobody has tested, and this phase has been bitten by exactly that four times.
  */
 export function auditSource(file: string, source: string): Violation[] {
+  const base = file.split("/").pop() ?? file;
   const violations: Violation[] = [];
+
+  const add = (rule: string, where: string): void => {
+    const surface = FORBIDDEN_OUTBOUND.find((f) => f.rule === rule);
+    if (surface === undefined) throw new Error(`no such rule: ${rule}`);
+    violations.push({
+      file: base,
+      rule,
+      detail:
+        `${file}: ${where} reaches ${surface.surface}, which CORE-01 forbids in this phase — ` +
+        surface.why,
+    });
+  };
 
   const sf = ts.createSourceFile(
     file,
@@ -180,8 +193,145 @@ export function auditSource(file: string, source: string): Violation[] {
     ts.ScriptKind.TS,
   );
 
+  /**
+   * Identifiers aliasing an outbound RECEIVER, and identifiers a `send` was
+   * destructured onto. Collected in a first pass over the file in document
+   * order, so `const r = sdk.requests; const { send } = r;` resolves — and, per
+   * boundary 2 in the header, no further: there is no symbol table here.
+   */
+  const receiverAliases = new Map<string, string>();
+  const sendAliases = new Set<string>();
+
+  /** The outbound receiver an expression denotes, if it denotes one. */
+  const receiverKind = (node: ts.Expression): string | undefined => {
+    if (ts.isPropertyAccessExpression(node) && RECEIVERS.has(node.name.text)) {
+      return node.name.text;
+    }
+    if (
+      ts.isElementAccessExpression(node) &&
+      ts.isStringLiteralLike(node.argumentExpression) &&
+      RECEIVERS.has(node.argumentExpression.text)
+    ) {
+      return node.argumentExpression.text;
+    }
+    if (ts.isIdentifier(node)) return receiverAliases.get(node.text);
+    return undefined;
+  };
+
+  /** The receiver and method name of a call, in either access form. */
+  const calleeParts = (
+    callee: ts.Expression,
+  ): { receiver: ts.Expression; method: string } | undefined => {
+    if (ts.isPropertyAccessExpression(callee)) {
+      return { receiver: callee.expression, method: callee.name.text };
+    }
+    if (
+      ts.isElementAccessExpression(callee) &&
+      ts.isStringLiteralLike(callee.argumentExpression)
+    ) {
+      return {
+        receiver: callee.expression,
+        method: callee.argumentExpression.text,
+      };
+    }
+    return undefined;
+  };
+
+  /** The literal specifier of a module reference, if it is a literal at all. */
+  const specifierOf = (node: ts.Node | undefined): string | undefined =>
+    node !== undefined && ts.isStringLiteralLike(node) ? node.text : undefined;
+
+  const collect = (node: ts.Node): void => {
+    if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
+      const kind = receiverKind(node.initializer);
+      if (kind !== undefined) {
+        if (ts.isIdentifier(node.name)) {
+          receiverAliases.set(node.name.text, kind);
+        } else if (
+          kind === SEND_RECEIVER &&
+          ts.isObjectBindingPattern(node.name)
+        ) {
+          for (const el of node.name.elements) {
+            const property = el.propertyName ?? el.name;
+            const propertyName =
+              ts.isIdentifier(property) || ts.isStringLiteralLike(property)
+                ? property.text
+                : "";
+            if (propertyName === SEND_METHOD && ts.isIdentifier(el.name)) {
+              sendAliases.add(el.name.text);
+            }
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sf);
+
   const visit = (node: ts.Node): void => {
-    // RED: no rule is implemented yet. Every firing case below must fail.
+    // --- static import and `export ... from` ---------------------------------
+    if (
+      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+      specifierOf(node.moduleSpecifier) === HTTP_SPECIFIER
+    ) {
+      add(
+        "outbound-import",
+        ts.isImportDeclaration(node)
+          ? "a static import"
+          : "an `export ... from`",
+      );
+    }
+
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+
+      // --- dynamic import() and require() ------------------------------------
+      if (
+        (callee.kind === ts.SyntaxKind.ImportKeyword ||
+          (ts.isIdentifier(callee) && callee.text === "require")) &&
+        specifierOf(node.arguments[0]) === HTTP_SPECIFIER
+      ) {
+        add(
+          "outbound-import",
+          callee.kind === ts.SyntaxKind.ImportKeyword
+            ? "a dynamic import()"
+            : "a require()",
+        );
+      }
+
+      if (ts.isIdentifier(callee)) {
+        // --- the bare global ------------------------------------------------
+        if (callee.text === FETCH_GLOBAL) {
+          add("outbound-fetch", `a call to \`${callee.text}(...)\``);
+        }
+        // --- a `send` destructured off a requests receiver -------------------
+        if (sendAliases.has(callee.text)) {
+          add(
+            "outbound-send",
+            `a call to \`${callee.text}(...)\`, destructured from a \`${SEND_RECEIVER}\` receiver`,
+          );
+        }
+      }
+
+      // --- a method on an outbound receiver -----------------------------------
+      const parts = calleeParts(callee);
+      if (parts !== undefined) {
+        const kind = receiverKind(parts.receiver);
+        if (kind === SEND_RECEIVER && parts.method === SEND_METHOD) {
+          add(
+            "outbound-send",
+            `a \`${parts.method}\` call on a \`${SEND_RECEIVER}\` receiver`,
+          );
+        }
+        if (kind === NET_RECEIVER) {
+          add(
+            "outbound-net",
+            `a \`${parts.method}\` call on a \`${NET_RECEIVER}\` receiver`,
+          );
+        }
+      }
+    }
+
     ts.forEachChild(node, visit);
   };
   visit(sf);
@@ -277,9 +427,9 @@ describe("the gate's own failure paths", () => {
   });
 
   it("outbound-send fires through a RECEIVER ALIAS", () => {
-    expect(
-      rulesOf("const r = sdk.requests;\nawait r.send(req);"),
-    ).toContain("outbound-send");
+    expect(rulesOf("const r = sdk.requests;\nawait r.send(req);")).toContain(
+      "outbound-send",
+    );
   });
 
   it("outbound-send fires on a DESTRUCTURED method", () => {
@@ -315,15 +465,13 @@ describe("the gate's own failure paths", () => {
     expect(rulesOf("await sdk.net.somethingElse(host);")).toContain(
       "outbound-net",
     );
-    expect(rulesOf("const n = sdk.net;\nawait n.connect(host, port);")).toContain(
-      "outbound-net",
-    );
+    expect(
+      rulesOf("const n = sdk.net;\nawait n.connect(host, port);"),
+    ).toContain("outbound-net");
   });
 
   it("outbound-net does NOT fire on an identifier merely NAMED net", () => {
-    expect(
-      rulesOf("const net = { port: 443 };\nreturn net.port;"),
-    ).toEqual([]);
+    expect(rulesOf("const net = { port: 443 };\nreturn net.port;")).toEqual([]);
   });
 
   // --- outbound-fetch ------------------------------------------------------
