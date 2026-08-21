@@ -28,14 +28,38 @@ import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const STORE_DIR = "packages/backend/src/store";
+const BACKEND_SRC = "packages/backend/src";
+const STORE_DIR = join(BACKEND_SRC, "store");
 
-/** Every non-spec module in the store package. */
-function storeFiles(): string[] {
-  return readdirSync(STORE_DIR)
-    .filter((f) => f.endsWith(".ts") && !f.endsWith(".spec.ts"))
-    .sort()
-    .map((f) => join(STORE_DIR, f));
+/**
+ * Every non-spec module in the BACKEND PACKAGE, at any depth.
+ *
+ * The package, not the directory. This used to read `store/` non-recursively, so
+ * every rule below — named parameters, array binds, exec arity, unscoped
+ * multi-row statements, module-scope prepare, interpolated SQL — was enforced
+ * only for files sitting directly in `store/`, while the header claimed it
+ * "catches every call site including the ones written next year". SQL written
+ * anywhere else in the backend was ungated, and there already was some:
+ * `index.ts`'s `db.prepare("SELECT 1")` probe. A future `hooks/` or `ingest/`
+ * query, or a `store/reads/` subdirectory, would have inherited none of it.
+ */
+function backendFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (
+        entry.name.endsWith(".ts") &&
+        !entry.name.endsWith(".spec.ts")
+      ) {
+        out.push(full);
+      }
+    }
+  };
+  walk(BACKEND_SRC);
+  return out.sort();
 }
 
 type Violation = { file: string; rule: string; detail: string };
@@ -295,18 +319,21 @@ export function auditSource(
   return { violations, sqlStrings };
 }
 
-describe("SQL discipline over packages/backend/src/store (STORE-07, T-01-19)", () => {
-  const files = storeFiles();
+describe("SQL discipline over packages/backend/src (STORE-07, T-01-19)", () => {
+  const files = backendFiles();
 
-  it("enumerates a NON-EMPTY set of store modules", () => {
+  it("enumerates a NON-EMPTY set of backend modules", () => {
     // Without this the whole gate passes by measuring nothing — the same failure
     // tests/schema.spec.ts:44-53 guards against for the same reason.
     expect(
       files.length,
-      `no .ts modules found under ${STORE_DIR}`,
+      `no .ts modules found under ${BACKEND_SRC}`,
     ).toBeGreaterThan(0);
     // The modules this plan and plan 01-01 shipped, so a RENAME is a visible
-    // change rather than a silently shrunk gate.
+    // change rather than a silently shrunk gate. `index.ts`, `consumer.ts` and
+    // `passive.ts` are here because the walk is over the PACKAGE now: index.ts
+    // already prepares a statement, and the two hook-side modules are where a
+    // future query is most likely to be written.
     const names = files.map((f) => f.split("/").pop());
     for (const expected of [
       "analyses.ts",
@@ -316,9 +343,37 @@ describe("SQL discipline over packages/backend/src/store (STORE-07, T-01-19)", (
       "observations.ts",
       "retention.ts",
       "settings.ts",
+      "index.ts",
+      "lifecycle.ts",
+      "telemetry.ts",
+      "consumer.ts",
+      "passive.ts",
+      "admit.ts",
+      "compat.ts",
     ]) {
       expect(names, `${expected} is not being audited`).toContain(expected);
     }
+    // And the walk really did DESCEND, rather than matching those names in one
+    // flat directory.
+    expect(
+      files.some((f) => f.includes("/ingest/")),
+      "the walk did not descend into subdirectories, which is the whole fix.",
+    ).toBe(true);
+  });
+
+  it("audits the SQL that lives OUTSIDE store/ — the reason for the walk", () => {
+    // Non-vacuity for the widening itself: index.ts's probe statement is real
+    // SQL that the directory-scoped version of this gate never saw.
+    const indexFile = join(BACKEND_SRC, "index.ts");
+    const { sqlStrings } = auditSource(
+      indexFile,
+      readFileSync(indexFile, "utf8"),
+    );
+    expect(
+      sqlStrings.length,
+      "index.ts contributes no SQL to the gate, so widening it bought nothing " +
+        "measurable. If the probe statement moved, point this at wherever it went.",
+    ).toBeGreaterThan(0);
   });
 
   it("finds SQL to audit — the gate is not measuring an empty set", () => {
