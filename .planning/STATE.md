@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-08-21T10:52:56.833Z"
+stopped_at: Completed 01-09-PLAN.md — phase 01 complete (9 of 9)
+last_updated: "2026-08-21T11:08:22.698Z"
 last_activity: 2026-08-21
-last_activity_desc: 01-08 gap closure — pre-policy observation rows measured at 0 and left, by operator decision at a blocking-human checkpoint
-state_head: 36752ca0c288b252f3f850b502499992ca38cf28
+last_activity_desc: 01-09 gap closure — CORE-01's outbound prohibition wired as an AST gate over packages/backend/src, mutation-proven twice against hooks/passive.ts; phase 01 complete at 9 of 9 plans
+state_head: 9ec3dc4d4f096102372d9e2ac29ee82dd4307089
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -27,19 +27,20 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 8 of 9 complete — next is 01-09, the last plan of the phase
-Status: Ready to execute 01-09
-Last activity: 2026-08-21 — 01-08 executed: pre-policy observation rows measured read-only at 0 across the 1 DefMiner database on this host; operator chose `leave` at a blocking-human checkpoint; no code shipped
+Phase: 01 (Skeleton, Persistence & Compatibility) — ALL PLANS EXECUTED
+Plan: 9 of 9 complete — 01-09 was the last plan of the phase
+Status: Ready for phase verification (`/gsd-verify-work 01`), not for another executor
+Last activity: 2026-08-21 — 01-09 executed: CORE-01's no-outbound-traffic prohibition moved from prose to a wired AST gate (`packages/backend/src/outbound-prohibition.spec.ts`) over the four surfaces, every rule fixture-proven in both directions and the gate made to FAIL twice against real shipped source before being restored green
 
-Progress: [████████░░] 89% of phase 01 (8 of 9 plans)
+Progress: [██████████] 100% of phase 01 (9 of 9 plans)
 
 > The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
-> returned `progress percent withheld by buildStateFrontmatter` on this run too (it has
-> now done so on two consecutive plans), and the
-> previous value (8%) was already stale — it read 8% both at 0 and at 6 completed
-> plans. The figure above is the phase-local one, stated with its basis rather than
-> as an unexplained number.
+> returned `progress percent withheld by buildStateFrontmatter` on this run too — it
+> has now done so on THREE consecutive plans (01-07, 01-08, 01-09), so this is the
+> handler's steady behaviour on this repo and not a transient. The previous value (8%)
+> was already stale — it read 8% both at 0 and at 6 completed plans. The figure above
+> is the phase-local one, computed from the 9 PLAN / 9 SUMMARY files on disk and
+> stated with its basis rather than as an unexplained number.
 
 ## Performance Metrics
 
@@ -70,6 +71,7 @@ Progress: [████████░░] 89% of phase 01 (8 of 9 plans)
 | Phase 01 P06 | 24 min | 3 tasks | 37 files |
 | Phase 01 P07 | 49 min | 3 tasks | 35 files |
 | Phase 01 P08 | 18 min | 3 tasks | 4 files |
+| Phase 01 P09 | 22 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -138,6 +140,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P7-D5 (operator decision at a blocking-human checkpoint, 2026-08-21): P1_EXPECT_VERSION moved 0.57.1 -> 0.58.0. An AUTHORISED EVIDENCE-CONTRACT CHANGE, not a version bump — 0.57.1 is unobtainable (the app bundle auto-upgraded in place; no PINNED_SHA512 entry; P6-D5 recorded api.caido.io 404s every non-`latest` version). COMPATIBLE IS NOT RE-MEASURED: 01-06 proved the 16 SDK surfaces behave identically, which is a claim about surface BEHAVIOUR, not timing or memory. Every go-no-go.json threshold was measured on 0.57.1 and none has been re-measured — a phase wanting to trust a Phase 0 NUMBER on 0.58.0 must re-measure first. Fail-closed tripwire verified in place: tests/phase1-load.spec.ts and tests/phase1-runtime.spec.ts still hard-code EXPECTED_CAIDO_VERSION "0.57.1", so re-running spa-load.sh or runtime-answers.sh FAILS loudly rather than contaminating a threshold artifact
 - [Phase 01]: P8-D1 (operator decision at a gate="blocking-human" checkpoint, 2026-08-21, resume signal `leave`): pre-policy `observations.url` rows are LEFT AS THEY ARE. The load-bearing reason is NOT that the measured count (0) is small — it is that the target population is CLOSED BY CONSTRUCTION. A pre-policy row can only be written by a build predating 01-07's write-path redactor; DefMiner has never shipped, so only a developer machine could hold one, and the one DefMiner database on this host holds zero. Every build from 01-07 onward redacts at write, so none can ever be added. A sweep would therefore be permanently dead code guarding an empty set that cannot grow — not machinery arriving early. STORE-06's 90-day window bounds an EMPTY SET: recorded as "no exposure to accept", not as an accepted exposure. T-01-36 closed by measurement; STORE-03 settled rather than dangling into 01-09
 - [Phase 01]: P8-D2: an exposure measurement prefers `sqlite3 -readonly` (WAL-aware) and falls back to `file:<db>?mode=ro&immutable=1` ONLY where no `-wal` sidecar exists; where a read-only open fails AND a non-empty `-wal` is present, NO count is taken and the database is reported as a named error, never as a zero. Proven necessary on this run rather than argued: an immutable read of the one DefMiner database (45,352-byte `-wal`) reports NO TABLES AT ALL, from which a COUNT(*) harness derives a confident zero indistinguishable from a clean bill of health. Seven of the eight plugin databases on this host refused `-readonly` outright, so the naive fallback was the obvious path and would have fabricated the number the operator then decided against
+- [Phase 01]: P9-D1: CORE-01's prohibition is now a GATE, not prose: packages/backend/src/outbound-prohibition.spec.ts audits every non-spec module in the backend package on every `pnpm test`, over four rules — outbound-send (direct call, element-access form, receiver alias, destructured method), outbound-net (ANY method on a `net` receiver, not just `connect`), outbound-fetch (the bare global only), outbound-import (all four caido:http specifier forms). Every rule has a firing fixture AND a legal fixture, and the whole gate was mutation-proven twice against real shipped source — The verifier's evidence line was explicit that NO WIRED ENFORCEMENT EXISTED: the DIST-05 bundle allowlist ADMITS caido:http (Phase 0 measured it loadable), and sdk.requests.send needs no import at all — so neither existing gate could catch a regression. Three Phase 0 measurements make that regression worse than it sounds: SURFACES_FIRING_INTERCEPT="proxy" and the non-re-firing send mean plugin-originated traffic is invisible to this plugin's own counters (no number anywhere would move), and caido/caido#2211 was filed against the exact target build. Both mutations were RUN, not described: a send planted in hooks/passive.ts produced `outbound-send: …/passive.ts`, a static caido:http import produced `outbound-import: …/passive.ts`. Note which one matters more — check:bundle would have PASSED mutation B (caido:http is on its allowlist as loadable) and can never see mutation A at all
+- [Phase 01]: P9-D2: scripts/ci/check-bundle-imports.mjs is deliberately NOT touched, and the two gates coexist by design — the bundle gate bounds what can LOAD, the new source gate bounds what the source may CALL — Its allowlist answers a different question: which specifiers Caido's QuickJS was MEASURED to resolve. caido:http is on it because the Phase 0 capability probe loaded it successfully, and that file's own header says the list is derived from a probe run and not authored. Removing an entry would silently redefine its semantics from "measured loadable" to "permitted", which is a lie about a measurement. The policy belongs in a source gate
+- [Phase 01]: P9-D3: the outbound gate's alias tracking is scope-blind ON PURPOSE and says so in its own header — it resolves `const r = sdk.requests; r.send(req)` and `const { send } = sdk.requests; send(req)` but builds no symbol table, so an alias rebound in an inner scope escapes it (T-01-51, accept). Its second residual: a .spec.ts file could call an outbound surface unnoticed (T-01-50, accept), bounded by check:bundle, which specs never enter — The same bound consumer.spec.ts's CORE-05 audit works within. Claiming a precision the walk does not have is worse than the gap, because it gets trusted — so both residuals are stated in the gate's header rather than left for a reader to discover. The .spec.ts exclusion is not incidental: it is what lets this gate's own fixtures, which necessarily contain the forbidden shapes as source text, live inline with no temp file and no stray module for `tsc --build` to trip over
 
 ### Known Risks Carried Forward
 
@@ -180,8 +185,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T10:52:30.613Z
-**Stopped at:** Completed 01-08-PLAN.md
+**Last session:** 2026-08-21T11:07:32.771Z
+**Stopped at:** Completed 01-09-PLAN.md — phase 01 complete (9 of 9)
 **Resume file:** None
 
 ### Blockers

@@ -359,3 +359,10 @@ Two residuals are recorded in the gate's own header rather than left to be disco
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-21*
+
+## Self-Check: PASSED
+
+- `packages/backend/src/outbound-prohibition.spec.ts` — FOUND on disk (564 lines)
+- `.planning/phases/01-skeleton-persistence-compatibility/COVERAGE.md` — FOUND on disk
+- `.planning/phases/01-skeleton-persistence-compatibility/01-09-SUMMARY.md` — FOUND on disk
+- Commits `2d8dcbf`, `331ffa5`, `7e96db9`, `9ec3dc4` — all present in `git log --all`

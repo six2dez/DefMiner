@@ -104,7 +104,7 @@ Plans:
 
 **Wave 9** *(blocked on 01-08 — sequencing, not code: all three gap plans mutate the shared tree to prove their gates can fail, and each asserts whole-suite green)*
 
-- [ ] 01-09-PLAN.md — **Gap 2**: CORE-01's no-outbound-traffic prohibition gets a wired AST gate over `packages/backend/src`, mutation-proven against real source — *wave 9*
+- [x] 01-09-PLAN.md — **Gap 2**: CORE-01's no-outbound-traffic prohibition gets a wired AST gate over `packages/backend/src`, mutation-proven against real source — *wave 9*
 
 ### Phase 2: Error Containment & Observability
 
