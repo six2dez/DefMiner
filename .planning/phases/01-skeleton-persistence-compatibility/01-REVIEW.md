@@ -63,7 +63,25 @@ findings:
   warning: 10
   info: 7
   total: 18
-status: issues_found
+status: fixes_applied
+fixed_at: 2026-08-21T08:05:00Z
+resolution:
+  fixed: [CR-01, WR-01, WR-02, WR-03, WR-04, WR-05, WR-06, WR-08, WR-09, WR-10]
+  deferred: [WR-07]
+  open: [IN-01, IN-02, IN-03, IN-04, IN-05, IN-06, IN-07]
+fix_commits:
+  CR-01: 910c382
+  WR-01: 7a5aa5c
+  WR-02: 0c27fbf
+  WR-03: 9927a76
+  WR-04: c58bad7
+  WR-05: e19b73e
+  WR-06: 2966662
+  WR-08: 49250aa
+  WR-09: 15509d4
+  WR-10: 992bada
+tests_before: 27 files / 616 tests
+tests_after: 28 files / 637 tests
 ---
 
 # Phase 1: Code Review Report
@@ -71,7 +89,35 @@ status: issues_found
 **Reviewed:** 2026-08-21T00:30:00Z
 **Depth:** standard
 **Files Reviewed:** 54 (34 production and gate files, 20 spec and config files read for cross-reference)
-**Status:** issues_found
+**Status:** fixes_applied — 10 of 11 in scope fixed, 1 deferred by decision, 7 info left open
+
+## Resolution (2026-08-21)
+
+Ten findings fixed, one commit each, each with a test that FAILS without the
+fix — every mutation run rather than described, and the failing message quoted
+in its commit. `WR-07` was deferred by explicit decision (the query-string
+retention policy is the operator's to make, so the code and the finding are
+untouched). `IN-01 … IN-07` are out of scope for this pass.
+
+| Finding | Status | Commit | The assertion that fails without the fix |
+|---|---|---|---|
+| CR-01 | fixed | `910c382` | `expected true to be false` (armed flag) and `expected 1 to be +0` (hook registered without isolation) |
+| WR-01 | fixed | `7a5aa5c` | `expected 1538 to be less than or equal to 512` |
+| WR-02 | fixed | `0c27fbf` | `expected 2 to be 1` (a change opened a second pool) |
+| WR-03 | fixed | `9927a76` | a URL crossed the getStatus RPC — `expected [ Array(1) ] to deeply equal []` |
+| WR-04 | fixed | `c58bad7` | `1 sweeps after 128 rows were inserted … expected 1 to be 2` |
+| WR-05 | fixed | `e19b73e` | a pending claim reported as a cache hit — `expected 1 to be +0` |
+| WR-06 | fixed | `2966662` | `expected +0 to be 4` (the rebound queue was never drained) |
+| WR-07 | **deferred** | — | left untouched by decision; the policy call is the operator's |
+| WR-08 | fixed | `49250aa` | two violations planted in `hooks/passive.ts`, invisible to the old gate |
+| WR-09 | fixed | `15509d4` | `expected 0 to be greater than 0`, at the summary and at the counter |
+| WR-10 | fixed | `992bada` | `promise rejected … instead of resolving` |
+
+Test count moved from **27 files / 616 tests** to **28 files / 637 tests**;
+`pnpm typecheck`, `pnpm lint`, `pnpm knip` clean; the shipped bundle's import
+set is still exactly `crypto`; and `scripts/phase1/tracer-e2e.sh` reports
+TRACER PASSED against a live Caido 0.57.1 — digest equal, one artifact with
+`seen_count` 2, two observations, sqlite 3.46.0, schema v2.
 
 ## Summary
 
@@ -127,6 +173,8 @@ return { ...summary, projectChangeArmed };
 
 and in `index.ts`, if `projectChangeArmed === false`, do not register `onInterceptResponse`, set `compatReason` to the same sentence, and surface it on `getStatus()` (the refusal path at `index.ts:141-155` already has the shape). Then change `lifecycle.spec.ts:507` to assert the refusal, and add a case proving no row is written under the stale id after a change the plugin never saw.
 
+**RESOLVED** — `910c382`, as suggested. `installLifecycle` returns `LifecycleInstallation` carrying `projectChangeArmed`; the catch sets `activeProjectId = null`, aborts the current token, and reports `next: null` so the summary says where the plugin actually ended up. `init()` gained step 5b, refusing exactly as step 1 does: no consumer, no ready latch, no `onInterceptResponse`, `ISOLATION_UNAVAILABLE_REASON` on `getStatus()`. `lifecycle.spec.ts` now asserts the refusal, and a second case drives the real `init()` end to end — registration fails, a response arrives, and all four row counts under both project ids are zero. Restoring the old catch body fails both (`expected true to be false`, `expected 1 to be +0`).
+
 ---
 
 ## Warnings
@@ -159,6 +207,8 @@ for (const k of kids) { if (budget() <= 0) { moreWork = true; break; } deleted +
 
 and add the failing fixture above to `retention.spec.ts` so the assertion can actually fail.
 
+**RESOLVED** — `7a5aa5c`. The cascade enumerates child KEYS oldest-first within the remaining budget (`OBSERVATION_KEYS_FOR_DIGEST_SQL`, `ANALYSIS_KEYS_FOR_DIGEST_SQL`) and removes each with the fully-bound single-row delete the orphan and per-table sweeps already used, so the pass is bounded whatever the data's shape. The artifact row goes last and only when the enumeration proves nothing of its is left — completeness decided by whether the LIMIT was reached, not by the loop's bookkeeping — so a capped cascade defers instead of orphaning. `examined` counts those children, so `deleted N of 1 examined` is no longer expressible. The new spec seeds a 1536-row fan-out on one digest and reports `expected 1538 to be less than or equal to 512` against the old cascade.
+
 ### WR-02: `resetDbHandle()` never affects production, and the spec that "proves" it does never runs the production path
 
 **File:** `packages/backend/src/store/db.ts:40-42`, `packages/backend/src/lifecycle.ts:205-209`, `packages/backend/src/index.ts:162` (spec: `packages/backend/src/lifecycle.spec.ts:295-320`)
@@ -170,6 +220,8 @@ The test asserts the memo, not the plugin: it calls `getDb()` by hand before and
 This is benign *today* — `sdk.meta.db()` is one plugin-global database, so reusing the handle is arguably right — which is exactly why it is dangerous: a later phase that adds a genuine per-change reset requirement will read this code, the comment and the green test, and conclude the mechanism works.
 
 **Fix:** pick one and make the test match it. Either (a) delete `resetDbHandle()` and its call, and record in `db.ts` that one pooled handle spans every project by design; or (b) make the consumer and the RPCs resolve through `getDb(sdk)` at each use so the reset means something, and rewrite the spec to drive `handleOne` across a change and count `meta.db()` calls made by production code.
+
+**RESOLVED** — `0c27fbf`, option (a). The production reset and the injected `resetDb` dep are gone; `db.ts` records that one pooled handle spans every project by design and why (the same file is open whichever project is selected, so isolation is `project_id` in the key and cannot be a fresh connection), including what the old claim cost. What remains is a test seam named like the other three, `resetDbHandleForTest`. Both specs now assert the design in force: a change does NOT re-resolve the handle (re-adding a reset gives `expected 2 to be 1`), and a second case drives the real consumer across a change through the handle `init()` resolved, proving both projects' rows land apart through one pool.
 
 ### WR-03: The `getStatus` RPC still returns one unredacted `String(e)`
 
@@ -194,6 +246,8 @@ compatReason = "init failed: " + describeError(e);
 
 Apply the same at `index.ts:215` and at the `log(... String(e) ...)` sites in `consumer.ts:274, 529, 566` and `lifecycle.ts:251, 276` — the host log is also a channel the threat model says must not carry target-controlled content. Then extend the recursive walk in `telemetry.spec.ts` to the object `getStatus()` actually returns, not to `slimStatus()` alone.
 
+**RESOLVED** — `9927a76` (the two `lifecycle.ts` sites came with CR-01 in `910c382`). All seven named call sites now go through `describeError`. `telemetry.spec.ts`'s recursive walk was rooted at `slimStatus()` and therefore structurally blind to `reason`; it now also walks the object the registered `getStatus()` RPC returns, driven through the real `init()` with a `meta.db()` rejection carrying a token-bearing URL. Restoring `String(e).slice(0, 160)` fails it. The remaining `String(e).slice(...)` sites in the store layer are error strings persisted to a column rather than RPC text, and were left alone as out of this finding's scope.
+
 ### WR-04: Rows are inserted on iterations that never advance the retention cadence
 
 **File:** `packages/backend/src/ingest/consumer.ts:381-412` vs `:444-445`
@@ -216,6 +270,8 @@ processedForSweep += 1;            // the interval counts WRITES, not completion
 
 and add a consumer case that abandons every iteration after the artifact write and asserts a sweep still fires at the cadence boundary.
 
+**RESOLVED** — `c58bad7`, as suggested: the increment now sits at the point the first row lands, with the reasoning stated where it is. The new consumer case switches project during EVERY artifact write — a fixture `Database` whose `prepare` wraps the artifact upsert and bumps the epoch the instant it returns — so all 128 iterations insert and then abandon. With the counter back on the completion path it reports `1 sweeps after 128 rows were inserted … expected 1 to be 2`.
+
 ### WR-05: A cancelled or failed walk strands the analysis row at `pending`, and the next sighting is counted as a cache hit
 
 **File:** `packages/backend/src/ingest/consumer.ts:423-441`, `packages/backend/src/store/analyses.ts:71-75, 138-158`
@@ -236,6 +292,8 @@ Reconciliation is legitimately ERR-02/Phase 2. Mislabelling it as a cache hit is
 }
 ```
 
+**RESOLVED** — `e19b73e`. New counter `analysisStale`, with the branch decided against `TERMINAL_SCAN_STATES` rather than a second hand-written state list — a state added to one list and not the other is exactly how a non-terminal row starts reporting as a completed one — and a log line naming ERR-02 as the owner of the reconciliation. A vanished row (`state === undefined`, which retention can legitimately cause) counts as stale too, not as a hit. Two cases: a walk cancelled mid-flight followed by a re-serve of the same bytes (`expected 1 to be +0` when the branch is neutered), and a non-vacuity case proving CORE-08's real skip still counts as a hit.
+
 ### WR-06: A second `startConsumer` silently orphans the queue the hook was just rebound to
 
 **File:** `packages/backend/src/ingest/consumer.ts:212-217` with `packages/backend/src/index.ts:231-258`
@@ -255,6 +313,8 @@ if (current !== undefined) {
 
 or, if a second start must be a no-op, have `init()` detect it and skip `configurePassive` and the hook registration too.
 
+**RESOLVED** — `2966662`, the first option: a second start stops the running loop and starts with the new deps, so there is still exactly one loop (the stop precedes the start) and the producer and consumer cannot end up on different queues. The existing "starting twice reloads 10 times, not 20" case keeps its claim and now asserts the rebind; a new case fills a second queue and proves it gets drained — `expected +0 to be 4` against the old behaviour.
+
 ### WR-07: `observations.url` persists query strings verbatim, in a database that outlives the project and the install
 
 **File:** `packages/backend/src/store/observations.ts:32-41`, `packages/backend/src/store/migrations.ts:57-66`, exposed by `packages/backend/src/index.ts:267-271`
@@ -264,6 +324,8 @@ or, if a second start must be a no-op, have `init()` detect it and skip `configu
 This is a documented decision, and the retained query genuinely matters for the cache-hit measurement. But it directly contradicts the mitigation the phase claims elsewhere and never reconciles: `schema.spec.ts:36-40` says "a stolen copy of the plugin database must be a list of URLs, digests and byte counts, **not a credential dump**", and `01-RESEARCH.md`'s threat table says "Phase 1 creates no column that can hold a secret. Enforce by *absence*." A query string is a column that can hold a secret. The asymmetry is stark: `telemetry.ts:236` redacts URLs out of a 240-character error string because they "often carry a session token in the query", while the same value is stored unbounded-in-time one module away — in a file `db.ts:3-6` notes is never GC'd, survives project deletion, and survives force-reinstall.
 
 **Fix:** decide it explicitly rather than by inheritance. The cheapest option that keeps the cache measurement intact is to store the query's *identity* rather than its content — e.g. keep the path and a digest of the sorted query keys+values — and to record the tradeoff in `schema.spec.ts`'s allowlist comment either way. If the raw query is kept, the comment claiming "not a credential dump" must be corrected, and DIST-02's disclosure needs to say the plugin database retains full request URLs for 90 days by default.
+
+**DEFERRED — not fixed, deliberately.** This is a policy decision the operator makes separately, and the finding asks for exactly that: a decision, recorded. Touching the code first would make it by inheritance again, from a different direction. `observations.ts`, `migrations.ts` and this finding are unchanged, and the contradiction it names — `schema.spec.ts:36-40`'s "not a credential dump" against a column that can hold one — is still open and still stated here.
 
 ### WR-08: The SQL discipline gate audits one directory, while its header claims it audits every call site
 
@@ -283,6 +345,8 @@ function backendFiles(): string[] {
 
 The existing "enumerates a NON-EMPTY set" test already guards against the glob silently matching nothing; extend its expected-name list to cover `index.ts` so a rename is still visible.
 
+**RESOLVED** — `49250aa`. A recursive walk over the package (`readdirSync` with `withFileTypes`, no new dependency) rather than a glob. The non-vacuity list gains `index.ts`, `lifecycle.ts`, `telemetry.ts`, `consumer.ts`, `passive.ts`, `admit.ts` and `compat.ts`, plus one assertion that the walk really descended and one that `index.ts` contributes SQL — otherwise the widening buys nothing measurable. Verified by planting a named-parameter, unscoped `SELECT` in `hooks/passive.ts`: the widened gate reports both violations, the directory-scoped one saw neither.
+
 ### WR-09: Retention failures are discarded with no counter, no log and no error record
 
 **File:** `packages/backend/src/store/retention.ts:386-392, 477-484`
@@ -293,6 +357,8 @@ So a sweep that fails on every row for a structural reason — a locked database
 
 **Fix:** count and record. `deleteOne` should return `{deleted, error}` or take an `onError` callback; `sweepRetention` should carry `errors: number` (or a `lastError` string) on `RetentionSweepSummary`; and `runRetentionPass` should feed both into `counters.storeErrors` and `recordError`. Add a spec case with a delete statement that always rejects, asserting the counter moves.
 
+**RESOLVED** — `15509d4`, as suggested. `deleteOne` returns `{deleted, error}` so "the delete failed" and "there was nothing to delete" stop being the same value; `RetentionSweepSummary` carries `errors` and `lastError`; every delete on the path goes through one recording closure, so none can fail uncounted; the outer handler records instead of `void e`; and `runRetentionPass` feeds both into `counters.storeErrors` and `recordError` with a `RETENTION_DELETE_FAILED` line. Three cases: a fixture where every DELETE rejects (summary), the same through the running consumer (counter and `lastError`), and a working pass asserting `errors` is 0 so the counter is not always-on. Dropping the recording fails two with `expected 0 to be greater than 0`.
+
 ### WR-10: `checkCompat` and the refusal-path RPC registrations run outside `init()`'s try/catch
 
 **File:** `packages/backend/src/index.ts:134-155` (guard starts at `:159`)
@@ -301,9 +367,13 @@ So a sweep that fails on every row for a structural reason — a locked database
 
 **Fix:** move `try {` above line 138 and keep the existing catch, which already sets `compatible = false` and re-registers `getStatus` defensively.
 
+**RESOLVED** — `992bada`, as suggested. `caidoVersion` moved above the `try` because the catch reports it. New `packages/backend/src/index.spec.ts` drives the real `init()` against a throwing `sdk.runtime` accessor (`promise rejected … instead of resolving` with the old boundary), an `api.register` that throws on the refusal path, and a plain below-minimum refusal — the last one proving the widened `try` did not turn an ordinary refusal into "init failed".
+
 ---
 
 ## Info
+
+_All seven left OPEN: informational, out of scope for the review-fix pass. IN-03 is now partly overtaken — `resetDbHandle` was renamed to `resetDbHandleForTest` and its `@public` tag and knip.json note removed by WR-02's fix — but the rest of that entry, and IN-01/02/04/05/06/07, stand as written._
 
 ### IN-01: Production-dead exports kept alive only by their own specs
 
