@@ -25,6 +25,15 @@
 // and buying nothing. The latch is MODULE-level, not per-call, because a second
 // `startConsumer(...)` is the realistic way a second loop appears (a re-init, a
 // hot reload) and a per-call flag would not see it.
+//
+// A second start therefore STOPS the running loop and rebinds to the new deps.
+// It used to return the existing handle and discard the new ones — including the
+// queue and the database — which is worse than either alternative: `init()`
+// constructs a FRESH BoundedQueue and hands it to `configurePassive` BEFORE
+// calling this, so on a re-init the hook filled queue #2 while the surviving
+// consumer drained queue #1, which nothing filled. The plugin looked healthy
+// while `admitted` climbed, `queueDepth` climbed to QUEUE_CAP, `queueOverflow`
+// climbed, and `processed` never moved again.
 
 import { sha256Hex } from "@defminer/engine/digest";
 import {
@@ -202,7 +211,7 @@ function isTerminal(state: ScanState | undefined): boolean {
 }
 
 /** The one running consumer, if any. Module scope, so a second `startConsumer`
- *  is a no-op rather than a second loop. */
+ *  rebinds rather than adding a second loop. */
 let current: ConsumerHandle | undefined;
 
 /** Test seam. Module state is process-global, so a spec that did not reset it
@@ -228,10 +237,14 @@ export function startConsumer(
   };
 
   if (current !== undefined) {
-    // Returning the EXISTING handle rather than a fresh no-op one, so a caller
-    // that stops what it started actually stops the running loop.
-    log("consumer already running; not starting a second drain loop");
-    return current;
+    // STOP AND REBIND, never "return the old handle and drop the new deps".
+    // The caller has already pointed the hook at the new queue by the time it
+    // gets here (index.ts calls configurePassive before startConsumer), so
+    // keeping the old binding leaves the producer and the consumer on two
+    // different queues with no error anywhere. Still exactly one loop: the old
+    // one is stopped before the new one exists.
+    log("consumer already running; stopping it and rebinding to the new deps");
+    current.stop();
   }
 
   const clock = deps.now ?? defaultClock();

@@ -906,11 +906,12 @@ describe("CORE-04 — exactly one drain loop, whatever the caller does", () => {
     const sdk = makeFakeSdk(p.overrides);
     const first = startConsumer(sdk, deps());
     const second = startConsumer(sdk, deps());
-    // The same handle, so a caller that stops what it started stops the real loop.
-    expect(second).toBe(first);
+    // A NEW handle bound to the new deps, with the old loop stopped — still
+    // exactly one loop, because the stop happens before the start.
+    expect(second).not.toBe(first);
 
     await Promise.all([first.drainNow(), second.drainNow()]);
-    first.stop();
+    second.stop();
 
     expect(
       sdk.calls.requestsGet.length,
@@ -919,6 +920,50 @@ describe("CORE-04 — exactly one drain loop, whatever the caller does", () => {
     ).toBe(10);
     expect(new Set(sdk.calls.requestsGet).size).toBe(10);
     expect(counters.processed).toBe(10);
+  });
+
+  it("a second start REBINDS to the new queue rather than orphaning it", async () => {
+    // init() constructs a FRESH BoundedQueue and points the hook at it with
+    // configurePassive BEFORE calling startConsumer. A second start that
+    // returned the existing handle discarded the new deps entirely, so the hook
+    // filled queue #2 while the surviving consumer drained queue #1 — which
+    // nothing fills. Observable result: admitted climbs, queueDepth climbs to
+    // QUEUE_CAP, queueOverflow climbs, and processed never moves again.
+    const entries: Planned[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      entries.push({
+        id: "n" + String(i),
+        url: "https://x.test/" + String(i) + ".js",
+        bytes: body("rebind-" + String(i)),
+      });
+    }
+    const p = plan(entries);
+    const sdk = makeFakeSdk(p.overrides);
+
+    // Loop #1, bound to the module-level `queue`, which stays empty.
+    const first = startConsumer(sdk, deps());
+
+    // Re-init: a new queue, filled by the hook, then a second start.
+    const rebound = new BoundedQueue(QUEUE_CAP);
+    for (const e of entries) {
+      rebound.offer({ id: e.id, bytes: e.bytes.length, kind: "js" });
+      enqueuedAt.set(e.id, Date.now());
+    }
+    const second = startConsumer(sdk, deps({ queue: rebound }));
+
+    await second.drainNow();
+    // The old handle is stopped, so driving it does nothing at all.
+    await first.drainNow();
+    second.stop();
+
+    expect(
+      counters.processed,
+      "the consumer kept draining the queue it was started with while the hook " +
+        "filled a different one. Nothing reports that: the plugin looks healthy " +
+        "and simply stops processing.",
+    ).toBe(entries.length);
+    expect(rebound.depth).toBe(0);
+    expect(sdk.calls.requestsGet.length).toBe(entries.length);
   });
 
   it("the IN-FLIGHT latch holds while a drain is still running", async () => {
