@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
-status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-08-20T23:35:03.525Z"
+status: verifying
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-08-21T00:05:22.470Z"
 last_activity: 2026-08-20
 last_activity_desc: Phase 01 execution started
-state_head: 7828589b6e198a11fff3f914842a2ffdde1e3e06
+state_head: 18e463f6c80da19f296039c4942c7f1e539dd19d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-20 — Phase 01 execution started
 
 Progress: [█░░░░░░░░░] 8%
@@ -60,6 +60,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P04 | 28 min | 3 tasks | 15 files |
 | Phase 01 P03 | 37 min | 3 tasks | 22 files |
 | Phase 01 P05 | 35 min | 3 tasks | 14 files |
+| Phase 01 P06 | 24 min | 3 tasks | 37 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P5-D7: the restart check reads the plugin database with sqlite3 rather than getArtifacts — a guest can create TEMPORARY projects only (temporary:false returns PermissionDeniedUserError, measured on 0.57.1), so the project dies with the restart while the artifacts must not
 - [Phase 01]: P5-D8: describeError redacts URL-shaped substrings BEFORE truncating — truncating first leaves the front half of a URL, which is the half carrying the host (T-01-26). Found by the spec's recursive walk, not by review
 - [Phase 01]: CORE-10 measured externally on 0.57.1: max_slice_ms 0.028 against a 25 ms budget over 200 distinct chunks, and the loaded RPC distribution sits AT OR BELOW the idle baseline — Phase 1's visit is a no-op, so the instrument is proven wired and the stress test only becomes meaningful in Phase 3
+- [Phase 01]: P6-D4: the capability gate is TWO stages — checkCompat(sdk) reads properties only so its refusal opens nothing, checkRuntimeSurfaces(ctx) runs after meta.db() and before any hook, because a Database's method set is not discoverable without a Database
+- [Phase 01]: P6-D5: api.caido.io publishes artifact hashes for 'latest' ONLY (/releases, /releases/0.57.1, /releases/v0.57.1 all 404), so fetch-caido.sh REFUSES a non-latest version unless its hash is committed in PINNED_SHA512 — an unverifiable executable is never downloaded
+- [Phase 01]: P6-D6: COVERAGE.md rows 35/36 (string_decoder, buffer) reclassified INTEGRATE -> INTEGRATE (source-only): decode.ts is tree-shaken out of the shipped bundle, whose entire import set is one specifier (crypto). Requiring them would mean statically importing modules the plugin does not use
+- [Phase 01]: P6-D7: a guest may hold at most ONE temporary project — a second createProject returns PermissionDeniedUserError even before either is selected — so onProjectChange is driven through the null -> project transition instead of a project switch
+- [Phase 01]: [Phase 01] COMPAT-02 CLOSED by measurement: all 16 REQUIRED_SURFACES exercised on both Caido 0.57.1 and 0.58.0, matrices differ in exactly 3 fields (two fresh project UUIDs and the version under test). SQLite 3.46.0 on both. No behavioural difference.
+- [Phase 01]: [Phase 01] The plan's cmpCaidoVersion(0.6.0, 0.57.1) POSITIVE criterion was INVERTED — Caido's minor runs 55/57/58, so 0.6.0 is ancient and must compare NEGATIVE. POSITIVE is what the string-compare trap produces. Implementing it as written would have accepted builds from before the measured minimum.
 
 ### Known Risks Carried Forward
 
@@ -155,8 +162,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-20T23:34:11.532Z
-**Stopped at:** Completed 01-05-PLAN.md
+**Last session:** 2026-08-21T00:05:06.177Z
+**Stopped at:** Completed 01-06-PLAN.md
 **Resume file:** None
 
 ### Blockers

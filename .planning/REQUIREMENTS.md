@@ -169,8 +169,8 @@ These run first and can invalidate the design. Each is cheap; several change eve
 
 ### Caido compatibility (COMPAT)
 
-- [ ] **COMPAT-01**: A declared minimum supported Caido version, checked at runtime, with a clear message rather than an obscure failure when unmet.
-- [ ] **COMPAT-02**: SDK surfaces the plugin depends on are exercised by a smoke test that runs against the current Caido release, so a breaking SDK change is caught by us and not by users.
+- [x] **COMPAT-01**: A declared minimum supported Caido version, checked at runtime, with a clear message rather than an obscure failure when unmet.
+- [x] **COMPAT-02**: SDK surfaces the plugin depends on are exercised by a smoke test that runs against the current Caido release, so a breaking SDK change is caught by us and not by users.
 
 ### Encoding correctness (ENC)
 
