@@ -36,23 +36,58 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *
  * This is T-01-21's mitigation and it works by ABSENCE: a stolen copy of the
  * plugin database must be a list of URLs, digests and byte counts, not a
- * credential dump. Nothing below can hold a response body, a cookie or an
- * authorization token.
+ * credential dump. No column below can hold a response body or a cookie.
  *
- * THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE, which is worth saying
- * here rather than quietly editing. `01-REVIEW.md` WR-07 found the contradiction:
- * a query string IS a column that can hold a secret, and `observations.url` was
- * storing one verbatim. WR-07 offered two ways out — correct the CLAIM, or change
- * the CODE. The code changed (plan 01-07, `normaliseObservedUrl` ->
- * `redactQueryValues`), so the claim stands. It rests on an assertion rather than
- * on prose: `observations.spec.ts` is the enforcing spec, and
- * `scripts/phase1/tracer-e2e.sh` proves it end to end by reading the column with
- * sqlite3 from outside Caido.
+ * AN AUTHORIZATION TOKEN IS A PER-GRAMMAR CLAIM, NOT A SENTENCE. Stating it as
+ * one sentence is what went wrong here before, so it is stated per URL grammar
+ * and no wider than the cases that RUN at the moment you are reading this:
+ *
+ *   ENFORCED — the QUERY grammar, everything after the first `?`. Every VALUE of
+ *     a `name=value` segment is replaced, and since 2026-08-21 (decision P10-D1)
+ *     so is every BARE segment carrying no `=`. Enforcing spec:
+ *     `observations.spec.ts`, whose `BARE_CREDENTIAL_SHAPES` block runs one case
+ *     per credential format (PAT, AWS key id, Stripe secret, session id, UUID,
+ *     JWT and two short opaque tokens) and each goes RED when the branch is
+ *     reverted. Proven end to end by `scripts/phase1/tracer-e2e.sh`, which reads
+ *     the column with sqlite3 from outside Caido.
+ *
+ *   OPEN — three grammars OUTSIDE the query still reach this column verbatim.
+ *     `01-REVIEW.md` WR-11 executed all three and they are reproduced here rather
+ *     than summarised, because a reader who trusts this paragraph must not be
+ *     misled about its reach:
+ *       userinfo               `https://user:pa55w0rd@cdn.test/app.js` — stored
+ *                              whole. HTTP Basic credentials in plaintext.
+ *       `;` path parameters    `https://cdn.test/a.js;jsessionid=SECRETSESSION` —
+ *                              stored whole. RFC 3986 path-parameter syntax and
+ *                              the classic session-token-in-URL shape Java
+ *                              servlet URL rewriting still emits.
+ *       path-embedded tokens   `https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9…/app.js`
+ *                              — stored whole. How signed CDN and object-store
+ *                              URLs are shaped when the signature is not a query
+ *                              parameter.
+ *     OWNER: plan 01-11, which needs a decision about how much of the non-query
+ *     URL to keep at all. SOURCE: WR-11.
+ *
+ * WHY THE WORDING CHANGED, recorded rather than quietly edited. This paragraph
+ * used to read "Nothing below can hold … an authorization token", followed by
+ * "THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE". Both halves were
+ * wrong together in a way neither was alone. The 2026-08-21T13:45 re-verification
+ * found a 40-character GitHub PAT pasted as a BARE query segment surviving
+ * verbatim into this column, under an "is now true" formulation, with the only
+ * test for the bound using a 104-character name — the one length at which
+ * truncation is visible — so nothing could go red. An unfalsifiable residual
+ * underneath an upgraded claim. The bare-segment half is now closed by
+ * construction and IS falsifiable; the three grammars above are not closed, and
+ * saying so is the whole point of the rewrite. A claim stronger than its
+ * enforcement is an attack surface on the next author, who builds on the claim
+ * rather than on the code.
  *
  * The four entries that could conceivably carry target bytes, and why each is
  * here deliberately rather than by omission:
  *   observations.url          — a URL with the fragment stripped, EVERY QUERY VALUE
- *                               REPLACED with `<redacted>`, the parameter names and
+ *                               REPLACED with `<redacted>` — including a BARE
+ *                               `=`-less segment, which is a value with no name
+ *                               (P10-D1) — the names of `name=value` pairs and
  *                               their order retained, truncated to 2048. It is the
  *                               artifact->request edge; without it the plugin
  *                               records that bytes were seen but not WHERE. The
@@ -60,6 +95,10 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               decision of 2026-08-21 deliberately kept; the
  *                               values are credentials and they are gone before the
  *                               row is written. Enforced by observations.spec.ts.
+ *                               NOT REDACTED, and named here so this entry is not
+ *                               read as a complete guarantee: userinfo, `;` path
+ *                               parameters and path-embedded tokens — the three
+ *                               grammars listed as OPEN above, owned by plan 01-11.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission

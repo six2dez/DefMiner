@@ -7,7 +7,7 @@ status: draft
 nyquist_compliant: true
 wave_0_complete: false
 created: 2026-08-20
-revised: 2026-08-20
+revised: 2026-08-21
 ---
 
 # Phase 1 — Validation Strategy
@@ -180,10 +180,46 @@ lacks one. The rows below bring the ledger up to date rather than filling anythi
 
 ---
 
+### Gap-closure round 2 — plans 01-10, 01-11, 01-12, 01-13 and 01-14 (added 2026-08-21)
+
+APPENDED to the table above, which is left exactly as it was. The 2026-08-21T13:45 re-verification
+found both UAT gaps only PARTIALLY closed and the phase grew from NINE plans to FOURTEEN, adding TWELVE
+tasks: 01-10 four, 01-11 three, 01-12 two, 01-13 one, 01-14 two. That count was taken by counting
+`<task` elements in the five PLAN files rather than from any prose — the files are the authority, and
+they agreed.
+
+Each row's Automated Command is copied from the task's own `<verify><automated>` block rather than
+invented, so a row cannot promise a check the plan does not run. Two things in the Requirement column
+are deliberate: 01-12's rows carry **CORE-11**, which exists on disk because plan 01-10 task 3 opened it
+in wave 10 precisely so the plan that owns the gate could declare the requirement it enforces; and the
+rows carrying `STORE-03` or `STORE-07` are written as the plans declare them, with no correction here,
+because those two ledger collisions are recorded as known-and-deferred in `.planning/REQUIREMENTS.md`
+and a row silently disagreeing with the requirement file would be a third version of the truth.
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 01-10/T1 | 01-10 | 10 | STORE-03 | T-01-36, T-01-41 | **NO AUTOMATED VERIFY, AND THAT IS CORRECT — the SECOND such row in the phase.** A `checkpoint:decision` with `gate="blocking-human"`: what a bare (`=`-less) query segment becomes is a policy over bytes written into a durable column, and the three options each cost a different analytic signal. A gate cannot make that choice. Listed rather than omitted so the exception is visible instead of absent. | `checkpoint:decision` | — (human decision, `gate="blocking-human"`) | n/a | ✅ done — `redact-bare` selected 2026-08-21 |
+| 01-10/T2 | 01-10 | 10 | STORE-03 | T-01-53, T-01-54, T-01-56 | A bare `=`-less query segment is replaced whole; one executed case per credential format (PAT 40, AWS 20, Stripe 32, session hex 32, UUID 36, JWT 43, opaque 16 and 12), each RED when the `eq === -1` branch is reverted; empty segments preserved; idempotent; still no pattern execution | unit + integration (SQLite fixture), TDD | `pnpm vitest run packages/backend/src/store/observations.spec.ts && pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ✅ | ✅ done |
+| 01-10/T3 | 01-10 | 10 | CORE-11 | T-01-71, T-01-76 | The outbound prohibition has its own requirement id, opened BEFORE plan 01-12 declares it; every live ledger pointing at it carries a dated amendment; the two remaining STORE-* collisions are marked with a reason and an owner | ledger gate (anchored greps) + whole suite | `grep -q 'CORE-11' .planning/REQUIREMENTS.md && sed -n '/^### Phase 1:/,/^### Phase 2:/p' .planning/ROADMAP.md \| grep -q '^\*\*Requirements\*\*:.*CORE-11' && grep -q 'CORE-11.*\| Phase 1 \|' .planning/ROADMAP.md && grep -q 'CORE-11' .planning/STATE.md && git diff --exit-code packages/ && pnpm test` | ✅ | ✅ done |
+| 01-10/T4 | 01-10 | 10 | STORE-01, STORE-03 | T-01-55 | The T-01-21 claim is stated PER URL GRAMMAR and no wider than what runs: the query grammar enforced and its spec named, userinfo / `;` path parameters / path-embedded tokens named as OPEN with plan 01-11 as owner | unit + doc gate | `pnpm vitest run packages/backend/src/store/schema.spec.ts tests/schema.spec.ts && pnpm test` | ✅ | ✅ done |
+| 01-11/T1 | 01-11 | 11 | STORE-03 | T-01-57, T-01-58 | URL userinfo and `;`-delimited path-parameter VALUES redacted by the same policy through one shared per-segment helper, so the two delimiters cannot drift apart; the path-embedded-token residual named rather than left to be found | unit + integration | `pnpm vitest run packages/backend/src/store/observations.spec.ts packages/backend/src/store/schema.spec.ts && pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-11/T2 | 01-11 | 11 | STORE-07 | T-01-59, T-01-60, T-01-77 | `sdk.meta.path()` stops crossing the `getStatus` RPC in an error string — `redactPaths` applied after the URL redaction and before truncation, proven at the RPC level; no pattern added on a `REDOS_RECOVERY = "kill"` runtime | unit + RPC-level integration | `pnpm vitest run packages/backend/src/telemetry.spec.ts packages/backend/src/store/schema.spec.ts && pnpm test && pnpm typecheck && pnpm lint` | ⬜ | ⬜ pending |
+| 01-11/T3 | 01-11 | 11 | STORE-03 | T-01-61, T-01-55 | The "executes no pattern" gate is re-anchored on the AST rather than a line-filtered substring scan, widened to `telemetry.ts`, and its claim narrowed to its reach — a gate that a comment can defeat or trip is not a gate | static AST gate, mutation-proven | `pnpm vitest run packages/backend/src/store/observations.spec.ts && pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-12/T1 | 01-12 | 12 | CORE-11 | T-01-62, T-01-63, T-01-64, T-01-65, T-01-67 | The outbound gate sees the 14 shapes a 22-shape probe found it missing — `globalThis`/`window`/`self`/`global` fetch, destructured and assigned receivers, any non-allowlisted method of an identified receiver, `.call`/`.apply`/`Reflect.apply`, the global constructors — and REPORTS what it cannot read instead of calling it clean | static AST gate, every rule fixture-proven | `pnpm vitest run packages/backend/src/outbound-prohibition.spec.ts && pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-12/T2 | 01-12 | 12 | CORE-11 | T-01-66, T-01-47, T-01-51, T-01-50 | `packages/engine/src` — which ships in the bundle and was walked by NO outbound gate — is walked under the same rule set, with a by-name non-vacuity list and at least one file asserted per root; the widened gate mutation-proven against real shipped source | static gate + bundle gate, mutation-proven | `pnpm test && pnpm build:backend && pnpm check:bundle && git diff --exit-code packages/backend/src/hooks/passive.ts packages/engine/src/pipeline.ts packages/backend/src/ingest/consumer.ts` | ⬜ | ⬜ pending |
+| 01-13/T1 | 01-13 | 13 | STORE-07 | T-01-68, T-01-69, T-01-70, T-01-37 | The error-redaction gate FOLLOWS the binding instead of matching it — `derivesFrom` unwraps casts, parentheses and copies, so `e.message`, `String(e as Error)`, `e.toString()`, `JSON.stringify(e)` and a destructured error parameter are all reachable; every existing negative fixture still passes | static AST gate, mutation-proven | `pnpm vitest run packages/backend/src/store/error-redaction.spec.ts && pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-14/T1 | 01-14 | 14 | STORE-03 | T-01-72, T-01-73, T-01-74, T-01-75 | The live fixture exercises the grammars this phase now redacts — a per-run random secret as a BARE segment and as a `;` path parameter — asserted absent from BOTH the raw column read with `sqlite3` and the RPC projection; both reads open READ-ONLY; the recorded build is the build that ran | live end-to-end (script shape gate) | `bash -n scripts/phase1/tracer-e2e.sh && pnpm test && git diff --exit-code tests/phase1-load.spec.ts tests/phase1-runtime.spec.ts packages/backend/src/compat.ts` | ⬜ | ⬜ pending |
+| 01-14/T2 | 01-14 | 14 | STORE-03 | T-01-54, T-01-35 | Run it LIVE, twice: one clean pass, and one deliberate failure in which the bare-segment branch is reverted, rebuilt, and the tracer must FAIL naming the bare-segment secret specifically. A live tier that has never been observed failing is not evidence. | live end-to-end + committed mutation run | `pnpm build:backend && pnpm check:bundle && bash scripts/phase1/tracer-e2e.sh && pnpm test && git diff --exit-code packages/backend/src/store/observations.ts` | ⬜ | ⬜ pending |
+
+> Rows are recorded from each plan's declared `<verify>` blocks. `Status` stays `pending` until the task
+> is executed; 01-10's four rows are marked done because plan 01-10 ran on 2026-08-21.
+
+---
+
 ## Validation Sign-Off
 
-- [x] All tasks have `<automated>` verify or Wave 0 dependencies — every task in all NINE plans carries one, with exactly ONE deliberate exception: `01-08/T2` is a `checkpoint:decision` over a one-way data destruction, which is a human decision and correctly has no command. It is listed in the map rather than omitted, so the exception is visible instead of absent. The four live-tier commands are declared as a separate slower tier above. (Extended from six plans to nine on 2026-08-21 by gap-closure plan 01-07.)
-- [x] Sampling continuity: no 3 consecutive tasks without automated verify — the single `01-08/T2` checkpoint is bracketed by `01-08/T1` and `01-08/T3`, both automated, so no three-task window lacks one
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — every task in all FOURTEEN plans carries one, with exactly TWO deliberate exceptions, both `checkpoint:decision` under `gate="blocking-human"`: `01-08/T2` (whether to rewrite or delete rows written before the redaction policy — one-way data destruction) and `01-10/T1` (what a bare `=`-less query segment becomes — a policy over bytes written into a durable column). Both are human decisions a gate cannot make, and both are LISTED in the map rather than omitted, so each exception is visible instead of absent. The four live-tier commands are declared as a separate slower tier above. (Extended from six plans to nine on 2026-08-21 by gap-closure plan 01-07, and from nine to fourteen the same day by gap-closure round 2, plan 01-10.)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — RE-CHECKED against the twelve new rows on 2026-08-21 rather than assumed to still hold. `01-08/T2` is bracketed by `01-08/T1` and `01-08/T3`, both automated. `01-10/T1` is the first task of its plan, so its bracket crosses the plan boundary: it is preceded by `01-09/T2` and followed by `01-10/T2`, both automated. The two no-command rows are four waves apart and never adjacent, so no three-task window anywhere in the fourteen plans lacks an automated verify.
 - [x] Wave 0 covers all MISSING references — every ❌ W0 row in the map above appears in the Wave 0 list, bound to the plan and task that creates it
 - [x] No watch-mode flags — every command is `vitest run` or a `bash` script; `test:watch` is never invoked by a plan
 - [x] Feedback latency < 15s — for the unit tier, which is the per-task-commit loop. The four live runs exceed it by necessity and are declared as their own tier rather than pretended away
