@@ -413,3 +413,275 @@ describe("the gate's own failure paths", () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// THE EVASIONS, ENUMERATED BEFORE THE RULE THAT CATCHES THEM.
+// ---------------------------------------------------------------------------
+// Round 1's gates each passed every fixture they had, because the fixtures were
+// written by the same reasoning that wrote the rule. Every shape below was
+// written and confirmed RED against the round-1 walk — `isRefTo`, a two-line
+// bare-identifier match — BEFORE a line of that walk was touched. The probe
+// tables come from two independent executions (the verifier's 8 shapes in
+// `01-VERIFICATION.md`, the reviewer's 10 in `01-REVIEW.md` CR-05), so the
+// before/after comparison is one artifact rather than a paragraph nobody re-reads.
+
+describe("the 8-shape STORE-07 probe from 01-VERIFICATION.md", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  /** The two the round-1 gate caught. Both must STILL be caught: this is the
+   *  half of the probe that says the widening broke nothing. The second is the
+   *  one that proves the binding is resolved from the CATCH CLAUSE and not from
+   *  a hard-coded name — `ex` is not in `ERROR_BINDING_NAMES`. */
+  const CAUGHT: ReadonlyArray<readonly [string, string]> = [
+    [
+      "catch(e){ return String(e); }",
+      "function f() { try { g(); } catch (e) { return String(e); } }",
+    ],
+    [
+      "catch(ex){ return String(ex); } — name outside the listed set",
+      "function f() { try { g(); } catch (ex) { return String(ex); } }",
+    ],
+  ];
+
+  /** The six it missed, verbatim from the probe table. */
+  const MISSED: ReadonlyArray<readonly [string, string]> = [
+    [
+      "catch(e){ return (e as any).message; }",
+      "function f() { try { g(); } catch (e) { return (e as any).message; } }",
+    ],
+    [
+      'catch(e){ return "x: " + e.message; }',
+      'function f() { try { g(); } catch (e) { return "x: " + e.message; } }',
+    ],
+    [
+      "catch(e){ return String(e as Error); }",
+      "function f() { try { g(); } catch (e) { return String(e as Error); } }",
+    ],
+    [
+      "catch(e){ return e.toString(); }",
+      "function f() { try { g(); } catch (e) { return e.toString(); } }",
+    ],
+    [
+      "catch(e){ return JSON.stringify(e); }",
+      "function f() { try { g(); } catch (e) { return JSON.stringify(e); } }",
+    ],
+    [
+      "catch(e){ const x = e; return String(x); }",
+      "function f() { try { g(); } catch (e) { const x = e; return String(x); } }",
+    ],
+  ];
+
+  it.each(CAUGHT)("control — %s is still caught", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} is no longer caught`).not.toEqual([]);
+  });
+
+  it.each(MISSED)("previously MISSED — %s now reports", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} still reports clean`).not.toEqual([]);
+  });
+});
+
+describe("CR-05's 10-shape executed table from 01-REVIEW.md", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  const SHAPES: ReadonlyArray<readonly [string, string]> = [
+    [
+      "e.message returned",
+      "function f() { try { g(); } catch (e) { return e.message; } }",
+    ],
+    [
+      "e.message concat",
+      'function f() { try { g(); } catch (e) { return "x: " + e.message; } }',
+    ],
+    [
+      "e.message template",
+      "function f() { try { g(); } catch (e) { return `x: ${e.message}`; } }",
+    ],
+    [
+      "String(e.message)",
+      "function f() { try { g(); } catch (e) { return String(e.message); } }",
+    ],
+    [
+      "e.toString()",
+      "function f() { try { g(); } catch (e) { return e.toString(); } }",
+    ],
+    [
+      "JSON.stringify(e)",
+      "function f() { try { g(); } catch (e) { return JSON.stringify(e); } }",
+    ],
+    [
+      "String(e as Error)",
+      "function f() { try { g(); } catch (e) { return String(e as Error); } }",
+    ],
+    [
+      "`${e as any}`",
+      "function f() { try { g(); } catch (e) { return `${e as any}`; } }",
+    ],
+    [
+      "reassign then String",
+      "function f() { try { g(); } catch (e) { const x = e; return String(x); } }",
+    ],
+    [
+      "array join",
+      'function f() { try { g(); } catch (e) { return [e].join(""); } }',
+    ],
+  ];
+
+  it.each(SHAPES)("%s now reports at least one violation", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} still reports clean`).not.toEqual([]);
+  });
+});
+
+describe("the gate follows the binding — reach, cast, assert, parenthesise, copy", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    [
+      "reach — e.message",
+      "function f() { try { g(); } catch (e) { return e.message; } }",
+    ],
+    [
+      "reach — concatenated e.message",
+      'function f() { try { g(); } catch (e) { return "x: " + e.message; } }',
+    ],
+    [
+      "reach — interpolated e.message",
+      "function f() { try { g(); } catch (e) { return `x: ${e.message}`; } }",
+    ],
+    [
+      "reach — String(e.message)",
+      "function f() { try { g(); } catch (e) { return String(e.message); } }",
+    ],
+    [
+      "reach — a call ON a member, e.toString()",
+      "function f() { try { g(); } catch (e) { return e.toString(); } }",
+    ],
+    [
+      "render — JSON.stringify(e)",
+      "function f() { try { g(); } catch (e) { return JSON.stringify(e); } }",
+    ],
+    [
+      "cast — String(e as Error)",
+      "function f() { try { g(); } catch (e) { return String(e as Error); } }",
+    ],
+    [
+      "cast — `${e as any}`",
+      "function f() { try { g(); } catch (e) { return `${e as any}`; } }",
+    ],
+    [
+      "parenthesise — String((e))",
+      "function f() { try { g(); } catch (e) { return String((e)); } }",
+    ],
+    [
+      "non-null assert — String(e!)",
+      "function f() { try { g(); } catch (e) { return String(e!); } }",
+    ],
+    [
+      "cast then reach — (e as Error).message",
+      "function f() { try { g(); } catch (e) { return (e as Error).message; } }",
+    ],
+    [
+      "copy — const x = e; String(x)",
+      "function f() { try { g(); } catch (e) { const x = e; return String(x); } }",
+    ],
+    [
+      "render — [e].join('')",
+      'function f() { try { g(); } catch (e) { return [e].join(""); } }',
+    ],
+  ])("flags %s", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} reports clean`).not.toEqual([]);
+  });
+});
+
+describe("the two positions CR-05 names — a return value and an object-literal value", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("flags the caught binding RETURNED without passing through describeError", () => {
+    expect(
+      rulesOf("function f() { try { g(); } catch (e) { return e; } }"),
+    ).toContain("unredacted-return");
+  });
+
+  it("flags a derivative of the binding as an OBJECT-LITERAL property value", () => {
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, error: e.message }; } }",
+      ),
+    ).toContain("unredacted-object-value");
+  });
+});
+
+describe("rule 4 reaches a DESTRUCTURED error-shaped parameter", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("flags function fin({ error }: { error: string | null })", () => {
+    expect(
+      rulesOf(
+        "function fin({ error }: { error: string | null }) { return error === null ? null : String(error); }",
+      ),
+    ).toContain("unredacted-persisted-error");
+  });
+
+  it("flags the same with a RENAMED binding — { error: err }", () => {
+    // The PROPERTY name decides whether it is error-shaped; the BOUND name is
+    // what gets scanned. Keying on the bound name alone would miss this, and
+    // keying on the property name alone would scan the wrong identifier.
+    expect(
+      rulesOf(
+        "function fin({ error: err }: { error: string }) { return String(err); }",
+      ),
+    ).toContain("unredacted-persisted-error");
+  });
+});
+
+describe("the widened rule is NOT always-on — nine shapes that must stay quiet", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    [
+      "describeError(e) inside a catch",
+      "function f() { try { g(); } catch (e) { return describeError(e).slice(0, 200); } }",
+    ],
+    [
+      "THE REAL STORE SHAPE — return { ok: false, error: describeError(e).slice(0, 200) }",
+      "function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e).slice(0, 200) }; } }",
+    ],
+    [
+      "the raw binding handed to a function that renders it safely",
+      "function f() { try { g(); } catch (e) { recordError(e); return null; } }",
+    ],
+    [
+      "a bare catch binds nothing",
+      "function f() { try { g(); } catch { return null; } }",
+    ],
+    [
+      "a String(x) outside any catch",
+      "function f(x) { return String(x).slice(0, 120); }",
+    ],
+    [
+      "a type MEMBER named error",
+      "type AnalysisRow = { error: string | null }; interface B { error: string } const r: AnalysisRow = { error: null }; const s = String(r.error);",
+    ],
+    [
+      "a parameter that is not error-shaped — label",
+      "function f(label: string) { return String(label); }",
+    ],
+    [
+      "a parameter that is not error-shaped — contentType",
+      "function f(contentType: string) { return String(contentType).slice(0, 120); }",
+    ],
+    [
+      "an error-shaped parameter passed to describeError — analyses.ts:228's real shape",
+      "function fin(error: string | null) { return error === null ? null : describeError(error).slice(0, 300); }",
+    ],
+  ])("stays quiet on %s", (_shape, src) => {
+    expect(rulesOf(src), `${_shape} FIRED — the rule is wrong, not the code`).toEqual(
+      [],
+    );
+  });
+});
