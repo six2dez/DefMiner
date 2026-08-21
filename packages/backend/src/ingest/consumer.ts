@@ -373,6 +373,18 @@ export function startConsumer(
       c.storeErrors++;
       log("ARTIFACT_WRITE_FAILED " + a.error);
     }
+    // THE RETENTION INTERVAL COUNTS WRITES, NOT COMPLETIONS.
+    //
+    // It used to be the last statement of this function, reached only on the
+    // full-success path — but the two project-change returns below happen AFTER
+    // this artifact row (and, for the second, after the observation row) has
+    // already landed. Under sustained project churn the rows accumulated while
+    // the counter stayed frozen at whatever it was, and because `sweptSinceStart`
+    // is already true by then, NO sweep was scheduled at all. That breaks the
+    // convergence inequality thresholds.spec.ts asserts, whose right-hand side is
+    // "rows inserted per sweep interval" and holds only if every row-inserting
+    // iteration advances the interval.
+    processedForSweep += 1;
 
     // --- 2. THE EDGE --------------------------------------------------------
     // UNCONDITIONAL, and never skipped on a cache hit. An artifact written
@@ -447,7 +459,6 @@ export function startConsumer(
     }
 
     c.processed++;
-    processedForSweep += 1;
   }
 
   /**

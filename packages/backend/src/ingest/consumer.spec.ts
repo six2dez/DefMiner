@@ -666,6 +666,33 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     }
   }
 
+  /** A `Database` that runs the real fixture, and calls `bump` the instant the
+   *  artifact upsert has landed. That is the ONE interleaving point this case is
+   *  about: a project change that arrives after the identity write and before
+   *  the observation write. */
+  function dbBumpingAfterTheArtifactWrite(
+    bump: () => void,
+  ): SqliteFixture["db"] {
+    return {
+      exec: fx.db.exec.bind(fx.db),
+      prepare: async (sql: string) => {
+        const stmt = await fx.db.prepare(sql);
+        if (!/INSERT\s+INTO\s+artifacts/i.test(sql)) return stmt;
+        // `get` and `all` are delegated unchanged: only the write is
+        // instrumented, so nothing else about the fixture's behaviour moves.
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: async (...params: string[]) => {
+            const res = await stmt.run(...params);
+            bump();
+            return res;
+          },
+        };
+      },
+    };
+  }
+
   it("row counts FALL with no call to sweepRetention anywhere in this test", async () => {
     // grep this file for `sweepRetention` — it is imported by nothing here. The
     // only way the count can fall is if the consumer scheduled the pass itself.
@@ -735,6 +762,56 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
       counters.retentionSweeps,
       `${counters.retentionSweeps} sweeps over ${RETENTION_SWEEP_EVERY_N} processed artifacts. ` +
         `Expected exactly 2: one on the first iteration after start, one at the cadence boundary.`,
+    ).toBe(2);
+  });
+
+  it("still reaches the cadence when every iteration is abandoned AFTER a write", async () => {
+    // The cadence counter used to be the LAST statement of handleOne, reached
+    // only on the full-success path — while the project-change returns that
+    // precede it happen after one or two rows have already landed. Under
+    // sustained churn the rows accumulated and the interval never advanced, and
+    // since the first-iteration sweep has already happened, nothing was ever
+    // scheduled again. Every existing cadence case feeds fully-processed
+    // entries, so none of them can see it.
+    const entries: Planned[] = [];
+    for (let i = 0; i < RETENTION_SWEEP_EVERY_N; i += 1) {
+      entries.push({
+        id: "r" + String(i),
+        url: "https://x.test/" + String(i) + ".js",
+        bytes: body("churn-" + String(i)),
+      });
+    }
+    const p = plan(entries);
+    p.offer();
+
+    // The operator switches project DURING each artifact write, so every
+    // iteration inserts its artifact row and then abandons before the
+    // observation write.
+    let epoch = 0;
+    await runOnce(p.overrides, {
+      db: dbBumpingAfterTheArtifactWrite(() => {
+        epoch += 1;
+      }),
+      projectEpoch: () => epoch,
+    });
+
+    expect(
+      counters.abandonedOnProjectChange,
+      "the fixture did not actually abandon the iterations it was built to " +
+        "abandon, so this case would pass against the bug it exists to catch.",
+    ).toBe(RETENTION_SWEEP_EVERY_N);
+    expect(counters.processed).toBe(0);
+    expect(
+      (await retentionCounts(fx.db, PROJECT)).artifacts,
+      "every iteration wrote its artifact row before abandoning — that is the " +
+        "whole premise.",
+    ).toBe(RETENTION_SWEEP_EVERY_N);
+    expect(
+      counters.retentionSweeps,
+      `${counters.retentionSweeps} sweeps after ${RETENTION_SWEEP_EVERY_N} ` +
+        `rows were inserted. Retention is the ONLY bound on this database, and ` +
+        `an interval that counts completions rather than writes stops advancing ` +
+        `exactly when the rows keep coming.`,
     ).toBe(2);
   });
 
