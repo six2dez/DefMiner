@@ -56,7 +56,7 @@ Plans:
 
 **Goal**: A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
 **Depends on**: Phase 0
-**Requirements**: CORE-01 … CORE-10, STORE-01 … STORE-07, COMPAT-01, COMPAT-02, ENC-01, DIST-05, DIST-06
+**Requirements**: CORE-01 … CORE-11, STORE-01 … STORE-07, COMPAT-01, COMPAT-02, ENC-01, DIST-05, DIST-06
 **Success Criteria** (what must be TRUE):
 
   1. The `onInterceptResponse` handler is non-async, gates cheaply, enqueues, and returns — analysis never happens inline
@@ -392,7 +392,7 @@ Two further ordering changes: error containment and observability moved forward 
 | Requirement group | Phase |
 |---|---|
 | SPIKE-01 … SPIKE-12, SPIKE-04b | Phase 0 |
-| CORE-01 … CORE-10, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06 | Phase 1 |
+| CORE-01 … CORE-11, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06 | Phase 1 |
 | ERR-01 … ERR-04, OBS-01 … OBS-03 | Phase 2 |
 | DET-01 … DET-10, QUAL-01/02/03 | Phase 3 |
 | SEC-01 … SEC-06, ENDP-01/03/06, ENC-02/03/04, UPGRADE-02, STORE-08 (`entities`, `evidence`) | Phase 4 |

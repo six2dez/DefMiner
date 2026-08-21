@@ -152,11 +152,31 @@ lacks one. The rows below bring the ledger up to date rather than filling anythi
 | 01-08/T1 | 01-08 | 8 | STORE-03, STORE-06 | T-01-36 | Count how many pre-policy rows are actually exposed WITHOUT ever reading a value — the exposure artifact itself must contain no URL | live measurement + artifact gate | `node -e "…observation-url-exposure.json…" && ! grep -qE 'https?://' …/observation-url-exposure.json` | ⬜ | ⬜ pending |
 | 01-08/T2 | 01-08 | 8 | STORE-03 | T-01-36 | **NO AUTOMATED VERIFY, AND THAT IS CORRECT.** A `checkpoint:decision` with `gate="blocking-human"`: rows written before 01-07 still carry verbatim query values, and rewriting or deleting them is ONE-WAY. The decision is the operator's; a gate cannot make it. Listed rather than omitted so the ONE row in the phase without a command is VISIBLE as such rather than absent. | `checkpoint:decision` | — (human decision, `gate="blocking-human"`) | n/a | ⬜ pending |
 | 01-08/T3 | 01-08 | 8 | STORE-03, STORE-06 | T-01-36 | Whatever the checkpoint selected is implemented convergently and visibly | unit + integration | `pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
-| 01-09/T1 | 01-09 | 9 | CORE-01 | T-01-01 | The CORE-01 prohibition acquires an AST gate that can actually FAIL — no outbound surface reachable from backend source | static gate (TDD) | `pnpm test -- packages/backend/src/outbound-prohibition.spec.ts && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
-| 01-09/T2 | 01-09 | 9 | CORE-01 | T-01-01 | The gate is mutation-proven against the REAL tree and the coverage rows point at it | static gate + bundle gate | `pnpm test && pnpm build:backend && pnpm check:bundle && git diff --exit-code packages/backend/src/hooks/passive.ts` | ⬜ | ⬜ pending |
+| 01-09/T1 | 01-09 | 9 | CORE-11 (was CORE-01) | T-01-01 | The CORE-01 prohibition acquires an AST gate that can actually FAIL — no outbound surface reachable from backend source | static gate (TDD) | `pnpm test -- packages/backend/src/outbound-prohibition.spec.ts && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-09/T2 | 01-09 | 9 | CORE-11 (was CORE-01) | T-01-01 | The gate is mutation-proven against the REAL tree and the coverage rows point at it | static gate + bundle gate | `pnpm test && pnpm build:backend && pnpm check:bundle && git diff --exit-code packages/backend/src/hooks/passive.ts` | ⬜ | ⬜ pending |
 
 > Rows for 01-08 and 01-09 are recorded from those plans' declared `<verify>` blocks. Their `Status`
 > stays `pending` until each is executed; 01-07's three rows are marked done because they were.
+
+> **Requirement-pointer amendment, 2026-08-21 (gap-closure round 2, plan 01-10 task 3).** The
+> Requirement cell of rows `01-09/T1` and `01-09/T2` read `CORE-01` when written and now read
+> `CORE-11 (was CORE-01)`. The outbound-traffic prohibition was split out of CORE-01 into its own
+> requirement id on that date — CORE-01's text is the non-async-handler requirement and says nothing
+> about outbound traffic — following the operator's own STORE-01 → STORE-08 precedent from this
+> phase's UAT. The reason is recorded inline on CORE-11 in `.planning/REQUIREMENTS.md`.
+>
+> **The rule this follows, stated once so it is not re-litigated.** A ledger POINTER may be amended in
+> place when the thing it points at is RENAMED, provided the amendment is VISIBLE in the cell itself
+> (hence `(was CORE-01)`, not a silent substitution) and explained in a dated note. A ledger's
+> EVIDENCE — its command, its test type, its status, its description of the secure behaviour — is
+> NEVER rewritten. Amending a pointer keeps the record readable; rewriting evidence destroys it. They
+> are different acts and only the first is permitted. Every other cell of those two rows is
+> byte-identical.
+>
+> `01-09-PLAN.md`'s own frontmatter deliberately still reads `CORE-01`, and so do `01-VERIFICATION.md`,
+> `01-REVIEW.md`, `01-UAT.md` and plans `01-01` … `01-09`. Those are the historical record of what was
+> planned and what was found; their tags were correct when written, and rewriting evidence to match a
+> later ledger is the one edit this phase must never make.
 
 ---
 
