@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-20T23:27:01Z",
+  "generated_at": "2026-08-21T00:01:18Z",
   "question": "Success criterion 3 \u2014 under a synthetic 200-chunk SPA load, what is the maximum synchronous slice the plugin actually took, and does its own RPC keep answering an EXTERNAL prober throughout? Plus criterion 4's live half: do artifacts survive a real Caido restart?",
   "method": "An external caller polls getStatus over REST on a fixed interval while load runs. A starved thread cannot report that it is starved and this runtime exposes no scheduler introspection, so the measurement is taken from outside the process (decision P5-D3, Pitfall 8).",
   "reported_version": "0.57.1",
@@ -11,8 +11,8 @@
     "reported_version": "0.57.1",
     "sha256": "e9f77d87eecf89cdc82feca4d46821bb52f1b14d205477991a3678c931c6bb54"
   },
-  "run_id": "20260820T232639Z-19876",
-  "restart_run_id": "20260820T232639Z-19876-restart",
+  "run_id": "20260821T000056Z-4996",
+  "restart_run_id": "20260821T000056Z-4996-restart",
   "load": {
     "chunks_requested": 200,
     "concurrency": 20,
@@ -26,10 +26,10 @@
     "requests_completed": 200,
     "requests_ok": 200,
     "requests_failed": 0,
-    "elapsed_s": 0.376,
-    "rate_rps": 532.5
+    "elapsed_s": 0.302,
+    "rate_rps": 662.3
   },
-  "max_slice_ms": 0.02799999713897705,
+  "max_slice_ms": 0.029000043869018555,
   "max_sync_slice_ms_budget": 25,
   "processed": 200,
   "admitted": 200,
@@ -82,20 +82,20 @@
       "measured": true,
       "samples": 53,
       "errors": 0,
-      "median_ms": 1.238,
-      "p95_ms": 1.31,
-      "max_ms": 1.374,
-      "min_ms": 0.585,
+      "median_ms": 1.254,
+      "p95_ms": 1.338,
+      "max_ms": 1.586,
+      "min_ms": 0.52,
       "max_gap_between_samples_s": 0.235
     },
     "loaded": {
       "measured": true,
       "samples": 26,
       "errors": 0,
-      "median_ms": 1.089,
-      "p95_ms": 1.249,
-      "max_ms": 1.311,
-      "min_ms": 0.439,
+      "median_ms": 1.163,
+      "p95_ms": 1.269,
+      "max_ms": 1.33,
+      "min_ms": 0.4,
       "max_gap_between_samples_s": 0.233
     }
   },

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 8
 waived_count: 0
 fixed_count: 2
-total_count: 9
-last_updated: 2026-08-20T22:55:56.507Z
+total_count: 10
+last_updated: 2026-08-21T00:02:00.191Z
 ---
 
 # Broken Windows Ledger
@@ -24,6 +24,7 @@ last_updated: 2026-08-20T22:55:56.507Z
 | 7 | 01 | stub | packages/backend/src/ingest/consumer.ts |  | walk()'s visit callback is a no-op — no detector exists until Phase 3; the walk's yielding, deadline and offset accounting are real regardless | open |  | 2026-08-20T22:55:56.313Z |  |
 | 8 | 01 | stub | packages/engine/src/decode.ts |  | decode.ts has no consumer in the shipped bundle until a frontend exists (Phase 3/5); ENC-01's byte-vs-text inequality is proven by decode.spec.ts today | open |  | 2026-08-20T22:55:56.411Z |  |
 | 9 | 01 | deviation | knip.json |  | knip ignoreExportsUsedInFile:true hides a dead export referenced once in its own file — accepted to restore the exports/types gate to error; revisit in Phase 5 | open |  | 2026-08-20T22:55:56.507Z |  |
+| 10 | 01 | deviation | packages/backend/src/compat.ts |  | COMPAT-01's operator-visible message is delivered as a host-log line plus a getStatus()/getCompat() RPC only, with no visible UI: the backend QuickJS surface has NO toast or notification API (exhaustive grep for showToast, Toast and notification across @caido/quickjs-types finds nothing), and sdk.api.send has no subscriber because Phase 1 ships no frontend. Decision P6-D2. Phase 5 owes the visible surface. | open |  | 2026-08-21T00:02:00.191Z |  |
 
 ````json
 [
@@ -133,6 +134,18 @@ last_updated: 2026-08-20T22:55:56.507Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-20T22:55:56.507Z",
+    "resolved_at": null
+  },
+  {
+    "id": 10,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/compat.ts",
+    "line": null,
+    "description": "COMPAT-01's operator-visible message is delivered as a host-log line plus a getStatus()/getCompat() RPC only, with no visible UI: the backend QuickJS surface has NO toast or notification API (exhaustive grep for showToast, Toast and notification across @caido/quickjs-types finds nothing), and sdk.api.send has no subscriber because Phase 1 ships no frontend. Decision P6-D2. Phase 5 owes the visible surface.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T00:02:00.191Z",
     "resolved_at": null
   }
 ]

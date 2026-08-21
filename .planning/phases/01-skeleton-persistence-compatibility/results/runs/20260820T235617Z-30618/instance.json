@@ -1,0 +1,23 @@
+{
+  "run_id": "20260820T235617Z-30618",
+  "pid": 14823,
+  "port": 8973,
+  "listen": "127.0.0.1:8973",
+  "data_path": "/tmp/defminer-probe-20260820T235617Z-30618",
+  "fresh": true,
+  "binary": {
+    "path": "/Users/six2dez/.caido/caido-cli",
+    "expected_version": "0.55.3",
+    "reported_version": "0.55.3",
+    "sha256": "10927dd0cb15ea3069409382a7f3718e55239b983ccde0ce9c75f09b85a5d2bd"
+  },
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "started_at": "2026-08-20T23:56:18Z",
+  "exit_code": 137,
+  "stopped_at": "2026-08-20T23:56:24Z"
+}

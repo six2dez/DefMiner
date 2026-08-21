@@ -1,0 +1,13 @@
+{
+  "requests": 200,
+  "concurrency": 20,
+  "url": "http://127.0.0.1:8972/chunk-{}.js",
+  "elapsed_s": 0.302,
+  "completed": 200,
+  "ok": 200,
+  "failed": 0,
+  "status_codes": {
+    "200": 200
+  },
+  "rate_rps": 662.3
+}

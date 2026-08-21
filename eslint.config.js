@@ -115,6 +115,24 @@ export default [
   },
 
   {
+    // SAME exception as packages/**, for the same measured reason, extended to
+    // the gates in tests/ by plan 01-06.
+    //
+    // `no-restricted-types` bans `null` as a type. But the artifacts these gates
+    // read RECORD null, and null means something there that `undefined` does
+    // not: `coverage_row: null` is "this is a capability, not one of the 40
+    // enumerated API surfaces", and `reason: null` is "compatible, nothing to
+    // explain". tests/phase1-compat.spec.ts declares the artifact's shape rather
+    // than reaching for `any` precisely so a renamed field is a typecheck
+    // failure instead of a silently-undefined assertion that passes — and it
+    // cannot declare that shape honestly without `| null`.
+    files: ["tests/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-restricted-types": "off",
+    },
+  },
+
+  {
     files: ["packages/backend/**/*.ts"],
     rules: {
       // The SDK boundary is DELIBERATELY untyped. Phase 0 measured that
