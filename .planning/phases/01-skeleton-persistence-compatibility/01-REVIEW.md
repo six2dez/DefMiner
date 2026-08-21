@@ -1,8 +1,17 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-21T00:30:00Z
+reviewed: 2026-08-21T11:21:31Z
+reviews:
+  - pass: initial
+    reviewed: 2026-08-21T00:30:00Z
+    scope: 54 files (plans 01-01 … 01-06)
+    findings: CR-01, WR-01…WR-10, IN-01…IN-07
+  - pass: gap-closure
+    reviewed: 2026-08-21T11:21:31Z
+    scope: 13 files changed by plans 01-07, 01-08, 01-09
+    findings: CR-02…CR-06, WR-11…WR-16, IN-08…IN-13
 depth: standard
-files_reviewed: 54
+files_reviewed: 58
 files_reviewed_list:
   - packages/engine/src/queue.ts
   - packages/engine/src/chunker.ts
@@ -23,6 +32,7 @@ files_reviewed_list:
   - packages/backend/src/lifecycle.spec.ts
   - packages/backend/src/telemetry.ts
   - packages/backend/src/telemetry.spec.ts
+  - packages/backend/src/outbound-prohibition.spec.ts
   - packages/backend/src/hooks/passive.ts
   - packages/backend/src/hooks/passive.spec.ts
   - packages/backend/src/hooks/admit.ts
@@ -34,6 +44,8 @@ files_reviewed_list:
   - packages/backend/src/store/migrations.spec.ts
   - packages/backend/src/store/artifacts.ts
   - packages/backend/src/store/observations.ts
+  - packages/backend/src/store/observations.spec.ts
+  - packages/backend/src/store/error-redaction.spec.ts
   - packages/backend/src/store/analyses.ts
   - packages/backend/src/store/settings.ts
   - packages/backend/src/store/retention.ts
@@ -47,6 +59,7 @@ files_reviewed_list:
   - scripts/ci/gen-thresholds.mjs
   - scripts/phase1/env.sh
   - scripts/phase1/fetch-caido.sh
+  - scripts/phase1/tracer-e2e.sh
   - tests/phase1-compat.spec.ts
   - tests/phase1-load.spec.ts
   - vitest.config.ts
@@ -59,16 +72,42 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 1
-  warning: 10
-  info: 7
-  total: 18
-status: fixes_applied
+  critical: 6
+  warning: 16
+  info: 13
+  total: 35
+status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
   fixed: [CR-01, WR-01, WR-02, WR-03, WR-04, WR-05, WR-06, WR-08, WR-09, WR-10]
   deferred: [WR-07]
-  open: [IN-01, IN-02, IN-03, IN-04, IN-05, IN-06, IN-07]
+  open:
+    [
+      IN-01,
+      IN-02,
+      IN-03,
+      IN-04,
+      IN-05,
+      IN-06,
+      IN-07,
+      CR-02,
+      CR-03,
+      CR-04,
+      CR-05,
+      CR-06,
+      WR-11,
+      WR-12,
+      WR-13,
+      WR-14,
+      WR-15,
+      WR-16,
+      IN-08,
+      IN-09,
+      IN-10,
+      IN-11,
+      IN-12,
+      IN-13,
+    ]
 fix_commits:
   CR-01: 910c382
   WR-01: 7a5aa5c
@@ -86,29 +125,36 @@ tests_after: 28 files / 637 tests
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files) and 2026-08-21T11:21:31Z (gap closure, 13 files)
 **Depth:** standard
-**Files Reviewed:** 54 (34 production and gate files, 20 spec and config files read for cross-reference)
-**Status:** fixes_applied — 10 of 11 in scope fixed, 1 deferred by decision, 7 info left open
+**Files Reviewed:** 58 (union of both passes)
+**Status:** issues_found — five new BLOCKERs from the gap-closure pass, on top of `WR-07` (deferred) and `IN-01…IN-07` (open)
+
+> **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
+> 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
+> verbatim because the `fix_commits` map is evidence. Everything below it is the
+> 2026-08-21T11:21Z review of the 13 files plans 01-07, 01-08 and 01-09 changed
+> afterwards. New findings use a fresh ID series (`CR-02+`, `WR-11+`, `IN-08+`)
+> so nothing collides.
 
 ## Resolution (2026-08-21)
 
 Ten findings fixed, one commit each, each with a test that FAILS without the
 fix — every mutation run rather than described, and the failing message quoted
-in its commit. `WR-07` was deferred by explicit decision (the query-string
-retention policy is the operator's to make, so the code and the finding are
-untouched). `IN-01 … IN-07` are out of scope for this pass.
+in its commit. `WR-07` was deferred by explicit decision at the time (the
+query-string retention policy was the operator's to make). **`WR-07` has since
+been acted on** — see the disposition note below. `IN-01 … IN-07` remain open.
 
 | Finding | Status | Commit | The assertion that fails without the fix |
 |---|---|---|---|
 | CR-01 | fixed | `910c382` | `expected true to be false` (armed flag) and `expected 1 to be +0` (hook registered without isolation) |
 | WR-01 | fixed | `7a5aa5c` | `expected 1538 to be less than or equal to 512` |
 | WR-02 | fixed | `0c27fbf` | `expected 2 to be 1` (a change opened a second pool) |
-| WR-03 | fixed | `9927a76` | a URL crossed the getStatus RPC — `expected [ Array(1) ] to deeply equal []` |
+| WR-03 | fixed (partially — see WR-12) | `9927a76` | a URL crossed the getStatus RPC — `expected [ Array(1) ] to deeply equal []` |
 | WR-04 | fixed | `c58bad7` | `1 sweeps after 128 rows were inserted … expected 1 to be 2` |
 | WR-05 | fixed | `e19b73e` | a pending claim reported as a cache hit — `expected 1 to be +0` |
 | WR-06 | fixed | `2966662` | `expected +0 to be 4` (the rebound queue was never drained) |
-| WR-07 | **deferred** | — | left untouched by decision; the policy call is the operator's |
+| WR-07 | **deferred, then acted on** | `f0fb3c6` | see the disposition note under WR-07 — the policy landed, the finding does not close |
 | WR-08 | fixed | `49250aa` | two violations planted in `hooks/passive.ts`, invisible to the old gate |
 | WR-09 | fixed | `15509d4` | `expected 0 to be greater than 0`, at the summary and at the counter |
 | WR-10 | fixed | `992bada` | `promise rejected … instead of resolving` |
@@ -119,7 +165,7 @@ set is still exactly `crypto`; and `scripts/phase1/tracer-e2e.sh` reports
 TRACER PASSED against a live Caido 0.57.1 — digest equal, one artifact with
 `seen_count` 2, two observations, sqlite 3.46.0, schema v2.
 
-## Summary
+## Summary (pass 1)
 
 The measured runtime constraints are respected where it counts. I tried to break the four rules that Phase 0 says are fatal and could not: every mutation is a single statement (`artifacts.ts:38`, `observations.ts:25`, `analyses.ts:98/163`, `retention.ts:115-195`), every statement is prepared inside its write, no `last_insert_rowid()` or `RETURNING` appears anywhere, no module-level promise or statement exists, the only multi-statement `exec` is `IF NOT EXISTS` DDL, and `onInterceptResponse`'s path (`passive.ts:120-176` → `admit.ts:158-199`) contains no `await`, no `toRaw()`, no `toText()` and no regex. Offsets and digests derive from `toRaw()` bytes only (`consumer.ts:173-183`, `digest.ts:24`). The DIST-05 gate has a real, executed failing path.
 
@@ -246,7 +292,7 @@ compatReason = "init failed: " + describeError(e);
 
 Apply the same at `index.ts:215` and at the `log(... String(e) ...)` sites in `consumer.ts:274, 529, 566` and `lifecycle.ts:251, 276` — the host log is also a channel the threat model says must not carry target-controlled content. Then extend the recursive walk in `telemetry.spec.ts` to the object `getStatus()` actually returns, not to `slimStatus()` alone.
 
-**RESOLVED** — `9927a76` (the two `lifecycle.ts` sites came with CR-01 in `910c382`). All seven named call sites now go through `describeError`. `telemetry.spec.ts`'s recursive walk was rooted at `slimStatus()` and therefore structurally blind to `reason`; it now also walks the object the registered `getStatus()` RPC returns, driven through the real `init()` with a `meta.db()` rejection carrying a token-bearing URL. Restoring `String(e).slice(0, 160)` fails it. The remaining `String(e).slice(...)` sites in the store layer are error strings persisted to a column rather than RPC text, and were left alone as out of this finding's scope.
+**RESOLVED (PARTIALLY — see WR-12)** — `9927a76` (the two `lifecycle.ts` sites came with CR-01 in `910c382`). All seven named call sites now go through `describeError`. `telemetry.spec.ts`'s recursive walk was rooted at `slimStatus()` and therefore structurally blind to `reason`; it now also walks the object the registered `getStatus()` RPC returns, driven through the real `init()` with a `meta.db()` rejection carrying a token-bearing URL. Restoring `String(e).slice(0, 160)` fails it. **The SQLite-path half of this finding's own stated rationale is NOT delivered** — `describeError` redacts only `scheme://…` substrings, so `sdk.meta.path()` still crosses the RPC in full. That residual is now tracked as `WR-12`.
 
 ### WR-04: Rows are inserted on iterations that never advance the retention cadence
 
@@ -325,7 +371,7 @@ This is a documented decision, and the retained query genuinely matters for the 
 
 **Fix:** decide it explicitly rather than by inheritance. The cheapest option that keeps the cache measurement intact is to store the query's *identity* rather than its content — e.g. keep the path and a digest of the sorted query keys+values — and to record the tradeoff in `schema.spec.ts`'s allowlist comment either way. If the raw query is kept, the comment claiming "not a credential dump" must be corrected, and DIST-02's disclosure needs to say the plugin database retains full request URLs for 90 days by default.
 
-**DEFERRED — not fixed, deliberately.** This is a policy decision the operator makes separately, and the finding asks for exactly that: a decision, recorded. Touching the code first would make it by inheritance again, from a different direction. `observations.ts`, `migrations.ts` and this finding are unchanged, and the contradiction it names — `schema.spec.ts:36-40`'s "not a credential dump" against a column that can hold one — is still open and still stated here.
+**DISPOSITION UPDATED 2026-08-21 (pass 2) — acted on, NOT closed.** The initial disposition was "deferred, the operator's call to make". The operator made it at plan 01-07's UAT checkpoint (redact values, keep names) and `f0fb3c6` implemented `redactQueryValues`. The `?name=value` half of this finding is genuinely fixed and proven end to end by `scripts/phase1/tracer-e2e.sh`. **The finding does not close, because the contradiction it named is still live:** `schema.spec.ts:39-46` now asserts in prose that "THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE", and it is not — a bare query parameter under 64 characters, a matrix parameter after `;`, a path-embedded token and URL userinfo all still reach the column byte-for-byte. See `CR-06` and `WR-11`, which carry the executed counterexamples.
 
 ### WR-08: The SQL discipline gate audits one directory, while its header claims it audits every call site
 
@@ -404,7 +450,700 @@ _All seven left OPEN: informational, out of scope for the review-fix pass. IN-03
 `analyses.ts:152` treats `Number(row.started_at) === startedAt` as "I inserted this row". It is safe today only because one sequential drain loop cannot claim the same `(project, sha256, corpus)` twice inside one millisecond. Two consumers, a coarser clock, or a future retry that reuses a captured `now` would each make two callers believe they own the same claim, and both would walk and both would `finishAnalysis`. Worth a comment stating the precondition, since CORE-04 is the only thing holding it up.
 
 ---
+---
 
-_Reviewed: 2026-08-21T00:30:00Z_
+# --- PASS 2 --- Gap-Closure Review (plans 01-07, 01-08, 01-09)
+
+**Reviewed:** 2026-08-21T11:21:31Z
+**Depth:** standard
+**Files Reviewed:** 13 (the files plans 01-07/01-08/01-09 changed after the pass-1 review)
+**Status:** issues_found — 5 BLOCKER, 6 WARNING, 6 INFO
+
+## Summary (pass 2)
+
+Two things were shipped as guarantees, and neither one is as strong as its own
+header says. Both hold against the shape the author had in mind and fail against
+the neighbouring shape.
+
+**Every finding below was executed, not reasoned about.** I imported
+`auditSource` from both new gates and `normaliseObservedUrl` from
+`observations.ts` into a throwaway spec and ran twenty-plus candidate bypasses
+through them. The outputs are pasted verbatim in each finding. The three new
+spec files pass (68 tests), and `pnpm typecheck`, `pnpm lint` and `pnpm knip` are
+all clean — none of which can see any of this.
+
+**CORE-01's gate (`outbound-prohibition.spec.ts`) is bypassable by twelve of the
+twenty shapes I tried, several of which are the *idiomatic* way to write the
+call.** `outbound-fetch` only matches a callee that is the bare identifier
+`fetch`, so `globalThis.fetch(url)` — the form this very package already uses for
+`globalThis.performance` at `telemetry.ts:287` — reports zero violations.
+`outbound-send`/`outbound-net` resolve the receiver only through a
+`VariableDeclaration` whose initializer is a `requests`/`net` property access, so
+`const { requests } = sdk; requests.send(req)` reports zero, as do `.call`,
+`.apply`, `Reflect.apply`, a computed key, and a plain `r = sdk.requests`
+assignment. And the walk stops at `packages/backend/src` while
+`packages/engine/src` — imported by `index.ts`, `consumer.ts` and `lifecycle.ts`,
+and therefore *in the shipped bundle* — is never opened at all.
+
+The header does disclose one boundary ("an alias rebound in an inner scope is
+outside its reach"). None of the above is an inner-scope rebind. A gate whose
+stated rule is "no non-spec module may reach an outbound network surface" and
+whose actual rule is "no module may write four specific spellings" is worse than
+no gate, because `COVERAGE.md` rows 9, 27 and 38 now cite it as their enforcement
+(commit `7e96db9`).
+
+**`error-redaction.spec.ts` cannot see `e.message`.** Rules 1-3 fire only when
+the caught binding appears as a *bare identifier* inside `String(…)`, a template
+span, or a `+` operand. `return e.message`, `"failed: " + e.message`,
+`` `failed: ${e.message}` ``, `String(e.message)`, `e.toString()`,
+`JSON.stringify(e)`, `String(e as Error)` and `const x = e; String(x)` all report
+zero. `e.message` is the single most common way to render an error, and under
+`useUnknownInCatchVariables` the cast forms are the only ones TypeScript permits
+for anything richer than `String(e)` — so the gate is blind to precisely the
+shapes a future author will reach for.
+
+**The write-path redaction is scoped to the `?…&…=` grammar and nothing else.**
+`redactQueryValues` is correct for what it covers, and the tracer's live proof
+against the real database file is good work. But four credential-bearing URL
+shapes reach `observations.url` byte-for-byte, confirmed by execution:
+
+```
+"https://cdn.test/a.js?ghp_0123456789abcdefghij1234567890abcdefgh"
+  -> "https://cdn.test/a.js?ghp_0123456789abcdefghij1234567890abcdefgh"
+"https://cdn.test/a.js;jsessionid=SECRETSESSION"
+  -> "https://cdn.test/a.js;jsessionid=SECRETSESSION"
+"https://user:pa55w0rd@cdn.test/app.js"
+  -> "https://user:pa55w0rd@cdn.test/app.js"
+"https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js"
+  -> "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js"
+```
+
+`QUERY_NAME_MAX = 64` is named in the source as the thing that "closes the
+bare-token hole" (`observations.ts:57-62`). It does not: a GitHub PAT is 40
+characters, an AWS access key id is 20, a Stripe secret key is ~32, a session id
+is typically 26-32. Every one of them is under the bound and survives whole. The
+spec exercises only a name *longer* than 64 (`observations.spec.ts:128-140`), so
+it cannot see this.
+
+Meanwhile `schema.spec.ts:39-46` was rewritten in this same batch to assert, in
+prose, "THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE". It is still
+false. The honest version of that paragraph is what makes this a BLOCKER rather
+than a WARNING: the code got better and the claim got stronger than the code.
+
+Three smaller things are right and worth recording so nobody re-litigates them:
+the `describeError` conversion introduces **no import cycle** (`telemetry.ts`
+imports only `./hooks/admit`, which imports only `@defminer/engine/thresholds` —
+verified, not taken on trust); `normaliseObservedUrl` **is** idempotent even when
+`URL_MAX` truncation lands inside a `<redacted>` marker (I swept every boundary
+from 2020 to 2048); and the `describeError(error)` call in `finishAnalysis`
+behaves exactly as its comment says for a `string` input.
+
+---
+
+## Critical Issues (pass 2)
+
+### CR-02: `outbound-fetch` matches only a bare-identifier callee — `globalThis.fetch(url)` reports zero violations
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:302-306`
+**Severity:** BLOCKER
+
+**Issue:** The rule fires in exactly one place:
+
+```ts
+if (ts.isIdentifier(callee)) {
+  if (callee.text === FETCH_GLOBAL) { add("outbound-fetch", …); }
+}
+```
+
+`callee` is an identifier only for `fetch(...)`. Every other spelling of the same
+call has a non-identifier callee, or an identifier the walk never learned about.
+Executed against `auditSource("f.ts", src)`:
+
+```
+globalThis.fetch             []      // await globalThis.fetch(url);
+globalThis['fetch']          []      // await globalThis["fetch"](url);
+fetch alias                  []      // const f = fetch; await f(url);
+destructured fetch           []      // const { fetch: f2 } = globalThis; await f2(url);
+```
+
+This is not a theoretical spelling. `packages/backend/src/telemetry.ts:287-290`
+already reaches a global through `globalThis` and casts it, because that is what
+you do in a runtime where you cannot assume a bare global exists:
+
+```ts
+const p = (globalThis as { performance?: { now?: () => number } }).performance;
+```
+
+An author adding a fetch in Phase 8 — or accidentally, in a copied snippet —
+writes `globalThis.fetch` for exactly the same reason, and the gate says nothing.
+There is no backstop either: `scripts/ci/check-bundle-imports.mjs` inspects
+import specifiers only, and a global `fetch` needs no import.
+
+The header's `FORBIDDEN_OUTBOUND` entry describes the surface as "the global
+`fetch()`" and its `why` as "the global fetch reaches any host". The rule
+enforces "the identifier `fetch` in callee position".
+
+**Fix:** treat `fetch` as a *name* wherever it appears in callee position, and
+track the identifiers it can be bound to, the same way `sendAliases` already
+does for `send`. Both the member form and the alias form are two more branches
+in code that already exists:
+
+```ts
+// in `collect`, beside sendAliases:
+//   const f = fetch;          -> fetchAliases.add("f")
+//   const f = globalThis.fetch -> fetchAliases.add("f")
+//   const { fetch: f } = globalThis -> fetchAliases.add("f")
+const fetchAliases = new Set<string>([FETCH_GLOBAL]);
+
+// in `visit`, replacing the identifier-only branch:
+if (ts.isIdentifier(callee) && fetchAliases.has(callee.text)) {
+  add("outbound-fetch", `a call to \`${callee.text}(...)\``);
+}
+const parts = calleeParts(callee);
+if (parts !== undefined && parts.method === FETCH_GLOBAL && !isLocalObject(parts.receiver)) {
+  // globalThis.fetch(...) / globalThis["fetch"](...) / self.fetch(...)
+  add("outbound-fetch", `a \`${FETCH_GLOBAL}\` call on \`${parts.receiver.getText()}\``);
+}
+```
+
+The existing false-positive case at `:485-489` (`cache.fetch(url)` must stay
+quiet) is the one to preserve — restrict the member form to receivers named
+`globalThis`, `self`, `global` and `window` rather than to any receiver. Then add
+each of the four executed shapes above as a failing-path case beside the ones at
+`:479-483`.
+
+---
+
+### CR-03: `outbound-send` and `outbound-net` miss five receiver forms, including the idiomatic destructure
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:206-219, 244-269, 316-332`
+**Severity:** BLOCKER
+
+**Issue:** `receiverKind` recognises an outbound receiver in three ways: a
+property access named `requests`/`net`, an element access with a *string
+literal* key, or an identifier previously recorded in `receiverAliases`. And
+`receiverAliases` is populated only from a `VariableDeclaration` whose
+initializer is itself one of those three. Everything outside that closure is
+invisible. Executed:
+
+```
+destructured requests        []   // const { requests } = sdk; await requests.send(req);
+net destructured             []   // const { net } = sdk; await net.connect(h, p);
+assignment alias             []   // let r; r = sdk.requests; await r.send(req);
+conditional receiver         []   // const r = flag ? sdk.requests : sdk.requests; await r.send(req);
+send .call                   []   // await sdk.requests.send.call(sdk.requests, req);
+send .apply                  []   // await sdk.requests.send.apply(sdk.requests, [req]);
+Reflect.apply                []   // await Reflect.apply(sdk.requests.send, sdk.requests, [req]);
+computed method              []   // const m = "send"; await sdk.requests[m](req);
+computed receiver            []   // const r = "requests"; await sdk[r].send(req);
+send returned from fn        []   // const g = () => sdk.requests.send; await g()(req);
+```
+
+`const { requests } = sdk;` is the shape that matters most. It is ordinary
+TypeScript, it is what anyone writes when they touch `sdk.requests` more than
+once in a function, and the gate already handles the *inner* destructure
+(`const { send } = sdk.requests`) — so the omission reads as an oversight rather
+than a boundary. The header's disclosed limitation is "an alias rebound in an
+**inner scope**"; none of the ten shapes above is an inner-scope rebind, so a
+reader who trusts the header is misled about the gate's actual reach.
+
+Two narrower gaps in the same code:
+
+- **`outbound-send` matches only the method name `send`.** `receiverKind` proves
+  the receiver *is* `sdk.requests`; a future `sdk.requests.sendRaw(...)` or
+  `sdk.requests.replay(...)` is outbound traffic on a receiver the gate has
+  already positively identified, and it passes. `outbound-net` is written the
+  other way — any method on a `net` receiver fires — so the two rules disagree
+  about what a positively identified outbound receiver licenses.
+- **A member access with a non-literal key defeats both rules**, because
+  `calleeParts` returns `undefined` and the receiver is never even consulted.
+  Returning `undefined` for a computed key means "I could not read this", and the
+  gate treats "could not read" as "clean".
+
+**Fix:** three changes, all local.
+
+1. Populate `receiverAliases` from a binding pattern as well as an identifier:
+   `const { requests, net } = sdk` should record both, keyed on the *property*
+   name, exactly as the `send` destructure at `:251-264` already does.
+2. Once a receiver is positively identified as `requests`, flag **any** call on
+   it whose method is not on an explicit read-only allowlist
+   (`get`, `query`, `inScope`, …) — the same posture `outbound-net` already
+   takes. That preserves the load-bearing `sdk.requests.get(id)` case at `:445`
+   and makes a new outbound method fail loudly instead of silently.
+3. Flag, rather than ignore, a computed member access on a positively identified
+   outbound receiver, and `.call`/`.apply`/`Reflect.apply` applied to a
+   `requests`/`net` member expression. If flagging a dynamic key is judged too
+   noisy, it must at minimum be *reported* as an unanalysable site rather than
+   dropped.
+
+Then add every executed shape above as a failing-path case, and rewrite header
+boundary 2 to say what the walk actually resolves: a `const` bound directly to a
+`requests`/`net` member expression, and nothing else.
+
+---
+
+### CR-04: `packages/engine/src` ships in the bundle and is entirely outside the gate's walk
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:77, 145-162`
+**Severity:** BLOCKER
+
+**Issue:** `BACKEND_SRC = "packages/backend/src"`, and `backendFiles()` walks that
+and only that — 14 modules. But the shipped plugin also contains
+`packages/engine/src`, imported by production code:
+
+```
+index.ts:41       import { BoundedQueue } from "@defminer/engine/queue";
+index.ts:42       import { QUEUE_CAP } from "@defminer/engine/thresholds";
+consumer.ts:38    import { sha256Hex } from "@defminer/engine/digest";
+consumer.ts:43    from "@defminer/engine/pipeline";
+consumer.ts:46    import { yieldToLoop } from "@defminer/engine/yield";
+```
+
+Seven engine modules (`pipeline.ts`, `decode.ts`, `chunker.ts`, `deadline.ts`,
+`queue.ts`, `digest.ts`, `yield.ts`) are bundled into `packages/backend/dist` and
+none is ever opened by this gate. `pipeline.ts` is the detector walk — the module
+most likely to grow a "just fetch the sourcemap" line in a later phase, which is
+the *literal* wording of CORE-01's "no speculative retrieval of any kind".
+
+The gate's own doc comment argues for exactly the widening it did not do: "The
+package, not a directory: `sdk.requests.send` needs no import, so the surface it
+could appear on is **every module the plugin ships**". `packages/engine/src` is
+every-module-the-plugin-ships too. And there is no compensating gate: a
+`globalThis.fetch(url)` in `pipeline.ts` is invisible to
+`check-bundle-imports.mjs` (imports only) and to `sql-discipline.spec.ts`
+(backend only) as well.
+
+**Fix:** walk both source roots and name an engine module in the non-vacuity
+list, so a future package split is a visible failure:
+
+```ts
+const SOURCE_ROOTS = ["packages/backend/src", "packages/engine/src"];
+
+function shippedFiles(): string[] {
+  return SOURCE_ROOTS.flatMap((root) => walk(root)).sort();
+}
+```
+
+and extend the by-name list at `:356-366` with `pipeline.ts`, `decode.ts` and
+`queue.ts`. The `telemetry.ts` documentation case at `:393-405` stays as is.
+
+---
+
+### CR-05: The redaction gate cannot see `e.message` — the most common way to render an error
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:86-88, 120-174`
+**Severity:** BLOCKER
+
+**Issue:** All three catch rules bottom out in `isRefTo(node, name)`, which is
+`ts.isIdentifier(node) && node.text === name`. The binding must therefore appear
+as a *bare identifier* — as `String(e)`, as `${e}`, or as an operand of `+`.
+Reach through it, cast it, or copy it, and the rule is gone. Executed against
+`auditSource("f.ts", src)`:
+
+```
+e.message returned           []   // catch(e){ return e.message; }
+e.message concat             []   // catch(e){ return "x: " + e.message; }
+e.message template           []   // catch(e){ return `x: ${e.message}`; }
+String(e.message)            []   // catch(e){ return String(e.message); }
+e.toString()                 []   // catch(e){ return e.toString(); }
+JSON.stringify(e)            []   // catch(e){ return JSON.stringify(e); }
+String(e as Error)           []   // catch(e){ return String(e as Error); }
+`${e as any}`                []   // catch(e){ return `${e as any}`; }
+reassign then String         []   // catch(e){ const x = e; return String(x); }
+array join                   []   // catch(e){ return [e].join(""); }
+```
+
+`e.message` is not an exotic spelling — it is *the* spelling. And in this
+codebase specifically, TypeScript types a catch binding as `unknown`, so anything
+beyond `String(e)` requires a cast: `String(e as Error)` and
+`(e as Error).message` are the forms the compiler pushes an author toward. The
+gate is blind to both.
+
+Rule 4 has the same shape and the same hole plus one more: it requires
+`ts.isIdentifier(param.name)`, so
+`function finishAnalysis({ error }: { error: string | null })` — a destructured
+parameter — reports zero. Confirmed: `param destructured []`.
+
+Why this is a BLOCKER rather than a WARNING. The gate's header states the rule as
+"no module under `packages/backend/src/store/` renders an ERROR-SHAPED BINDING to
+a string without passing it through `describeError` first", and `schema.spec.ts`
+was rewritten in this same batch (`:62-70`) to justify keeping the
+`analyses.error` column in the T-01-21 allowlist **on the strength of this
+gate**. The column is durable for 90 days in a file `db.ts` documents as never
+garbage-collected. Phase 2's ERR-02/ERR-04 authors — named in the comment as the
+people who "will read the gate to learn what is already guaranteed" — will write
+`error: (e as Error).message` and ship it green.
+
+**Fix:** make `isRefTo` follow the binding rather than match it literally, and
+invert the default for shapes the walk cannot analyse.
+
+```ts
+/** Does this expression DERIVE from `name`? Unwraps casts, parenthesisation,
+ *  non-null assertions and member access, so `e`, `e as Error`, `(e)`,
+ *  `e.message` and `(e as Error).message` are all the binding. */
+function derivesFrom(node: ts.Node, name: string): boolean {
+  let n: ts.Node = node;
+  for (;;) {
+    if (ts.isParenthesizedExpression(n) || ts.isAsExpression(n) ||
+        ts.isNonNullExpression(n) || ts.isTypeAssertionExpression(n)) { n = n.expression; continue; }
+    if (ts.isPropertyAccessExpression(n) || ts.isElementAccessExpression(n)) { n = n.expression; continue; }
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) { n = n.expression.expression; continue; }
+    break;
+  }
+  return ts.isIdentifier(n) && n.text === name;
+}
+```
+
+Swap `isRefTo` for `derivesFrom` in all three rules; that alone closes
+`e.message`, `String(e.message)`, `e.toString()`, and every cast form. Then add a
+fourth form to `scanFor` — the binding (or anything derived from it) appearing as
+a *return value* or as an object-literal property value without passing through
+`describeError` — and extend rule 4 to `ObjectBindingPattern` parameters. Add
+every executed shape above as a failing-path case; the negative fixtures at
+`:349-361` are what keeps the widened rule from becoming always-on.
+
+---
+
+### CR-06: A bare query parameter under 64 characters reaches `observations.url` verbatim, and `schema.spec.ts` now asserts that it cannot
+
+**File:** `packages/backend/src/store/observations.ts:57-62, 96-101`; claim at `packages/backend/src/store/schema.spec.ts:39-46`
+**Severity:** BLOCKER
+
+**Issue:** A query segment with no `=` is treated as a NAME and kept, truncated
+to `QUERY_NAME_MAX = 64`. The source names this as the mitigation:
+
+> The bound on a RETAINED parameter name. A segment with no `=` is syntactically
+> a name, so without this a token pasted as a bare parameter would survive
+> verbatim under a values-only rule (T-01-31). Residual, named rather than left
+> to be found: a secret shorter than this used as a bare parameter name still
+> survives.
+
+The residual is not a corner — it is most of the space. Executed through
+`normaliseObservedUrl`:
+
+```
+"https://cdn.test/a.js?ghp_0123456789abcdefghij1234567890abcdefgh"
+  -> "https://cdn.test/a.js?ghp_0123456789abcdefghij1234567890abcdefgh"
+"https://cdn.test/a.js?sk_live_51H0000000000000000000000"
+  -> "https://cdn.test/a.js?sk_live_51H0000000000000000000000"
+```
+
+A GitHub personal access token is 40 characters. An AWS access key id is 20. A
+Stripe secret key is around 32. A PHP/Java session id is 26-32. A UUID is 36.
+Every common credential format on the web is shorter than 64 and is therefore
+written to the durable column whole. The bound only catches a JWT, and only its
+tail.
+
+The spec cannot see this. `observations.spec.ts:128-140` is the only case for the
+bound and it exercises a name of `QUERY_NAME_MAX + 40` characters — a name
+*longer* than the bound, which is the one length at which truncation is visible.
+No case in the file, and no assertion in `scripts/phase1/tracer-e2e.sh`, uses a
+bare parameter shorter than 64.
+
+What makes this a BLOCKER rather than a documented residual is what landed
+alongside it. `schema.spec.ts:39-46` was rewritten in the same batch to say:
+
+> THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE, which is worth saying
+> here rather than quietly editing. … The code changed (plan 01-07,
+> `normaliseObservedUrl` -> `redactQueryValues`), so the claim stands.
+
+and the claim it now backs is that "nothing below can hold a response body, a
+cookie or **an authorization token**". A 40-character PAT sitting in
+`observations.url` is an authorization token in a column the paragraph says
+cannot hold one. The T-01-21 mitigation is documented as working by ABSENCE; the
+absence is not there.
+
+**Fix:** a bare segment is a *value with no name*, not a name. Redact it:
+
+```ts
+if (eq === -1) {
+  // No `=`. Syntactically a name, semantically unknown — and an unknown segment
+  // is exactly where a pasted token lands. Keep the SHAPE, drop the bytes.
+  out.push(segment === "" ? "" : QUERY_VALUE_REDACTION);
+  continue;
+}
+```
+
+That keeps the parameter count, the order, and the empty-segment behaviour the
+existing cases assert, and it costs one analytic signal the operator's decision
+never actually asked for (the decision was "keep parameter NAMES"; a bare segment
+has no name). If keeping bare segments is genuinely wanted, then
+`QUERY_NAME_MAX` must come down to a length no credential fits in — 16 or less —
+and `observations.spec.ts` must gain a case for a 40-character bare token
+asserting it does not survive.
+
+Either way `schema.spec.ts:39-46` must stop asserting the claim is TRUE until an
+executed case proves it, and `observations.spec.ts` needs the case that can fail.
+
+---
+
+## Warnings (pass 2)
+
+### WR-11: The redaction is scoped to the `?…&…=` grammar — `;` parameters, path tokens and userinfo reach the column verbatim
+
+**File:** `packages/backend/src/store/observations.ts:87-112, 141-143`
+
+**Issue:** `redactQueryValues` keys entirely off the first `?`. Anything
+credential-bearing that a URL can carry outside that delimiter passes through
+untouched. Executed:
+
+```
+"https://cdn.test/a.js;jsessionid=SECRETSESSION"
+  -> "https://cdn.test/a.js;jsessionid=SECRETSESSION"
+"https://user:pa55w0rd@cdn.test/app.js"
+  -> "https://user:pa55w0rd@cdn.test/app.js"
+"https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js"
+  -> "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js"
+```
+
+- `;jsessionid=` (and `;sid=`, `;phpsessid=`) is RFC 3986 path-parameter
+  syntax and the classic session-token-in-URL shape that Java servlet URL
+  rewriting still emits. `head` is kept verbatim, so it is stored whole.
+- URL userinfo is HTTP Basic credentials in plaintext.
+- Path-embedded tokens are how signed CDN and object-store URLs are commonly
+  shaped when the signature is not in the query.
+
+Note the interaction with the semicolon case that *is* covered: `?a=1;token=SECRET`
+correctly becomes `?a=<redacted>` because the whole segment after the first `=`
+is a value. The hole is only when the `;` appears before any `?`.
+
+Separated from `CR-06` because the fix is different: `CR-06` is a one-line change
+inside the existing loop, whereas this needs a decision about how much of the
+non-query URL to keep at all.
+
+**Fix:** at minimum, drop userinfo (there is no analytic value in it) and redact
+after the first `;` in the path the same way the query is handled:
+
+```ts
+// userinfo: everything between "//" and the "@" that precedes the host.
+// path parameters: same name/value rule as the query, on ";" instead of "&".
+```
+
+and record path-embedded secrets in the source as an accepted residual *with the
+reason*, rather than leaving them unnamed. Add one case per shape to
+`observations.spec.ts` and one to the tracer's raw-column assertion, so the
+residual is a measured statement instead of a silence.
+
+### WR-12: `describeError` redacts only scheme-prefixed URLs — filesystem paths and schemeless host+query strings pass through whole
+
+**File:** `packages/backend/src/telemetry.ts:249-251`, relied on by all six store modules and by `schema.spec.ts:62-70`
+
+**Issue:** `redactUrls` is `text.replace(/[a-z][a-z0-9+.-]*:\/\/\S*/gi, URL_REDACTION)`.
+It requires a literal `://`. Executed through the real `describeError`:
+
+```
+"Error: SQLITE_CANTOPEN: unable to open database file '/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/1a2b/data.db'"
+"Error: failed loading //cdn.victim.example/app.js?token=SECRET"
+"Error: failed loading cdn.victim.example/app.js?token=SECRET"
+"Error: failed <url-redacted> and /Users/x/secret/path"        <- only the scheme'd one goes
+```
+
+Two consequences.
+
+1. **`WR-03`'s own stated rationale is not delivered by `WR-03`'s fix.** That
+   finding justified routing `init()`'s catch through `describeError` because
+   init errors "routinely carry the SQLite file path from `sdk.meta.path()` —
+   server-side path disclosure that DEPLOY-02 says must not be presented". The
+   path — including the operator's OS username — still crosses the `getStatus`
+   RPC in full. `WR-03` is marked fixed in the ledger above; the URL half is
+   genuinely fixed, the path half is not.
+2. **The `analyses.error` allowlist justification overstates.**
+   `schema.spec.ts:62-70` now reads "rendered through `describeError` (which
+   redacts URL-shaped substrings before truncating)". "URL-shaped" is not what
+   the regex matches; it matches "absolute URL with an explicit scheme". A
+   scheme-relative reference is URL-shaped and survives with its query intact.
+
+The store layer specifically is not currently exposed to (2), because the URL
+bound into every store statement is already `normaliseObservedUrl`'d — worth
+saying, because it is the reason this is a WARNING and not a BLOCKER.
+
+**Fix:** add a second, equally backtrack-free replacement for absolute
+filesystem paths before the truncate, and reword the two claims to say
+"scheme-prefixed URLs" rather than "URL-shaped substrings":
+
+```ts
+const PATH_REDACTION = "<path-redacted>";
+function redactPaths(text: string): string {
+  return text.replace(/(?:\/[A-Za-z0-9._-]+){2,}/g, PATH_REDACTION);
+}
+```
+
+Then extend `telemetry.spec.ts`'s recursive walk with a case that throws an
+error carrying `sdk.meta.path()`'s real shape and asserts the username does not
+cross the RPC.
+
+### WR-13: The "executes no pattern" gate cannot see `.replace(/…/)`, and `observations.ts` now executes a pattern transitively
+
+**File:** `packages/backend/src/store/observations.spec.ts:167-193`
+
+**Issue:** The gate greps `observations.ts`'s own source for six literal
+substrings: `.test(`, `.match(`, `.exec(`, `.matchAll(`, `.search(`, `RegExp(`.
+Every one of those is a *method on a pattern or a match call*. The list omits the
+two shapes that actually get written when someone reaches for a regex in string
+code:
+
+- `s.replace(/…/g, x)` and `s.replaceAll(/…/g, x)` — the single most likely way
+  to rewrite this exact function.
+- `s.split(/…/)` — a one-character change from the `split("&")` already there.
+- A bare regex literal assigned to a `const` and used later.
+
+So the assertion's own claim — "the implementation is string splitting only" —
+is not what it enforces. Worse, it is now *false at the module level*: plan
+01-07 added `import { describeError } from "../telemetry"` to `observations.ts`
+(`:10`), and `describeError` runs `redactUrls`, which is a `String.replace` with
+a regex. Every failed observation write in the store now executes a pattern on
+the very runtime whose `REDOS_RECOVERY` the comment says is "kill". The pattern
+in question backtracks linearly rather than catastrophically, so this is a
+WARNING about the guarantee's *wording and reach*, not about a live hang.
+
+**Fix:** add `.replace(`, `.replaceAll(`, `.split(/`, and a check for a regex
+literal token to the forbidden list, and either (a) restate the claim as "this
+module's own code executes no pattern; `describeError` on the error path does,
+and its pattern is asserted backtrack-free in `telemetry.spec.ts`", or (b) walk
+the import graph so the claim covers what it says it covers. The comment-stripping
+filter at `:177-180` also drops only lines that *begin* with `*` or `//`, so a
+trailing `// …` comment can still trip the scan — anchor the scan on the AST the
+way the two new gates do, or say that it is textual.
+
+### WR-14: `outbound-import` misses a dynamic `import()` whose specifier is not a literal, and no other gate covers it
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:240-242, 288-300`
+
+**Issue:** `specifierOf` returns a value only for `ts.isStringLiteralLike`.
+Executed:
+
+```
+import via variable specifier  []   // const spec = "caido:http"; const m = await import(spec);
+```
+
+Normally this would be caught downstream, but not here:
+`scripts/ci/check-bundle-imports.mjs` **allowlists** `caido:http` (deliberately —
+it answers "what did QuickJS resolve when measured", per the recorded decision).
+So a dynamic import through a variable is invisible to both gates
+simultaneously, which is the one combination the two-gate design was supposed to
+rule out.
+
+**Fix:** resolve a single-hop `const` initialised to a string literal in the same
+`collect` pass that already resolves receiver aliases, and — for anything still
+unresolvable — report it as an unanalysable dynamic import rather than dropping
+it silently. An `import(x)` in a plugin whose entire shipped import set is one
+specifier is worth failing on by itself.
+
+### WR-15: `tracer-e2e.sh`'s header still names Caido 0.57.1 after `P1_EXPECT_VERSION` moved to 0.58.0
+
+**File:** `scripts/phase1/tracer-e2e.sh:5` (with `scripts/phase1/env.sh:47-79`)
+
+**Issue:** `env.sh` was changed carefully: the sentence "The Caido build every
+Phase 0 threshold was measured on" was *deleted* rather than left standing,
+precisely because it had become false, and the change is recorded in thirty lines
+of rationale. The harness that consumes the variable kept its own copy of the
+false statement:
+
+```sh
+# The question in words: does a JavaScript response proxied through a REAL Caido
+# 0.57.1 come out the other end as ...
+```
+
+The script's exit line prints `TRACER PASSED` and its output is the phase's
+evidence artifact. A reader of that artifact who checks what it was run against
+finds "0.57.1" in the header and 0.58.0 in the environment. The pass-1 resolution
+note in this very file has the same problem — it says "TRACER PASSED against a
+live Caido 0.57.1", which was true when written and is no longer the build the
+script will use.
+
+**Fix:** replace the literal in the header with `$P1_EXPECT_VERSION` prose ("a
+REAL Caido at `$P1_EXPECT_VERSION`, see `scripts/phase1/env.sh`") and echo the
+resolved `$ACTUAL_VERSION` into the run directory next to `status.json`, so the
+evidence carries the build it was actually produced on rather than a build named
+in a comment.
+
+### WR-16: The tracer opens the live plugin database read-write
+
+**File:** `scripts/phase1/tracer-e2e.sh:166, 174`
+
+**Issue:** Both `sqlite3` invocations run against `$PLUGIN_DB` while Caido — and
+the plugin — are still running and holding that same file open:
+
+```sh
+ARTIFACT_COLUMNS="$(sqlite3 "$PLUGIN_DB" "PRAGMA table_info(artifacts)" | …)"
+sqlite3 "$PLUGIN_DB" "SELECT url FROM observations" > "$RUN_DIR/observations-url-raw.txt"
+```
+
+`sqlite3` opens read-write by default. Against a live database it can create or
+touch `-wal`/`-shm` sidecars, and it can block on or contend for a lock the
+plugin holds. Under `set -euo pipefail` a lock timeout aborts the script *after*
+the traffic has already been proxied, discarding the run for a reason unrelated
+to what was being measured — and in the worst case an evidence-gathering script
+mutates the artifact it is measuring.
+
+**Fix:** open read-only, which is both safer and faster:
+
+```sh
+sqlite3 -readonly "$PLUGIN_DB" "SELECT url FROM observations" > …
+```
+
+(or `sqlite3 "file:$PLUGIN_DB?mode=ro" …` if the local `sqlite3` predates
+`-readonly`). Same for the `PRAGMA` at `:166`.
+
+---
+
+## Info (pass 2)
+
+### IN-08: `backendFiles()` is walked twice, producing two lists that can diverge
+
+`outbound-prohibition.spec.ts:346` binds `const files = backendFiles()` and
+`:385` calls `backendFiles()` again for `it.each`. Two filesystem walks, and the
+non-vacuity assertions at `:348-383` are made against a *different* array object
+than the one the per-file cases iterate. Bind once and reuse.
+
+### IN-09: Both new gates mix `path.join` with hard-coded `/` string surgery
+
+`outbound-prohibition.spec.ts` builds paths with `join()` (platform separator)
+and then asserts `f.endsWith("/" + expected)` (`:368`), filters on
+`r.includes("/")` (`:380`), and derives `base` with `file.split("/").pop()`
+(`:173`). `error-redaction.spec.ts` does the same at `:46` vs `:99` and `:251`.
+On any non-POSIX host every by-name assertion silently stops matching and
+`Violation.file` becomes a full path. Use `path.sep`, or build with `/`
+throughout.
+
+### IN-10: Neither gate names `store/db.ts` in its non-vacuity list
+
+`error-redaction.spec.ts:252-259` names five store modules and
+`outbound-prohibition.spec.ts:356-366` names nine backend modules; `db.ts` is
+scanned by both and named by neither. It is the module that owns the pooled
+handle and the one whose rename would be least noticed. Add it to both lists.
+
+### IN-11: `ERROR_MAX` is now provably dead, and its comment says "in practice"
+
+`analyses.ts:100` defines `ERROR_MAX = 300`; `analyses.ts:212` applies it to the
+output of `describeError`, which returns at most `ERROR_TEXT_LIMIT = 240`. The
+comment at `:209-211` says this makes 300 "unreachable in practice" — it is
+unreachable *always*, for every input, by construction. Either state that (and
+keep the slice as a column-bound assertion, which is the stated intent), or
+replace it with a one-line assertion that `ERROR_TEXT_LIMIT <= ERROR_MAX` so the
+relationship fails loudly if either constant moves. `migrations.ts:176-183` made
+the opposite choice for the same situation and documented the 300→240 narrowing;
+the two files should agree.
+
+### IN-12: `auditSource`'s `no such rule` throw is unreachable
+
+`outbound-prohibition.spec.ts:177-178` looks the rule up in `FORBIDDEN_OUTBOUND`
+and throws if it is missing. Every one of the six `add(...)` call sites passes a
+string literal that is present in the frozen table, so the branch cannot execute
+and has no test. Either derive the rule id from the table (making the lookup
+total by construction) or drop the branch.
+
+### IN-13: The tracer's raw-column assertion is weaker than the per-row one
+
+`tracer-e2e.sh:264` asserts only that `access_token=` appears somewhere in the
+concatenated raw column text, while the RPC rows at `:230-240` are each checked
+for the redaction marker. Assert `REDACTION in raw_urls` too, and assert the raw
+row count equals `len(obs)` — otherwise a run where the RPC returned two rows and
+the table holds ten would still pass.
+
+---
+
+_Pass 1 reviewed: 2026-08-21T00:30:00Z_
+_Pass 2 reviewed: 2026-08-21T11:21:31Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
