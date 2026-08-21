@@ -108,7 +108,7 @@ Plans:
 
 **Wave 10** *(gap closure round 2 — re-verification 2026-08-21T13:45 found both UAT gaps only PARTIALLY closed; blocked on Wave 9)*
 
-- [ ] 01-10-PLAN.md — **Gap 1a**: an operator decision on the bare (`=`-less) query segment, implemented at the write path with one falsifying case per credential format — every common format is shorter than the 64-character bound that was supposed to catch them — *wave 10*
+- [ ] 01-10-PLAN.md — **Gap 1a**: an operator decision on the bare (`=`-less) query segment, implemented at the write path with one falsifying case per credential format — every common format is shorter than the 64-character bound that was supposed to catch them — plus CORE-11 split out of CORE-01 here, in wave 10, so the plan that owns the outbound gate can declare the requirement it enforces in its own frontmatter — *wave 10*
 
 **Wave 11** *(blocked on 01-10 — shares `observations.ts`, and the whole round is serialised)*
 
@@ -116,11 +116,11 @@ Plans:
 
 **Wave 12** *(blocked on 01-11 — sequencing, not code: each round-2 plan mutates the shared tree to prove its gate can fail, and each asserts whole-suite green)*
 
-- [ ] 01-12-PLAN.md — **Gap 2a**: the CORE-01 gate widened to the 14 shapes a 22-shape probe found it missing — `globalThis.fetch`, the destructured receiver, `.call`/`.apply`, computed keys — and extended to `packages/engine/src`, which ships in the bundle and was walked by no gate at all — *wave 12*
+- [ ] 01-12-PLAN.md — **Gap 2a**: the CORE-11 gate (CORE-01's until wave 10) widened to the 14 shapes a 22-shape probe found it missing — `globalThis.fetch`, the destructured receiver, `.call`/`.apply`, computed keys — and extended to `packages/engine/src`, which ships in the bundle and was walked by no gate at all — *wave 12*
 
 **Wave 13** *(blocked on 01-12 — shares `outbound-prohibition.spec.ts`)*
 
-- [ ] 01-13-PLAN.md — **Gap 2b**: the STORE-07 redaction gate made to follow the binding rather than match it, so `e.message` and every cast form fail; and CORE-11 split out of CORE-01 so every gate enforces the requirement it names — *wave 13*
+- [ ] 01-13-PLAN.md — **Gap 2b**: the STORE-07 redaction gate made to follow the binding rather than match it, so `e.message` and every cast form fail, with an owner named for every bare render it does not cover — *wave 13*
 
 **Wave 14** *(blocked on 01-13 — needs every redaction change landed before the live tier can assert them)*
 
