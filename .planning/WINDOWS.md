@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 10
 waived_count: 0
 fixed_count: 2
-total_count: 10
-last_updated: 2026-08-21T00:02:00.191Z
+total_count: 12
+last_updated: 2026-08-21T13:56:33.426Z
 ---
 
 # Broken Windows Ledger
@@ -25,6 +25,8 @@ last_updated: 2026-08-21T00:02:00.191Z
 | 8 | 01 | stub | packages/engine/src/decode.ts |  | decode.ts has no consumer in the shipped bundle until a frontend exists (Phase 3/5); ENC-01's byte-vs-text inequality is proven by decode.spec.ts today | open |  | 2026-08-20T22:55:56.411Z |  |
 | 9 | 01 | deviation | knip.json |  | knip ignoreExportsUsedInFile:true hides a dead export referenced once in its own file — accepted to restore the exports/types gate to error; revisit in Phase 5 | open |  | 2026-08-20T22:55:56.507Z |  |
 | 10 | 01 | deviation | packages/backend/src/compat.ts |  | COMPAT-01's operator-visible message is delivered as a host-log line plus a getStatus()/getCompat() RPC only, with no visible UI: the backend QuickJS surface has NO toast or notification API (exhaustive grep for showToast, Toast and notification across @caido/quickjs-types finds nothing), and sdk.api.send has no subscriber because Phase 1 ships no frontend. Decision P6-D2. Phase 5 owes the visible surface. | open |  | 2026-08-21T00:02:00.191Z |  |
+| 11 | 01 | stub | packages/backend/src/store/observations.ts |  | Path-embedded token in a URL path SEGMENT is NOT redacted — named residual, pinned by observations.spec.ts's RESIDUAL case | open |  | 2026-08-21T13:56:33.328Z |  |
+| 12 | 01 | stub | packages/backend/src/telemetry.ts |  | Windows C:\\\\ paths are not redacted by redactPaths, and a path containing a space loses only the portion before the space — both named residuals | open |  | 2026-08-21T13:56:33.426Z |  |
 
 ````json
 [
@@ -146,6 +148,30 @@ last_updated: 2026-08-21T00:02:00.191Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T00:02:00.191Z",
+    "resolved_at": null
+  },
+  {
+    "id": 11,
+    "kind": "stub",
+    "phase": "01",
+    "file": "packages/backend/src/store/observations.ts",
+    "line": null,
+    "description": "Path-embedded token in a URL path SEGMENT is NOT redacted — named residual, pinned by observations.spec.ts's RESIDUAL case",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T13:56:33.328Z",
+    "resolved_at": null
+  },
+  {
+    "id": 12,
+    "kind": "stub",
+    "phase": "01",
+    "file": "packages/backend/src/telemetry.ts",
+    "line": null,
+    "description": "Windows C:\\\\ paths are not redacted by redactPaths, and a path containing a space loses only the portion before the space — both named residuals",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T13:56:33.426Z",
     "resolved_at": null
   }
 ]
