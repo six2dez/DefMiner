@@ -1,0 +1,2 @@
+installed plugin_package: backend=8a62dc6d-37c3-4726-b500-c7969c1765a1 package=28ede653-5a6e-47f0-ab9e-eedca55cb6d5
+scripts/phase1/tracer-e2e.sh: line 135: 77048 Killed: 9                  python3 scripts/spike/origin.py --dir "$FIXDIR" --port "$P1_ORIGIN_PORT" > "$RUN_DIR/origin-$P1_ORIGIN_PORT.log" 2>&1

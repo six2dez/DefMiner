@@ -1,0 +1,10 @@
+installed plugin_package: backend=2f0df4b4-c6ec-45a7-b772-1a674e74b963 package=a591e6b1-f0de-4dda-b2eb-5a249525c047
+
+TRACER FAILED:
+  - [bare `=`-less query segment (01-10, P10-D1)] the per-run secret occurs 2 time(s) in SELECT url FROM observations, read with sqlite3 from OUTSIDE Caido — the DURABLE column is dirty
+  - [bare `=`-less query segment (01-10, P10-D1)] the per-run secret occurs 2 time(s) in observations.json (the RPC projection)
+  - [bare `=`-less query segment (01-10, P10-D1)] observation row 0 still carries the per-run secret: 'http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&1d984bbcfeb14c2d3a26ab9c8c20560e'
+  - [bare `=`-less query segment (01-10, P10-D1)] observation row 1 still carries the per-run secret: 'http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&1d984bbcfeb14c2d3a26ab9c8c20560e'
+  - raw column row 0 does not END with &<redacted> — the BARE (`=`-less) query segment did not reach the column redacted, which is decision P10-D1: 'http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&1d984bbcfeb14c2d3a26ab9c8c20560e'
+  - raw column row 1 does not END with &<redacted> — the BARE (`=`-less) query segment did not reach the column redacted, which is decision P10-D1: 'http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&1d984bbcfeb14c2d3a26ab9c8c20560e'
+scripts/phase1/tracer-e2e.sh: line 135: 78945 Killed: 9                  python3 scripts/spike/origin.py --dir "$FIXDIR" --port "$P1_ORIGIN_PORT" > "$RUN_DIR/origin-$P1_ORIGIN_PORT.log" 2>&1
