@@ -4,7 +4,9 @@
 //
 //   1. checkCompat  — and on failure return WITHOUT registering a hook and
 //                     WITHOUT opening the database. A plugin that half-runs on an
-//                     unmeasured build produces silently wrong numbers.
+//                     unmeasured build produces silently wrong numbers. INSIDE
+//                     the try, along with everything after it: a throw that
+//                     escapes init() is invisible on this runtime.
 //   2. sdk.meta.db()
 //   3. migrate()    — ALL DDL up front, before any data write.
 //   4. SELECT sqlite_version() — read once and cached. RESEARCH.md Open Question 1:
@@ -150,29 +152,39 @@ function compatReport(caidoVersion: string | null): Record<string, unknown> {
 export async function init(sdk: any): Promise<void> {
   log(sdk, "init");
 
-  // 1 — the version guard, before anything else has a side effect.
-  const compat = checkCompat(sdk);
-  const caidoVersion =
-    typeof sdk?.runtime?.version === "string" ? sdk.runtime.version : null;
-  if (!compat.ok) {
-    compatible = false;
-    compatReason = compat.reason;
-    log(sdk, "INCOMPATIBLE: " + compat.reason);
-    // getStatus is the ONLY thing registered. No hook, no database. COMPAT-01's
-    // "clear message" is this log line plus this RPC; the visible surface is owed
-    // to Phase 5 (decision P1-D5).
-    surfaceCtx = { ...surfaceCtx, sdk };
-    sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
-    // Registered on the REFUSAL path too. A build that refuses is exactly the
-    // build whose surface matrix somebody needs to read, and leg C of the
-    // compatibility smoke test has no other way to see it.
-    sdk.api.register("getCompat", () => compatReport(caidoVersion));
-    return;
-  }
-  compatible = true;
-  compatReason = null;
+  // OUTSIDE the try because the catch reports it, and INSIDE nothing else:
+  // everything from the version guard down is covered. Four statements used to
+  // sit outside the catch — checkCompat, this read, and the two api.register
+  // calls on the refusal path — and each of them can throw. checkCompat walks
+  // `sdk` with property access, so a throwing accessor or a revoked proxy escapes
+  // init() into a runtime that logs nothing; `api.register` rejects a duplicate
+  // name, which is exactly what a re-init hits. The plugin would then have no
+  // hook, no RPC and no log line: the obscure failure COMPAT-01 forbids.
+  let caidoVersion: string | null = null;
 
   try {
+    // 1 — the version guard, before anything else has a side effect.
+    const compat = checkCompat(sdk);
+    caidoVersion =
+      typeof sdk?.runtime?.version === "string" ? sdk.runtime.version : null;
+    if (!compat.ok) {
+      compatible = false;
+      compatReason = compat.reason;
+      log(sdk, "INCOMPATIBLE: " + compat.reason);
+      // getStatus is the ONLY thing registered. No hook, no database. COMPAT-01's
+      // "clear message" is this log line plus this RPC; the visible surface is owed
+      // to Phase 5 (decision P1-D5).
+      surfaceCtx = { ...surfaceCtx, sdk };
+      sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
+      // Registered on the REFUSAL path too. A build that refuses is exactly the
+      // build whose surface matrix somebody needs to read, and leg C of the
+      // compatibility smoke test has no other way to see it.
+      sdk.api.register("getCompat", () => compatReport(caidoVersion));
+      return;
+    }
+    compatible = true;
+    compatReason = null;
+
     // 2, 3 — handle, then ALL DDL, before any data write can leave a transaction
     // dangling on a pooled connection.
     db = await getDb(sdk);
