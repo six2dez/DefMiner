@@ -32,6 +32,7 @@ import {
   QUERY_VALUE_REDACTION,
   recordObservation,
   redactQueryValues,
+  redactUrlHead,
 } from "./observations";
 
 /** `URL_MAX` is module-private on purpose — the column's bound is not a knob. The
@@ -431,6 +432,269 @@ describe("normaliseObservedUrl", () => {
   });
 });
 
+// ===========================================================================
+// THE URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-01-58)
+// ===========================================================================
+
+/**
+ * The grammars a URL can carry BEFORE the first `?`.
+ *
+ * `redactQueryValues` keys entirely off the first `?`, so everything
+ * credential-bearing that a URL can carry ahead of it passed through untouched.
+ * `01-REVIEW.md` WR-11 executed all three and they are reproduced here rather
+ * than summarised:
+ *
+ *   userinfo             `https://user:pa55w0rd@cdn.test/app.js` — stored whole.
+ *                        HTTP Basic credentials in plaintext.
+ *   `;` path parameters  `https://cdn.test/a.js;jsessionid=SECRETSESSION` — stored
+ *                        whole. RFC 3986 path-parameter syntax and the classic
+ *                        session-token-in-URL shape Java servlet URL rewriting
+ *                        still emits.
+ *   path-embedded tokens `https://cdn.test/download/eyJ…SECRET/app.js` — stored
+ *                        whole. THE ONE RESIDUAL, pinned at the bottom of this
+ *                        table rather than left as a silence.
+ *
+ * Enumerated adversarially, and the MUST-NOT-TOUCH half is not padding: an
+ * `@`-anywhere rule is the obvious wrong implementation and it would silently
+ * corrupt every Vite and scoped-package URL the operator browses. Round 1's
+ * gates each passed fixtures written by the same reasoning that wrote the rule,
+ * so the evasions are enumerated before the rule, not after it.
+ */
+const HEAD_CASES: ReadonlyArray<{ name: string; in: string; out: string }> = [
+  // ---- MUST REDACT ------------------------------------------------------
+  {
+    name: "userinfo with a password: NEITHER half survives, and the `@` does",
+    in: "https://user:pa55w0rd@cdn.test/app.js",
+    out: `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js`,
+  },
+  {
+    name: "userinfo with no password half gets exactly the same treatment",
+    in: "https://user@cdn.test/app.js",
+    out: `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js`,
+  },
+  {
+    name: "a `;jsessionid=` path parameter keeps its NAME and loses its VALUE",
+    in: "https://cdn.test/a.js;jsessionid=SECRETSESSION",
+    out: `https://cdn.test/a.js;jsessionid=${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "two parameters on ONE segment: both values gone, both names kept, order preserved",
+    in: "https://cdn.test/a.js;sid=X;phpsessid=Y",
+    out: `https://cdn.test/a.js;sid=${QUERY_VALUE_REDACTION};phpsessid=${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a `;` parameter on a NON-final path segment, and on more than one segment",
+    in: "https://cdn.test/seg;a=1/other;b=2/app.js",
+    out: `https://cdn.test/seg;a=${QUERY_VALUE_REDACTION}/other;b=${QUERY_VALUE_REDACTION}/app.js`,
+  },
+  {
+    name: "all three grammars in ONE URL: three values gone, three names kept",
+    in: "https://user:pw@cdn.test/a.js;jsessionid=S?token=T",
+    out: `https://${QUERY_VALUE_REDACTION}@cdn.test/a.js;jsessionid=${QUERY_VALUE_REDACTION}?token=${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    // The coupling is named in the title on purpose. There is ONE policy for a
+    // delimited segment carrying no `=`, and it is decision P10-D1 (operator,
+    // 2026-08-21): a segment with no name is a value with no name and is
+    // redacted whole. `;` is a second delimiter, never a second policy — both
+    // loops call the same internal helper, which is what makes that true rather
+    // than asserted.
+    name: "a BARE `;` segment follows decision P10-D1 exactly as a bare QUERY segment does — ONE policy, two delimiters",
+    in: "https://cdn.test/a.js;SECRETTOKEN",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "an EMPTY `;` parameter stays empty and gains no marker — the shape is not normalised",
+    in: "https://cdn.test/a.js;",
+    out: "https://cdn.test/a.js;",
+  },
+  // ---- MUST NOT TOUCH ---------------------------------------------------
+  {
+    name: "an `@` in the PATH is untouched — a Vite dev server serves exactly this",
+    in: "https://cdn.test/@vite/client.js",
+    out: "https://cdn.test/@vite/client.js",
+  },
+  {
+    name: "a scoped npm package path is untouched",
+    in: "https://cdn.test/@scope/pkg/index.js",
+    out: "https://cdn.test/@scope/pkg/index.js",
+  },
+  {
+    name: "a `:` in the authority is a PORT, not userinfo",
+    in: "http://127.0.0.1:8081/app.js",
+    out: "http://127.0.0.1:8081/app.js",
+  },
+  {
+    name: "a plain URL with no head grammar at all is byte-identical",
+    in: "https://cdn.test/app.js",
+    out: "https://cdn.test/app.js",
+  },
+  {
+    // Already correct BEFORE this plan, because the whole thing after the first
+    // `=` is a value. Asserted to STAY correct, since a new `;` rule is exactly
+    // what would double-process it into `a=<redacted>;token=<redacted>`.
+    name: "`?a=1;token=SECRET` was ALREADY correct and STAYS correct — the `;` rule does not reach into the query",
+    in: "https://cdn.test/a.js?a=1;token=SECRET",
+    out: `https://cdn.test/a.js?a=${QUERY_VALUE_REDACTION}`,
+  },
+  // ---- THE ONE NAMED RESIDUAL, PINNED -----------------------------------
+  {
+    // Asserted UNCHANGED, deliberately. Telling a signed-URL segment from a
+    // legitimate path segment needs entropy scoring — for which Phase 1 has no
+    // measured false-positive rate, and which would silently destroy the
+    // analytic core of this column — or a pattern, which `REDOS_RECOVERY =
+    // "kill"` forbids in this module. Naming a residual is only honest when a
+    // test can see it change: if a later phase closes this, this case goes RED
+    // and whoever closed it updates it deliberately.
+    name: "RESIDUAL, PINNED: a token embedded in a path SEGMENT is NOT redacted, and this case is what makes that a measured statement rather than a silence",
+    in: "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js",
+    out: "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js",
+  },
+];
+
+describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-01-58)", () => {
+  it("enumerates a NON-EMPTY table covering all three head grammars", () => {
+    // Non-vacuity, in the shape `error-redaction.spec.ts` uses: a table-driven
+    // gate over an empty table reports nothing wrong and proves nothing.
+    expect(HEAD_CASES.length).toBeGreaterThanOrEqual(13);
+    expect(HEAD_CASES.filter((c) => c.in.includes("@")).length).toBeGreaterThan(
+      2,
+    );
+    expect(HEAD_CASES.filter((c) => c.in.includes(";")).length).toBeGreaterThan(
+      3,
+    );
+  });
+
+  for (const c of HEAD_CASES) {
+    it(c.name, () => {
+      expect(normaliseObservedUrl(c.in)).toBe(c.out);
+    });
+  }
+
+  it("the credential literals do not survive ANYWHERE in the output", () => {
+    // SUBSTRING SEARCH over the whole returned string, never an equality
+    // against a hand-written expected value — an equality passes when both
+    // sides are wrong in the same way.
+    const secrets: ReadonlyArray<readonly [string, string]> = [
+      ["https://user:pa55w0rd@cdn.test/app.js", "pa55w0rd"],
+      ["https://user:pa55w0rd@cdn.test/app.js", "user"],
+      ["https://cdn.test/a.js;jsessionid=SECRETSESSION", "SECRETSESSION"],
+      ["https://cdn.test/a.js;SECRETTOKEN", "SECRETTOKEN"],
+      ["https://user:pw@cdn.test/a.js;jsessionid=S?token=T", "pw"],
+    ];
+    for (const [input, secret] of secrets) {
+      const out = normaliseObservedUrl(input);
+      expect(out.includes(secret), `${secret} survived in ${out}`).toBe(false);
+    }
+  });
+
+  it("the `@` and the HOST survive — the URL carried userinfo and that fact is kept, the bytes are not", () => {
+    // Dropping userinfo entirely was WR-11's own recommendation ("there is no
+    // analytic value in it"). Keeping the separator preserves strictly more
+    // signal than that asked for, and it is what makes the step idempotent: a
+    // second pass finds `<redacted>` as the userinfo and replaces it with
+    // itself.
+    const out = normaliseObservedUrl("https://user:pa55w0rd@cdn.test/app.js");
+    expect(out.includes("@")).toBe(true);
+    expect(out.includes("cdn.test")).toBe(true);
+    expect(out.startsWith("https://")).toBe(true);
+  });
+
+  it("the USERNAME is redacted too, not just the password", () => {
+    // Not optional. A username is the same class of disclosure as the OS
+    // username `telemetry.ts`'s `redactPaths` removes from the error path one
+    // module away.
+    expect(normaliseObservedUrl("https://alice@cdn.test/app.js")).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js`,
+    );
+  });
+
+  it("is IDEMPOTENT over every head case — a second pass returns the first byte-for-byte", () => {
+    for (const c of HEAD_CASES) {
+      const once = normaliseObservedUrl(c.in);
+      expect(normaliseObservedUrl(once), c.name).toBe(once);
+    }
+  });
+
+  it("still strips the fragment and still bounds the result at URL_MAX", () => {
+    expect(normaliseObservedUrl("https://user:pw@cdn.test/a.js;s=1#frag")).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test/a.js;s=${QUERY_VALUE_REDACTION}`,
+    );
+    const long = normaliseObservedUrl(
+      `https://user:pw@cdn.test/${"p".repeat(4000)};s=1`,
+    );
+    expect(long.length).toBe(URL_MAX);
+  });
+
+  it("percent-encoding in the head stays OPAQUE (T-01-32) — neither decoded nor re-encoded", () => {
+    // Same reasoning as the query half: decoding would let an encoded
+    // delimiter inside a value split into a fake parameter whose "name" half is
+    // a surviving slice of a real value.
+    expect(normaliseObservedUrl("https://cdn.test/a%3Bb.js")).toBe(
+      "https://cdn.test/a%3Bb.js",
+    );
+    expect(normaliseObservedUrl("https://cdn.test/a.js;n=%3D%3B1")).toBe(
+      `https://cdn.test/a.js;n=${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("redactQueryValues in ISOLATION still leaves EVERY head byte-identical", () => {
+    // The head redaction is a SEPARATE exported function on purpose, and this
+    // is the assertion that makes that separation worth having: the existing
+    // head byte-identity case keeps its meaning for the function it was written
+    // about. One function rewriting both halves would make it untestable.
+    for (const c of HEAD_CASES) {
+      const head = c.in.split("?")[0];
+      expect(redactQueryValues(c.in).split("?")[0], c.name).toBe(head);
+    }
+  });
+});
+
+describe("redactUrlHead in isolation — the authority is resolved, never searched for", () => {
+  it("touches ONLY the head — a query handed to it passes through untouched", () => {
+    // The query belongs to `redactQueryValues`. Two functions, one composition,
+    // and each one's assertions stay true of the function they were written
+    // about.
+    expect(redactUrlHead("https://user:pw@cdn.test/a.js?token=T")).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test/a.js?token=T`,
+    );
+  });
+
+  it("does nothing when there is no `://` — with no authority there is no userinfo", () => {
+    expect(redactUrlHead("cdn.test/app.js@x")).toBe("cdn.test/app.js@x");
+  });
+
+  it("resolves userinfo inside the AUTHORITY ONLY — an `@` after the first `/` is PATH", () => {
+    // An `@`-anywhere rule is the obvious wrong implementation, and it is why
+    // this is a separate case from the table above rather than folded into it.
+    expect(redactUrlHead("https://cdn.test/@vite/client.js")).toBe(
+      "https://cdn.test/@vite/client.js",
+    );
+    expect(redactUrlHead("https://cdn.test/a/@b/c@d.js")).toBe(
+      "https://cdn.test/a/@b/c@d.js",
+    );
+  });
+
+  it("takes the LAST `@` in the authority, so an `@` inside the userinfo leaves no tail behind", () => {
+    expect(redactUrlHead("https://us@er:pw@cdn.test/a.js")).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test/a.js`,
+    );
+  });
+
+  it("handles an authority with no path at all", () => {
+    expect(redactUrlHead("https://user:pw@cdn.test")).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test`,
+    );
+  });
+
+  it("is IDEMPOTENT — `<redacted>` carries no `@` and no `=`, so a second pass replaces it with itself", () => {
+    for (const c of HEAD_CASES) {
+      const once = redactUrlHead(c.in);
+      expect(redactUrlHead(once), c.name).toBe(once);
+    }
+  });
+});
+
 describe("recordObservation writes the redacted URL, not the raw one", () => {
   let fx: SqliteFixture;
 
@@ -489,6 +753,32 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
     expect(rows.length).toBe(1);
     expect(rows[0].url.includes(literal), rows[0].url).toBe(false);
     expect(rows[0].url).toBe(`https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`);
+  });
+
+  it("USERINFO does not reach the column either, nor does a `;` parameter value (WR-11)", async () => {
+    // A pure-function case cannot tell whether the head redactor is WIRED INTO
+    // THE WRITE. This one reads the row back out of the real database file,
+    // which is the only assertion that fails when `redactUrlHead` is correct and
+    // nobody composed it into `normaliseObservedUrl`.
+    const res = await recordObservation(
+      fx.db,
+      "project-one",
+      "d".repeat(64),
+      "r4",
+      "https://user:pa55w0rd@cdn.test/app.js;jsessionid=SECRETSESSION",
+      200,
+      null,
+      1_700_000_000_003,
+    );
+    expect(res.ok, JSON.stringify(res)).toBe(true);
+
+    const rows = await listObservations(fx.db, "project-one");
+    expect(rows.length).toBe(1);
+    expect(rows[0].url.includes("pa55w0rd"), rows[0].url).toBe(false);
+    expect(rows[0].url.includes("SECRETSESSION"), rows[0].url).toBe(false);
+    expect(rows[0].url).toBe(
+      `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js;jsessionid=${QUERY_VALUE_REDACTION}`,
+    );
   });
 
   it("the JWT case survives the round trip with its parameter name intact", async () => {
