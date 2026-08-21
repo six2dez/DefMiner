@@ -17,6 +17,10 @@
 // equality assertion passes when both sides are wrong in the same way; a substring
 // search for the literal token cannot.
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import ts from "typescript";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -40,6 +44,11 @@ import {
  *  the two ever disagree the ordering case fails loudly rather than silently
  *  measuring nothing. */
 const URL_MAX = 2048;
+
+/** Where the two modules this file's pattern gate reads actually live. Relative
+ *  to the repository root, matching `telemetry.spec.ts` and
+ *  `outbound-prohibition.spec.ts`. */
+const BACKEND_SRC = "packages/backend/src";
 
 /** A real-shaped JWT prefix. Used as the thing that must NOT survive. */
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9";
@@ -249,34 +258,6 @@ describe("redactQueryValues", () => {
     ]) {
       const once = redactQueryValues(extra);
       expect(redactQueryValues(once)).toBe(once);
-    }
-  });
-
-  it("executes no pattern — the implementation is string splitting only", async () => {
-    // REDOS_RECOVERY is "kill" on this runtime: SPIKE-01 measured that a
-    // catastrophic pattern hangs the QuickJS thread with NO interrupt handler and
-    // that SIGKILL is the only exit, taking `caido-cli` down with the operator's
-    // real project data. `admit.ts` holds the hooks to indexOf/endsWith for
-    // exactly this reason and the store has no licence the hooks do not.
-    const fs = await import("node:fs/promises");
-    const url = await import("node:url");
-    const here = url.fileURLToPath(new URL(".", import.meta.url));
-    const source = await fs.readFile(here + "observations.ts", "utf8");
-    const code = source
-      .split("\n")
-      .filter((l) => !/^\s*\*/.test(l) && !/^\s*\/\//.test(l))
-      .join("\n");
-    for (const forbidden of [
-      ".test(",
-      ".match(",
-      ".exec(",
-      ".matchAll(",
-      ".search(",
-      "RegExp(",
-    ]) {
-      expect(code.includes(forbidden), `${forbidden} in observations.ts`).toBe(
-        false,
-      );
     }
   });
 });
@@ -798,5 +779,422 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
     expect(rows.length).toBe(1);
     expect(rows[0].url.includes(TOKEN)).toBe(false);
     expect(rows[0].url.includes("access_token=")).toBe(true);
+  });
+});
+
+// ===========================================================================
+// THE "EXECUTES NO PATTERN" GATE — AST-ANCHORED, OVER TWO MODULES (WR-13)
+// ===========================================================================
+//
+// WHAT THIS GATE CLAIMS, and it is narrower than the sentence it replaced.
+//
+// `observations.ts`'s OWN CODE executes no pattern. That is what is enforced
+// here. The module-level claim — "the implementation is string splitting only" —
+// became FALSE the day plan 01-07 added the `describeError` import at
+// `observations.ts:10`: `describeError` runs `redactUrls`, which is a
+// `String.replace` with a pattern, so this module reaches a pattern
+// TRANSITIVELY on its error path. Restating the claim rather than quietly
+// keeping the old title is WR-13's option (a) and the honest one; a claim wider
+// than its enforcement is an attack surface on the next author, who trusts the
+// sentence instead of reading the code.
+//
+// THE TRANSITIVE PATTERN IS NAMED AND BOUNDED. It is the single regex literal
+// inside `redactUrls`, and it is asserted backtrack-free BY MEASUREMENT — not by
+// an argument about its shape — in `telemetry.spec.ts`'s case "renders a
+// 200,000-character adversarial near-miss input inside 250 ms". The error path
+// is reached only after a store write has already failed, which bounds how OFTEN
+// it runs but says nothing about whether it is safe, so the measurement is what
+// carries the weight.
+//
+// WHY IT READS `telemetry.ts` TOO, and this is the point of the widening rather
+// than a bonus. `telemetry.ts`'s `redactPaths` is a string scan justified
+// ENTIRELY by `REDOS_RECOVERY = "kill"`: SPIKE-01 measured that a catastrophic
+// pattern hangs the QuickJS thread with no interrupt handler and that SIGKILL is
+// the only exit, taking `caido-cli` down with the operator's live project data.
+// A gate built one file away for exactly that reason, which cannot SEE the
+// function it was built for, has a hole precisely where its own motivation is.
+// The measured-linearity case bounds `redactUrls` — it does not bound a future
+// author's rewrite of `redactPaths` into WR-12's suggested
+// `(?:\/[A-Za-z0-9._-]+){2,}`, which nests a quantifier inside a quantifier and
+// is the patch task 2 declined.
+//
+// THE EXEMPTION IS A COUNT PLUS AN ANCHOR, NEVER A FILE-NAME SKIP, and the
+// difference is the whole mechanism. `telemetry.ts` may hold EXACTLY ONE regex
+// literal AND it must sit inside the `redactUrls` declaration. A second literal
+// anywhere in that module fails. MOVING the existing one, or renaming the
+// function around it, also fails — until somebody updates the exemption, which
+// is precisely the moment they are forced to add a linearity measurement for
+// whatever they moved. A reader who mistook this for a file-name exception would
+// copy it, so the mechanism is stated here rather than left to be inferred.
+//
+// AN AST WALK, NOT A TEXT SCAN. The scan this replaces read its own module's
+// text, dropped lines BEGINNING with `*` or `//`, and searched for six literal
+// substrings. Both halves failed: a TRAILING comment on a code line survived the
+// filter and could TRIP the gate — which teaches an author to delete the
+// reasoning — and the six substrings missed the shapes a person actually writes.
+// This module's own comments necessarily discuss every forbidden construct by
+// name, which is why the documentation fixture below must report zero.
+
+/** One finding. Same shape as `error-redaction.spec.ts`'s `Violation`, so the
+ *  three gates in this package read alike. */
+type PatternFinding = { file: string; rule: string; detail: string };
+
+/**
+ * The five method names that EXECUTE a pattern by definition.
+ *
+ * `split` and the two replace methods are deliberately ABSENT. With regex
+ * literals and `RegExp` construction both banned there is no way to hand them a
+ * pattern, and banning them outright would ban `split("&")` — which is the
+ * implementation this gate exists to protect.
+ */
+const PATTERN_EXECUTING_METHODS = new Set([
+  "test",
+  "match",
+  "exec",
+  "matchAll",
+  "search",
+]);
+
+/**
+ * The ONE exemption, as a count and an anchor. See the header for why it is not
+ * a file-name skip. The literal it permits is cited to the evidence that bounds
+ * it: `telemetry.spec.ts`'s measured-linearity case.
+ */
+const PATTERN_EXEMPTIONS: ReadonlyMap<
+  string,
+  { readonly literals: number; readonly anchor: string }
+> = new Map([["telemetry.ts", { literals: 1, anchor: "redactUrls" }]]);
+
+/**
+ * Names that MUST appear in each scanned file. Non-vacuity: a rename or a moved
+ * file becomes a visible failure rather than a silently empty scan, which is the
+ * failure class (T-01-34) that produced four green-because-they-could-not-fail
+ * gates earlier in this phase.
+ */
+const PATTERN_SCAN_MARKERS: ReadonlyMap<string, readonly string[]> = new Map([
+  ["observations.ts", ["redactQueryValues", "redactUrlHead"]],
+  ["telemetry.ts", ["redactPaths", "redactUrls"]],
+]);
+
+/** The name of the declaration a node sits inside, walking outwards. Used to
+ *  ANCHOR the exemption to `redactUrls` rather than to a file name. */
+function enclosingDeclarationName(node: ts.Node): string | null {
+  let current: ts.Node | undefined = node.parent;
+  while (current !== undefined) {
+    if (
+      (ts.isFunctionDeclaration(current) ||
+        ts.isMethodDeclaration(current) ||
+        ts.isClassDeclaration(current)) &&
+      current.name !== undefined &&
+      ts.isIdentifier(current.name)
+    ) {
+      return current.name.text;
+    }
+    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
+      return current.name.text;
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+/**
+ * Audit one source file for pattern use.
+ *
+ * PURE — takes text, returns findings — for the same reason
+ * `error-redaction.spec.ts`'s `auditSource` is: every rule's FAILING path is
+ * executed below against an inline fixture. A gate whose failure path has never
+ * run is a gate nobody has tested.
+ *
+ * The fixtures are inline STRINGS and never separate files, because they contain
+ * the forbidden constructs as source text — the same reason
+ * `outbound-prohibition.spec.ts` and `error-redaction.spec.ts` both keep theirs
+ * inline and both skip `.spec.ts` in their walks.
+ */
+function auditPatternUse(file: string, source: string): PatternFinding[] {
+  const base = file.split("/").pop() ?? file;
+  const findings: PatternFinding[] = [];
+  const add = (rule: string, detail: string): void => {
+    findings.push({ file: base, rule, detail });
+  };
+
+  // ---- Non-vacuity, BEFORE any walking. -----------------------------------
+  if (source.trim() === "") {
+    add(
+      "vacuous-scan",
+      `${base} is empty. A pattern audit over an empty file reports zero violations and proves nothing.`,
+    );
+    return findings;
+  }
+  for (const marker of PATTERN_SCAN_MARKERS.get(base) ?? []) {
+    if (!source.includes(marker)) {
+      add(
+        "vacuous-scan",
+        `${base} no longer contains \`${marker}\`. Either it was renamed or this gate is pointed at the wrong file; both make the scan meaningless.`,
+      );
+    }
+  }
+
+  const sf = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const lineOf = (node: ts.Node): number =>
+    sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+
+  const literals: Array<{ line: number; anchor: string | null }> = [];
+
+  const visit = (node: ts.Node): void => {
+    // ---- Rule 1: a regex LITERAL anywhere in the module. -------------------
+    // This one rule subsumes the two shapes the old substring list missed most
+    // dangerously: a pattern handed to a string method has to be WRITTEN as a
+    // literal to get there.
+    if (ts.isRegularExpressionLiteral(node)) {
+      literals.push({
+        line: lineOf(node),
+        anchor: enclosingDeclarationName(node),
+      });
+    }
+
+    // ---- Rule 2: a `RegExp` construction, as a call or with `new`. ---------
+    // So a pattern ASSEMBLED from a string cannot walk around rule 1.
+    if (ts.isNewExpression(node) || ts.isCallExpression(node)) {
+      const callee = node.expression;
+      const isRegExpCallee =
+        (ts.isIdentifier(callee) && callee.text === "RegExp") ||
+        (ts.isPropertyAccessExpression(callee) &&
+          callee.name.text === "RegExp");
+      if (isRegExpCallee) {
+        add(
+          "regexp-construction",
+          `${base}:${String(lineOf(node))} constructs a RegExp. REDOS_RECOVERY is "kill" on this runtime: a catastrophic pattern hangs the QuickJS thread with no interrupt handler and SIGKILL is the only exit, taking caido-cli down with the operator's live project data.`,
+        );
+      }
+    }
+
+    // ---- Rule 3: a call to one of the five pattern-executing methods. ------
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      PATTERN_EXECUTING_METHODS.has(node.expression.name.text)
+    ) {
+      add(
+        "pattern-execution",
+        `${base}:${String(lineOf(node))} calls .${node.expression.name.text}(), which executes a pattern by definition.`,
+      );
+    }
+
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(sf, visit);
+
+  // ---- Rule 1's verdict, under the count-plus-anchor exemption. ------------
+  const exemption = PATTERN_EXEMPTIONS.get(base);
+  if (exemption === undefined) {
+    for (const literal of literals) {
+      add(
+        "regex-literal",
+        `${base}:${String(literal.line)} holds a regular-expression literal. This module executes no pattern; string splitting only.`,
+      );
+    }
+  } else {
+    if (literals.length > exemption.literals) {
+      add(
+        "exemption-exceeded",
+        `${base} holds ${String(literals.length)} regex literals; the exemption permits exactly ${String(exemption.literals)}, inside \`${exemption.anchor}\`, bounded by telemetry.spec.ts's measured-linearity case. Lines: ${literals.map((l) => String(l.line)).join(", ")}. A second pattern needs its own linearity MEASUREMENT before it can be permitted.`,
+      );
+    }
+    for (const literal of literals) {
+      if (literal.anchor !== exemption.anchor) {
+        add(
+          "exemption-anchor",
+          `${base}:${String(literal.line)} holds a regex literal inside \`${String(literal.anchor)}\`, but the exemption is anchored to \`${exemption.anchor}\`. Moving or renaming it requires updating the exemption — which is the moment a linearity measurement is owed for whatever moved.`,
+        );
+      }
+    }
+  }
+
+  return findings;
+}
+
+describe("neither observations.ts nor telemetry.ts executes an unbounded pattern (T-01-60, T-01-77)", () => {
+  const scanned = [
+    join(BACKEND_SRC, "store", "observations.ts"),
+    join(BACKEND_SRC, "telemetry.ts"),
+  ];
+
+  it("reads exactly the two files it claims to, and both are non-empty", () => {
+    for (const file of scanned) {
+      const source = readFileSync(file, "utf8");
+      expect(source.length, `${file} is empty`).toBeGreaterThan(0);
+    }
+    expect(scanned.length).toBe(2);
+  });
+
+  it.each(scanned)(
+    "%s executes no pattern beyond its stated exemption",
+    (file) => {
+      const findings = auditPatternUse(file, readFileSync(file, "utf8"));
+      expect(
+        findings.map((f) => `${f.rule}: ${f.detail}`),
+        `${file} reaches a pattern. REDOS_RECOVERY is "kill" on this runtime and SIGKILL is the only exit.`,
+      ).toEqual([]);
+    },
+  );
+
+  it("still SEES the one literal it permits — the exemption is exercised, not dormant", () => {
+    // If `redactUrls` ever stops holding a literal this reports zero for the
+    // wrong reason, and the exemption below would be permitting nothing while
+    // reading as though it were load-bearing.
+    const file = join(BACKEND_SRC, "telemetry.ts");
+    const source = readFileSync(file, "utf8");
+    // Pointed at a file with NO exemption, the same source must report exactly
+    // one `regex-literal` — which is how many the exemption is spending.
+    const unexempted = auditPatternUse("nowhere/unexempted.ts", source);
+    expect(unexempted.map((f) => f.rule)).toEqual(["regex-literal"]);
+  });
+
+  it("this module's own comments name every forbidden construct and it STILL reports clean", () => {
+    // The documentation hazard, asserted live on the real file rather than on a
+    // fixture: this file has to keep explaining why patterns are banned, and an
+    // AST walk is the only way that stays possible.
+    const file = join(BACKEND_SRC, "store", "observations.spec.ts");
+    const source = readFileSync(file, "utf8");
+    expect(source).toContain("RegExp");
+    expect(source).toContain("matchAll");
+    // Scanned under NO exemption and reported against the module the gate really
+    // guards: a text scan over this file would fire on the words above.
+    const documentationFixture = [
+      "// This comment names RegExp, .test(, .match(, .exec(, .matchAll( and",
+      "// .search( — and a pattern that looks like /[a-z]+/gi — on purpose.",
+      "/** It also names them in a doc comment: new RegExp('x'), s.match(/y/). */",
+      "export function stringsOnly(s: string): string[] {",
+      '  return s.split("&");',
+      "}",
+    ].join("\n");
+    expect(auditPatternUse("fixture.ts", documentationFixture)).toEqual([]);
+  });
+});
+
+describe("the pattern gate's own failure paths, EXECUTED", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditPatternUse(file, src).map((f) => f.rule);
+
+  it("rule 1 — a regex literal in a function body", () => {
+    expect(
+      rulesOf(
+        [
+          "export function f(s: string): boolean {",
+          "  return /a+/.test(s);",
+          "}",
+        ].join("\n"),
+      ),
+    ).toContain("regex-literal");
+  });
+
+  it("rule 2 — a RegExp construction, with `new` and as a bare call", () => {
+    expect(
+      rulesOf(
+        ['const r = new RegExp("a" + "+");', "export const x = r;"].join("\n"),
+      ),
+    ).toContain("regexp-construction");
+    expect(
+      rulesOf(
+        ['const r = RegExp("a" + "+");', "export const x = r;"].join("\n"),
+      ),
+    ).toContain("regexp-construction");
+  });
+
+  it("rule 3 — each of the five pattern-executing method names", () => {
+    for (const method of ["test", "match", "exec", "matchAll", "search"]) {
+      expect(
+        rulesOf(
+          [
+            "export function f(s: string, p: unknown): unknown {",
+            `  return (p as { ${method}: (x: string) => unknown }).${method}(s);`,
+            "}",
+          ].join("\n"),
+        ),
+        method,
+      ).toContain("pattern-execution");
+    }
+  });
+
+  it("stays QUIET on `split`, `replace` and `replaceAll` with string arguments", () => {
+    // Deliberately not on the banned list: with literals and RegExp both banned
+    // there is no way to hand them a pattern, and banning them would ban
+    // `split("&")`, which IS the implementation.
+    expect(
+      rulesOf(
+        [
+          "export function f(s: string): string {",
+          '  return s.split("&").join("&").replace("a", "b").replaceAll("c", "d");',
+          "}",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("non-vacuity — an EMPTY source reports `vacuous-scan` and nothing else", () => {
+    expect(auditPatternUse("observations.ts", "")).toEqual([
+      {
+        file: "observations.ts",
+        rule: "vacuous-scan",
+        detail:
+          "observations.ts is empty. A pattern audit over an empty file reports zero violations and proves nothing.",
+      },
+    ]);
+  });
+
+  it("non-vacuity — a RENAMED anchor function reports `vacuous-scan`", () => {
+    expect(
+      rulesOf('export const x = "no markers here";', "observations.ts"),
+    ).toContain("vacuous-scan");
+    expect(
+      rulesOf('export const x = "no markers here";', "telemetry.ts"),
+    ).toContain("vacuous-scan");
+  });
+
+  it("the exemption is a COUNT — a SECOND literal in telemetry.ts fails", () => {
+    const twoLiterals = [
+      "export function redactUrls(t: string): string {",
+      '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
+      "}",
+      "export function redactPaths(t: string): string {",
+      '  return t.replace(/(?:\\/[A-Za-z0-9._-]+){2,}/g, "<path-redacted>");',
+      "}",
+    ].join("\n");
+    expect(rulesOf(twoLiterals, "telemetry.ts")).toContain(
+      "exemption-exceeded",
+    );
+  });
+
+  it("the exemption is an ANCHOR — the SAME single literal outside `redactUrls` fails", () => {
+    const movedLiteral = [
+      "export function redactUrls(t: string): string {",
+      "  return applyPattern(t);",
+      "}",
+      "export function redactPaths(t: string): string {",
+      '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
+      "}",
+    ].join("\n");
+    const findings = auditPatternUse("telemetry.ts", movedLiteral);
+    expect(findings.map((f) => f.rule)).toContain("exemption-anchor");
+    // And NOT the count rule: there is still exactly one literal. The two rules
+    // fail for different reasons and say so.
+    expect(findings.map((f) => f.rule)).not.toContain("exemption-exceeded");
+  });
+
+  it("the exemption does NOT travel — the same one-literal source fails in any other file", () => {
+    // The thing a file-name skip would get wrong, asserted directly.
+    const oneLiteral = [
+      "export function redactQueryValues(t: string): string {",
+      '  return redactUrlHead(t).replace(/x/g, "y");',
+      "}",
+    ].join("\n");
+    expect(rulesOf(oneLiteral, "observations.ts")).toContain("regex-literal");
   });
 });
