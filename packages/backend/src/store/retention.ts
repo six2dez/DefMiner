@@ -112,12 +112,30 @@ const COUNT_ARTIFACTS_SQL = `SELECT COUNT(*) AS n FROM artifacts WHERE project_i
 const COUNT_OBSERVATIONS_SQL = `SELECT COUNT(*) AS n FROM observations WHERE project_id = ?`;
 const COUNT_ANALYSES_SQL = `SELECT COUNT(*) AS n FROM analyses WHERE project_id = ?`;
 
-const DELETE_OBSERVATIONS_FOR_DIGEST_SQL = `
-DELETE FROM observations WHERE project_id = ? AND sha256 = ?
+// THE CASCADE ENUMERATES KEYS, IT DOES NOT DELETE BY DIGEST.
+//
+// `DELETE FROM observations WHERE project_id = ? AND sha256 = ?` is one
+// statement, which is the rule this file cares most about — but its ROW COUNT is
+// chosen by the target. One bundle re-served 3000 times costs 3001 rows in a pass
+// whose cap is 512, and a cap the traffic can overrun is not a cap. Measured, not
+// argued: one artifact with 3000 sightings produced `deleted: 3001, examined: 1`.
+//
+// So the children are listed as KEYS, oldest first, within the remaining budget,
+// and each one is removed by the SAME fully-bound single-row delete the orphan
+// and per-table sweeps use. The pass therefore deletes at most
+// RETENTION_SWEEP_MAX_ROWS rows whatever the shape of the data.
+const OBSERVATION_KEYS_FOR_DIGEST_SQL = `
+SELECT request_id FROM observations
+WHERE project_id = ? AND sha256 = ?
+ORDER BY observed_at ASC, request_id ASC
+LIMIT ?
 `;
 
-const DELETE_ANALYSES_FOR_DIGEST_SQL = `
-DELETE FROM analyses WHERE project_id = ? AND sha256 = ?
+const ANALYSIS_KEYS_FOR_DIGEST_SQL = `
+SELECT detector_set_hash FROM analyses
+WHERE project_id = ? AND sha256 = ?
+ORDER BY started_at ASC, detector_set_hash ASC
+LIMIT ?
 `;
 
 const DELETE_ARTIFACT_SQL = `
@@ -282,17 +300,12 @@ export async function sweepRetention(
         moreWork = true;
         break;
       }
-      // DEPENDENCY ORDER. Children first, parent last, so an exhausted budget
-      // leaves a parent with fewer children and NEVER a child with no parent.
-      deleted += await deleteOne(db, DELETE_OBSERVATIONS_FOR_DIGEST_SQL, [
-        projectId,
-        sha256,
-      ]);
-      deleted += await deleteOne(db, DELETE_ANALYSES_FOR_DIGEST_SQL, [
-        projectId,
-        sha256,
-      ]);
-      deleted += await deleteOne(db, DELETE_ARTIFACT_SQL, [projectId, sha256]);
+      const cascade = await deleteDigest(db, projectId, sha256, budget);
+      examined += cascade.examined;
+      deleted += cascade.deleted;
+      // The digest still has children, or the budget ran out inside it. Either
+      // way the artifact row is still there and the next pass resumes on it.
+      if (cascade.capped) moreWork = true;
     }
 
     // --- 2. orphans, if any survived an earlier interrupted pass -----------
@@ -392,6 +405,77 @@ export async function sweepRetention(
   }
 
   return { examined, deleted, moreWork };
+}
+
+/**
+ * Remove ONE digest and everything hanging off it, within the remaining budget.
+ *
+ * DEPENDENCY ORDER. Children first, parent last, so an exhausted budget leaves a
+ * parent with fewer children and NEVER a child with no parent — which is why the
+ * artifact row is deleted only when the enumeration proves nothing of its is
+ * left. "I deleted everything I listed" is not "there is nothing left" when the
+ * listing itself was capped, so completeness is decided by whether the LIMIT was
+ * reached rather than by the loop's own bookkeeping.
+ *
+ * `capped` means this digest is not finished: the artifact survives and the next
+ * pass picks it up again, oldest-first ordering guaranteeing it comes back.
+ */
+async function deleteDigest(
+  db: Database,
+  projectId: string,
+  sha256: string,
+  budget: () => number,
+): Promise<{ examined: number; deleted: number; capped: boolean }> {
+  let examined = 0;
+  let deleted = 0;
+  /** What is left of the PASS budget, this cascade's own deletions included. */
+  const left = (): number => budget() - deleted;
+
+  const obsLimit = Math.min(left(), CANDIDATE_SCAN_LIMIT);
+  const obsStmt = await db.prepare(OBSERVATION_KEYS_FOR_DIGEST_SQL);
+  const obs = await obsStmt.all<{ request_id: string }>(
+    projectId,
+    sha256,
+    obsLimit,
+  );
+  examined += obs.length;
+  for (const o of obs) {
+    if (left() <= 0) return { examined, deleted, capped: true };
+    deleted += await deleteOne(db, DELETE_OBSERVATION_SQL, [
+      projectId,
+      sha256,
+      String(o.request_id),
+    ]);
+  }
+
+  const anaLimit = Math.min(left(), CANDIDATE_SCAN_LIMIT);
+  const anaStmt = await db.prepare(ANALYSIS_KEYS_FOR_DIGEST_SQL);
+  const ana =
+    anaLimit <= 0
+      ? []
+      : await anaStmt.all<{ detector_set_hash: string }>(
+          projectId,
+          sha256,
+          anaLimit,
+        );
+  examined += ana.length;
+  for (const a of ana) {
+    if (left() <= 0) return { examined, deleted, capped: true };
+    deleted += await deleteOne(db, DELETE_ANALYSIS_SQL, [
+      projectId,
+      sha256,
+      String(a.detector_set_hash),
+    ]);
+  }
+
+  // Reaching the LIMIT means there may be more rows behind it. Deleting the
+  // parent now would orphan them.
+  if (obs.length >= obsLimit || ana.length >= anaLimit) {
+    return { examined, deleted, capped: true };
+  }
+  if (left() <= 0) return { examined, deleted, capped: true };
+  deleted += await deleteOne(db, DELETE_ARTIFACT_SQL, [projectId, sha256]);
+  return { examined, deleted, capped: false };
 }
 
 /** The four statements and the second key column that describe one child table to

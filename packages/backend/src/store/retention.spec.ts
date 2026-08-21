@@ -315,6 +315,53 @@ describe("the per-pass cap and convergence", () => {
     expect(settled.moreWork).toBe(false);
   });
 
+  it("bounds the CASCADE: one artifact with a large fan-out cannot overrun the cap", async () => {
+    // THE FIXTURE THAT COULD FAIL. The case above seeds exactly ONE observation
+    // per artifact, so the largest overshoot it can possibly detect is one row —
+    // it passed against a cascade that deleted every sighting of a digest in a
+    // single unbounded statement, which measured `deleted: 3001` against a cap of
+    // 512. Real traffic makes this the NORMAL shape: the artifact row is upserted
+    // on every re-serve while each re-serve adds an observation.
+    const cap = RETENTION_PASS_LIMITS.maxRowsPerPass;
+    const [sha] = seedArtifacts(P1, 1, NOW - 100_000);
+    const fanOut = cap * 3;
+    for (let i = 0; i < fanOut; i += 1) {
+      seedObservation(P1, String(sha), "r-" + String(i), NOW - 100_000);
+    }
+    await claimAnalysis(fx.db, P1, String(sha), DETECTOR_CORPUS_VERSION, 1);
+
+    const bounds: RetentionBounds = { maxRows: 0, maxAgeMs: 1 };
+    const first = await sweepRetention(fx.db, P1, bounds, NOW);
+
+    expect(
+      first.deleted,
+      `one pass removed ${String(first.deleted)} rows against a cap of ` +
+        `${String(cap)}. RetentionSweepSummary states that deleted is never ` +
+        `greater than RETENTION_SWEEP_MAX_ROWS, and the whole point of the cap ` +
+        `is that no pass becomes the long synchronous stretch it exists to ` +
+        `prevent — a bound the TARGET can overrun by re-serving one bundle is ` +
+        `not a bound.`,
+    ).toBeLessThanOrEqual(cap);
+    expect(first.moreWork).toBe(true);
+    // `examined` is in ROWS, so a pass that deleted hundreds may not report that
+    // it looked at one.
+    expect(
+      first.examined,
+      "examined reported fewer rows than the pass deleted, which is the " +
+        "incoherence that made `deleted 3001 of 1 examined` a legal log line.",
+    ).toBeGreaterThanOrEqual(first.deleted);
+    // The parent outlives its children: a capped cascade must never orphan.
+    expect(orphanCount(P1)).toEqual({ observations: 0, analyses: 0 });
+
+    // And it still converges — deferral, not a loop to convergence inside a pass.
+    await sweepToConvergence(P1, bounds);
+    expect(await retentionCounts(fx.db, P1)).toEqual({
+      artifacts: 0,
+      observations: 0,
+      analyses: 0,
+    });
+  });
+
   it("the per-pass cap dominates what one interval can insert", () => {
     // The convergence inequality, asserted against the SAME constants the sweep
     // reads. thresholds.spec.ts owns the full derivation; this asserts the sweep
