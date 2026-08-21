@@ -51,22 +51,40 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *     reverted. Proven end to end by `scripts/phase1/tracer-e2e.sh`, which reads
  *     the column with sqlite3 from outside Caido.
  *
- *   OPEN — three grammars OUTSIDE the query still reach this column verbatim.
- *     `01-REVIEW.md` WR-11 executed all three and they are reproduced here rather
- *     than summarised, because a reader who trusts this paragraph must not be
- *     misled about its reach:
- *       userinfo               `https://user:pa55w0rd@cdn.test/app.js` — stored
- *                              whole. HTTP Basic credentials in plaintext.
- *       `;` path parameters    `https://cdn.test/a.js;jsessionid=SECRETSESSION` —
- *                              stored whole. RFC 3986 path-parameter syntax and
- *                              the classic session-token-in-URL shape Java
- *                              servlet URL rewriting still emits.
+ *   ENFORCED — URL USERINFO, since 2026-08-21 (plan 01-11). Resolved inside the
+ *     AUTHORITY component only — after the first `://`, up to the first `/`, `?`
+ *     or `#` — and BOTH halves are replaced, never just the password. The `@` is
+ *     kept, so the fact that the URL carried userinfo survives and the bytes do
+ *     not. Enforcing spec: `observations.spec.ts`'s `HEAD_CASES` block, whose
+ *     MUST-NOT-TOUCH half asserts that an `@` in a PATH — `/@vite/client.js`,
+ *     `/@scope/pkg/index.js` — is byte-identical, because an `@`-anywhere rule
+ *     is the obvious wrong implementation.
+ *
+ *   ENFORCED — `;`-DELIMITED PATH PARAMETERS, since 2026-08-21 (plan 01-11), by
+ *     THE SAME RULE as a query parameter and through the same internal helper:
+ *     `;jsessionid=SECRETSESSION` keeps its name and loses its value, and a bare
+ *     `;` segment follows P10-D1 exactly as a bare query segment does. ONE
+ *     policy, two delimiters — `redactDelimitedSegment` in `observations.ts` is
+ *     the single implementation both loops call, which is what makes that true
+ *     rather than asserted. Enforcing spec: `observations.spec.ts`'s
+ *     `HEAD_CASES`.
+ *
+ *   OPEN — ONE grammar outside the query still reaches this column verbatim, and
+ *     it is the only one:
  *       path-embedded tokens   `https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9…/app.js`
  *                              — stored whole. How signed CDN and object-store
  *                              URLs are shaped when the signature is not a query
  *                              parameter.
- *     OWNER: plan 01-11, which needs a decision about how much of the non-query
- *     URL to keep at all. SOURCE: WR-11.
+ *     NOT closed, and the reason is specific rather than "out of scope":
+ *     distinguishing a signed-URL segment from a legitimate path segment needs
+ *     either entropy scoring — for which Phase 1 has no measured false-positive
+ *     rate, and which would shred ordinary hashed asset names, destroying the
+ *     analytic core of this column — or a pattern, which `REDOS_RECOVERY =
+ *     "kill"` forbids in that module. PINNED, not merely named: the case titled
+ *     "RESIDUAL, PINNED: a token embedded in a path SEGMENT is NOT redacted" in
+ *     `observations.spec.ts` asserts the current behaviour, so the day somebody
+ *     closes it that case goes RED and they update it deliberately. SOURCE:
+ *     WR-11.
  *
  * WHY THE WORDING CHANGED, recorded rather than quietly edited. This paragraph
  * used to read "Nothing below can hold … an authorization token", followed by
@@ -77,10 +95,18 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  * test for the bound using a 104-character name — the one length at which
  * truncation is visible — so nothing could go red. An unfalsifiable residual
  * underneath an upgraded claim. The bare-segment half is now closed by
- * construction and IS falsifiable; the three grammars above are not closed, and
- * saying so is the whole point of the rewrite. A claim stronger than its
- * enforcement is an attack surface on the next author, who builds on the claim
- * rather than on the code.
+ * construction and IS falsifiable; the grammars listed above as open are not
+ * closed, and saying so is the whole point of the rewrite. A claim stronger than
+ * its enforcement is an attack surface on the next author, who builds on the
+ * claim rather than on the code.
+ *
+ * AMENDED 2026-08-21 (plan 01-11), and amended in place rather than rewritten.
+ * When this paragraph was written it named THREE open grammars — userinfo, `;`
+ * path parameters and path-embedded tokens — all owned by plan 01-11. Two of the
+ * three are now ENFORCED and are listed as such above; ONE remains, and the
+ * count in this note is the record that the number moved from three to one on a
+ * date rather than having always been one. The ownership note stopped being a
+ * promise by the two grammars closing, not by the sentence being deleted.
  *
  * The four entries that could conceivably carry target bytes, and why each is
  * here deliberately rather than by omission:
@@ -94,11 +120,17 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               names are the analytic value the operator's UAT
  *                               decision of 2026-08-21 deliberately kept; the
  *                               values are credentials and they are gone before the
- *                               row is written. Enforced by observations.spec.ts.
+ *                               row is written. Since 2026-08-21 (plan 01-11) the
+ *                               same VALUE rule also covers the head: USERINFO is
+ *                               replaced in the authority component with the `@`
+ *                               kept, and `;` PATH-PARAMETER values are replaced
+ *                               by the same helper the query loop uses. Enforced
+ *                               by observations.spec.ts.
  *                               NOT REDACTED, and named here so this entry is not
- *                               read as a complete guarantee: userinfo, `;` path
- *                               parameters and path-embedded tokens — the three
- *                               grammars listed as OPEN above, owned by plan 01-11.
+ *                               read as a complete guarantee: a token embedded in
+ *                               a path SEGMENT — the ONE grammar listed as OPEN
+ *                               above, pinned by an executed case rather than left
+ *                               as a sentence.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission
