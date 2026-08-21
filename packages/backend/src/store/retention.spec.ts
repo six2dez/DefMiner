@@ -271,7 +271,13 @@ describe("project isolation (T-01-20)", () => {
       { maxRows: 1, maxAgeMs: 1 },
       NOW,
     );
-    expect(summary).toEqual({ examined: 0, deleted: 0, moreWork: false });
+    expect(summary).toEqual({
+      examined: 0,
+      deleted: 0,
+      moreWork: false,
+      errors: 0,
+      lastError: null,
+    });
     expect((await retentionCounts(fx.db, P1)).artifacts).toBe(10);
   });
 });
@@ -370,6 +376,76 @@ describe("the per-pass cap and convergence", () => {
     expect(RETENTION_PASS_LIMITS.maxRowsPerPass).toBeGreaterThanOrEqual(
       RETENTION_PASS_LIMITS.insertedPerArtifact,
     );
+  });
+});
+
+describe("a sweep that cannot delete", () => {
+  /** The fixture database, with every DELETE rejecting. Models the structural
+   *  failures that make retention stop bounding anything: a locked database, or
+   *  a schema the migration ladder left partial — which index.ts explicitly
+   *  allows the plugin to keep running on. */
+  function dbWhereDeletesFail(): SqliteFixture["db"] {
+    return {
+      exec: fx.db.exec.bind(fx.db),
+      prepare: async (sql: string) => {
+        const stmt = await fx.db.prepare(sql);
+        if (!/^\s*DELETE\b/i.test(sql)) return stmt;
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: () => Promise.reject(new Error("database is locked")),
+        };
+      },
+    };
+  }
+
+  it("COUNTS and RECORDS the failures instead of reporting a clean pass", async () => {
+    // Two swallows used to sit on this path: deleteOne's empty `catch {}`, which
+    // made a failure indistinguishable from "nothing to delete", and the outer
+    // handler's `void e`, which discarded the error object outright. A sweep
+    // failing on every row therefore produced retentionSweeps climbing,
+    // retentionDeleted stuck at 0, no lastError, no storeErrors, and
+    // "more remains for the next cadence boundary" for ever.
+    const digests = seedArtifacts(P1, 5, NOW - 100_000);
+    for (const sha of digests)
+      seedObservation(P1, sha, "r-" + sha, NOW - 100_000);
+
+    const summary = await sweepRetention(
+      dbWhereDeletesFail(),
+      P1,
+      { maxRows: 0, maxAgeMs: 1 },
+      NOW,
+    );
+
+    expect(
+      summary.errors,
+      "every delete in the pass failed and the summary reported no error at " +
+        "all. Retention is the ONLY bound on this database's growth, and on a " +
+        "runtime whose HANDLER_ERROR_SURFACED is 'neither' this summary is the " +
+        "only record that will ever exist.",
+    ).toBeGreaterThan(0);
+    expect(String(summary.lastError)).toContain("database is locked");
+    expect(summary.deleted).toBe(0);
+    expect(summary.moreWork).toBe(true);
+    // Nothing was removed, and the pass did not throw.
+    expect(await retentionCounts(fx.db, P1)).toEqual({
+      artifacts: 5,
+      observations: 5,
+      analyses: 0,
+    });
+  });
+
+  it("reports zero errors on a pass that works — the counter is not always-on", async () => {
+    seedArtifacts(P1, 3, NOW - 100_000);
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      { maxRows: 0, maxAgeMs: 1 },
+      NOW,
+    );
+    expect(summary.deleted).toBe(3);
+    expect(summary.errors).toBe(0);
+    expect(summary.lastError).toBeNull();
   });
 });
 

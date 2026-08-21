@@ -56,11 +56,27 @@ import type { RetentionBounds } from "./settings";
  * is true when eligible rows remained when the pass stopped — the caller defers to
  * the next cadence boundary rather than looping, because the delete rate is above
  * the insert rate by construction and deferral therefore converges anyway.
+ *
+ * `errors` and `lastError` exist because retention failing was the one thing
+ * here that reported nothing at all. Both swallows on this path — `deleteOne`'s
+ * empty `catch {}` and the outer handler's `void e` — discarded the error
+ * object, so a sweep failing on every row for a structural reason (a locked
+ * database, a schema the migration ladder left partial and index.ts explicitly
+ * allows the plugin to run on) produced: `retentionSweeps` climbing,
+ * `retentionDeleted` stuck at 0, no lastError, no storeErrors, and a log line
+ * saying "more remains for the next cadence boundary" for ever. Retention is
+ * stated three times in this file to be the ONLY bound on this database's
+ * growth, and on a runtime whose measured HANDLER_ERROR_SURFACED is "neither",
+ * discarding the error discards the only record that will ever exist.
  */
 export type RetentionSweepSummary = {
   examined: number;
   deleted: number;
   moreWork: boolean;
+  /** Deletes that failed, plus one for a pass that threw outright. */
+  errors: number;
+  /** The most recent failure's text, bounded like every other store error. */
+  lastError: string | null;
 };
 
 /**
@@ -246,12 +262,34 @@ export async function sweepRetention(
   let examined = 0;
   let deleted = 0;
   let moreWork = false;
+  /** Mutated from inside `remove` below, so it is an object rather than two
+   *  `let`s: a captured `let` assigned only inside a closure is exactly the
+   *  shape narrowing gets wrong. */
+  const failures = { count: 0, last: null as string | null };
 
   // A sweep for the reserved global scope would be a bug: '' is a settings-only
   // scope and no artifact, observation or analysis can carry it.
-  if (projectId === "") return { examined, deleted, moreWork };
+  if (projectId === "")
+    return {
+      examined,
+      deleted,
+      moreWork,
+      errors: failures.count,
+      lastError: failures.last,
+    };
 
   const budget = (): number => MAX_ROWS_PER_PASS - deleted;
+
+  /** One delete, with its failure RECORDED rather than returned as a zero that
+   *  is indistinguishable from "there was nothing to delete". */
+  const remove: DeleteFn = async (sql, params) => {
+    const outcome = await deleteOne(db, sql, params);
+    if (outcome.error !== null) {
+      failures.count += 1;
+      failures.last = outcome.error;
+    }
+    return outcome.deleted;
+  };
 
   const cutoff = nowMs - bounds.maxAgeMs;
 
@@ -300,7 +338,7 @@ export async function sweepRetention(
         moreWork = true;
         break;
       }
-      const cascade = await deleteDigest(db, projectId, sha256, budget);
+      const cascade = await deleteDigest(db, projectId, sha256, budget, remove);
       examined += cascade.examined;
       deleted += cascade.deleted;
       // The digest still has children, or the budget ran out inside it. Either
@@ -321,7 +359,7 @@ export async function sweepRetention(
           moreWork = true;
           break;
         }
-        deleted += await deleteOne(db, DELETE_OBSERVATION_SQL, [
+        deleted += await remove(DELETE_OBSERVATION_SQL, [
           projectId,
           String(o.sha256),
           String(o.request_id),
@@ -341,7 +379,7 @@ export async function sweepRetention(
           moreWork = true;
           break;
         }
-        deleted += await deleteOne(db, DELETE_ANALYSIS_SQL, [
+        deleted += await remove(DELETE_ANALYSIS_SQL, [
           projectId,
           String(a.sha256),
           String(a.detector_set_hash),
@@ -364,6 +402,7 @@ export async function sweepRetention(
         bounds,
         cutoff,
         budget,
+        remove,
       );
       examined += obs.examined;
       deleted += obs.deleted;
@@ -384,6 +423,7 @@ export async function sweepRetention(
         bounds,
         cutoff,
         budget,
+        remove,
       );
       examined += ana.examined;
       deleted += ana.deleted;
@@ -398,14 +438,30 @@ export async function sweepRetention(
     }
   } catch (e) {
     // A sweep that throws is a sweep that silently stops bounding growth, and
-    // Caido surfaces neither the throw nor the rejection. Report what the pass
-    // managed and let the caller schedule another.
-    void e;
+    // Caido surfaces neither the throw nor the rejection. RECORD it — `void e`
+    // threw away the only account of why retention stopped working — then report
+    // what the pass managed and let the caller schedule another.
+    failures.count += 1;
+    failures.last = String(e).slice(0, 200);
     moreWork = true;
   }
 
-  return { examined, deleted, moreWork };
+  return {
+    examined,
+    deleted,
+    moreWork,
+    errors: failures.count,
+    lastError: failures.last,
+  };
 }
+
+/** One recorded delete. `sweepRetention` supplies it; the helpers below take it
+ *  rather than reaching for `deleteOne` themselves, so no delete on this path can
+ *  fail without being counted. */
+type DeleteFn = (
+  sql: string,
+  params: [string, string] | [string, string, string],
+) => Promise<number>;
 
 /**
  * Remove ONE digest and everything hanging off it, within the remaining budget.
@@ -425,6 +481,7 @@ async function deleteDigest(
   projectId: string,
   sha256: string,
   budget: () => number,
+  remove: DeleteFn,
 ): Promise<{ examined: number; deleted: number; capped: boolean }> {
   let examined = 0;
   let deleted = 0;
@@ -441,7 +498,7 @@ async function deleteDigest(
   examined += obs.length;
   for (const o of obs) {
     if (left() <= 0) return { examined, deleted, capped: true };
-    deleted += await deleteOne(db, DELETE_OBSERVATION_SQL, [
+    deleted += await remove(DELETE_OBSERVATION_SQL, [
       projectId,
       sha256,
       String(o.request_id),
@@ -461,7 +518,7 @@ async function deleteDigest(
   examined += ana.length;
   for (const a of ana) {
     if (left() <= 0) return { examined, deleted, capped: true };
-    deleted += await deleteOne(db, DELETE_ANALYSIS_SQL, [
+    deleted += await remove(DELETE_ANALYSIS_SQL, [
       projectId,
       sha256,
       String(a.detector_set_hash),
@@ -474,7 +531,7 @@ async function deleteDigest(
     return { examined, deleted, capped: true };
   }
   if (left() <= 0) return { examined, deleted, capped: true };
-  deleted += await deleteOne(db, DELETE_ARTIFACT_SQL, [projectId, sha256]);
+  deleted += await remove(DELETE_ARTIFACT_SQL, [projectId, sha256]);
   return { examined, deleted, capped: false };
 }
 
@@ -499,6 +556,7 @@ async function trimChildTable(
   bounds: RetentionBounds,
   cutoff: number,
   budget: () => number,
+  remove: DeleteFn,
 ): Promise<{ examined: number; deleted: number; capped: boolean }> {
   const victims: { sha256: string; second: string }[] = [];
   const seen = new Set<string>();
@@ -541,29 +599,30 @@ async function trimChildTable(
       capped = true;
       break;
     }
-    deleted += await deleteOne(db, spec.deleteSql, [
-      projectId,
-      v.sha256,
-      v.second,
-    ]);
+    deleted += await remove(spec.deleteSql, [projectId, v.sha256, v.second]);
   }
   return { examined: victims.length, deleted, capped };
 }
 
-/** One delete, one statement, prepared inside the call, parameters SPREAD.
- *  Returns the rows it removed, or 0 if it failed — a single unwritable row must
- *  not stop the pass. */
+/**
+ * One delete, one statement, prepared inside the call, parameters SPREAD.
+ *
+ * Returns the rows it removed AND why it failed if it did. A single unwritable
+ * row must not stop the pass — but the previous version's `catch { return 0; }`
+ * made "failed" and "there was nothing to delete" the same value, which is how a
+ * sweep failing on every row could report a clean pass for ever.
+ */
 async function deleteOne(
   db: Database,
   sql: string,
   params: [string, string] | [string, string, string],
-): Promise<number> {
+): Promise<{ deleted: number; error: string | null }> {
   try {
     const stmt = await db.prepare(sql);
     const res = await stmt.run(...params);
-    return Number(res.changes);
-  } catch {
-    return 0;
+    return { deleted: Number(res.changes), error: null };
+  } catch (e) {
+    return { deleted: 0, error: String(e).slice(0, 200) };
   }
 }
 

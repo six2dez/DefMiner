@@ -287,6 +287,22 @@ export function startConsumer(
       );
       counters.retentionSweeps++;
       counters.retentionDeleted += summary.deleted;
+      if (summary.errors > 0) {
+        // Retention is the ONLY bound on this database's growth, and its failure
+        // used to be the one thing on this path that reported nothing: sweeps
+        // climbing, deleted stuck at 0, no counter, no lastError, and a log line
+        // promising the next cadence boundary for ever.
+        counters.storeErrors += summary.errors;
+        const text =
+          "RETENTION_DELETE_FAILED " +
+          String(summary.errors) +
+          " of " +
+          String(summary.examined) +
+          " examined: " +
+          (summary.lastError ?? "unknown");
+        recordError(text);
+        log(text);
+      }
       if (summary.moreWork) {
         // Picked up at the NEXT cadence boundary, deliberately.
         log(

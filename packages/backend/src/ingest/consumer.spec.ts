@@ -822,6 +822,56 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     ).toBe(2);
   });
 
+  /** The fixture database with every DELETE rejecting — the shape a locked
+   *  database or a half-applied schema takes from in here. */
+  function dbWhereDeletesFail(): SqliteFixture["db"] {
+    return {
+      exec: fx.db.exec.bind(fx.db),
+      prepare: async (sql: string) => {
+        const stmt = await fx.db.prepare(sql);
+        if (!/^\s*DELETE\b/i.test(sql)) return stmt;
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: () => Promise.reject(new Error("database is locked")),
+        };
+      },
+    };
+  }
+
+  it("a sweep whose deletes all fail moves a counter and leaves a record", async () => {
+    // The failure used to be silent end to end: retentionSweeps climbing,
+    // retentionDeleted stuck at 0, no storeErrors, no lastError, and a log line
+    // saying "more remains for the next cadence boundary" for ever — while
+    // retention is the only thing bounding this database at all.
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "1",
+      Date.now(),
+    );
+    seedArtifacts(10, Date.now() - 1_000);
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("locked") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { db: dbWhereDeletesFail() });
+
+    expect(counters.retentionSweeps).toBe(1);
+    expect(counters.retentionDeleted).toBe(0);
+    expect(
+      counters.storeErrors,
+      "a retention pass failed on every row and nothing counted it.",
+    ).toBeGreaterThan(0);
+    expect(
+      String(slimStatus().lastError),
+      "no error record survived the sweep. HANDLER_ERROR_SURFACED is " +
+        "'neither', so this is the only record that will ever exist.",
+    ).toContain("RETENTION_DELETE_FAILED");
+  });
+
   it("still reaches the cadence when every iteration is abandoned AFTER a write", async () => {
     // The cadence counter used to be the LAST statement of handleOne, reached
     // only on the full-success path — while the project-change returns that
