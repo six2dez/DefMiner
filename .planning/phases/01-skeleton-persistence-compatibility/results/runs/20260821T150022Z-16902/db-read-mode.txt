@@ -1,0 +1,7 @@
+# How the LIVE plugin database was read (decision P8-D2, 01-REVIEW.md WR-16).
+plugin_db=/tmp/defminer-probe-20260821T150022Z-16902/plugins/8a62dc6d-37c3-4726-b500-c7969c1765a1/data.db
+read_mode=readonly
+sqlite_master_objects=14
+wal_bytes=168952
+shm_present=yes
+sqlite3_cli=3.51.0
