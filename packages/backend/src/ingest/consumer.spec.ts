@@ -204,18 +204,32 @@ describe("one reloaded entry produces BOTH an artifact and an observation", () =
     expect(counters.reloadHit).toBe(1);
   });
 
-  it("the observation carries the URL with its query and no fragment", async () => {
+  it("the observation carries the query NAMES, no query values and no fragment", async () => {
     const p = plan([
-      { id: "r1", url: "https://x.test/app.js?v=8c1f#frag", bytes: body("a") },
+      {
+        id: "r1",
+        url: "https://x.test/app.js?v=8c1f&access_token=eyJhbGciOiJIUzI1NiJ9#frag",
+        bytes: body("a"),
+      },
     ]);
     p.offer();
     await runOnce(p.overrides);
 
     const rows = await listObservations(fx.db, PROJECT);
     expect(rows.length).toBe(1);
-    // The cache-busting query is exactly what makes a re-served bundle a MISS;
-    // dropping it would inflate the hit rate this data exists to measure.
-    expect(rows[0].url).toBe("https://x.test/app.js?v=<redacted>");
+    // WHY THE NAMES ARE KEPT AND THE VALUES ARE NOT — operator decision, UAT
+    // 2026-08-21, gap WR-07. A parameter NAME carries analytic value: knowing an
+    // endpoint takes an `access_token` parameter is worth being able to see, and
+    // the names are also enough to tell that a URL is cache-busted. A parameter
+    // VALUE is a credential, and this column is durable for 90 days in a file
+    // that is never garbage-collected and survives force-reinstall. What actually
+    // decides a cache hit or a miss is the content DIGEST, not the URL.
+    expect(rows[0].url).toBe(
+      "https://x.test/app.js?v=<redacted>&access_token=<redacted>",
+    );
+    // Asserted as a substring search as well as an equality: an equality passes
+    // when both sides are wrong in the same way.
+    expect(rows[0].url.includes("eyJhbGciOiJIUzI1NiJ9")).toBe(false);
     expect(rows[0].status).toBe(200);
     expect(rows[0].content_type).toBe("application/javascript");
     expect(rows[0].request_id).toBe("r1");

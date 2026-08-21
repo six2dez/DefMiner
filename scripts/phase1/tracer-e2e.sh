@@ -23,6 +23,11 @@ source scripts/phase1/env.sh
 GO_NO_GO=".planning/phases/00-runtime-reality-check/results/go-no-go.json"
 FIXTURE_NAME="defminer-tracer-fixture.js"
 CACHE_BUSTER="v=tracer1"
+# STORE-03's live probe. `SECRET_VALUE` is sixteen random bytes rendered as hex and
+# generated FRESH at every run: a value that cannot appear in the database by
+# coincidence and cannot be satisfied by a hard-coded expectation.
+SECRET_PARAM="access_token"
+SECRET_VALUE="$(openssl rand -hex 16)"
 
 # --- preflight: fail before touching anything ------------------------------
 [ -x "$P1_CAIDO_BIN" ] || { echo "FATAL: $P1_CAIDO_BIN is not executable" >&2; exit 1; }
@@ -118,7 +123,12 @@ probe_install packages/dist/plugin_package
 # of the query is observable. Two requests, two distinct Caido request ids, one
 # set of bytes: exactly one artifact with seen_count 2 and exactly two
 # observations is what proves the upsert is the only write path on both tables.
-FIXTURE_URL="http://127.0.0.1:$P1_ORIGIN_PORT/$FIXTURE_NAME?$CACHE_BUSTER"
+#
+# The url ALSO carries a credential-shaped parameter whose value is random per run
+# (STORE-03, UAT decision 2026-08-21). What the assertions below prove is that the
+# parameter NAMES survive and every VALUE does not — read out of the database FILE
+# with sqlite3, not only out of the RPC projection.
+FIXTURE_URL="http://127.0.0.1:$P1_ORIGIN_PORT/$FIXTURE_NAME?$CACHE_BUSTER&$SECRET_PARAM=$SECRET_VALUE"
 for n in 1 2; do
   code="$(curl -s --max-time 60 --proxy "$CAIDO_URL" -o /dev/null -w '%{http_code}' "$FIXTURE_URL")"
   [ "$code" = "200" ] || { echo "FATAL: proxied request $n returned $code" >&2; exit 1; }
@@ -157,18 +167,33 @@ ARTIFACT_COLUMNS="$(sqlite3 "$PLUGIN_DB" "PRAGMA table_info(artifacts)" | cut -d
 echo "plugin db   : $PLUGIN_DB"
 echo "artifacts   : $ARTIFACT_COLUMNS"
 
+# The RAW column, read from OUTSIDE Caido. The RPC could redact on READ while the
+# column stayed dirty, and only the file can tell you which happened — the same
+# reason the PRAGMA above is asserted against the real file rather than against the
+# DDL string the plugin shipped.
+sqlite3 "$PLUGIN_DB" "SELECT url FROM observations" > "$RUN_DIR/observations-url-raw.txt"
+echo "raw url rows: $(wc -l < "$RUN_DIR/observations-url-raw.txt" | tr -d ' ')"
+
 # --- assertions -------------------------------------------------------------
 python3 - "$EXPECTED_SHA" "$EXPECTED_BYTES" "$FIXTURE_NAME" "$CACHE_BUSTER" \
          "$RUN_DIR/artifacts.json" "$RUN_DIR/observations.json" "$RUN_DIR/status.json" \
-         "$ARTIFACT_COLUMNS" <<'PY'
+         "$ARTIFACT_COLUMNS" "$SECRET_PARAM" "$SECRET_VALUE" \
+         "$RUN_DIR/observations-url-raw.txt" <<'PY'
 import json, sys
 
-sha, nbytes, fixture, buster, af, of, sf, columns = sys.argv[1:9]
+(sha, nbytes, fixture, buster, af, of, sf, columns,
+ secret_param, secret_value, rawf) = sys.argv[1:12]
 nbytes = int(nbytes)
 arts = json.load(open(af))
 obs  = json.load(open(of))
 st   = json.load(open(sf))
 cols = columns.split()
+raw_urls = open(rawf, encoding="utf-8").read()
+obs_json_text = open(of, encoding="utf-8").read()
+# The cache buster is `v=tracer1`. Under the redaction policy the NAME half
+# survives and the VALUE half must not, so it is split rather than searched whole.
+buster_name, _, buster_value = buster.partition("=")
+REDACTION = "<redacted>"
 
 fails = []
 def check(cond, msg):
@@ -201,7 +226,18 @@ for o in obs:
     check(o.get("sha256") == sha, f"observation sha256 {o.get('sha256')!r} != host digest")
     url = o.get("url") or ""
     check(fixture in url, f"observation url {url!r} does not name the fixture")
-    check(buster in url, f"observation url {url!r} lost the cache-busting query")
+    # The NAMES survive — that is the analytic value the operator's decision kept.
+    check(f"{buster_name}=" in url,
+          f"observation url {url!r} lost the cache-busting parameter NAME")
+    check(f"{secret_param}=" in url,
+          f"observation url {url!r} lost the {secret_param} parameter NAME")
+    # The VALUES do not.
+    check(buster_value not in url,
+          f"observation url {url!r} still carries the cache buster VALUE {buster_value!r}")
+    check(secret_value not in url,
+          f"observation url {url!r} still carries the SECRET VALUE")
+    check(REDACTION in url,
+          f"observation url {url!r} carries no redaction marker")
     check("#" not in url, f"observation url {url!r} carries a fragment")
     check(o.get("status") == 200, f"observation status {o.get('status')!r} != 200")
 
@@ -214,6 +250,19 @@ check(c.get("processed", 0) >= 2, f"counters.processed is {c.get('processed')!r}
 check(c.get("reloadMissing", 1) == 0,
       f"counters.reloadMissing is {c.get('reloadMissing')!r} — sdk.requests.get(id) "
       f"was not readable for every enqueued event")
+
+# THE ASSERTION THAT MAKES THIS AN END-TO-END PROOF RATHER THAN A PROJECTION TEST.
+# The RPC could redact on read while the column stayed dirty. Only the file can
+# tell you which happened, so BOTH are asserted — not either.
+raw_hits  = raw_urls.count(secret_value)
+json_hits = obs_json_text.count(secret_value)
+check(raw_hits == 0,
+      f"the SECRET VALUE occurs {raw_hits} time(s) in SELECT url FROM observations "
+      f"read with sqlite3 from OUTSIDE Caido — the durable column is dirty")
+check(json_hits == 0,
+      f"the SECRET VALUE occurs {json_hits} time(s) in observations.json (the RPC)")
+check(f"{secret_param}=" in raw_urls,
+      f"the raw column lost the {secret_param} parameter NAME entirely: {raw_urls!r}")
 
 if fails:
     print("\nTRACER FAILED:", file=sys.stderr)
@@ -228,6 +277,10 @@ print("EQUAL                  :", arts[0]["sha256"] == sha)
 print("artifact rows          :", len(arts), "seen_count", arts[0]["seen_count"])
 print("observation rows       :", len(obs), "distinct request ids", len(ids))
 print("observed url           :", obs[0]["url"])
+print("secret param name      :", secret_param + "= present in raw column:",
+      f"{secret_param}=" in raw_urls)
+print("SECRET VALUE in raw db :", raw_hits, "occurrence(s)")
+print("SECRET VALUE in RPC    :", json_hits, "occurrence(s)")
 print("sqlite inside Caido    :", st["sqliteVersion"])
 print("schema version         :", st.get("schemaVersion"))
 print("max event->reload ms   :", st.get("maxEventToReloadMs"))

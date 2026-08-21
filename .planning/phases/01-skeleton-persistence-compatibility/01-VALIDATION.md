@@ -69,7 +69,7 @@ revised: 2026-08-20
 | 01-05/T3 | 01-05 | 5 | CORE-10 | T-01-27 | Max slice under a 200-chunk SPA load measured EXTERNALLY, recorded, ≤ `MAX_SYNC_SLICE_MS`; zero fails | live + artifact gate | `bash scripts/phase1/spa-load.sh && pnpm vitest run tests/phase1-load.spec.ts` | ❌ W0 | ⬜ pending |
 | 01-04/T1 | 01-04 | 3 | STORE-01/02 | T-01-20, T-01-21 | Exact table set; every table has `project_id` in its key by ordinal; column allowlist | unit — key ordinals + column allowlist, non-vacuous | `pnpm vitest run packages/backend/src/store/schema.spec.ts` | ❌ W0 | ⬜ pending |
 | 01-01/T2 | 01-01 | 1 | STORE-03 | — | Digest derives from `toRaw()` bytes; empty input digest asserted | unit | `pnpm vitest run packages/engine/src/digest.spec.ts` | ❌ W0 | ⬜ pending |
-| 01-01/T2 | 01-01 | 1 | STORE-03 (URL edge) | T-01-02 | One proxied response yields one artifact row AND one observation row carrying the request id and the query-preserving URL; `artifacts` has no `url` column | live end-to-end | `bash scripts/phase1/tracer-e2e.sh` | ❌ W0 | ⬜ pending |
+| 01-01/T2 | 01-01 | 1 | STORE-03 (URL edge) | T-01-02 | One proxied response yields one artifact row AND one observation row carrying the request id and the URL with its query parameter NAMES preserved and every VALUE redacted (amended 2026-08-21 by 01-07); `artifacts` has no `url` column | live end-to-end | `bash scripts/phase1/tracer-e2e.sh` | ❌ W0 | ⬜ pending |
 | 01-03/T3 | 01-03 | 4 | STORE-03 / CORE-08 (wiring) | — | The consumer writes BOTH rows unconditionally per iteration, and a repeat digest at the current corpus version leaves the `analyses` count unchanged while `seen_count` and observations advance | integration (fake SDK + SQLite fixture) | `pnpm vitest run packages/backend/src/ingest/consumer.spec.ts` | ❌ W0 | ⬜ pending |
 | 01-04/T1 | 01-04 | 3 | STORE-04 | — | Analysis rows key on `detector_set_hash`; a corpus bump creates a new row | integration | `pnpm vitest run packages/backend/src/store/artifacts.spec.ts` | ❌ W0 | ⬜ pending |
 | 01-04/T1 | 01-04 | 3 | STORE-05 | T-01-24 | Migration ladder runs forward on a **populated** DB, loses no row, is a no-op on re-run | integration | `pnpm vitest run packages/backend/src/store/migrations.spec.ts` | ❌ W0 | ⬜ pending |
@@ -135,12 +135,35 @@ end-of-phase. The automated half of each row runs regardless.
 | Per-surface outcome DETAIL differs between 0.57.1 and 0.58.0 | COMPAT-02 | 01-06 / T3 `<human-check>` | The automated gate proves every surface was exercised and succeeded on both legs. A behavioural difference in the *detail* — a different row shape, a different error string, a different `sqlite_version` — is exactly what a byte-identical type surface cannot reveal, and it is the phase's top open risk (assumption A1). | Skim leg B's surface matrix against leg A's in `results/compat-smoke.json` before Phase 2 builds on it. |
 | Below-minimum refusal observed on a real old binary rather than a faked version string | COMPAT-01 | 01-06 / T3 (automated leg C) | Listed here because RESEARCH.md proposed it as a manual checkpoint. It is **automated instead**: leg C launches the real `caido-cli 0.55.3` via `instance.sh` with `CAIDO_BIN` passed explicitly, and the gate asserts zero artifact rows plus a refusal-mode field from a closed value set. No human step remains. | `bash scripts/phase1/compat-smoke.sh && pnpm vitest run tests/phase1-compat.spec.ts` |
 
+### Gap-closure plans 01-07, 01-08 and 01-09 (added 2026-08-21)
+
+The map above stops at plan 01-06 because it was written when the phase had six plans. The phase now
+has NINE, and EIGHT further tasks (01-07 three, 01-08 three, 01-09 two — plan 01-07's own prose said
+"seven", which was an undercount of 01-08 by one; the map below is built from the plans' actual task
+lists rather than from that number). This is STALENESS, not a coverage hole: every non-checkpoint task in the three gap plans
+already carries an `<automated>` verify, no task uses a watch-mode flag, and no three-task window
+lacks one. The rows below bring the ledger up to date rather than filling anything in.
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 01-07/T1 | 01-07 | 7 | STORE-03 | T-01-30, T-01-31, T-01-32 | Every query VALUE is replaced before the row is written; NAMES and their order survive; bounded at `QUERY_NAME_MAX`; redact BEFORE truncate; idempotent; no pattern execution | unit + integration (SQLite fixture) | `pnpm vitest run packages/backend/src/store/observations.spec.ts` | ✅ | ✅ done |
+| 01-07/T2 | 01-07 | 7 | STORE-07 | T-01-33, T-01-52, T-01-34 | No module under `store/` renders an error-shaped binding without `describeError` — eight catch sites plus `finishAnalysis`'s parameter, the one line that writes the `analyses.error` column; non-vacuity assertion names all six modules | static AST gate, every rule fixture-proven | `pnpm vitest run packages/backend/src/store/error-redaction.spec.ts` | ✅ | ✅ done |
+| 01-07/T3 | 01-07 | 7 | STORE-03 | T-01-35 | A per-run random secret in a proxied URL's query is absent from `SELECT url FROM observations` read with `sqlite3` from OUTSIDE Caido, and absent from the RPC projection — both, not either | live end-to-end | `bash scripts/phase1/tracer-e2e.sh && pnpm test` | ✅ | ✅ done |
+| 01-08/T1 | 01-08 | 8 | STORE-03, STORE-06 | T-01-36 | Count how many pre-policy rows are actually exposed WITHOUT ever reading a value — the exposure artifact itself must contain no URL | live measurement + artifact gate | `node -e "…observation-url-exposure.json…" && ! grep -qE 'https?://' …/observation-url-exposure.json` | ⬜ | ⬜ pending |
+| 01-08/T2 | 01-08 | 8 | STORE-03 | T-01-36 | **NO AUTOMATED VERIFY, AND THAT IS CORRECT.** A `checkpoint:decision` with `gate="blocking-human"`: rows written before 01-07 still carry verbatim query values, and rewriting or deleting them is ONE-WAY. The decision is the operator's; a gate cannot make it. Listed rather than omitted so the ONE row in the phase without a command is VISIBLE as such rather than absent. | `checkpoint:decision` | — (human decision, `gate="blocking-human"`) | n/a | ⬜ pending |
+| 01-08/T3 | 01-08 | 8 | STORE-03, STORE-06 | T-01-36 | Whatever the checkpoint selected is implemented convergently and visibly | unit + integration | `pnpm test && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-09/T1 | 01-09 | 9 | CORE-01 | T-01-01 | The CORE-01 prohibition acquires an AST gate that can actually FAIL — no outbound surface reachable from backend source | static gate (TDD) | `pnpm test -- packages/backend/src/outbound-prohibition.spec.ts && pnpm typecheck && pnpm lint && pnpm knip` | ⬜ | ⬜ pending |
+| 01-09/T2 | 01-09 | 9 | CORE-01 | T-01-01 | The gate is mutation-proven against the REAL tree and the coverage rows point at it | static gate + bundle gate | `pnpm test && pnpm build:backend && pnpm check:bundle && git diff --exit-code packages/backend/src/hooks/passive.ts` | ⬜ | ⬜ pending |
+
+> Rows for 01-08 and 01-09 are recorded from those plans' declared `<verify>` blocks. Their `Status`
+> stays `pending` until each is executed; 01-07's three rows are marked done because they were.
+
 ---
 
 ## Validation Sign-Off
 
-- [x] All tasks have `<automated>` verify or Wave 0 dependencies — every task in all six plans carries one; the four live-tier commands are declared as a separate slower tier above
-- [x] Sampling continuity: no 3 consecutive tasks without automated verify — no task anywhere in the phase lacks one
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — every task in all NINE plans carries one, with exactly ONE deliberate exception: `01-08/T2` is a `checkpoint:decision` over a one-way data destruction, which is a human decision and correctly has no command. It is listed in the map rather than omitted, so the exception is visible instead of absent. The four live-tier commands are declared as a separate slower tier above. (Extended from six plans to nine on 2026-08-21 by gap-closure plan 01-07.)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify — the single `01-08/T2` checkpoint is bracketed by `01-08/T1` and `01-08/T3`, both automated, so no three-task window lacks one
 - [x] Wave 0 covers all MISSING references — every ❌ W0 row in the map above appears in the Wave 0 list, bound to the plan and task that creates it
 - [x] No watch-mode flags — every command is `vitest run` or a `bash` script; `test:watch` is never invoked by a plan
 - [x] Feedback latency < 15s — for the unit tier, which is the per-task-commit loop. The four live runs exceed it by necessity and are declared as their own tier rather than pretended away

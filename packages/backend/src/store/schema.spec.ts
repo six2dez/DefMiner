@@ -36,20 +36,42 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *
  * This is T-01-21's mitigation and it works by ABSENCE: a stolen copy of the
  * plugin database must be a list of URLs, digests and byte counts, not a
- * credential dump. Nothing below can hold a response body, a header value, a
- * cookie or an authorization token.
+ * credential dump. Nothing below can hold a response body, a cookie or an
+ * authorization token.
+ *
+ * THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE, which is worth saying
+ * here rather than quietly editing. `01-REVIEW.md` WR-07 found the contradiction:
+ * a query string IS a column that can hold a secret, and `observations.url` was
+ * storing one verbatim. WR-07 offered two ways out — correct the CLAIM, or change
+ * the CODE. The code changed (plan 01-07, `normaliseObservedUrl` ->
+ * `redactQueryValues`), so the claim stands. It rests on an assertion rather than
+ * on prose: `observations.spec.ts` is the enforcing spec, and
+ * `scripts/phase1/tracer-e2e.sh` proves it end to end by reading the column with
+ * sqlite3 from outside Caido.
  *
  * The four entries that could conceivably carry target bytes, and why each is
  * here deliberately rather than by omission:
- *   observations.url          — a URL, fragment stripped, truncated to 2048. It is
- *                               the artifact->request edge; without it the plugin
- *                               records that bytes were seen but not WHERE.
+ *   observations.url          — a URL with the fragment stripped, EVERY QUERY VALUE
+ *                               REPLACED with `<redacted>`, the parameter names and
+ *                               their order retained, truncated to 2048. It is the
+ *                               artifact->request edge; without it the plugin
+ *                               records that bytes were seen but not WHERE. The
+ *                               names are the analytic value the operator's UAT
+ *                               decision of 2026-08-21 deliberately kept; the
+ *                               values are credentials and they are gone before the
+ *                               row is written. Enforced by observations.spec.ts.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission
  *                               diagnosable.
- *   analyses.error            — a PLUGIN-GENERATED diagnostic, truncated at the
- *                               write. Never target bytes.
+ *   analyses.error            — a PLUGIN-GENERATED diagnostic, rendered through
+ *                               `describeError` (which redacts URL-shaped
+ *                               substrings before truncating) and truncated again
+ *                               at the write. Never target bytes. Enforced by
+ *                               error-redaction.spec.ts's
+ *                               `unredacted-persisted-error` rule, which exists
+ *                               because the one line that writes this column is
+ *                               not inside a catch clause.
  *   settings.value            — OPERATOR configuration (retention bounds). Never
  *                               target bytes and never a credential: nothing in
  *                               Phase 1 writes a secret to settings, and a phase
