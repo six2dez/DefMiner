@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-skeleton-persistence-compatibility
 source: [01-VERIFICATION.md]
 started: 2026-08-21T08:30:00Z
