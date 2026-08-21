@@ -298,3 +298,7 @@ Stated so the next plan is not surprised, and so nobody reads this SUMMARY as cl
 ## Next Phase Readiness
 
 Ready for 01-11. The working tree is green and the shared files 01-11 will touch (`observations.ts`, `observations.spec.ts`, `schema.spec.ts`) are committed and clean.
+
+## Self-Check: PASSED
+
+All modified source files exist on disk; all five commits (`a231bbd`, `2458713`, `67d8c57`, `8d869fb`, `4f6498b`) are reachable in the git history. All four task-level `<acceptance_criteria>` sets and all ten plan-level `<verification>` items were re-run after the final commit.

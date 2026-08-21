@@ -108,7 +108,7 @@ Plans:
 
 **Wave 10** *(gap closure round 2 — re-verification 2026-08-21T13:45 found both UAT gaps only PARTIALLY closed; blocked on Wave 9)*
 
-- [ ] 01-10-PLAN.md — **Gap 1a**: an operator decision on the bare (`=`-less) query segment, implemented at the write path with one falsifying case per credential format — every common format is shorter than the 64-character bound that was supposed to catch them — plus CORE-11 split out of CORE-01 here, in wave 10, so the plan that owns the outbound gate can declare the requirement it enforces in its own frontmatter — *wave 10*
+- [x] 01-10-PLAN.md — **Gap 1a**: an operator decision on the bare (`=`-less) query segment, implemented at the write path with one falsifying case per credential format — every common format is shorter than the 64-character bound that was supposed to catch them — plus CORE-11 split out of CORE-01 here, in wave 10, so the plan that owns the outbound gate can declare the requirement it enforces in its own frontmatter — *wave 10*
 
 **Wave 11** *(blocked on 01-10 — shares `observations.ts`, and the whole round is serialised)*
 

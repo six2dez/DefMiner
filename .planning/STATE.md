@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-09-PLAN.md — phase 01 complete (9 of 9)
-last_updated: "2026-08-21T13:04:51.016Z"
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-08-21T13:23:15.223Z"
 last_activity: 2026-08-21
-last_activity_desc: Phase 01 execution started
-state_head: b19e0a068ce6b7947f0a6458ab22c667fa0a072c
+last_activity_desc: 01-10 gap closure — a bare (=-less) query segment is redacted by construction (P10-D1), eight credential formats mutation-proven, CORE-11 opened before plan 01-12 declares it
+state_head: 4f6498bb8330d81c5d109a1505c1633bf9acf33c
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -28,19 +28,22 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 1 of 14
-Status: Executing Phase 01
-Last activity: 2026-08-21 — Phase 01 execution started
+Plan: 10 of 14 complete — gap-closure round 2 running, plans 01-11 … 01-14 remain
+Status: Executing Phase 01 (wave 11 next)
+Last activity: 2026-08-21 — 01-10 executed: the bare-segment redaction policy decided and implemented, CORE-11 split out of CORE-01
 
-Progress: [██████████] 100% of phase 01 (9 of 9 plans)
+Progress: [███████░░░] 71% of phase 01 (10 of 14 plans)
 
 > The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it
-> has now done so on THREE consecutive plans (01-07, 01-08, 01-09), so this is the
-> handler's steady behaviour on this repo and not a transient. The previous value (8%)
-> was already stale — it read 8% both at 0 and at 6 completed plans. The figure above
-> is the phase-local one, computed from the 9 PLAN / 9 SUMMARY files on disk and
-> stated with its basis rather than as an unexplained number.
+> has now done so on FOUR consecutive plans (01-07, 01-08, 01-09, 01-10), so this is
+> the handler's steady behaviour on this repo and not a transient. The figure above is
+> the phase-local one, computed from the 14 PLAN / 10 SUMMARY files on disk and stated
+> with its basis rather than as an unexplained number. It DROPPED from the 100% this
+> line read after 01-09, and that is correct rather than a regression: re-verification
+> on 2026-08-21T13:45 found both UAT gaps only partially closed and added five plans,
+> so the denominator grew. A progress bar that could only go up would be measuring
+> nothing.
 
 ## Performance Metrics
 
@@ -72,6 +75,7 @@ Progress: [██████████] 100% of phase 01 (9 of 9 plans)
 | Phase 01 P07 | 49 min | 3 tasks | 35 files |
 | Phase 01 P08 | 18 min | 3 tasks | 4 files |
 | Phase 01 P09 | 22 min | 2 tasks | 2 files |
+| Phase 01 P10 | 18 min | 4 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -186,8 +190,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T11:07:32.771Z
-**Stopped at:** Completed 01-09-PLAN.md — phase 01 complete (9 of 9)
+**Last session:** 2026-08-21T13:23:15.201Z
+**Stopped at:** Completed 01-10-PLAN.md
 **Resume file:** None
 
 ### Blockers
