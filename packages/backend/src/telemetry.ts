@@ -126,6 +126,21 @@ export type Counters = {
   analysisCacheHit: number;
   /** Analyses this consumer claimed and walked. */
   analysisStarted: number;
+  /**
+   * Sightings of a digest whose `analyses` row is claimed but NOT terminal — a
+   * claim nobody finished, or one retention removed between the insert and the
+   * read.
+   *
+   * Its own counter rather than a cache hit, which is what it used to be
+   * counted as. A walk cancelled by a project change or killed with the runtime
+   * leaves `scan_state = 'pending'`, and `pending` is not terminal, so the
+   * artifact is never re-analysed at this corpus version — not on the next
+   * sighting, not after a restart, until the row ages out at 90 days. Reporting
+   * that as `analysisCacheHit` both corrupts the CORE-08 hit rate Phase 1 exists
+   * to start measuring and makes the stuck state read as a success. ERR-02
+   * (Phase 2) owns the reconciliation; this owns the visibility.
+   */
+  analysisStale: number;
   /** Walks that hit ARTIFACT_DEADLINE_MS and persisted a `partial` state. */
   analysisPartial: number;
   /** Retention sweep passes actually run from the consumer loop (STORE-06). */
@@ -158,6 +173,7 @@ function createCounters(): Counters {
     reloadEmptyBody: 0,
     analysisCacheHit: 0,
     analysisStarted: 0,
+    analysisStale: 0,
     analysisPartial: 0,
     retentionSweeps: 0,
     retentionDeleted: 0,

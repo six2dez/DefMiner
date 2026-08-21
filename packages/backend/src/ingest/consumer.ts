@@ -44,6 +44,8 @@ import {
   DETECTOR_CORPUS_VERSION,
   finishAnalysis,
   isAnalysed,
+  type ScanState,
+  TERMINAL_SCAN_STATES,
 } from "../store/analyses";
 import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
@@ -186,6 +188,17 @@ function extract(rr: {
     contentType: contentTypeOf(rr.response.getHeaders()),
     bytes: raw,
   };
+}
+
+/** Has this analysis reached a state that means "do not analyse again"?
+ *
+ *  Reads TERMINAL_SCAN_STATES rather than listing the states again: a state
+ *  added to one list and not the other is exactly how a non-terminal row starts
+ *  being reported as a completed one. `undefined` means the row vanished between
+ *  the insert and the read — retention can legitimately do that — and is not
+ *  terminal either. */
+function isTerminal(state: ScanState | undefined): boolean {
+  return state !== undefined && TERMINAL_SCAN_STATES.includes(state);
 }
 
 /** The one running consumer, if any. Module scope, so a second `startConsumer`
@@ -450,11 +463,28 @@ export function startConsumer(
       } else if (claim.claimed) {
         c.analysisStarted++;
         await analyseAndFinish(projectId, got, detectorSetHash, stillCurrent);
-      } else {
-        // Somebody else owns the row. With one loop this is a re-entrant sighting
-        // of an artifact whose analysis is still `pending`, which is NOT a cache
-        // hit — `isAnalysed` returns true only for TERMINAL states.
+      } else if (isTerminal(claim.state)) {
+        // The row reached a terminal state between the isAnalysed read above and
+        // this claim. Genuinely a cache hit.
         c.analysisCacheHit++;
+      } else {
+        // A CLAIM NOBODY FINISHED, and NOT a cache hit. Anything between the
+        // claim and finishAnalysis can strand the row at `pending`: a walk
+        // cancelled by a project change, the epoch return in analyseAndFinish, a
+        // rejected finishAnalysis, a killed runtime. `pending` is not terminal,
+        // so isAnalysed keeps returning false and claimAnalysis keeps hitting DO
+        // NOTHING — the artifact is never re-analysed at this corpus version
+        // until the row ages out. Counting it as a cache hit made the stuck state
+        // report as a success and corrupted the CORE-08 hit rate. Reconciling it
+        // is ERR-02 in Phase 2; SEEING it is this counter.
+        c.analysisStale++;
+        log(
+          "analysis row for " +
+            got.sha256.slice(0, 12) +
+            " is " +
+            String(claim.state ?? "<gone>") +
+            " and unfinished — not re-analysed at this corpus version (ERR-02)",
+        );
       }
     }
 

@@ -642,6 +642,63 @@ describe("the consumer feeds the max synchronous slice into telemetry", () => {
   });
 });
 
+describe("a claim nobody finished", () => {
+  it("is counted as STALE on the next sighting, never as a cache hit", async () => {
+    // The real way this happens: a walk cancelled by a project change (or a
+    // killed runtime) leaves scan_state = 'pending'. `pending` is not terminal,
+    // so isAnalysed keeps saying false and claimAnalysis keeps hitting DO
+    // NOTHING — the artifact is never re-analysed at this corpus version until
+    // the row ages out at 90 days. The only counter that used to move said
+    // "cache hit", so the health surface reported a stuck artifact as a success
+    // AND the CORE-08 hit rate this phase exists to start measuring was wrong.
+    const bytes = body("stranded");
+
+    const first = plan([{ id: "r1", url: "https://x.test/a.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides, { signal: { aborted: true } });
+
+    const stranded = fx.raw
+      .prepare("SELECT scan_state FROM analyses WHERE project_id = ?")
+      .all(PROJECT) as { scan_state: string }[];
+    expect(
+      stranded.map((r) => r.scan_state),
+      "the fixture did not strand a pending row, so the case below would be " +
+        "asserting nothing.",
+    ).toEqual(["pending"]);
+    expect(counters.analysisStarted).toBe(1);
+
+    // The SAME bytes are served again.
+    const second = plan([{ id: "r2", url: "https://x.test/a.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides);
+
+    expect(
+      counters.analysisCacheHit,
+      "a pending claim was reported as a cache hit. It is the opposite: the " +
+        "bytes have NOT been through the detectors, and nothing will take them " +
+        "there again at this corpus version.",
+    ).toBe(0);
+    expect(counters.analysisStale).toBe(1);
+    expect(await countAnalyses(fx.db, PROJECT)).toBe(1);
+  });
+
+  it("still counts a genuinely finished analysis as a cache hit", async () => {
+    // Non-vacuity for the case above: the new branch must not have swallowed
+    // CORE-08's actual skip.
+    const bytes = body("finished");
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes },
+      { id: "r2", url: "https://x.test/b.js", bytes },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.analysisStarted).toBe(1);
+    expect(counters.analysisCacheHit).toBe(1);
+    expect(counters.analysisStale).toBe(0);
+  });
+});
+
 // ===========================================================================
 // 4. STORE-06's SCHEDULE
 // ===========================================================================
