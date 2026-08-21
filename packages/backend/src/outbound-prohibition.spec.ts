@@ -1,9 +1,20 @@
-// packages/backend/src/outbound-prohibition.spec.ts — CORE-01's wired gate.
+// packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wired gate.
 //
-// THE RULE: no non-spec module under `packages/backend/src` may reach an outbound
-// network surface. There are four of them and CORE-01's statement covers all four
-// in one breath — "no caido:http fetch, no sdk.requests.send, no sdk.net.connect,
-// no global fetch, no speculative retrieval of any kind".
+// THE RULE: no non-spec module the plugin SHIPS may reach an outbound network
+// surface. CORE-11's statement covers them in one breath — "no caido:http fetch,
+// no sdk.requests.send in any spelling, no method of an identified requests or
+// net receiver outside a read-only allowlist, no global fetch by any receiver or
+// alias, no XMLHttpRequest, WebSocket or EventSource, and no speculative
+// retrieval of any kind".
+//
+// WHICH REQUIREMENT, AND WHY IT CHANGED ON 2026-08-21. This prohibition was
+// tagged CORE-01 until that date. `REQUIREMENTS.md`'s CORE-01 is the
+// NON-ASYNC-HANDLER requirement and says nothing about outbound traffic, so one
+// id meant two different things and a reader could not tell which of them a gate
+// tagged CORE-01 was enforcing. The prohibition is now CORE-11, opened in
+// `REQUIREMENTS.md:46` by plan 01-10 (wave 10) before this gate declared it. The
+// split reason lives there and in `.planning/STATE.md` (decision P9-D1).
+// `hooks/passive.ts`'s non-async handler is still CORE-01 and stays that way.
 //
 // WHY THIS NEEDS A GATE AT ALL, when the phase ships no outbound call today.
 // Three facts measured in Phase 0 make a regression here worse than it sounds:
@@ -45,7 +56,8 @@
 // would quietly redefine it from "measured loadable" to "permitted". The bundle
 // gate bounds what can LOAD; this one bounds what the source may CALL. They
 // coexist, and the asymmetry is why this one has to exist at all —
-// `sdk.requests.send` needs no import, so no bundle gate can ever see it.
+// `sdk.requests.send` needs no import, and neither does `globalThis.fetch`, so no
+// bundle gate can ever see either.
 //
 // ===========================================================================
 // THREE BOUNDARIES, STATED RATHER THAN LEFT TO BE DISCOVERED
@@ -57,16 +69,43 @@
 //    residual is bounded by `pnpm check:bundle`, which reports the shipped
 //    bundle's entire import set (one specifier, `crypto`) and which specs never
 //    enter.
-// 2. SCOPE HANDLING IS SHALLOW, and saying so matters more than the gap does.
-//    The walk does not build a symbol table, so an alias rebound in an inner
-//    scope is outside its reach — the same bound `consumer.spec.ts`'s CORE-05
-//    audit works within. Claiming a precision the walk does not have is worse
-//    than the gap, because it gets trusted.
-// 3. `backendFiles()` below duplicates `store/sql-discipline.spec.ts`'s private
-//    walk by about fifteen lines, DELIBERATELY. Exporting one gate's internals
-//    into another means one gate's refactor can silently change the other's
-//    scope; the named non-vacuity assertion is the real protection against a
-//    walk that shrinks.
+// 2. WHAT THE WALK RESOLVES, AND WHAT IT REPORTS INSTEAD OF GUESSING.
+//    Rewritten on 2026-08-21. This boundary used to read "an alias rebound in an
+//    INNER SCOPE is outside its reach". That was true and it was the wrong
+//    sentence: an independent probe of 22 shapes found FOURTEEN missed, and not
+//    one of them was an inner-scope rebind. A reader who trusted the header was
+//    misled in the direction that gets trusted. What the walk actually does:
+//
+//      - It collects in ONE document-order pass and builds NO symbol table.
+//        Bindings are file-wide, not scope-aware, which over-approximates rather
+//        than under-approximates: a name bound to an outbound receiver anywhere
+//        in the file is treated as one everywhere in it.
+//      - Receivers resolve through a declaration (`const r = sdk.requests`), an
+//        object destructure (`const { requests, net } = sdk`), an assignment
+//        (`r = sdk.requests`), a conditional initializer, and a computed key
+//        whose value is a single-hop `const` string (`const r = "requests"`).
+//      - Member names and module specifiers resolve through that same single-hop
+//        `const` string map.
+//      - Once a receiver is positively identified, ANY member of it outside an
+//        explicit read-only allowlist fails — referenced, called, aliased,
+//        returned, or handed to `.call`/`.apply`/`Reflect.apply`.
+//      - Anything it CANNOT read on an identified receiver, and any module
+//        specifier it cannot reduce to a literal, is REPORTED as
+//        `outbound-unanalysable`. "Could not read" does not mean "clean"; that
+//        equivalence is the specific defect this rewrite removes.
+//
+//    THE RESIDUAL, precisely: a value that flows through a FUNCTION BOUNDARY, or
+//    through MORE THAN ONE HOP of indirection, is beyond the walk. Where it can
+//    tell indirection is happening it reports it; where it cannot — a receiver
+//    returned by a helper, a two-hop string — it misses it silently. That is the
+//    honest bound, and `pnpm check:bundle` plus the mutation runs recorded in
+//    `01-12-SUMMARY.md` are what stand behind it.
+// 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
+//    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
+//    `store/error-redaction.spec.ts` needs — both DELIBERATELY. Exporting one
+//    gate's internals into another means one gate's refactor can silently change
+//    the other's scope; the named non-vacuity assertion is the real protection
+//    against a walk that shrinks.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -76,8 +115,8 @@ import { describe, expect, it } from "vitest";
 
 const BACKEND_SRC = "packages/backend/src";
 
-// The four surfaces, as tokens the walk matches on, so the data table below and
-// the walk cannot drift apart.
+// The surfaces, as tokens the walk matches on, so the rule table below and the
+// walk cannot drift apart.
 const SEND_RECEIVER = "requests";
 const SEND_METHOD = "send";
 const NET_RECEIVER = "net";
@@ -87,51 +126,148 @@ const HTTP_SPECIFIER = "caido:http";
 const RECEIVERS = new Set<string>([SEND_RECEIVER, NET_RECEIVER]);
 
 /**
- * The rule set as DATA a reader can enumerate rather than logic they must trace.
+ * The methods of a `requests` receiver that are NOT outbound.
  *
- * A fifth outbound surface discovered in a later phase is one entry here plus one
- * branch in the walk, and the `why` travels with it into the failure message —
- * which is the difference between a gate that explains itself at 2am and a bare
+ * Derived from what this backend actually calls plus the read-only surfaces
+ * COVERAGE.md marks OPT-OUT: `sdk.requests.get` (`ingest/consumer.ts:344`, the
+ * CORE-05 reload the consumer cannot work without), `sdk.requests.inScope`
+ * (`hooks/admit.ts:197`), and `query`/`matches` (COVERAGE.md rows 7 and 8, both
+ * OPT-OUT-but-read-only, both deferred to Phase 6).
+ *
+ * EVERY ONE OF THESE READS EXISTING TRAFFIC AND GENERATES NONE. That is the whole
+ * membership test, and it is why the rule can be "any member NOT on this list"
+ * rather than "these named methods": a `sendRaw` or a `replay` added by a future
+ * SDK fails here without anybody having to enumerate it first.
+ */
+const REQUESTS_READ_ONLY = new Set<string>([
+  "get",
+  "query",
+  "inScope",
+  "matches",
+]);
+
+/**
+ * The receivers a member named `fetch` is the GLOBAL fetch on.
+ *
+ * Restricted to these four rather than matching any receiver, and the restriction
+ * is load-bearing: `cache.fetch(url)` and `client.fetch(u)` are methods of
+ * ordinary objects that reach nothing outside the process, and a gate that broke
+ * them would be reverted within the hour. Both are asserted as must-stay-quiet
+ * fixtures below.
+ */
+const GLOBAL_RECEIVERS = new Set<string>([
+  "globalThis",
+  "self",
+  "global",
+  "window",
+]);
+
+/**
+ * Outbound globals reached by CONSTRUCTION rather than by a call on a receiver.
+ *
+ * Phase 0's capability probe suggests none of these exists in Caido's QuickJS.
+ * That is an argument for the rule being CHEAP, not for omitting it: a surface
+ * excluded because it probably does not exist is a surface nobody checked, the
+ * cost here is three identifiers, and CORE-11's own words are "of any kind".
+ */
+const OUTBOUND_CONSTRUCTORS = new Set<string>([
+  "XMLHttpRequest",
+  "WebSocket",
+  "EventSource",
+]);
+
+type OutboundRule = Readonly<{ rule: string; surface: string; why: string }>;
+
+/**
+ * The rule set as DATA a reader can enumerate rather than logic they must trace,
+ * KEYED BY RULE ID.
+ *
+ * Keyed, not a bare array, because `add()` below used to look a rule up in an
+ * array and throw `no such rule` if it was absent — a branch every call site made
+ * unreachable and no test could execute (IN-12). Indexing this record makes the
+ * lookup TOTAL BY CONSTRUCTION: `RuleId` is `keyof typeof RULES`, so a typo is a
+ * compile error and there is no failure branch left to leave untested.
+ *
+ * A seventh outbound surface discovered in a later phase is one entry here plus
+ * one branch in the walk, and the `why` travels with it into the failure message
+ * — which is the difference between a gate that explains itself at 2am and a bare
  * rule id.
  */
-export const FORBIDDEN_OUTBOUND = Object.freeze([
-  Object.freeze({
+const RULES = Object.freeze({
+  "outbound-send": Object.freeze({
     rule: "outbound-send",
-    surface: `sdk.${SEND_RECEIVER}.${SEND_METHOD}`,
+    surface: `sdk.${SEND_RECEIVER}.${SEND_METHOD}, or any other non-read-only member of a ${SEND_RECEIVER} receiver`,
     why:
       "plugin-originated traffic does not come back through onInterceptResponse " +
       '(SURFACES_FIRING_INTERCEPT = "proxy"), so a leak would move no counter in this ' +
       "plugin and leave no trace in its own telemetry; and caido/caido#2211, filed " +
       "against 0.57.1, means cumulative sends can abort caido-cli with the operator's " +
       "project data. Active retrieval is Phase 8 (ACTIVE-*) and it arrives with the send " +
-      "counter and the write-ahead journal Phase 0 built for it — not by someone adding a call.",
+      "counter and the write-ahead journal Phase 0 built for it — not by someone adding a call. " +
+      "CORE-11 is the requirement whose text states this prohibition.",
   }),
-  Object.freeze({
+  "outbound-net": Object.freeze({
     rule: "outbound-net",
     surface: `sdk.${NET_RECEIVER}.*`,
     why:
       "a raw outbound connection is outbound traffic by any definition and is invisible " +
       "to this plugin's own counters for the same measured reason. COVERAGE.md row 27 " +
-      "places it under the same prohibition as sdk.requests.send.",
+      "places it under the same CORE-11 prohibition as sdk.requests.send.",
   }),
-  Object.freeze({
+  "outbound-fetch": Object.freeze({
     rule: "outbound-fetch",
-    surface: `the global ${FETCH_GLOBAL}()`,
+    surface: `the global ${FETCH_GLOBAL}(), by any receiver or alias`,
     why:
       "the global fetch reaches any host, including one that is not the target at all. " +
       "The operator authorised a PASSIVE observer; this is a boundary they were told " +
-      "does not exist. COVERAGE.md row 38 places it under the same prohibition.",
+      "does not exist. COVERAGE.md row 38 places it under the same CORE-11 prohibition. " +
+      "telemetry.ts already reaches globalThis for `performance`, so the codebase's own " +
+      "idiom for reaching a global is the spelling this rule exists to see.",
   }),
-  Object.freeze({
+  "outbound-import": Object.freeze({
     rule: "outbound-import",
     surface: `an import of "${HTTP_SPECIFIER}"`,
     why:
       "caido:http loads successfully inside Caido, and the DIST-05 bundle allowlist " +
       "admits it because Phase 0 MEASURED it loadable — a different question from " +
-      "whether it is permitted. Phase 0 also measured that traffic it issues delivers " +
-      "nothing back to onInterceptResponse.",
+      "whether it is permitted, and the reason CORE-11 needs a SOURCE gate. Phase 0 also " +
+      "measured that traffic it issues delivers nothing back to onInterceptResponse.",
   }),
-]);
+  "outbound-global-ctor": Object.freeze({
+    rule: "outbound-global-ctor",
+    surface:
+      "an outbound global constructor (XMLHttpRequest, WebSocket, EventSource)",
+    why:
+      "CORE-11 forbids outbound traffic OF ANY KIND, and each of these opens a channel to " +
+      "any host with no import and no SDK call, so neither the bundle allowlist nor the " +
+      "receiver rules above can see one. Phase 0's capability probe suggests they are " +
+      "absent from Caido's QuickJS: that makes the rule cheap, not unnecessary — a surface " +
+      "excluded because it probably does not exist is a surface nobody checked.",
+  }),
+  "outbound-unanalysable": Object.freeze({
+    rule: "outbound-unanalysable",
+    surface: "an outbound surface this walk cannot rule out",
+    why:
+      "this is the argument, not the rule. A computed key on a POSITIVELY IDENTIFIED " +
+      "outbound receiver, and a module specifier that will not reduce to a literal, are " +
+      "the one shape that defeats an AST gate SILENTLY — the walk returns nothing and the " +
+      "file reports clean, which is indistinguishable from a pass. And an import() in a " +
+      "plugin whose entire shipped import set is one specifier, `crypto`, is worth failing " +
+      "on by itself: check-bundle-imports.mjs ALLOWLISTS caido:http, so a dynamic import " +
+      "through a variable was invisible to both gates at once — the single combination the " +
+      "two-gate design exists to rule out. Resolve the value, or delete the indirection.",
+  }),
+});
+
+type RuleId = keyof typeof RULES;
+
+/**
+ * The same rule set as an ARRAY, for readers and for the enumeration assertion.
+ * Derived from `RULES` so the two cannot disagree about what the gate enforces.
+ */
+export const FORBIDDEN_OUTBOUND: readonly OutboundRule[] = Object.freeze(
+  Object.values(RULES),
+);
 
 type Violation = { file: string; rule: string; detail: string };
 
@@ -162,25 +298,70 @@ function backendFiles(): string[] {
 }
 
 /**
+ * Strip the wrappers that hide an expression from a syntactic match.
+ *
+ * `(globalThis as any).fetch(url)` is an `AsExpression` where a bare identifier
+ * was expected, and that single wrapper is why the round-1 gate reported it
+ * clean. Parens, `as`, `satisfies`, `!` and the legacy `<T>x` assertion all mean
+ * "the same value, differently typed", so all five unwrap.
+ *
+ * DUPLICATED DELIBERATELY: `store/error-redaction.spec.ts` needs the same helper
+ * and gets its own copy, per boundary 3 in the header. Sharing it would mean one
+ * gate's refactor silently changing the other gate's scope, and these two gates
+ * enforce different requirements for different reasons.
+ */
+function unwrap(node: ts.Expression): ts.Expression {
+  let current = node;
+  for (;;) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current) ||
+      ts.isTypeAssertionExpression(current)
+    ) {
+      current = current.expression;
+      continue;
+    }
+    return current;
+  }
+}
+
+/** Is this expression one of the four receivers a global lives on? */
+function isGlobalReceiver(node: ts.Expression): boolean {
+  const inner = unwrap(node);
+  return ts.isIdentifier(inner) && GLOBAL_RECEIVERS.has(inner.text);
+}
+
+/** The property name a binding element takes FROM the object being destructured. */
+function boundPropertyName(el: ts.BindingElement): string | undefined {
+  const property = el.propertyName ?? el.name;
+  return ts.isIdentifier(property) || ts.isStringLiteralLike(property)
+    ? property.text
+    : undefined;
+}
+
+/**
  * Audit one source file.
  *
  * PURE — takes text, returns findings — which is what makes every fixture below
  * possible without touching the filesystem, and what lets the failing path of
  * every rule actually RUN. A gate whose failure path has never run is a gate
- * nobody has tested, and this phase has been bitten by exactly that four times.
+ * nobody has tested, and this phase has been bitten by exactly that four times —
+ * plus once more by a gate that passed every fixture it had and missed fourteen
+ * of the twenty-two shapes an independent probe threw at it.
  */
 export function auditSource(file: string, source: string): Violation[] {
   const base = file.split("/").pop() ?? file;
   const violations: Violation[] = [];
 
-  const add = (rule: string, where: string): void => {
-    const surface = FORBIDDEN_OUTBOUND.find((f) => f.rule === rule);
-    if (surface === undefined) throw new Error(`no such rule: ${rule}`);
+  const add = (rule: RuleId, where: string): void => {
+    const surface = RULES[rule];
     violations.push({
       file: base,
       rule,
       detail:
-        `${file}: ${where} reaches ${surface.surface}, which CORE-01 forbids in this phase — ` +
+        `${file}: ${where} reaches ${surface.surface}, which CORE-11 forbids in this phase — ` +
         surface.why,
     });
   };
@@ -194,76 +375,128 @@ export function auditSource(file: string, source: string): Violation[] {
   );
 
   /**
-   * Identifiers aliasing an outbound RECEIVER, and identifiers a `send` was
-   * destructured onto. Collected in a first pass over the file in document
-   * order, so `const r = sdk.requests; const { send } = r;` resolves — and, per
-   * boundary 2 in the header, no further: there is no symbol table here.
+   * Identifiers aliasing an outbound RECEIVER, identifiers a global `fetch` was
+   * bound to, and `const` names bound to a single string literal. All three are
+   * collected in one pass over the file in document order — see header boundary
+   * 2 for exactly how far that reaches and what it reports instead of guessing.
    */
   const receiverAliases = new Map<string, string>();
-  const sendAliases = new Set<string>();
+  const fetchAliases = new Set<string>([FETCH_GLOBAL]);
+  const constStrings = new Map<string, string>();
 
   /** The outbound receiver an expression denotes, if it denotes one. */
   const receiverKind = (node: ts.Expression): string | undefined => {
-    if (ts.isPropertyAccessExpression(node) && RECEIVERS.has(node.name.text)) {
-      return node.name.text;
-    }
+    const inner = unwrap(node);
     if (
-      ts.isElementAccessExpression(node) &&
-      ts.isStringLiteralLike(node.argumentExpression) &&
-      RECEIVERS.has(node.argumentExpression.text)
+      ts.isPropertyAccessExpression(inner) &&
+      RECEIVERS.has(inner.name.text)
     ) {
-      return node.argumentExpression.text;
+      return inner.name.text;
     }
-    if (ts.isIdentifier(node)) return receiverAliases.get(node.text);
+    if (ts.isElementAccessExpression(inner)) {
+      const key = literalOf(inner.argumentExpression);
+      if (key !== undefined && RECEIVERS.has(key)) return key;
+      return undefined;
+    }
+    if (ts.isIdentifier(inner)) return receiverAliases.get(inner.text);
     return undefined;
   };
 
-  /** The receiver and method name of a call, in either access form. */
-  const calleeParts = (
-    callee: ts.Expression,
-  ): { receiver: ts.Expression; method: string } | undefined => {
-    if (ts.isPropertyAccessExpression(callee)) {
-      return { receiver: callee.expression, method: callee.name.text };
-    }
-    if (
-      ts.isElementAccessExpression(callee) &&
-      ts.isStringLiteralLike(callee.argumentExpression)
-    ) {
-      return {
-        receiver: callee.expression,
-        method: callee.argumentExpression.text,
-      };
+  /**
+   * The string an expression denotes: a literal, or a single-hop `const` bound to
+   * one. `undefined` means THE WALK COULD NOT READ IT — never "there was nothing
+   * there" — and every caller treats the two differently.
+   */
+  function literalOf(node: ts.Node | undefined): string | undefined {
+    if (node === undefined) return undefined;
+    if (ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isIdentifier(node)) return constStrings.get(node.text);
+    if (ts.isExpression(node)) {
+      const inner = unwrap(node);
+      if (inner !== node) return literalOf(inner);
     }
     return undefined;
+  }
+
+  /** The member name a property or element access reads, if the walk can read it. */
+  const memberName = (
+    node: ts.PropertyAccessExpression | ts.ElementAccessExpression,
+  ): string | undefined =>
+    ts.isPropertyAccessExpression(node)
+      ? node.name.text
+      : literalOf(node.argumentExpression);
+
+  /**
+   * The receiver an INITIALIZER denotes, including through a conditional: either
+   * branch resolving to an outbound receiver makes the binding one, because a
+   * receiver that is outbound on one path is outbound.
+   */
+  const initializerReceiver = (node: ts.Expression): string | undefined => {
+    const inner = unwrap(node);
+    if (ts.isConditionalExpression(inner)) {
+      return receiverKind(inner.whenTrue) ?? receiverKind(inner.whenFalse);
+    }
+    return receiverKind(inner);
   };
 
-  /** The literal specifier of a module reference, if it is a literal at all. */
-  const specifierOf = (node: ts.Node | undefined): string | undefined =>
-    node !== undefined && ts.isStringLiteralLike(node) ? node.text : undefined;
+  /** Is this expression the global fetch, in any spelling the walk resolves? */
+  const isFetchExpression = (node: ts.Expression): boolean => {
+    const inner = unwrap(node);
+    if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text);
+    if (
+      ts.isPropertyAccessExpression(inner) ||
+      ts.isElementAccessExpression(inner)
+    ) {
+      return (
+        memberName(inner) === FETCH_GLOBAL && isGlobalReceiver(inner.expression)
+      );
+    }
+    return false;
+  };
 
   const collect = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
-      const kind = receiverKind(node.initializer);
-      if (kind !== undefined) {
-        if (ts.isIdentifier(node.name)) {
-          receiverAliases.set(node.name.text, kind);
-        } else if (
-          kind === SEND_RECEIVER &&
-          ts.isObjectBindingPattern(node.name)
-        ) {
-          for (const el of node.name.elements) {
-            const property = el.propertyName ?? el.name;
-            const propertyName =
-              ts.isIdentifier(property) || ts.isStringLiteralLike(property)
-                ? property.text
-                : "";
-            if (propertyName === SEND_METHOD && ts.isIdentifier(el.name)) {
-              sendAliases.add(el.name.text);
-            }
+      const init = unwrap(node.initializer);
+
+      if (ts.isIdentifier(node.name)) {
+        // `const m = "send"` / `const spec = "caido:http"` — one hop, no more.
+        const literal = literalOf(init);
+        if (literal !== undefined && ts.isStringLiteralLike(init)) {
+          constStrings.set(node.name.text, literal);
+        }
+        if (isFetchExpression(init)) fetchAliases.add(node.name.text);
+        const kind = initializerReceiver(init);
+        if (kind !== undefined) receiverAliases.set(node.name.text, kind);
+      } else if (ts.isObjectBindingPattern(node.name)) {
+        // `const { requests, net } = sdk` — keyed on the PROPERTY name, exactly
+        // as the inner method destructure already worked one level down. This is
+        // ordinary TypeScript and it is what anyone writes who touches
+        // `sdk.requests` twice in a function.
+        for (const el of node.name.elements) {
+          const property = boundPropertyName(el);
+          if (property === undefined || !ts.isIdentifier(el.name)) continue;
+          if (RECEIVERS.has(property)) {
+            receiverAliases.set(el.name.text, property);
+          }
+          if (property === FETCH_GLOBAL && isGlobalReceiver(init)) {
+            fetchAliases.add(el.name.text);
           }
         }
       }
     }
+
+    // `let r; r = sdk.requests;` — the form the round-1 walk missed while
+    // catching the `const` one, because it read declarations only.
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left)
+    ) {
+      const kind = initializerReceiver(node.right);
+      if (kind !== undefined) receiverAliases.set(node.left.text, kind);
+      if (isFetchExpression(node.right)) fetchAliases.add(node.left.text);
+    }
+
     ts.forEachChild(node, collect);
   };
   collect(sf);
@@ -272,7 +505,7 @@ export function auditSource(file: string, source: string): Violation[] {
     // --- static import and `export ... from` ---------------------------------
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      specifierOf(node.moduleSpecifier) === HTTP_SPECIFIER
+      literalOf(node.moduleSpecifier) === HTTP_SPECIFIER
     ) {
       add(
         "outbound-import",
@@ -282,53 +515,113 @@ export function auditSource(file: string, source: string): Violation[] {
       );
     }
 
+    // --- a member destructured off an identified receiver ---------------------
+    if (
+      ts.isVariableDeclaration(node) &&
+      node.initializer !== undefined &&
+      ts.isObjectBindingPattern(node.name)
+    ) {
+      const kind = initializerReceiver(node.initializer);
+      if (kind !== undefined) {
+        for (const el of node.name.elements) {
+          const property = boundPropertyName(el);
+          if (property === undefined) {
+            add(
+              "outbound-unanalysable",
+              `a destructure off a \`${kind}\` receiver whose property name this walk cannot read`,
+            );
+            continue;
+          }
+          if (kind === SEND_RECEIVER && REQUESTS_READ_ONLY.has(property)) {
+            continue;
+          }
+          add(
+            kind === NET_RECEIVER ? "outbound-net" : "outbound-send",
+            `\`${property}\`, destructured from a \`${kind}\` receiver`,
+          );
+        }
+      }
+    }
+
+    // --- ANY member of a positively identified receiver -----------------------
+    // A member REFERENCE, not only a call. That is the single change that catches
+    // `.call`, `.apply`, `Reflect.apply`, `const s = sdk.requests.send` and the
+    // arrow-returned `g()(req)` together: each MENTIONS the member somewhere even
+    // though none of them calls it directly.
+    if (
+      ts.isPropertyAccessExpression(node) ||
+      ts.isElementAccessExpression(node)
+    ) {
+      const kind = receiverKind(node.expression);
+      const member = memberName(node);
+      if (kind === SEND_RECEIVER || kind === NET_RECEIVER) {
+        if (member === undefined) {
+          add(
+            "outbound-unanalysable",
+            `a computed member access on an identified \`${kind}\` receiver`,
+          );
+        } else if (kind === NET_RECEIVER) {
+          add(
+            "outbound-net",
+            `a reference to \`${member}\` on a \`${NET_RECEIVER}\` receiver`,
+          );
+        } else if (!REQUESTS_READ_ONLY.has(member)) {
+          add(
+            "outbound-send",
+            `a reference to \`${member}\` on a \`${SEND_RECEIVER}\` receiver`,
+          );
+        }
+      } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
+        add(
+          "outbound-fetch",
+          `a \`${FETCH_GLOBAL}\` member of \`${unwrap(node.expression).getText()}\``,
+        );
+      } else if (
+        member !== undefined &&
+        OUTBOUND_CONSTRUCTORS.has(member) &&
+        isGlobalReceiver(node.expression)
+      ) {
+        add(
+          "outbound-global-ctor",
+          `a reference to \`${member}\` on a global receiver`,
+        );
+      }
+    }
+
+    // --- construction of an outbound global -----------------------------------
+    if (ts.isNewExpression(node)) {
+      const target = unwrap(node.expression);
+      if (ts.isIdentifier(target) && OUTBOUND_CONSTRUCTORS.has(target.text)) {
+        add("outbound-global-ctor", `a construction of \`${target.text}\``);
+      }
+    }
+
     if (ts.isCallExpression(node)) {
-      const callee = node.expression;
+      const callee = unwrap(node.expression);
 
       // --- dynamic import() and require() ------------------------------------
       if (
-        (callee.kind === ts.SyntaxKind.ImportKeyword ||
-          (ts.isIdentifier(callee) && callee.text === "require")) &&
-        specifierOf(node.arguments[0]) === HTTP_SPECIFIER
+        callee.kind === ts.SyntaxKind.ImportKeyword ||
+        (ts.isIdentifier(callee) && callee.text === "require")
       ) {
-        add(
-          "outbound-import",
+        const how =
           callee.kind === ts.SyntaxKind.ImportKeyword
             ? "a dynamic import()"
-            : "a require()",
-        );
-      }
-
-      if (ts.isIdentifier(callee)) {
-        // --- the bare global ------------------------------------------------
-        if (callee.text === FETCH_GLOBAL) {
-          add("outbound-fetch", `a call to \`${callee.text}(...)\``);
-        }
-        // --- a `send` destructured off a requests receiver -------------------
-        if (sendAliases.has(callee.text)) {
+            : "a require()";
+        const specifier = literalOf(node.arguments[0]);
+        if (specifier === HTTP_SPECIFIER) {
+          add("outbound-import", how);
+        } else if (specifier === undefined) {
           add(
-            "outbound-send",
-            `a call to \`${callee.text}(...)\`, destructured from a \`${SEND_RECEIVER}\` receiver`,
+            "outbound-unanalysable",
+            `${how} whose specifier this walk cannot reduce to a literal`,
           );
         }
       }
 
-      // --- a method on an outbound receiver -----------------------------------
-      const parts = calleeParts(callee);
-      if (parts !== undefined) {
-        const kind = receiverKind(parts.receiver);
-        if (kind === SEND_RECEIVER && parts.method === SEND_METHOD) {
-          add(
-            "outbound-send",
-            `a \`${parts.method}\` call on a \`${SEND_RECEIVER}\` receiver`,
-          );
-        }
-        if (kind === NET_RECEIVER) {
-          add(
-            "outbound-net",
-            `a \`${parts.method}\` call on a \`${NET_RECEIVER}\` receiver`,
-          );
-        }
+      // --- the global fetch, by name or by alias ------------------------------
+      if (ts.isIdentifier(callee) && fetchAliases.has(callee.text)) {
+        add("outbound-fetch", `a call to \`${callee.text}(...)\``);
       }
     }
 
@@ -342,7 +635,7 @@ export function auditSource(file: string, source: string): Violation[] {
 // ---------------------------------------------------------------------------
 // THE REAL TREE
 // ---------------------------------------------------------------------------
-describe("CORE-01 — no outbound surface is reachable from packages/backend/src", () => {
+describe("CORE-11 — no outbound surface is reachable from packages/backend/src", () => {
   const files = backendFiles();
 
   it("enumerates a NON-EMPTY set of backend modules, BY NAME", () => {
@@ -386,7 +679,7 @@ describe("CORE-01 — no outbound surface is reachable from packages/backend/src
     const violations = auditSource(file, readFileSync(file, "utf8"));
     expect(
       violations.map((v) => `${v.rule}: ${v.detail}`),
-      `${file} reaches an outbound network surface, which CORE-01 forbids`,
+      `${file} reaches an outbound network surface, which CORE-11 forbids`,
     ).toEqual([]);
   });
 
@@ -401,6 +694,26 @@ describe("CORE-01 — no outbound surface is reachable from packages/backend/src
       source,
       "telemetry.ts no longer names caido:http, so the AST-vs-text case below is vacuous",
     ).toContain(HTTP_SPECIFIER);
+    expect(auditSource(file, source)).toEqual([]);
+  });
+
+  it("telemetry.ts reaches globalThis the way this codebase reaches globals, and still reports clean", () => {
+    // THE false positive that decides whether the fetch rule is usable, asserted
+    // LIVE against the real file rather than only as an inline fixture. The
+    // codebase's established idiom for reaching a global is
+    // `(globalThis as { x?: ... }).x`, because in a runtime where you cannot
+    // assume a bare global exists that is what you write — which is precisely why
+    // `globalThis.fetch` was the spelling the round-1 gate could not see. The
+    // widened rule matches a member NAMED `fetch` on a global receiver, so
+    // `performance` on the same receiver stays quiet. If this file ever stops
+    // using the idiom, the containment assertion fails rather than leaving a case
+    // that proves nothing.
+    const file = join(BACKEND_SRC, "telemetry.ts");
+    const source = readFileSync(file, "utf8");
+    expect(
+      source,
+      "telemetry.ts no longer reaches globalThis, so the global-receiver false-positive case is vacuous",
+    ).toContain("(globalThis as { performance?");
     expect(auditSource(file, source)).toEqual([]);
   });
 });
@@ -520,7 +833,7 @@ describe("the gate's own failure paths", () => {
     // paragraph explaining the prohibition.
     const documented = [
       "// This module deliberately does NOT import caido:http and does NOT call",
-      "// sdk.requests.send(request) — see CORE-01 and the header of telemetry.ts.",
+      "// sdk.requests.send(request) — see CORE-11 and the header of telemetry.ts.",
       "/*",
       " * Historical note: an earlier draft called sdk.requests.send(req), reached",
       ' * sdk.net.connect(host, port), used fetch(url), and imported "caido:http".',
@@ -611,7 +924,17 @@ describe("the 22-shape gate-reach probe from 01-VERIFICATION.md", () => {
    *  table, so the before/after comparison is one artifact and not two. */
   const MISSED: ReadonlyArray<readonly [string, string]> = [
     ["globalThis.fetch(u)", "await globalThis.fetch(url);"],
-    ["(globalThis as any).fetch(u)", "await (globalThis as any).fetch(url);"],
+    // The `export {};` is NOT decoration and NOT a weakening of the shape. A bare
+    // top-level `await (x as any).f()` in a file with NO import and NO export is
+    // parsed by TypeScript in SCRIPT context, where `await` is an ordinary
+    // identifier — so `await (globalThis as any)` becomes a CALL to a function
+    // named `await` and the cast stops being the callee's receiver. Every module
+    // this gate actually walks has an import or an export, so this fixture
+    // carries one for the same reason. Verified by parsing all four forms.
+    [
+      "(globalThis as any).fetch(u)",
+      "export {};\nawait (globalThis as any).fetch(url);",
+    ],
     ["window.fetch(u)", "await window.fetch(url);"],
     [
       "const { requests } = sdk; requests.send(q)",
@@ -683,7 +1006,10 @@ describe("the global fetch, in every reachable spelling", () => {
   it.each([
     ["globalThis.fetch", "await globalThis.fetch(url);"],
     ["globalThis['fetch']", 'await globalThis["fetch"](url);'],
-    ["(globalThis as any).fetch", "await (globalThis as any).fetch(url);"],
+    [
+      "(globalThis as any).fetch",
+      "export {};\nawait (globalThis as any).fetch(url);",
+    ],
     ["window.fetch", "await window.fetch(url);"],
     ["self.fetch", "await self.fetch(url);"],
     ["global.fetch", "await global.fetch(url);"],
