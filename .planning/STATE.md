@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-10-PLAN.md
-last_updated: "2026-08-21T13:23:15.223Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-08-21T13:55:45.528Z"
 last_activity: 2026-08-21
-last_activity_desc: 01-10 gap closure — a bare (=-less) query segment is redacted by construction (P10-D1), eight credential formats mutation-proven, CORE-11 opened before plan 01-12 declares it
-state_head: 4f6498bb8330d81c5d109a1505c1633bf9acf33c
+last_activity_desc: 01-11 gap closure — URL userinfo and `;` path parameters redacted at the write path, the plugin-database path (and the OS username in it) kept off the getStatus RPC, and the no-pattern gate re-anchored on the AST across both modules; six mutations run
+state_head: f4716a3542214aca669d6c4138591b9bd1adcf66
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -28,15 +28,15 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 10 of 14 complete — gap-closure round 2 running, plans 01-11 … 01-14 remain
-Status: Executing Phase 01 (wave 11 next)
-Last activity: 2026-08-21 — 01-10 executed: the bare-segment redaction policy decided and implemented, CORE-11 split out of CORE-01
+Plan: 11 of 14 complete — gap-closure round 2 running, plans 01-12 … 01-14 remain
+Status: Ready to execute
+Last activity: 2026-08-21 — 01-11 executed: the URL head and the error-path filesystem path both redacted, `redactUrls` bounded by measurement, the pattern gate widened to `telemetry.ts` under a count-plus-anchor exemption
 
-Progress: [███████░░░] 71% of phase 01 (10 of 14 plans)
+Progress: [████████░░] 79% of phase 01 (11 of 14 plans)
 
 > The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it
-> has now done so on FOUR consecutive plans (01-07, 01-08, 01-09, 01-10), so this is
+> has now done so on FIVE consecutive plans (01-07 … 01-11), so this is
 > the handler's steady behaviour on this repo and not a transient. The figure above is
 > the phase-local one, computed from the 14 PLAN / 10 SUMMARY files on disk and stated
 > with its basis rather than as an unexplained number. It DROPPED from the 100% this
@@ -76,6 +76,7 @@ Progress: [███████░░░] 71% of phase 01 (10 of 14 plans)
 | Phase 01 P08 | 18 min | 3 tasks | 4 files |
 | Phase 01 P09 | 22 min | 2 tasks | 2 files |
 | Phase 01 P10 | 18 min | 4 tasks | 7 files |
+| Phase 01 P11 | 30 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P9-D1: CORE-01's prohibition is now a GATE, not prose: packages/backend/src/outbound-prohibition.spec.ts audits every non-spec module in the backend package on every `pnpm test`, over four rules — outbound-send (direct call, element-access form, receiver alias, destructured method), outbound-net (ANY method on a `net` receiver, not just `connect`), outbound-fetch (the bare global only), outbound-import (all four caido:http specifier forms). Every rule has a firing fixture AND a legal fixture, and the whole gate was mutation-proven twice against real shipped source — The verifier's evidence line was explicit that NO WIRED ENFORCEMENT EXISTED: the DIST-05 bundle allowlist ADMITS caido:http (Phase 0 measured it loadable), and sdk.requests.send needs no import at all — so neither existing gate could catch a regression. Three Phase 0 measurements make that regression worse than it sounds: SURFACES_FIRING_INTERCEPT="proxy" and the non-re-firing send mean plugin-originated traffic is invisible to this plugin's own counters (no number anywhere would move), and caido/caido#2211 was filed against the exact target build. Both mutations were RUN, not described: a send planted in hooks/passive.ts produced `outbound-send: …/passive.ts`, a static caido:http import produced `outbound-import: …/passive.ts`. Note which one matters more — check:bundle would have PASSED mutation B (caido:http is on its allowlist as loadable) and can never see mutation A at all — RETAG 2026-08-21 (gap-closure round 2, plan 01-10 task 3): the prohibition this decision describes is **CORE-11**, not CORE-01. CORE-01 remains the non-async-handler requirement and says nothing about outbound traffic; the split reason and the STORE-01 → STORE-08 precedent are recorded inline on CORE-11 in `.planning/REQUIREMENTS.md`. This is a POINTER amendment appended to the decision, visible as such: not one word of P9-D1's own text or of the mutation outputs it quotes has been rewritten, because those are the record of what was actually run.
 - [Phase 01]: P9-D2: scripts/ci/check-bundle-imports.mjs is deliberately NOT touched, and the two gates coexist by design — the bundle gate bounds what can LOAD, the new source gate bounds what the source may CALL — Its allowlist answers a different question: which specifiers Caido's QuickJS was MEASURED to resolve. caido:http is on it because the Phase 0 capability probe loaded it successfully, and that file's own header says the list is derived from a probe run and not authored. Removing an entry would silently redefine its semantics from "measured loadable" to "permitted", which is a lie about a measurement. The policy belongs in a source gate
 - [Phase 01]: P9-D3: the outbound gate's alias tracking is scope-blind ON PURPOSE and says so in its own header — it resolves `const r = sdk.requests; r.send(req)` and `const { send } = sdk.requests; send(req)` but builds no symbol table, so an alias rebound in an inner scope escapes it (T-01-51, accept). Its second residual: a .spec.ts file could call an outbound surface unnoticed (T-01-50, accept), bounded by check:bundle, which specs never enter — The same bound consumer.spec.ts's CORE-05 audit works within. Claiming a precision the walk does not have is worse than the gap, because it gets trusted — so both residuals are stated in the gate's header rather than left for a reader to discover. The .spec.ts exclusion is not incidental: it is what lets this gate's own fixtures, which necessarily contain the forbidden shapes as source text, live inline with no temp file and no stray module for `tsc --build` to trip over
+- [Phase 01]: The `;` delimiter is a second DELIMITER, not a second POLICY: `redactDelimitedSegment` is the single helper both the query loop and the path loop call, so P10-D1's bare-segment rule reaches `;` by construction rather than by a second edit (plan 01-11).
+- [Phase 01]: `redactPaths` is a STRING SCAN, not WR-12's suggested `(?:\/[A-Za-z0-9._-]+){2,}` — that nests a quantifier inside a quantifier on a runtime where REDOS_RECOVERY is "kill" and SIGKILL is the only exit (plan 01-11).
+- [Phase 01]: `redactUrls`'s safety claim is a MEASUREMENT (200k adversarial input under 250 ms), not an argument about the pattern's shape; the argued paragraph was deleted (plan 01-11).
+- [Phase 01]: The no-pattern gate's `telemetry.ts` exemption is a COUNT plus an ANCHOR — exactly one regex literal, inside `redactUrls` — never a file-name skip, so moving or renaming it fails until a new linearity measurement is owed (plan 01-11).
 
 ### Known Risks Carried Forward
 
@@ -190,8 +195,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T13:23:15.201Z
-**Stopped at:** Completed 01-10-PLAN.md
+**Last session:** 2026-08-21T13:55:34.128Z
+**Stopped at:** Completed 01-11-PLAN.md
 **Resume file:** None
 
 ### Blockers

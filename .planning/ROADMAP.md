@@ -112,7 +112,7 @@ Plans:
 
 **Wave 11** *(blocked on 01-10 — shares `observations.ts`, and the whole round is serialised)*
 
-- [ ] 01-11-PLAN.md — **Gap 1b**: URL userinfo and `;` path-parameter values redacted by the same policy; the plugin-database path stops crossing the `getStatus` RPC; the no-pattern gate re-anchored on the AST — *wave 11*
+- [x] 01-11-PLAN.md — **Gap 1b**: URL userinfo and `;` path-parameter values redacted by the same policy; the plugin-database path stops crossing the `getStatus` RPC; the no-pattern gate re-anchored on the AST — *wave 11*
 
 **Wave 12** *(blocked on 01-11 — sequencing, not code: each round-2 plan mutates the shared tree to prove its gate can fail, and each asserts whole-suite green)*
 
