@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-21T11:21:31Z
+reviewed: 2026-08-21T15:23:01Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -10,6 +10,16 @@ reviews:
     reviewed: 2026-08-21T11:21:31Z
     scope: 13 files changed by plans 01-07, 01-08, 01-09
     findings: CR-02…CR-06, WR-11…WR-16, IN-08…IN-13
+  - pass: gap-closure-round-2
+    reviewed: 2026-08-21T15:23:01Z
+    scope: 9 files changed by plans 01-10 … 01-14
+    findings: CR-07, WR-17…WR-21, IN-14…IN-19
+    verdict: >-
+      CR-02…CR-06 and WR-11…WR-16 all verified CLOSED by execution, not by
+      summary. IN-08, IN-10…IN-13 closed; IN-09 half closed. One NEW BLOCKER —
+      a bare query/path segment that CONTAINS an `=` (every base64-padded
+      credential) is still parsed as `name=value` and survives verbatim into
+      `observations.url`.
 depth: standard
 files_reviewed: 58
 files_reviewed_list:
@@ -72,14 +82,43 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 6
-  warning: 16
-  info: 13
-  total: 35
+  critical: 7
+  warning: 21
+  info: 19
+  total: 47
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
-  fixed: [CR-01, WR-01, WR-02, WR-03, WR-04, WR-05, WR-06, WR-08, WR-09, WR-10]
+  fixed:
+    [
+      CR-01,
+      CR-02,
+      CR-03,
+      CR-04,
+      CR-05,
+      CR-06,
+      WR-01,
+      WR-02,
+      WR-03,
+      WR-04,
+      WR-05,
+      WR-06,
+      WR-08,
+      WR-09,
+      WR-10,
+      WR-11,
+      WR-12,
+      WR-13,
+      WR-14,
+      WR-15,
+      WR-16,
+      IN-08,
+      IN-10,
+      IN-11,
+      IN-12,
+      IN-13,
+    ]
+  partially_fixed: [IN-09]
   deferred: [WR-07]
   open:
     [
@@ -90,23 +129,19 @@ resolution:
       IN-05,
       IN-06,
       IN-07,
-      CR-02,
-      CR-03,
-      CR-04,
-      CR-05,
-      CR-06,
-      WR-11,
-      WR-12,
-      WR-13,
-      WR-14,
-      WR-15,
-      WR-16,
-      IN-08,
       IN-09,
-      IN-10,
-      IN-11,
-      IN-12,
-      IN-13,
+      CR-07,
+      WR-17,
+      WR-18,
+      WR-19,
+      WR-20,
+      WR-21,
+      IN-14,
+      IN-15,
+      IN-16,
+      IN-17,
+      IN-18,
+      IN-19,
     ]
 fix_commits:
   CR-01: 910c382
@@ -119,15 +154,32 @@ fix_commits:
   WR-08: 49250aa
   WR-09: 15509d4
   WR-10: 992bada
+  CR-02: a3a2cc9
+  CR-03: a3a2cc9
+  CR-04: 51545c0
+  CR-05: 4e16c11
+  CR-06: 2458713
+  WR-11: 2bc42d0
+  WR-12: b2512f9
+  WR-13: b7e4e2f
+  WR-14: a3a2cc9
+  WR-15: 59c9c67
+  WR-16: 59c9c67
+  IN-08: a3a2cc9
+  IN-09: a3a2cc9
+  IN-10: a3a2cc9
+  IN-11: 02ceee5
+  IN-12: a3a2cc9
+  IN-13: 59c9c67
 tests_before: 27 files / 616 tests
 tests_after: 28 files / 637 tests
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files) and 2026-08-21T11:21:31Z (gap closure, 13 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files) and 2026-08-21T15:23:01Z (gap closure round 2, 9 files)
 **Depth:** standard
-**Files Reviewed:** 58 (union of both passes)
+**Files Reviewed:** 58 (union of all three passes)
 **Status:** issues_found — five new BLOCKERs from the gap-closure pass, on top of `WR-07` (deferred) and `IN-01…IN-07` (open)
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
@@ -1145,5 +1197,490 @@ the table holds ten would still pass.
 
 _Pass 1 reviewed: 2026-08-21T00:30:00Z_
 _Pass 2 reviewed: 2026-08-21T11:21:31Z_
+
+---
+---
+
+# --- PASS 3 --- Gap-Closure ROUND 2 Review (plans 01-10 … 01-14)
+
+**Reviewed:** 2026-08-21T15:23:01Z
+**Depth:** standard
+**Files Reviewed:** 9 (the files plans 01-10 … 01-14 changed after the pass-2 review)
+**Status:** issues_found — 1 BLOCKER, 5 WARNING, 6 INFO, on top of a clean sweep of pass 2's eleven
+
+New findings use a fresh ID series (`CR-07`, `WR-17+`, `IN-14+`) so nothing
+collides with the two ledgers above, both of which are preserved verbatim.
+
+## Resolution of pass 2 (2026-08-21, round 2)
+
+**Every disposition below was decided by EXECUTION.** I imported `auditSource`
+from both gates and `normaliseObservedUrl` / `redactUrlHead` /
+`redactQueryValues` / `describeError` from the production modules into a
+throwaway spec, ran 24 outbound shapes, 17 redaction-gate shapes, 31 URL shapes
+and 6 error strings through them, and deleted the probe. Nothing below is
+marked fixed because a SUMMARY said so.
+
+| Finding | Status | Commit | The evidence |
+|---|---|---|---|
+| CR-02 | **fixed** | `a3a2cc9` | `globalThis.fetch(u)` → `["outbound-fetch"]`; `fetchAliases` now tracks `const f = fetch`, `const f = globalThis.fetch` and `const { fetch: f } = globalThis`; the member form is restricted to the four `GLOBAL_RECEIVERS`, and `cache.fetch(u)` still reports `[]` |
+| CR-03 | **fixed** | `a3a2cc9` | `const { requests } = sdk; requests.send(req)` → `["outbound-send"]`; so do `let r; r = sdk.requests`, `Reflect.apply(sdk.requests.send, …)`, `sdk.requests.send(...args)`, a `class` method, and `sdk?.requests?.send(req)`. `sdk.requests.get(id)` stays quiet via `REQUESTS_READ_ONLY`, so the rule is now "any member not on the allowlist" rather than the literal name `send`. Residual receiver hole → `WR-19` |
+| CR-04 | **fixed** | `51545c0` | `SOURCE_ROOTS` is `["packages/backend/src", "packages/engine/src"]`; the by-name non-vacuity list carries `pipeline.ts`, `decode.ts`, `queue.ts` and `store/db.ts`, so a package split fails loudly |
+| CR-05 | **fixed** | `4e16c11` | `derivesFrom` replaces the bare-identifier match. Executed: `e.message` returned, `"x: " + e.message`, `` `${(e as Error).stack}` ``, `e.toString()`, `JSON.stringify(e)`, `String(e as Error)`, `const x = e; String(x)`, `[e].join("")`, `String.raw\`${e}\``, `{ ["error"]: e.message }`, `{ ...{ error: e.message } }`, `{ error }` where `const error = e.message`, a concise-arrow `(e) => e.message`, and a destructured `{ error }` parameter ALL fire. `describeError(e).slice(0, 200)` stays quiet. Residual render forms → `WR-17` |
+| CR-06 | **fixed** | `2458713` | `redactDelimitedSegment`'s `eq === -1` branch. All eight `BARE_CREDENTIAL_SHAPES` return `?<redacted>`; the empty segment still returns empty; idempotent. **But the CLASS is not closed — see `CR-07`, which is the same column and the same claim** |
+| WR-11 | **fixed (path residual PINNED)** | `2bc42d0` | `https://user:pa55w0rd@cdn.test/app.js` → `https://<redacted>@cdn.test/app.js`; `https://cdn.test/a.js;jsessionid=X` → `;jsessionid=<redacted>`; `https://cdn.test/@vite/client.js` byte-identical. Userinfo is resolved inside the authority, not by an `@`-anywhere search. The path-embedded token is PINNED by an executed case rather than left as prose |
+| WR-12 | **fixed (POSIX half)** | `b2512f9` | `describeError` on the real `SQLITE_CANTOPEN` shape returns `<path-redacted> Support/…/data.db` — the OS username is inside the redacted portion. `redactPaths` is a whitespace-token string scan, no second pattern, and `observations.spec.ts`'s `auditPatternUse` enforces the one-literal budget. Two stale/missing disclosures → `WR-18` |
+| WR-13 | **fixed** | `b7e4e2f` | The gate is AST-anchored, scans `observations.ts` AND `telemetry.ts`, bans the regex LITERAL (which subsumes `.replace(/…/)` and `.split(/…/)`) plus `RegExp` construction, and permits exactly one literal anchored to `redactUrls`. Closure argument overstated → `WR-20` |
+| WR-14 | **fixed** | `a3a2cc9` | `const s = "caido:http"; await import(s)` → `["outbound-import"]`; `import("caido:" + "http")` → `["outbound-unanalysable"]` rather than silence |
+| WR-15 | **fixed** | `59c9c67` | No version literal survives in `tracer-e2e.sh`; the resolved `$ACTUAL_VERSION` is written to `$RUN_DIR/caido-version.txt`. The claimed enforcement does not exist → `WR-21` |
+| WR-16 | **fixed** | `59c9c67` | Both reads go through `sqlite_ro()`, over decision P8-D2's three-rung ladder, with rung 3 a named FATAL rather than a fallback and a `sqlite_master` object count asserted `> 0` so a mode that opens but sees nothing cannot be selected |
+| IN-08 | fixed | `a3a2cc9` | `const files = shippedFiles()` is bound once and every case reads it |
+| IN-09 | **half fixed** | `a3a2cc9` | `outbound-prohibition.spec.ts` is POSIX end to end. `error-redaction.spec.ts` was not converted → `IN-15` |
+| IN-10 | fixed | `a3a2cc9` | `db.ts` is named in both non-vacuity lists |
+| IN-11 | fixed | `02ceee5` | `ERROR_MAX` is exported and `telemetry.spec.ts:425-453` asserts `ERROR_TEXT_LIMIT <= ERROR_MAX` against the constant, not a copy of its value |
+| IN-12 | fixed | `a3a2cc9` | `RULES` is a keyed frozen record and `RuleId = keyof typeof RULES`, so the lookup is total by construction and the untestable throw is gone |
+| IN-13 | fixed | `59c9c67` | The raw column is now checked PER ROW for the marker, for `v=<redacted>`, for `access_token=<redacted>` and for a trailing `&<redacted>`, and `len(raw_rows) == len(obs)` is asserted |
+
+## Summary (pass 3)
+
+Round 2 did the work. Both gates went from "passes its own fixtures" to
+"survives an adversarial probe it did not write": 23 of the 24 outbound shapes
+and 15 of the 17 redaction shapes I threw at them now land, including every
+shape CR-02, CR-03 and CR-05 named. The engine package is inside the walk. The
+tracer reads the live database read-only through a ladder that refuses to
+measure rather than measure nothing. The claims in `schema.spec.ts` and
+`observations.ts` were rewritten from one sentence into per-grammar statements
+with an OPEN list, which is the single most valuable thing in this batch.
+
+**And the headline claim is still stronger than the code, for the third review
+in a row, in the same column, by the same mechanism.**
+
+Decision P10-D1's construction is stated in `observations.ts:74-81` as: *"a bare
+segment is a VALUE WITH NO NAME and is redacted by construction, so no length of
+bare segment survives and there is no 'shorter than the bound' left for a future
+credential format to hide in."* The construction is `segment.indexOf("=") === -1`.
+That is not a test for "has no name" — it is a test for "contains no `=`
+byte", and standard base64 padding is an `=` byte. Executed:
+
+```
+"https://cdn.test/a.js?dXNlcjpwYTU1dzByZA=="
+  -> "https://cdn.test/a.js?dXNlcjpwYTU1dzByZA=<redacted>"      // base64("user:pa55w0rd")
+"https://cdn.test/a.js?QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo="
+  -> "https://cdn.test/a.js?QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=<redacted>"
+"https://cdn.test/a.js;dXNlcjpwYTU1dzByZA=="
+  -> "https://cdn.test/a.js;dXNlcjpwYTU1dzByZA=<redacted>"       // same hole, `;` delimiter
+```
+
+The token is not truncated, not hashed and not redacted — it is promoted to a
+parameter NAME and written whole to a column `db.ts` documents as never
+garbage-collected, surviving project deletion and force-reinstall. `QUERY_NAME_MAX
+= 64` does not help: base64 of a 32-byte secret is 44 characters. And the reason
+the eight-format fixture table cannot see it is the reason its own header warns
+about — *"a fixture list that agrees with the implementation measures the
+implementation's opinion of itself"*: not one of the eight `BARE_CREDENTIAL_SHAPES`
+contains an `=`, because the shapes were chosen against a rule whose failure mode
+is the `=`. That is `CR-07`.
+
+Three smaller things are right and are recorded so nobody re-litigates them.
+`redactUrlHead` resolves userinfo inside the authority component and NOT by
+searching for an `@`, so `/@vite/client.js` and `/@scope/pkg` survive
+byte-identical — I ran both. `redactQueryValues` and `redactUrlHead` compose
+without double-processing: `?a=1;token=SECRET` still becomes `?a=<redacted>` and
+does not fabricate a second parameter. And `normaliseObservedUrl` is idempotent
+across all 31 shapes including the `URL_MAX` boundary, where truncation lands
+inside a marker and the second pass reproduces the first byte-for-byte
+(re-derived, not taken on trust).
+
+On the two invariants I was asked to hunt hardest for: `observations.ts` holds
+no regex literal, no `RegExp`, no `URL` and no pattern-executing method;
+`telemetry.ts` holds exactly one literal, at `:269`, inside `redactUrls`, and
+`auditPatternUse`'s count-plus-anchor exemption fails on a second one, on a move,
+and on a rename. `redactPaths` and `redactPathToken` are two-pointer string scans
+with no pattern at all. The single measured-linearity case now runs through
+`describeError`, so it covers both redactors even though its title names only one.
+
+---
+
+## Critical Issues (pass 3)
+
+### CR-07: A bare query or path segment CONTAINING an `=` is parsed as `name=value` and survives verbatim — every base64-padded credential is that shape
+
+**File:** `packages/backend/src/store/observations.ts:108-114` (the claim at `:74-81` and `:99-102`; the grammar claim at `packages/backend/src/store/schema.spec.ts:44-52`; the fixture table at `packages/backend/src/store/observations.spec.ts:74-100`)
+**Severity:** BLOCKER
+
+**Issue:** `redactDelimitedSegment` decides "bare" by the presence of an `=` byte:
+
+```ts
+const eq = segment.indexOf("=");
+if (eq === -1) return segment === "" ? "" : QUERY_VALUE_REDACTION;
+return segment.slice(0, eq).slice(0, QUERY_NAME_MAX) + "=" + QUERY_VALUE_REDACTION;
+```
+
+A segment that is entirely a credential but happens to contain an `=` therefore
+takes the second branch, and the credential lands in the position the policy
+KEEPS. Executed through `normaliseObservedUrl`:
+
+```
+?dXNlcjpwYTU1dzByZA==                       -> ?dXNlcjpwYTU1dzByZA=<redacted>
+?QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=       -> ?QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=<redacted>
+?ghp_AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIII=  -> ?ghp_AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIII=<redacted>
+?s3cr3t=                                    -> ?s3cr3t=<redacted>
+;dXNlcjpwYTU1dzByZA==                       -> ;dXNlcjpwYTU1dzByZA=<redacted>
+```
+
+`dXNlcjpwYTU1dzByZA==` is `base64("user:pa55w0rd")` — a whole HTTP Basic
+credential, recoverable with one `base64 -d`, written byte-for-byte into
+`observations.url`.
+
+This is not a corner of the space. Standard base64 pads to a multiple of four
+with `=`, so a 16-byte or 32-byte opaque token — the common size for a session
+id, an OAuth `state`, an `X-Amz-Security-Token` fragment, a SAML blob — carries
+one or two trailing `=` whenever it is not URL-encoded. `QUERY_NAME_MAX = 64`
+does not bound it either: base64 of 32 bytes is 44 characters, well inside the
+retained name. And because `redactDelimitedSegment` is deliberately THE shared
+helper, the identical hole exists on the `;` path-parameter delimiter — one
+policy, two delimiters, one defect.
+
+**Why this is a BLOCKER and not a documented residual, on the same grounds as
+CR-06.** Three artifacts claim it cannot happen:
+
+- `observations.ts:74-81` — *"no length of bare segment survives and there is no
+  'shorter than the bound' left for a future credential format to hide in."*
+  A base64-padded token is a bare segment of any length that survives.
+- `observations.ts:99-102` — *"With no `=`: … a VALUE WITH NO NAME."* The
+  converse is assumed and is false: with an `=` it is not necessarily a name.
+- `schema.spec.ts:44-52` lists the QUERY grammar as **ENFORCED**, with an OPEN
+  list that names exactly one grammar (path-embedded tokens). This is a second
+  open grammar and it is inside the one declared closed.
+
+And the enforcing fixture cannot fail: `BARE_CREDENTIAL_SHAPES`
+(`observations.spec.ts:74-100`) is eight formats, none containing an `=`, chosen
+— by its own header's account — against the rule whose blind spot is the `=`.
+
+**Fix:** a value half that is empty, or that consists only of `=` padding, means
+the segment was never a `name=value` pair. That is one branch inside the helper
+that already exists and it costs one analytic signal (`?debug=` with an empty
+value) that the operator's decision did not ask for:
+
+```ts
+function redactDelimitedSegment(segment: string): string {
+  const eq = segment.indexOf("=");
+  if (eq === -1) return segment === "" ? "" : QUERY_VALUE_REDACTION;
+
+  // P10-D1, second reading. `indexOf("=") !== -1` is not a test for "has a
+  // name" — base64 pads with `=`, so `?dXNlcjpwYTU1dzByZA==` is a whole
+  // credential whose "name" half is the credential. A pair whose VALUE half is
+  // empty or is only padding was never a pair.
+  const value = segment.slice(eq + 1);
+  let onlyPadding = true;
+  for (let i = 0; i < value.length; i += 1) if (value[i] !== "=") onlyPadding = false;
+  if (onlyPadding) return QUERY_VALUE_REDACTION;
+
+  return segment.slice(0, eq).slice(0, QUERY_NAME_MAX) + "=" + QUERY_VALUE_REDACTION;
+}
+```
+
+Then:
+
+1. Add `base64 with one `=` of padding`, `base64 with two`, and a trailing-`=`
+   token to `BARE_CREDENTIAL_SHAPES` so the table can fail, and mirror them into
+   `HEAD_CASES` for the `;` delimiter.
+2. Add a per-row assertion to `scripts/phase1/tracer-e2e.sh`: give the run a
+   sixth dye value shaped as `$(openssl rand -base64 16)` (which pads) carried
+   as a bare segment, and assert its absence from the raw column exactly as the
+   other five are asserted.
+3. Amend `schema.spec.ts:44-52`. Even with the fix above, a credential pasted as
+   a genuine parameter NAME (`?ghp_…=1`) is kept by policy and MUST appear in
+   the OPEN list — the query grammar is "every VALUE is replaced", which is not
+   the same sentence as "no authorization token reaches this column", and the
+   entry currently reads as though it were.
+
+---
+
+## Warnings (pass 3)
+
+### WR-17: The STORE-07 gate does not see `+=`, `.concat()`, or push-then-join — three string renders one token away from ones it does see
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:376-386` (the `+` rule)
+
+**Issue:** The concatenation rule matches `ts.SyntaxKind.PlusToken` only.
+`PlusEqualsToken` is a different kind, so the accumulate idiom is invisible, and
+because `names` grows only through a `VariableDeclaration` whose *initializer*
+derives from the binding, the accumulator never becomes the binding either.
+Executed against `auditSource("f.ts", src)`:
+
+```
+plus-equals            []   // catch(e){ let m = "failed"; m += e.message; return { ok:false, error: m }; }
+string-concat-method   []   // catch(e){ return "x: ".concat(e.message); }
+array-push-join        []   // catch(e){ const a:string[]=[]; a.push(e.message); return a.join(""); }
+```
+
+The first one is a complete, green, end-to-end path from a caught driver
+rejection into `StoreWriteResult.error`. The gate covers `[x].join(…)` — an
+array literal the binding is an element of — but not the array that was pushed
+into, and covers `+` but not `+=`.
+
+None of the three is the disclosed residual. Boundary 2 discloses a scope-blind
+walk and a one-hop copy limit; `m += e.message` is neither — the offending
+expression is right there in the AST with the binding as an operand.
+
+**Fix:** accept the compound assignment in the same rule, and add the two
+sibling render forms:
+
+```ts
+if (
+  ts.isBinaryExpression(node) &&
+  (node.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+   node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) &&
+  (derives(node.left) || derives(node.right))
+) { add(ruleFor("unredacted-concat"), …); }
+```
+
+plus a `.concat(...)` branch beside the `.join(...)` one (any argument that
+`derives`), and treat `a.push(x)` where `x` derives as adding `a` to `names`
+so the existing join rule reaches it. Add all three executed shapes as
+failing-path fixtures.
+
+### WR-18: `schema.spec.ts`'s `analyses.error` disclosure names a residual that no longer exists and omits the one that does
+
+**File:** `packages/backend/src/store/schema.spec.ts:155-171`, against `packages/backend/src/telemetry.ts:360-379`
+
+**Issue:** The allowlist entry says, of `describeError`:
+
+> NOT REDACTED … a SCHEME-RELATIVE reference — `//cdn/app.js?token=T` — is
+> URL-shaped to a reader and not to the pattern, so it survives with its query
+> intact … Both residuals are recorded beside `redactPaths` in `telemetry.ts`.
+
+Both halves are wrong as of `b2512f9`, the commit that wrote the paragraph.
+Executed through the real `describeError`:
+
+```
+"failed loading //cdn.victim.example/app.js?token=SECRET"
+  -> "Error: failed loading <path-redacted>"                 // COVERED, not open
+"failed loading cdn.victim.example/app.js?token=SECRET"
+  -> "Error: failed loading cdn.victim.example/app.js?token=SECRET"   // OPEN, unnamed
+```
+
+`redactPathToken` requires a leading separator and two separators total, so
+`//cdn/app.js?token=T` satisfies it and is consumed whole — the named residual
+is closed. The shape that actually survives is the HOST-RELATIVE one with no
+leading slash, which `WR-12`'s own executed evidence listed on its second line
+and which appears in neither disclosure. And `telemetry.ts:360-379` names exactly
+two residuals — Windows separators, and a path containing a space — so the claim
+that "both residuals are recorded beside `redactPaths`" is true of one of them.
+
+This matters more than a comment usually would because this paragraph is the
+stated justification for keeping `analyses.error` on the T-01-21 allowlist. A
+reader auditing that decision is told the wrong shape is dangerous and is not
+told about the right one.
+
+**Fix:** replace the scheme-relative sentence with the schemeless one, and add
+the same residual beside `redactPaths` so the cross-reference is true:
+
+```
+ *   A SCHEMELESS host reference — `cdn.victim.example/a.js?token=T` — has no
+ *   `://` for redactUrls and no leading separator for redactPaths, so it
+ *   survives with its query intact. A scheme-RELATIVE `//host/path` does NOT:
+ *   it begins with a separator and is consumed by redactPaths (verified).
+```
+
+and add both directions to `telemetry.spec.ts`'s "does NOT redact things that
+are not absolute paths" block, so the disclosure is executed rather than
+asserted.
+
+### WR-19: The CORE-11 gate reports nothing when the RECEIVER key is unreadable — the exact equivalence boundary 2 claims to have removed
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:437-440` (`receiverKind`) and `:587-628` (the member rule; the unanalysable branch is `:598-603`)
+
+**Issue:** Boundary 2 states the design rule in as many words:
+
+> Anything it CANNOT read on an identified receiver, and any module specifier it
+> cannot reduce to a literal, is REPORTED as `outbound-unanalysable`. "Could not
+> read" does not mean "clean"; that equivalence is the specific defect this
+> rewrite removes.
+
+It is applied one level too low. A computed MEMBER on an identified receiver is
+reported; a computed RECEIVER is not, because `receiverKind` returns `undefined`
+for an element access whose key will not reduce, and every caller then treats the
+site as an ordinary property access. Executed:
+
+```
+sdk["req"+"uests"].send(req)          []
+(globalThis as any)["fet"+"ch"](u)    []
+const a="requests"; const b=a; sdk[b].send(req)   []
+```
+
+Compare `import("caido:" + "http")`, which correctly reports
+`["outbound-unanalysable"]` for the same class of unreadable expression. The
+third case is the disclosed two-hop residual; the first two are one hop and are
+silent.
+
+`globalThis[x]()` is the sharper of the two: `globalThis` IS positively
+identified by `isGlobalReceiver`, and the member rule's global branch simply
+never runs when `memberName` returns `undefined`.
+
+**Fix:** report rather than drop, in the two places the receiver is identified
+enough to know something is being hidden:
+
+```ts
+// in receiverKind's ElementAccess branch — signal the caller, do not swallow
+if (ts.isElementAccessExpression(inner)) {
+  const key = literalOf(inner.argumentExpression);
+  if (key !== undefined) return RECEIVERS.has(key) ? key : undefined;
+  return UNREADABLE;            // a third state, distinct from "not a receiver"
+}
+```
+
+and in the member rule, add an `else if (member === undefined &&
+isGlobalReceiver(node.expression))` branch emitting `outbound-unanalysable`
+("a computed member on a global receiver"). Add both executed shapes as
+failing-path fixtures beside the existing computed-member one.
+
+### WR-20: The pattern gate's closure argument is module-local, but a pattern can arrive from outside the module
+
+**File:** `packages/backend/src/store/observations.spec.ts:843-857` (`PATTERN_EXECUTING_METHODS`)
+
+**Issue:** `replace`, `replaceAll` and `split` are deliberately excluded, on this
+stated argument:
+
+> With regex literals and `RegExp` construction both banned there is no way to
+> hand them a pattern, and banning them outright would ban `split("&")`.
+
+The premise holds only for patterns *written in the scanned module*. A pattern
+that arrives as an import, as a function parameter, or off an object defeats it
+with none of the three banned constructs present:
+
+```ts
+import { HOST_RE } from "./patterns";      // rule 1 sees no literal here
+export function f(s: string) { return s.replace(HOST_RE, ""); }   // rule 3 does not fire
+```
+
+On a runtime where `REDOS_RECOVERY = "kill"` and the recovery is SIGKILL taking
+`caido-cli` down with live project data, "no pattern can reach this module" is
+the claim the gate's own header makes, and it is enforced as "no pattern is
+written in this module".
+
+The exposure today is zero — neither scanned module imports anything
+pattern-shaped — which is why this is a WARNING. The exposure the day someone
+factors the redactors into a shared `patterns.ts` is total, and silent.
+
+**Fix:** either (a) flag `.replace`/`.replaceAll`/`.split` when the FIRST
+argument is not a string literal — which permits `split("&")` and
+`replace("#", "")` and rejects every identifier — or (b) restate the header's
+claim as "this module WRITES no pattern; a pattern reaching it through an import
+or a parameter is outside the walk", and add the imported-pattern shape as an
+executed fixture proving the gate is quiet so the limit is measured rather than
+assumed. (a) is a handful of lines and closes it.
+
+### WR-21: `tracer-e2e.sh` says the no-version-literal rule "is enforced" by a `grep -c`; no such gate exists
+
+**File:** `scripts/phase1/tracer-e2e.sh:17-19`
+
+**Issue:**
+
+```sh
+# A literal in this file is a bug, and a `grep -c` for the superseded one
+# returning zero is how that is enforced.
+```
+
+Nothing in the repository performs that grep. `grep -rn "tracer-e2e"` over
+`*.ts`, `*.mjs`, `*.sh` and `*.json` outside `.planning/` returns seven hits, and
+every one is prose: `runtime-answers.sh:19`, `env.sh:78`, two fixture comments,
+`schema.spec.ts:51` and `observations.ts:297`. There is no spec, no CI script and
+no shell gate that reads this file's text.
+
+That is the same defect `WR-15` was: a sentence claiming a property that only a
+gate can hold. It is worse in one respect — `WR-15` was a stale literal a reader
+could see was stale, whereas this is a claim that a check exists, which is the
+claim a reader will not re-verify. And it appears in a file whose entire purpose
+is producing citeable evidence.
+
+**Fix:** either write the gate or delete the sentence. The gate is four lines in
+a spec that already reads files from the repo root:
+
+```ts
+it("names no Caido version literal — the resolved build is written per run", () => {
+  const src = readFileSync("scripts/phase1/tracer-e2e.sh", "utf8");
+  // Non-vacuity first: the file must still cite the variable.
+  expect(src).toContain("P1_EXPECT_VERSION");
+  expect(src.match(/\b0\.\d+\.\d+\b/g) ?? [], "a version literal is back").toEqual([]);
+});
+```
+
+Note that `scripts/phase1/env.sh:78` carries `P1_EXPECT_VERSION=0.57.1 bash
+scripts/phase1/tracer-e2e.sh` as a usage example, so the gate must be scoped to
+the tracer or the example updated — which is itself worth knowing.
+
+---
+
+## Info (pass 3)
+
+### IN-14: `secret_sweep` reports `grep -c` output as "occurrences"; `grep -c` counts LINES
+
+`scripts/phase1/tracer-e2e.sh:131` and `:139`. The header written into
+`secret-sweep.txt` says "Occurrences of each per-run value … per file" and the
+value comes from `grep -c -F -- "$value" "$f"`, which counts matching lines. Two
+occurrences on one line — which is exactly the shape of a proxy log recording a
+request line and a response line, or of a single-line JSON dump — report as 1.
+The comment at `:127` even cites a measured count ("four occurrences of each wire
+value") that this instrument cannot produce. Use `grep -o -F -- "$value" "$f" |
+wc -l`, or relabel the column `lines`.
+
+### IN-15: `error-redaction.spec.ts` still mixes `path.join` with `/` string surgery — IN-09 was fixed in one gate only
+
+`outbound-prohibition.spec.ts` was converted to `posix.join` end to end.
+`error-redaction.spec.ts:114` builds `STORE_DIR` with `join(...)`, `:135-140`
+builds each entry with `join(STORE_DIR, d.name)`, and `:250` / `:543` then do
+`.split("/").pop()`. On a non-POSIX host the by-name non-vacuity list fails
+and `Violation.file` becomes a full path. It fails loudly rather than silently,
+which is why this is INFO — but the two gates now disagree about a convention
+one of them documents at length.
+
+### IN-16: `ERROR_BINDING_NAMES` is a closed four-name set, and the two nearest synonyms are unscanned
+
+`error-redaction.spec.ts:118-129`. Executed: a parameter named `reason` holding an
+error string and placed straight into an object literal reports `[]`, while the
+same body with the parameter named `e` reports `unredacted-persisted-error`. The
+comment justifies the set by "zero false-positive surface today", which is a
+claim about false positives and not about coverage. `reason`, `message`, `detail`
+and `failure` are the names a widened `finishAnalysis` would plausibly use. Add
+them, or state the closure as a coverage bound in boundary 2.
+
+### IN-17: `describeError` can itself throw, inside the catch blocks that exist to stop throwing
+
+`telemetry.ts:417-424`. `String(e)` raises `TypeError: Cannot convert object to
+primitive value` for a null-prototype object and for any value with a throwing
+`toString`, and `e.constructor?.name` can raise on a proxy. `recordError` wraps
+its call in a `try`; the six store call sites do not —
+`observations.ts:347`, `analyses.ts:168` and `:235`, and their siblings — so a
+handled store failure would become an unhandled rejection out of
+`recordObservation`. Vanishingly unlikely from a SQLite driver, one line to
+close: wrap the two reads in `describeError` itself and fall back to
+`"unrenderable error"`, the string `recordError` already uses.
+
+### IN-18: `URL_MAX` truncation can leave a partial `<redacted>` marker in the column
+
+Executed: a 400-parameter URL stores a tail of `…&p133=<re`. It is idempotent
+(a second pass regrows the marker and re-truncates to the same bytes) and it
+leaks nothing, so this is cosmetic — but any consumer that counts markers or
+splits on them sees a fragment, and `tracer-e2e.sh:543` asserts `REDACTION in r`
+per row, which a single-parameter URL truncated at the wrong boundary would fail.
+Truncating on a `&` boundary, or dropping a trailing partial marker, removes the
+class.
+
+### IN-19: `;` parameters inside the AUTHORITY are not redacted
+
+Executed: `https://cdn.test;sid=SECRET/a.js` is byte-identical out.
+`redactUrlHead` runs its `;` loop over `s.slice(pathStart)`, and `pathStart` is
+the first `/` after the authority, so the authority is returned verbatim.
+`;` is a legal `sub-delim` in a reg-name, and no real deployment puts a session
+id there, which is why this is INFO — but `schema.spec.ts:63-71` lists the `;`
+grammar as ENFORCED without qualifying it to the path, and one clause on that
+line would make the statement true.
+
+---
+
+_Pass 1 reviewed: 2026-08-21T00:30:00Z_
+_Pass 2 reviewed: 2026-08-21T11:21:31Z_
+_Pass 3 reviewed: 2026-08-21T15:23:01Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
