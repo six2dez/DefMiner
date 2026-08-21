@@ -32,6 +32,7 @@ import {
   ERROR_TEXT_LIMIT,
   FORBIDDEN_COMPLETENESS_WORDS,
   measured,
+  PATH_REDACTION,
   recordError,
   recordSlice,
   resetTelemetryForTest,
@@ -450,6 +451,236 @@ describe("describeError", () => {
     expect(rendered.length).toBe(ERROR_TEXT_LIMIT);
     expect(rendered.length).toBeLessThanOrEqual(ERROR_MAX);
     expect(rendered.slice(0, ERROR_MAX)).toBe(rendered);
+  });
+});
+
+// ===========================================================================
+// 5b. THE FILESYSTEM PATH — WR-03's OTHER HALF (STORE-07, T-01-59, DEPLOY-02)
+// ===========================================================================
+
+/**
+ * The operator's OS username, as it appears inside `sdk.meta.path()`.
+ *
+ * Distinctive on purpose. Every assertion below is a SUBSTRING SEARCH for THIS
+ * literal over the whole rendered string — never an equality against a
+ * hand-written expected value, which passes when both sides are wrong in the
+ * same way.
+ */
+const FIXTURE_OS_USERNAME = "defminer-fixture-operator";
+
+/**
+ * `sdk.meta.path()`'s REAL shape on macOS, carrying the username.
+ *
+ * The space inside "Application Support" is the point rather than an accident:
+ * a naive whitespace-delimited rule gets exactly this case wrong, so it is the
+ * PRIMARY fixture and not a tidied-up one.
+ */
+const PLUGIN_DB_PATH =
+  "/Users/" +
+  FIXTURE_OS_USERNAME +
+  "/Library/Application Support/io.caido.Caido/plugins/" +
+  "5f2a1c9e-0b44-4d18-9c31-7d6e2a8b41ff/data.db";
+
+describe("describeError redacts an absolute filesystem path (WR-03's other half)", () => {
+  it("removes the OS username from a plugin-database path — the macOS shape, spaces and all", () => {
+    const out = describeError(new Error("could not open " + PLUGIN_DB_PATH));
+    expect(
+      out.includes(FIXTURE_OS_USERNAME),
+      "the operator's OS username survived into an error string bound for the " +
+        "getStatus RPC. DEPLOY-02 says the backend filesystem is SERVER-SIDE; " +
+        "presenting it as if it were the operator's own machine is the " +
+        "disclosure WR-03 named and did not close. Rendered: " +
+        out,
+    ).toBe(false);
+    expect(out).toContain(PATH_REDACTION);
+  });
+
+  it("removes it from the single-quoted shape SQLITE_CANTOPEN actually emits", () => {
+    // `unable to open database file: '/Users/…/data.db'` — the quotes are part
+    // of the message, so a rule that only handles bare tokens misses the one
+    // shape the driver really produces.
+    const out = describeError(
+      new Error("SQLITE_CANTOPEN: unable to open database file: '" + PLUGIN_DB_PATH + "'"),
+    );
+    expect(out.includes(FIXTURE_OS_USERNAME), out).toBe(false);
+    expect(out).toContain(PATH_REDACTION);
+    // The punctuation is re-attached rather than eaten: the message stays
+    // readable, which is the half of the trade that keeps this from being a
+    // blunt instrument.
+    expect(out).toContain("'" + PATH_REDACTION);
+  });
+
+  it("redacts a short quoted path whole, punctuation restored on BOTH ends", () => {
+    const out = describeError(new Error("open failed '/var/db/caido/data.db'"));
+    expect(out).toBe("Error: open failed '" + PATH_REDACTION + "'");
+  });
+
+  it("redacts a URL and a path in the SAME message, and the URL still goes first", () => {
+    // Order matters: URL first, so a `file:///…` or `https://host/a/b` is
+    // consumed as a URL rather than shredded into a path marker.
+    const out = describeError(
+      new Error(
+        "copy https://victim.example/private/app.js?token=secret to " +
+          PLUGIN_DB_PATH,
+      ),
+    );
+    expect(out).toContain(URL_REDACTION);
+    expect(out).toContain(PATH_REDACTION);
+    expect(out.includes("victim.example"), out).toBe(false);
+    expect(out.includes("token=secret"), out).toBe(false);
+    expect(out.includes(FIXTURE_OS_USERNAME), out).toBe(false);
+  });
+
+  it("consumes a file:// URL as a URL, not as a path", () => {
+    const out = describeError(new Error("read file://" + PLUGIN_DB_PATH));
+    expect(out).toContain(URL_REDACTION);
+    expect(out.includes(FIXTURE_OS_USERNAME), out).toBe(false);
+  });
+
+  it("still redacts the path when the message is far longer than the truncation limit", () => {
+    // REDACT FIRST, TRUNCATE SECOND (decision P5-D8). Truncating first leaves
+    // the FRONT half of a path, and the front half is the half carrying the
+    // username.
+    // The path goes FIRST, deliberately: with the message truncated before the
+    // redaction ran, the username sits comfortably inside the surviving 240
+    // characters and this case fails. That is what makes it a test of the
+    // ORDERING rather than of the truncation.
+    const out = describeError(
+      new Error(PLUGIN_DB_PATH + " " + "y".repeat(5_000)),
+    );
+    expect(out.length).toBe(ERROR_TEXT_LIMIT);
+    expect(out.includes(FIXTURE_OS_USERNAME), out).toBe(false);
+  });
+});
+
+describe("describeError does NOT redact things that are not absolute paths", () => {
+  // The diagnosability half. A rule that turned every error into markers would
+  // be a blunt instrument, and a gate that destroys diagnosis gets deleted.
+
+  it("leaves a driver error with no separators completely alone", () => {
+    expect(describeError(new Error("SQLITE_ERROR: no such table: artifacts"))).toBe(
+      "Error: SQLITE_ERROR: no such table: artifacts",
+    );
+  });
+
+  it("leaves a RELATIVE source reference alone — it does not begin with a separator", () => {
+    expect(describeError(new Error("failed in store/observations.ts"))).toBe(
+      "Error: failed in store/observations.ts",
+    );
+  });
+
+  it("leaves a relative reference with TWO separators alone for the same reason", () => {
+    expect(
+      describeError(new Error("failed in packages/backend/src/telemetry.ts")),
+    ).toBe("Error: failed in packages/backend/src/telemetry.ts");
+  });
+
+  it("leaves a date rendered 2026/08/21 alone — the rule requires an ABSOLUTE path", () => {
+    expect(describeError(new Error("expired on 2026/08/21"))).toBe(
+      "Error: expired on 2026/08/21",
+    );
+  });
+
+  it("leaves a lone root-relative segment alone — one separator is not a path", () => {
+    expect(describeError(new Error("mounted at /data"))).toBe(
+      "Error: mounted at /data",
+    );
+  });
+
+  it("is IDEMPOTENT — applying it to its own output returns that output", () => {
+    // The two redactions must not fight or accumulate markers.
+    for (const message of [
+      "could not open " + PLUGIN_DB_PATH,
+      "copy https://victim.example/a.js to " + PLUGIN_DB_PATH,
+      "SQLITE_ERROR: no such table: artifacts",
+      "expired on 2026/08/21",
+    ]) {
+      const once = describeError(new Error(message));
+      expect(describeError(once), message).toBe(once);
+    }
+  });
+});
+
+describe("the plugin-database path does not cross the getStatus RPC (STORE-07)", () => {
+  it("is absent from EVERY string in the object the registered RPC returns", async () => {
+    // The same recursive walk WR-03 extended from slimStatus() to the object
+    // getStatus() ACTUALLY returns. A search over `reason` alone is what missed
+    // the URL half; a search over `reason` alone would miss this one too.
+    const registered: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      db: () =>
+        Promise.reject(
+          new Error(
+            "SQLITE_CANTOPEN: unable to open database file: '" +
+              PLUGIN_DB_PATH +
+              "'",
+          ),
+        ),
+      register: (name: string, fn: unknown) => {
+        registered[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+
+    await init(sdk);
+    // The memo now holds a rejected promise; leaving it would poison any later
+    // case in this file that resolved a handle.
+    resetDbHandleForTest();
+
+    const status = registered.getStatus();
+    const leaked = walkValues(status)
+      .filter((e) => typeof e.value === "string")
+      .filter((e) => (e.value as string).includes(FIXTURE_OS_USERNAME));
+    expect(
+      leaked.map((e) => e.path + " = " + String(e.value)),
+      "the operator's OS username crossed the getStatus RPC inside a " +
+        "server-side filesystem path. DEPLOY-02: the backend filesystem is " +
+        "not the operator's machine, and `sdk.meta.path()` carries the " +
+        "username in every real deployment.",
+    ).toEqual([]);
+
+    // Non-vacuity: the reason is present, says what happened, and shows the
+    // redaction ran rather than the message having vanished.
+    const reason = String((status as Record<string, unknown>).reason);
+    expect(reason).toContain("init failed");
+    expect(reason).toContain(PATH_REDACTION);
+  });
+});
+
+describe("redactUrls is backtrack-free BY MEASUREMENT, not by an argument about its shape", () => {
+  it("renders a 200,000-character adversarial near-miss input inside 250 ms", () => {
+    // REDOS_RECOVERY is "kill" on this runtime: SPIKE-01 measured that a
+    // catastrophic pattern hangs the QuickJS thread with NO interrupt handler
+    // and that SIGKILL is the only exit, taking `caido-cli` down with the
+    // operator's live project data. `telemetry.ts`'s header used to ARGUE this
+    // pattern was safe from its shape — one quantifier before a literal `://`
+    // and one after. An argued-linear pattern is exactly what nobody re-checks,
+    // so this measures it instead.
+    //
+    // The input is built from runs that repeatedly ALMOST satisfy `://`: a long
+    // `[a-z0-9+.-]*` run, then a `:`, then a single `/` — the character that
+    // would complete the match is never the one that arrives.
+    //
+    // THE CEILING IS DELIBERATELY LOOSE. The observed time is on the order of a
+    // millisecond, so 250 ms is roughly three orders of magnitude above it and
+    // can only be tripped by catastrophic backtracking, not by a busy CI box. A
+    // bound that fails on a loaded machine is a bound somebody deletes.
+    const chunk = "a".repeat(50) + ":/";
+    const adversarial = chunk.repeat(Math.ceil(200_000 / chunk.length));
+    expect(adversarial.length).toBeGreaterThanOrEqual(200_000);
+
+    const t0 = Date.now();
+    const rendered = describeError(new Error(adversarial));
+    const elapsedMs = Date.now() - t0;
+
+    expect(
+      elapsedMs,
+      "redactUrls took " +
+        String(elapsedMs) +
+        " ms on a 200k adversarial input. On a REDOS_RECOVERY=\"kill\" runtime " +
+        "there is no interrupt handler and SIGKILL is the only exit.",
+    ).toBeLessThan(250);
+    // Non-vacuity: the render actually happened and is still bounded.
+    expect(rendered.length).toBe(ERROR_TEXT_LIMIT);
   });
 });
 
