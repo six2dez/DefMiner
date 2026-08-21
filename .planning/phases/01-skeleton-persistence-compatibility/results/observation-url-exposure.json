@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "artifact": "observation-url-exposure",
+  "plan": "01-08",
+  "task": "Task 1 \u2014 measure pre-policy observation rows, read-only, counts only",
+  "generated_at": "2026-08-21T10:37:58Z",
+  "headline": "1 DefMiner plugin database exists on this machine. It holds 0 observation rows in total, so 0 rows carry a pre-policy verbatim query string. This is a MEASURED zero taken against a database that was found and read, not a zero produced by finding no database \u2014 those are different facts and only the first one is a clean bill of health. DefMiner is NOT installed in the operator's live Caido instance: all 6 plugin databases under the live data directory belong to other plugins and none has an `observations` table.",
+  "marker": "<redacted>",
+  "marker_source": "QUERY_VALUE_REDACTION, packages/backend/src/store/observations.ts:55",
+  "marker_note": "The counts below were computed against this exact marker string. If QUERY_VALUE_REDACTION ever changes, these counts describe a predicate that no longer matches the code and must be re-taken rather than reused.",
+  "databases_found": 1,
+  "plugin_databases_scanned": 8,
+  "defminer_databases_measured": 1,
+  "defminer_databases_errored": 0,
+  "non_defminer_plugin_databases": 7,
+  "search_roots": [
+    {
+      "origin": "operator-live",
+      "root": "/Users/six2dez/Library/Application Support/io.caido.Caido",
+      "status": "present",
+      "note": "The default data directory of the operator's live Caido on port 8080 (pid 41674 runs with no --data-path). Read while Caido held it open; the instance was not started, stopped, restarted or otherwise touched."
+    },
+    {
+      "origin": "phase1-isolated",
+      "root": "/private/tmp/defminer-probe-*",
+      "status": "present",
+      "note": "instance.sh puts an isolated instance's data directory at /tmp/defminer-probe-<RUN_ID>, not under $P1_OUT/runs/ \u2014 $P1_OUT/runs/<RUN_ID>/instance.json only RECORDS the path. All 61 data_path values recorded across every runs/ directory in the repo were checked for existence; 60 are gone (torn down), 1 survives (.spike/recorder-data, below). Two /tmp probe directories survive that are not in any instance.json."
+    },
+    {
+      "origin": "phase0-instance",
+      "root": "/Users/six2dez/Tools/DefMiner/.spike/recorder-data",
+      "status": "present",
+      "note": "The SPIKE-10 recorder instance's data directory. Its caido-cli on port 8998 is still running (STATE.md records the LaunchAgent as uninstalled; the process was not). Its one plugin database belongs to the recorder plugin (cache_log), not DefMiner."
+    }
+  ],
+  "databases": [
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/2e97cd01-44e5-4c38-8d8f-67a45dbd67f0/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "providers settings",
+      "counts": null
+    },
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/35747526-147f-4929-a0b4-193219ad13c8/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "tools history",
+      "counts": null
+    },
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/4caff27c-48d8-451f-87db-0247534fab9c/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "",
+      "counts": null
+    },
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/7e0768bf-fd0a-4fba-9c2e-1d85fc1d2b38/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "paramfinder_session_projects paramfinder_sessions paramfinder_session_entries wordlists",
+      "counts": null
+    },
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/a00a5002-3ba3-46c8-b839-f19aa88fe28b/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "config",
+      "counts": null
+    },
+    {
+      "origin": "operator-live",
+      "path": "/Users/six2dez/Library/Application Support/io.caido.Caido/plugins/e4e2a6da-c855-43ae-957f-b8f30e527a44/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "themes",
+      "counts": null
+    },
+    {
+      "origin": "phase1-isolated",
+      "root": "/private/tmp/defminer-probe-20260820T142611Z-25336",
+      "status": "no-plugin-databases"
+    },
+    {
+      "origin": "phase1-isolated",
+      "path": "/private/tmp/defminer-probe-20260820T203649Z-28414/plugins/c180b107-187c-4eac-b69b-1d0f6ca0c3a0/data.db",
+      "status": "measured",
+      "read_mode": "readonly",
+      "counts": {
+        "total": 0,
+        "with_query": 0,
+        "unredacted_with_query": 0,
+        "already_redacted": 0
+      }
+    },
+    {
+      "origin": "phase0-instance",
+      "path": "/Users/six2dez/Tools/DefMiner/.spike/recorder-data/plugins/73c7e164-4805-4123-b35e-95c2f4af5864/data.db",
+      "status": "not-defminer",
+      "read_mode": "immutable-no-wal",
+      "tables": "cache_log sqlite_sequence",
+      "counts": null
+    }
+  ],
+  "totals": {
+    "total": 0,
+    "with_query": 0,
+    "unredacted_with_query": 0,
+    "already_redacted": 0
+  },
+  "totals_scope": "Totals sum the `measured` databases only. Databases with status `not-defminer` have no observations table and contribute nothing; databases with status `error` contribute nothing and are counted in defminer_databases_errored so an unread database can never be mistaken for a zero.",
+  "method": {
+    "values_never_read": "No statement in this measurement selects, prints, logs or commits a url value. Every query is a COUNT(*). The values being counted are the credentials this gap exists to remove; echoing them into a terminal scrollback, a shell history or a committed file would create a second copy in a place with none of the database's access controls.",
+    "queries": [
+      "SELECT COUNT(*) FROM observations",
+      "SELECT COUNT(*) FROM observations WHERE url LIKE '%?%'",
+      "SELECT COUNT(*) FROM observations WHERE url LIKE '%?%' AND url LIKE '%=%' AND url NOT LIKE '%<redacted>%'",
+      "SELECT COUNT(*) FROM observations WHERE url LIKE '%<redacted>%'"
+    ],
+    "read_modes": {
+      "readonly": "sqlite3 -readonly <db> \u2014 WAL-aware, sees rows resident in the -wal file.",
+      "immutable-no-wal": "sqlite3 'file:<db>?mode=ro&immutable=1' \u2014 used ONLY where `sqlite3 -readonly` refused to open the file (WAL journal_mode with no usable -shm) AND no -wal sidecar existed, so there were no WAL-resident rows for an immutable read to miss.",
+      "refused": "Where `sqlite3 -readonly` failed AND a non-empty -wal existed, NO count was taken and the database is reported as an error entry. An immutable read there would silently omit WAL-resident rows and report a confident undercount \u2014 measured on this very run: the one DefMiner database carries a 45,352-byte -wal, and an immutable read of it reports NO TABLES AT ALL while the WAL-aware read reports `artifacts` and `observations`."
+    },
+    "liveness": "Nothing was started, stopped, restarted or killed. Reading a WAL database opened by another process does update its -shm index file; the database file and its -wal were not modified (both retain their pre-existing mtimes).",
+    "enumeration": "find <root>/plugins -name data.db, over the three roots above, plus an independent find /private/tmp /private/var/folders -path '*/plugins/*/data.db' sweep that returned the same single non-live database. A plugin database counts as DefMiner's only if its schema carries an `observations` table."
+  },
+  "what_this_does_not_cover": [
+    "Machines other than this one. This is a measurement of this host, and nothing else.",
+    "Any DefMiner database that existed and has since been deleted. 60 of the 61 recorded isolated instance data directories are gone; whatever they held is gone with them and is not recoverable for counting.",
+    "Rows a future run writes. The write path has been redacting since plan 01-07; this artifact describes the state of disk at generated_at."
+  ]
+}
