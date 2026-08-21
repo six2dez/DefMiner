@@ -116,7 +116,7 @@ Plans:
 
 **Wave 12** *(blocked on 01-11 — sequencing, not code: each round-2 plan mutates the shared tree to prove its gate can fail, and each asserts whole-suite green)*
 
-- [ ] 01-12-PLAN.md — **Gap 2a**: the CORE-11 gate (CORE-01's until wave 10) widened to the 14 shapes a 22-shape probe found it missing — `globalThis.fetch`, the destructured receiver, `.call`/`.apply`, computed keys — and extended to `packages/engine/src`, which ships in the bundle and was walked by no gate at all — *wave 12*
+- [x] 01-12-PLAN.md — **Gap 2a**: the CORE-11 gate (CORE-01's until wave 10) widened to the 14 shapes a 22-shape probe found it missing — `globalThis.fetch`, the destructured receiver, `.call`/`.apply`, computed keys — and extended to `packages/engine/src`, which ships in the bundle and was walked by no gate at all — *wave 12*
 
 **Wave 13** *(blocked on 01-12 — shares `outbound-prohibition.spec.ts`)*
 

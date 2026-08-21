@@ -434,3 +434,7 @@ None. No new network endpoint, auth path, file-access pattern or schema change w
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-21*
+
+## Self-Check: PASSED
+
+All modified files present on disk; all four commits (`2cc3aaa`, `a3a2cc9`, `51545c0`, `f7c8d21`) present in `git log`.
