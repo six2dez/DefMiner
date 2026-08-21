@@ -635,7 +635,7 @@ PY
   done
   echo "# end"
 } > "$RUN_DIR/secret-sweep.txt"
-echo "secret sweep : $(grep -vc '^#' "$RUN_DIR/secret-sweep.txt" || true) file(s) in the run directory carry a per-run value"
+echo "secret sweep : $(grep -v '^#' "$RUN_DIR/secret-sweep.txt" | awk '{print $2}' | sort -u | wc -l | tr -d ' ') file(s) in the run directory carry a per-run value, over $(grep -vc '^#' "$RUN_DIR/secret-sweep.txt" || true) (grammar, file) pair(s)"
 
 echo
 echo "TRACER PASSED"
