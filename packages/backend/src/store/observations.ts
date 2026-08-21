@@ -54,19 +54,50 @@ ON CONFLICT (project_id, sha256, request_id) DO UPDATE SET
  */
 export const QUERY_VALUE_REDACTION = "<redacted>";
 
-/** The bound on a RETAINED parameter name. A segment with no `=` is syntactically
- *  a name, so without this a token pasted as a bare parameter would survive
- *  verbatim under a values-only rule (T-01-31). Residual, named rather than left
- *  to be found: a secret shorter than this used as a bare parameter name still
- *  survives. */
+/**
+ * The bound on the NAME HALF of a `name=value` segment. That is now its ONLY job,
+ * and the justification changed on 2026-08-21 — so it is restated here rather than
+ * left to be inferred from a number that outlived its reason.
+ *
+ * WHAT IT USED TO CLAIM. This constant was the answer to a bare (`=`-less)
+ * segment: such a segment is syntactically a name, so a values-only rule kept it,
+ * and this bound was what stopped a pasted token from surviving verbatim (T-01-31).
+ *
+ * WHY THAT WAS NOT AN ANSWER. Every common credential format is SHORTER than 64.
+ * A GitHub PAT is 40 characters, an AWS access key id 20, a Stripe secret ~32, a
+ * session id 26-32, a UUID 36, a compact JWT 43. Executed through
+ * `normaliseObservedUrl`, all eight shapes came back byte-for-byte. A bound is not
+ * a rule: picking the number is picking which credentials are acceptable to keep,
+ * and no number both catches a 12-character token and leaves
+ * `enableExperimentalFeature` readable.
+ *
+ * WHAT REPLACED IT: decision P10-D1 (operator, 2026-08-21, at a
+ * `gate="blocking-human"` checkpoint) — a bare segment is a VALUE WITH NO NAME and
+ * is redacted by construction, so no length of bare segment survives and there is
+ * no "shorter than the bound" left for a future credential format to hide in.
+ * This is a POLICY change, not a bug fix: decision P7-D2 was a faithful reading of
+ * the operator's UAT words ("keeping the path and the parameter names"), and the
+ * words were re-opened. Enforced by `observations.spec.ts`'s
+ * `BARE_CREDENTIAL_SHAPES` block, one executed case per format.
+ */
 export const QUERY_NAME_MAX = 64;
 
 /**
- * Replace every query-string VALUE; keep every NAME, in order.
+ * Replace every query-string VALUE; keep every NAME of a `name=value` pair, in
+ * order. A segment with NO `=` is a value with no name and is replaced too.
  *
- * The operator's UAT decision of 2026-08-21 (WR-07). Parameter names carry
- * analytic value — an endpoint that takes an `access_token` parameter is worth
- * being able to see — and values are credentials.
+ * The operator's UAT decision of 2026-08-21 (WR-07), as amended by decision
+ * P10-D1 the same day. Parameter names carry analytic value — an endpoint that
+ * takes an `access_token` parameter is worth being able to see — and values are
+ * credentials.
+ *
+ * THE BARE-SEGMENT HALF, because it is the half that was wrong first. A segment
+ * with no `=` used to be treated as a name and kept up to `QUERY_NAME_MAX`. Every
+ * common credential format is shorter than that bound and survived verbatim into
+ * a column `db.ts` documents as never garbage-collected, surviving project
+ * deletion and force-reinstall. P10-D1 replaced the bound with a rule. The cost
+ * was accepted with its name on it: `?debug`, `?nocache` and `?prod` are genuine
+ * feature-flag signal on a bundle URL and they now read `<redacted>`.
  *
  * STRING SPLITTING ONLY — no pattern execution of any kind, and this is not
  * stylistic. `REDOS_RECOVERY` is "kill" on this runtime: SPIKE-01 measured that a
@@ -96,8 +127,18 @@ export function redactQueryValues(url: string): string {
   for (const segment of s.slice(q + 1).split("&")) {
     const eq = segment.indexOf("=");
     if (eq === -1) {
-      // No `=` — this is a NAME, and names are what the decision keeps.
-      out.push(segment.slice(0, QUERY_NAME_MAX));
+      // No `=` — a VALUE WITH NO NAME, and it is redacted whole (decision
+      // P10-D1, operator, 2026-08-21). An unknown segment is exactly where a
+      // pasted token lands, and the segment carries no name to be worth keeping.
+      //
+      // An EMPTY segment pushes the empty string, not the marker: there is
+      // nothing there to redact, and `<redacted>` would invent a parameter that
+      // was never sent. `a=1&&b=2` came in with three segments and leaves with
+      // three.
+      //
+      // Idempotent for free: `QUERY_VALUE_REDACTION` contains no `=`, so on a
+      // second pass it arrives here itself and is replaced with the same bytes.
+      out.push(segment === "" ? "" : QUERY_VALUE_REDACTION);
       continue;
     }
     // The FIRST `=` only, so an `=` inside a value cannot fabricate a second
