@@ -500,7 +500,11 @@ describe("describeError redacts an absolute filesystem path (WR-03's other half)
     // of the message, so a rule that only handles bare tokens misses the one
     // shape the driver really produces.
     const out = describeError(
-      new Error("SQLITE_CANTOPEN: unable to open database file: '" + PLUGIN_DB_PATH + "'"),
+      new Error(
+        "SQLITE_CANTOPEN: unable to open database file: '" +
+          PLUGIN_DB_PATH +
+          "'",
+      ),
     );
     expect(out.includes(FIXTURE_OS_USERNAME), out).toBe(false);
     expect(out).toContain(PATH_REDACTION);
@@ -558,9 +562,9 @@ describe("describeError does NOT redact things that are not absolute paths", () 
   // be a blunt instrument, and a gate that destroys diagnosis gets deleted.
 
   it("leaves a driver error with no separators completely alone", () => {
-    expect(describeError(new Error("SQLITE_ERROR: no such table: artifacts"))).toBe(
-      "Error: SQLITE_ERROR: no such table: artifacts",
-    );
+    expect(
+      describeError(new Error("SQLITE_ERROR: no such table: artifacts")),
+    ).toBe("Error: SQLITE_ERROR: no such table: artifacts");
   });
 
   it("leaves a RELATIVE source reference alone — it does not begin with a separator", () => {
@@ -676,7 +680,7 @@ describe("redactUrls is backtrack-free BY MEASUREMENT, not by an argument about 
       elapsedMs,
       "redactUrls took " +
         String(elapsedMs) +
-        " ms on a 200k adversarial input. On a REDOS_RECOVERY=\"kill\" runtime " +
+        ' ms on a 200k adversarial input. On a REDOS_RECOVERY="kill" runtime ' +
         "there is no interrupt handler and SIGKILL is the only exit.",
     ).toBeLessThan(250);
     // Non-vacuity: the render actually happened and is still bounded.

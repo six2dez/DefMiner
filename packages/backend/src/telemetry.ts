@@ -244,13 +244,156 @@ export const URL_REDACTION = "<url-redacted>";
  * plugin in Phase 1 (T-01-26), so the redaction belongs here rather than at each
  * of the call sites that might one day build a message.
  *
- * One quantifier before a literal `://` and one after, no nesting and no
- * alternation — `admit.ts`'s ReDoS discipline is about the HOOK, but a pattern
- * that can backtrack has no business anywhere in a runtime whose REDOS_RECOVERY
- * is "kill".
+ * ONE quantifier before a literal `://` and one after, no nesting and no
+ * alternation. That shape is stated for the reader — but it is NOT the evidence,
+ * and this paragraph used to offer it as though it were. Reasoning about a
+ * pattern's shape is precisely what `REDOS_RECOVERY = "kill"` makes
+ * insufficient: an argued-linear pattern is the one nobody re-checks, and there
+ * is no interrupt handler on this runtime, so SIGKILL is the only exit and it
+ * takes `caido-cli` down with the operator's live project data.
+ *
+ * THE EVIDENCE IS A MEASUREMENT. `telemetry.spec.ts`'s case "renders a
+ * 200,000-character adversarial near-miss input inside 250 ms" runs this pattern
+ * over an input built from runs that repeatedly ALMOST satisfy `://`, under a
+ * ceiling roughly three orders of magnitude above the observed time — loose
+ * enough that only catastrophic backtracking trips it, never a busy machine.
+ *
+ * THIS IS THE ONE REGEX LITERAL THIS MODULE IS PERMITTED, and the permission is
+ * enforced rather than described: `observations.spec.ts`'s `auditPatternUse`
+ * runs over this file and allows exactly one literal, anchored INSIDE this
+ * declaration. Moving it, renaming this function, or adding a second pattern
+ * anywhere in this module fails that gate — which is the moment whoever did it
+ * is required to add a linearity measurement for whatever they moved.
  */
 function redactUrls(text: string): string {
   return text.replace(/[a-z][a-z0-9+.-]*:\/\/\S*/gi, URL_REDACTION);
+}
+
+/** What a redacted absolute filesystem path reads as in an error string.
+ *
+ *  Shaped to rhyme with {@link URL_REDACTION} so the two redactions on this path
+ *  read as ONE policy rather than two accidents, and distinct from it so a
+ *  reader can tell WHICH rule fired. */
+export const PATH_REDACTION = "<path-redacted>";
+
+/** The characters this scan treats as whitespace. Written out rather than
+ *  matched, because a character class is a pattern and this module is allowed
+ *  exactly one (see {@link redactPaths}). */
+const WHITESPACE_CHARS = " \t\n\r\f\v";
+
+/** Punctuation stripped from a token's ends before it is judged, and re-attached
+ *  afterwards. Named rather than inlined so the set is reviewable: these are the
+ *  characters a path arrives WRAPPED in, and SQLite's `SQLITE_CANTOPEN` message
+ *  wraps its path in the first of them. */
+const PATH_TRIM_PUNCTUATION = "'\"`()[],;:";
+
+/** The one separator this rule knows about. See the Windows residual on
+ *  {@link redactPaths}. */
+const PATH_SEPARATOR = "/";
+
+/**
+ * Judge ONE whitespace-delimited token and redact it if it is an absolute path.
+ *
+ * Strip the wrapping punctuation, then require TWO things of what is left: it
+ * BEGINS with a separator, and it contains at least two of them. Both conditions
+ * carry their weight:
+ *
+ *   "begins with a separator" is what keeps `2026/08/21` and
+ *   `store/observations.ts` readable, and it is the condition DEPLOY-02 actually
+ *   cares about — a SERVER-SIDE absolute path.
+ *
+ *   "at least two" is what keeps a lone `/data` or `/tmp` readable. One segment
+ *   is a mount point, not a disclosure.
+ *
+ * The stripped punctuation is RE-ATTACHED. A rule that ate the quotes would make
+ * `unable to open database file: <path-redacted>` read as though the driver had
+ * said something it did not.
+ */
+function redactPathToken(token: string): string {
+  let start = 0;
+  let end = token.length;
+  while (start < end && PATH_TRIM_PUNCTUATION.includes(token[start]))
+    start += 1;
+  while (end > start && PATH_TRIM_PUNCTUATION.includes(token[end - 1]))
+    end -= 1;
+
+  const core = token.slice(start, end);
+  if (!core.startsWith(PATH_SEPARATOR)) return token;
+
+  let separators = 0;
+  for (let i = 0; i < core.length; i += 1) {
+    if (core[i] === PATH_SEPARATOR) separators += 1;
+  }
+  if (separators < 2) return token;
+
+  return token.slice(0, start) + PATH_REDACTION + token.slice(end);
+}
+
+/**
+ * Strip absolute filesystem paths out of a string bound for the RPC.
+ *
+ * WHY THIS EXISTS, and it is the half of WR-03's OWN RATIONALE that WR-03's fix
+ * did not deliver. {@link redactUrls} requires a literal `://`, so a filesystem
+ * path is not URL-shaped to it and passes through whole — including
+ * `sdk.meta.path()`, which on every real deployment carries the OPERATOR'S OS
+ * USERNAME:
+ *
+ *   /Users/<name>/Library/Application Support/io.caido.Caido/plugins/<uuid>/data.db
+ *
+ * DEPLOY-02 says the backend filesystem is SERVER-SIDE. Presenting it across the
+ * `getStatus` RPC as if it were the operator's own machine is a disclosure, and
+ * `telemetry.spec.ts` proves the closure at the RPC level rather than at this
+ * function — driving the real `init()` with a `meta.db()` rejection and walking
+ * every string of the object the registered RPC returns.
+ *
+ * A STRING SCAN, WITH NO NEW PATTERN, and that choice is forced rather than
+ * stylistic. WR-12 suggested `(?:\/[A-Za-z0-9._-]+){2,}` — a quantifier nested
+ * inside a quantifier, which contradicts this file's own no-nesting discipline
+ * one function away, and which is exactly the kind of thing nobody re-derives at
+ * 2am on a runtime where the recovery from getting it wrong is SIGKILL.
+ * SPIKE-01 measured that a catastrophic pattern hangs the QuickJS thread with no
+ * interrupt handler. `observations.spec.ts`'s `auditPatternUse` ENFORCES this on
+ * this module: `telemetry.ts` may hold exactly ONE regex literal, the one inside
+ * {@link redactUrls}, so a future rewrite of this function into WR-12's shape
+ * fails a gate rather than depending on somebody re-reading this paragraph.
+ *
+ * TWO RESIDUALS, NAMED, because a redactor whose limits are unstated is trusted
+ * further than it has earned:
+ *
+ *   WINDOWS. `C:\Users\<name>\AppData\…` uses a different separator and is NOT
+ *   redacted by this rule. Caido runs on Windows, so this is real and not
+ *   hypothetical. Closing it is a SECOND separator in this same scan — a handful
+ *   of lines, no structural change — so whoever needs it knows the size of the
+ *   job. It is out of Phase 1 only because no Windows path has been measured
+ *   crossing this boundary, and a rule written against an unmeasured shape is
+ *   how `redactUrls` came to cover one of the two grammars it was believed to
+ *   cover.
+ *
+ *   A PATH CONTAINING A SPACE loses only the portion before the space —
+ *   `/Users/<name>/Library/Application` becomes the marker and
+ *   `Support/…/data.db` stays. The USERNAME is in the redacted portion, which is
+ *   the disclosure DEPLOY-02 names, and the tail is a fixed vendor path carrying
+ *   nothing about the operator. Stated because it is visible in the output and a
+ *   reader who has not been told will otherwise read the surviving tail as a
+ *   failure of the rule rather than its stated edge.
+ */
+function redactPaths(text: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    let j = i;
+    if (WHITESPACE_CHARS.includes(text[i])) {
+      // A whitespace run, copied through verbatim so the message's own shape —
+      // including newlines in a stack-shaped string — is preserved exactly.
+      while (j < text.length && WHITESPACE_CHARS.includes(text[j])) j += 1;
+      out += text.slice(i, j);
+    } else {
+      while (j < text.length && !WHITESPACE_CHARS.includes(text[j])) j += 1;
+      out += redactPathToken(text.slice(i, j));
+    }
+    i = j;
+  }
+  return out;
 }
 
 /**
@@ -262,7 +405,14 @@ function redactUrls(text: string): string {
  * `tier1/parse/src/index.ts:101`, which is where that lesson was learned.
  *
  * Redact FIRST, truncate SECOND: truncating first would leave the front half of
- * a URL in the output, which is the half carrying the host.
+ * a URL in the output, which is the half carrying the host — and the front half
+ * of a PATH, which is the half carrying the operator's OS username.
+ *
+ * URLS FIRST, PATHS SECOND, and the order is load-bearing rather than
+ * arbitrary. A `file:///Users/…` or an `https://host/a/b` must be consumed WHOLE
+ * as a URL; with the path scan running first it would be shredded into a path
+ * marker with the scheme still attached, which reads like a different failure
+ * than the one that happened. `telemetry.spec.ts` asserts both orderings.
  */
 export function describeError(e: unknown): string {
   const name =
@@ -271,7 +421,7 @@ export function describeError(e: unknown): string {
       : "";
   const body = String(e);
   const text = name === "" || body.startsWith(name) ? body : name + ": " + body;
-  return redactUrls(text).slice(0, ERROR_TEXT_LIMIT);
+  return redactPaths(redactUrls(text)).slice(0, ERROR_TEXT_LIMIT);
 }
 
 /** Record the most recent error. Never throws — it is the error path. */

@@ -136,13 +136,39 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               so recording it is what makes a wrong admission
  *                               diagnosable.
  *   analyses.error            — a PLUGIN-GENERATED diagnostic, rendered through
- *                               `describeError` (which redacts URL-shaped
- *                               substrings before truncating) and truncated again
- *                               at the write. Never target bytes. Enforced by
+ *                               `describeError` and truncated again at the write.
+ *                               Never target bytes. Enforced by
  *                               error-redaction.spec.ts's
  *                               `unredacted-persisted-error` rule, which exists
  *                               because the one line that writes this column is
  *                               not inside a catch clause.
+ *                               WHAT `describeError` REDACTS, stated as the two
+ *                               grammars it MATCHES rather than as the phrase
+ *                               this entry used to carry — "URL-shaped
+ *                               substrings" (corrected 2026-08-21, plan 01-11,
+ *                               WR-12). "URL-shaped" is wider than the pattern:
+ *                               it requires an explicit scheme and a literal
+ *                               `://`. What is enforced is (1) SCHEME-PREFIXED
+ *                               URLs and (2) ABSOLUTE FILESYSTEM PATHS — the
+ *                               second added 2026-08-21 so `sdk.meta.path()`,
+ *                               which carries the operator's OS username, does
+ *                               not cross the getStatus RPC (DEPLOY-02,
+ *                               STORE-07). Both redactions run BEFORE the
+ *                               truncation, URLs first.
+ *                               NOT REDACTED, named so this entry is not read as
+ *                               a complete guarantee: a SCHEME-RELATIVE
+ *                               reference — `//cdn/app.js?token=T` — is
+ *                               URL-shaped to a reader and not to the pattern,
+ *                               so it survives with its query intact; and a
+ *                               Windows `C:\Users\…` path uses the other
+ *                               separator. The store layer is not currently
+ *                               exposed to the first: every URL bound into a
+ *                               store statement has already been through
+ *                               `normaliseObservedUrl`, which is why WR-12 rated
+ *                               it a warning rather than a blocker. Both
+ *                               residuals are recorded beside `redactPaths` in
+ *                               `telemetry.ts` with the size of the job to close
+ *                               them.
  *   settings.value            — OPERATOR configuration (retention bounds). Never
  *                               target bytes and never a credential: nothing in
  *                               Phase 1 writes a secret to settings, and a phase
