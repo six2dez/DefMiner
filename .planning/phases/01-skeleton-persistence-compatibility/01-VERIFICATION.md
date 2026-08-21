@@ -1,140 +1,249 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-verified: 2026-08-21T08:18:25Z
-status: human_needed
-score: 9/9 must-haves verified
+verified: 2026-08-21T13:45:00Z
+status: gaps_found
+score: 7/9 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: human_needed
+  previous_score: 9/9
+  previous_verified: 2026-08-21T08:18:25Z
+  gaps_closed:
+    - "STORE-01 scope resolved — re-scoped to the four tables Phase 1 owns; STORE-08 opened for entities/evidence/audit with Phase 4/5 owners in the ROADMAP traceability table"
+    - "The 11 unclassified edge-probe rows confirmed still-acceptable at UAT"
+    - "IN-01 … IN-07 accepted as informational at UAT"
+    - "The three judgment-tier prohibitions (CORE-01, STORE-01, CORE-10) reviewed and accepted at UAT, with CORE-01 enforcement scheduled"
+  gaps_remaining:
+    - "UAT gap 1 (observations.url verbatim persistence) — PARTIALLY closed: name=value redaction lands and is live-proven; a bare query segment under 64 chars still persists verbatim"
+    - "UAT gap 2 (CORE-01 has no wired enforcement) — PARTIALLY closed: the AST gate exists and is mutation-proven, but misses four call forms, the globalThis idiom, and the whole engine package"
+  regressions: []
+gaps:
+  - truth: "`observations.url` does not persist query-string values verbatim; the path and parameter names are retained, the values are redacted or hashed before the row is written"
+    status: partial
+    reason: "The `name=value` half is genuinely closed and proven end to end against the real database file, with a committed mutation run showing the assertion goes red. But a query segment with NO `=` is classified as a NAME and retained verbatim up to `QUERY_NAME_MAX = 64`. Independently executed through `normaliseObservedUrl`: `?token=ghp_AAAA…` -> `?token=<redacted>` (correct), `?ghp_AAAA…` -> `?ghp_AAAA…` (survives byte-for-byte), `?eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdef` -> unchanged. A GitHub PAT is 40 chars, an AWS access key id is 20, a Stripe secret ~32, a session id 26-32, a UUID 36 — every common credential format is under the bound and is written whole into a column `db.ts` documents as never garbage-collected, surviving project deletion and force-reinstall. The residual IS disclosed in the source (T-01-31), so it is named rather than hidden — but no executed case can fail on it, and `schema.spec.ts:39-46` was rewritten in the same batch to assert the containing claim is 'NOW TRUE'. That is the one combination a phase about honest gates cannot ship: an unfalsifiable residual underneath an upgraded claim."
+    severity: major
+    artifacts:
+      - path: "packages/backend/src/store/observations.ts"
+        issue: "redactQueryValues:96-101 — the `eq === -1` branch pushes `segment.slice(0, QUERY_NAME_MAX)`, retaining a bare credential verbatim"
+      - path: "packages/backend/src/store/observations.spec.ts"
+        issue: "lines 128-140 are the ONLY case for the bound and use a name of QUERY_NAME_MAX + 40 — the one length at which truncation is visible. No case uses a bare segment SHORTER than the bound, so no test in the file can fail on the residual"
+      - path: "packages/backend/src/store/schema.spec.ts"
+        issue: "lines 39-46 assert 'Nothing below can hold a response body, a cookie or an authorization token' and that 'THAT CLAIM WAS FALSE UNTIL 2026-08-21 AND IS NOW TRUE'. A 40-character PAT in observations.url is an authorization token in that column"
+      - path: "scripts/phase1/tracer-e2e.sh"
+        issue: "FIXTURE_URL:131 uses `$SECRET_PARAM=$SECRET_VALUE` only — the live proof never exercises a bare segment"
+    missing:
+      - "Redact a bare (`=`-less) segment as a value with no name, per 01-REVIEW.md CR-06's fix — or bring QUERY_NAME_MAX down to a length no credential fits in (<=16)"
+      - "A case in observations.spec.ts using a 40-character bare token that asserts it does not survive, and that goes red when the branch is reverted"
+      - "Extend redaction to the two sibling grammars 01-REVIEW.md WR-11 names and I independently reproduced: userinfo (`https://user:pass@cdn.test/a.js` survives verbatim) and `;`-delimited parameters"
+      - "Either back the schema.spec.ts claim with an executed case or downgrade its wording until one exists"
+  - truth: "No code that ships in the plugin can introduce outbound traffic — a call to sdk.requests.send, sdk.net.*, a global fetch, or an import of caido:http fails a gate"
+    status: partial
+    reason: "The gate is real: `outbound-prohibition.spec.ts` runs under `pnpm test`, walks 14 backend modules with a by-name non-vacuity assertion and a descended-into-subdirectories assertion, executes every rule's failure path against inline fixtures, and stays quiet on `telemetry.ts`'s prose mention of `caido:http` — I planted `sdk.requests.send(req)` into the real `hooks/passive.ts` and the gate went red naming the file, the surface and the reason, then restored it. But the plan's own must_have truth is 'a call to sdk.requests.send ANYWHERE in a non-spec module fails a gate', and I executed four forms that do not: `let r; r = sdk.requests; r.send()`, `const { requests } = sdk; requests.send()`, `sdk.requests[m](q)`, and `sdk.requests.send.call/.apply(...)` — plus `sdk.requests.sendRaw()` on a positively identified requests receiver. `globalThis.fetch(url)` and `window.fetch(url)` are missed, and that is the sharp one: `telemetry.ts:289` already uses `(globalThis as {...}).performance` — the codebase's own idiom for reaching a global is the one form the gate cannot see. Separately, `packages/engine/src` ships in the bundle and is imported by index.ts / consumer.ts / lifecycle.ts, and NO gate walks it for outbound surfaces — `boundary.spec.ts` checks imports only (no Caido, no backend), so a `fetch(` added to `pipeline.ts`, the 'no speculative retrieval' module, passes every gate in the repo. The gate's header discloses 'an alias rebound in an INNER SCOPE' as its boundary; none of the missed shapes is an inner-scope rebind, so a reader who trusts the header is misled about the reach."
+    severity: major
+    artifacts:
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "receiverAliases is populated only from a VariableDeclaration initializer, so assignment aliases and `const { requests } = sdk` are invisible; calleeParts returns undefined for a computed key and the gate treats 'could not read' as 'clean'; outbound-fetch matches only a bare-identifier callee; outbound-send matches only the method name `send`"
+      - path: "packages/engine/src"
+        issue: "Ships in the bundle, imported by production backend modules, walked by no outbound gate at all — including pipeline.ts"
+      - path: "packages/backend/src/store/error-redaction.spec.ts"
+        issue: "STORE-07's sibling gate bottoms out in a bare-identifier check. Independently executed: `e.message`, `String(e as Error)`, `e.toString()`, `JSON.stringify(e)` and `const x = e; String(x)` all report clean. Because TypeScript types a catch binding as `unknown`, `String(e as Error)` and `(e as Error).message` are the forms the compiler pushes an author toward, and the gate is blind to both. (It does correctly resolve a non-listed binding name — `catch(ex){ String(ex) }` IS caught.)"
+    missing:
+      - "Populate receiverAliases from a binding pattern (`const { requests, net } = sdk`) and from assignment expressions"
+      - "Once a receiver is positively identified as `requests`, flag any method not on a read-only allowlist (get/query/inScope), the posture outbound-net already takes"
+      - "Match a member-access callee named `fetch` on `globalThis`/`window`/`self`, and flag `.call`/`.apply`/`Reflect.apply` on a requests/net member expression"
+      - "Flag, or at minimum REPORT as unanalysable, a computed member access on an identified outbound receiver and a non-literal dynamic import specifier (WR-14)"
+      - "Extend the walk to packages/engine/src, or add a sibling gate there, with its own by-name non-vacuity assertion"
+      - "Extend error-redaction.spec.ts past bare-identifier reach — at minimum a property access, a cast, and a copy of the caught binding (CR-05)"
+      - "Rewrite the gate header's boundary 2 to state what the walk actually resolves"
 deferred: []
 prohibitions:
   - requirement_id: CORE-01
-    statement: "MUST NOT issue any outbound network request to a target or to a third party in this phase."
-    verification: judgment
+    statement: "MUST NOT issue any outbound network request to a target or to a third party in this phase — no caido:http fetch, no sdk.requests.send, no sdk.net.connect, no global fetch, no speculative retrieval of any kind."
+    verification: gate
+    declared_status: resolved
     status: unverified
     flagged: true
-    evidence: "No `sdk.requests.send`, `caido:http`, `fetch(`, or `net.*` call exists in any non-spec source under packages/*/src. The shipped bundle's entire import set is one specifier (`crypto`). NO WIRED ENFORCEMENT EXISTS: the DIST-05 allowlist admits `caido:http`, and `sdk.requests.send` needs no import at all, so neither gate would catch a regression."
-  - requirement_id: STORE-01
-    statement: "MUST NOT retain operator browsing evidence beyond what the analysis needs — no body bytes, headers, cookies, or column capable of holding a secret."
-    verification: judgment
+    evidence: "The must-NOT itself DID NOT happen: no outbound call exists in any non-spec source under packages/backend/src or packages/engine/src (independently scanned), and `node scripts/ci/check-bundle-imports.mjs` reports the shipped bundle's entire import set as one specifier, `crypto`. The plan declares this prohibition `status: resolved, verification: gate`. Fail-closed: the wired enforcement does not cover what the statement claims — four sdk.requests.send call forms, globalThis/window fetch, and the entire engine package are outside its reach. Enforcement is PARTIAL, so the disposition is unverified-and-flagged, never a silent pass."
+  - requirement_id: STORE-03
+    statement: "MUST NOT persist a query-string VALUE from a target-controlled URL into observations.url. Parameter names, path, scheme and host are retained; every value is replaced before the row is written."
+    verification: gate
+    declared_status: resolved
     status: unverified
     flagged: true
-    evidence: "Column-shape half IS gated: schema.spec.ts enforces an explicit column allowlist plus a forbidden-name check, read from PRAGMA table_info. But `observations.url` persists query strings verbatim for 90 days (WR-07), and a query string routinely carries a session token — so the broader prohibition is in live tension with a deferred finding. Not silently passing."
+    evidence: "Proven for `name=value`: run 20260821T102525Z-17213 shows `SELECT url FROM observations` read with sqlite3 from OUTSIDE Caido returning `…?v=<redacted>&access_token=<redacted>`, and the committed mutation run 20260821T102509Z-4998 shows the assertion firing when redactQueryValues is removed. NOT proven for a bare `=`-less segment, which is also a query-string value from a target-controlled URL and which survives verbatim under 64 chars. Enforcement is partial; declared resolved."
+  - requirement_id: STORE-07
+    statement: "MUST NOT render a caught exception into a persisted or logged string without passing it through describeError first."
+    verification: gate
+    declared_status: resolved
+    status: unverified
+    flagged: true
+    evidence: "Zero violations across the store layer and no residual `String(e)` anywhere under packages/backend/src/store (independently grepped). The gate covers four rules including the non-catch `unredacted-persisted-error` rule that reaches `analyses.ts:194`. But it sees only a BARE IDENTIFIER reference to the binding: e.message, String(e as Error), e.toString(), JSON.stringify(e) and a copy all report clean. Enforcement is partial; declared resolved."
   - requirement_id: CORE-10
     statement: "MUST NOT present partial passive coverage as complete."
     verification: judgment
     status: unverified
     flagged: true
-    evidence: "Counter identifiers are honest — `proxiedResponsesObserved`, not a target-completeness noun. A scan for completeness-asserting identifiers (all*/every*/complete*/total*/full*) in telemetry.ts returned nothing. No wired gate enforces this on future identifiers."
-human_verification:
-  - test: "Decide the WR-07 persistence policy: `observations.url` (packages/backend/src/store/observations.ts:39, `normaliseObservedUrl`) strips only the fragment and keeps the query string verbatim for 90 days, in a database that survives project deletion and force-reinstall — while telemetry.ts:236 redacts that identical value out of error text before it crosses the RPC."
-    expected: "An explicit operator decision: keep verbatim (accept a durable record of real browsing incl. tokens in query strings), redact at write, or shorten retention for the url column specifically."
-    why_human: "A privacy/utility tradeoff, not a correctness defect. The code matches must_have truth 01-01 #2, which explicitly requires the query be preserved. Deliberately deferred by the code review."
-  - test: "Resolve STORE-01's scope. The requirement reads 'SQLite schema covering artifacts, occurrences, analyses, entities, evidence, and audit'. Three exist (artifacts, observations=occurrences, analyses) plus an unnamed `settings`. `entities`, `evidence` and `audit` do not exist. REQUIREMENTS.md:49 marks STORE-01 `[x]` complete and ROADMAP.md:363 maps STORE-01 exclusively to Phase 1 — no later phase claims the three missing tables."
-    expected: "Either re-scope STORE-01's wording to the three tables Phase 1 legitimately owns and open a new requirement for entities/evidence/audit against Phase 4/5, or amend the ROADMAP traceability table so those tables have an owner."
-    why_human: "A planning/requirements-ledger decision. Building empty tables with no writer in Phase 1 would be worse; the phase's own probe ledger (01-PROBE.md row 19) already flags 'where entities/evidence/audit land (Phases 4 and 5)' as UNRESOLVED. But that intent is not reflected in the roadmap, so the deferral cannot be auto-confirmed."
-  - test: "Review the three judgment-tier prohibitions listed in this file's frontmatter (CORE-01 outbound traffic, STORE-01 secret-capable persistence, CORE-10 completeness claims)."
-    expected: "Each accepted, or an enforcement mechanism scheduled."
-    why_human: "Authored descriptor-less with no wired check; they correctly dispose {status: unverified, flagged: true}. That disposition is expected, not a failure — but it is never a silent pass."
-  - test: "Review the 11 `unclassified` edge-probe rows in 01-PROBE.md (rows 2, 8, 15, 16, 19, 23, 24, 25, 26, 34, 37 — CORE-02, CORE-04, CORE-08, CORE-09, STORE-01, STORE-03, STORE-04, STORE-05, STORE-06, COMPAT-02, DIST-05)."
-    expected: "Each confirmed still-acceptable or promoted to a resolved disposition."
-    why_human: "Deliberately unresolved planner assumptions. Confirmed still surfaced in the ledger and referenced across all six plans — not silently dropped."
-  - test: "Review the seven open informational findings IN-01 … IN-07 in 01-REVIEW.md."
-    expected: "Accepted as informational or scheduled."
-    why_human: "Left open by decision in the code review."
+    evidence: "Carried forward unchanged from the 2026-08-21T08:18 verification and accepted by the operator at UAT test 3. Counter identifiers remain honest (proxiedResponsesObserved, not a target-completeness noun). Judgment-tier, autonomous run: NON-AUTHORITATIVE LLM-judge verdict, human review recommended."
+  - requirement_id: STORE-01
+    statement: "MUST NOT retain operator browsing evidence beyond what the analysis needs — no body bytes, headers, cookies, or column capable of holding a secret."
+    verification: judgment
+    status: unverified
+    flagged: true
+    evidence: "The column-shape half is gated (schema.spec.ts enforces a PRAGMA-read column allowlist plus a forbidden-name check). The 'capable of holding a secret' half is now in DIRECT tension with gap 1 above rather than merely deferred: observations.url can hold a 40-character PAT, and schema.spec.ts asserts it cannot."
 ---
 
 # Phase 1: Skeleton, Persistence & Compatibility — Verification Report
 
 **Phase Goal:** A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
-**Verified:** 2026-08-21T08:18:25Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Verified:** 2026-08-21T13:45:00Z
+**Status:** gaps_found
+**Re-verification:** Yes — after the `--gaps-only` run executing plans 01-07, 01-08 and 01-09
 
 ## Goal Achievement
 
-The goal is achieved. Every one of the seven ROADMAP Success Criteria is verified against the codebase, and both `verification: backstop` truths are closed by explicit measured evidence rather than abstention. The five human items below are decisions and flagged prohibitions, not defects — none of them blocks the phase or the next one.
+**The phase GOAL is achieved. The two UAT gaps are not fully closed.**
 
-Verification was adversarial: I did not accept SUMMARY claims, I re-derived the load-bearing facts myself. Where a gate's ability to fail was in question, I reintroduced the defect and confirmed the gate went red.
+Those are separate findings and collapsing them would misreport the phase. All seven ROADMAP Success Criteria hold against the codebase — I re-confirmed each, and none regressed under the gap-closure work. What did not land is the *enforcement* the gap-closure plans were written to add. Both gaps are **partially** closed: each shipped a real, wired, mutation-proven mechanism, and each mechanism has holes wide enough that the truth it claims to guarantee is not guaranteed.
+
+That distinction matters more here than in most phases, because this phase's entire subject is gates that can fail honestly. A gate that passes because it cannot see the violation is the failure mode this phase exists to prevent, and it is the failure mode both new gates exhibit.
+
+The project's own code review reached the same conclusion first: **CR-02 … CR-06 are five BLOCKER-severity findings, all against plans 01-07/08/09, and all are listed `open` in `01-REVIEW.md`'s resolution block** (`fixed_at: 08:05` predates the gap-closure review pass at `11:21`). I did not take the review's word for any of them — I re-executed each and they hold.
 
 ### Observable Truths
 
-| # | Truth (ROADMAP Success Criterion) | Status | Evidence |
+| # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | `onInterceptResponse` is non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `passive.ts:119` is `export function onResponse(...): void`, not async. **I wrote my own probe** invoking the registered callback: returns `undefined`, `.then` is undefined. The queue entry holds exactly `{id, bytes, kind}` where `bytes` is `body.length` — a scalar, so no Request/Response/Body reference survives the call (CORE-05). |
-| 2 | Work queue is bounded, overflow count visible; can never grow without limit | ✓ VERIFIED | **Independent probe I authored**: cap 500 holds at `depth=500`, the 501st offer leaves `depth=500, overflowCount=1`, the OLDEST entry is dropped, order is FIFO, and `overflowCount` is not reset by a take. `new BoundedQueue(499)` throws naming 500. Surfaced on `getStatus()` as `queueOverflowCount` (`index.ts:130`). |
-| 3 | 200-chunk SPA leaves plugin UI/RPC responsive; max sync slice recorded and under the Phase 0 threshold | ✓ VERIFIED | `results/spa-load.json`: 200 chunks / 17,953,135 bytes, `max_slice_ms` **0.029** against a `max_sync_slice_ms_budget` of **25**. RPC measured EXTERNALLY: loaded median 1.163 ms / p95 1.269 ms vs baseline median 1.254 ms / p95 1.338 ms — 26 loaded samples, 0 errors. `overflow: 0`, `queue_depth_at_end: 0`, `processed: 200`. Gated by `tests/phase1-load.spec.ts` with a >0 guard and a version-consistency guard so `expected_version` cannot be edited to rescue a run. |
-| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | Live restart in `spa-load.json`: `identical: true`, `plugin_reattached: true`, schema v2 → v2, `migration_advanced_version: false`, 200/200/200 rows before and after. Dedup proven on a **real Caido instance** — `results/runs/20260821T075936Z-12874/artifacts.json` holds ONE row, `seen_count: 2`, against TWO observation rows with distinct `request_id`s. `project_id` is in every PRIMARY KEY, asserted by **`PRAGMA table_info` pk ordinals, not DDL text** (`schema.spec.ts:144`), with non-vacuity guards on both the table list and the column list. |
-| 5 | Offsets and hashes derive from `toRaw()` bytes; a non-UTF-8 fixture round-trips without corruption | ✓ VERIFIED | **I reproduced the digests independently on the host**: `corpus/encoded/nonutf8.js` is 222 bytes / `4dc8826e…fee94d` raw, and 242 bytes / `9197a051…19e6` after a `toText()` round trip. The corruption is real and the plugin takes the raw path (`consumer.ts:189`). Hooks never touch either method — AST-gated in `admit.spec.ts:355`, and that gate is itself proven to fail on a violating fixture (`admit.spec.ts:372`). |
-| 6 | CI gate fails the build if the backend bundle imports a specifier outside the Phase 0 allowlist | ✓ VERIFIED | **Corrected criterion confirmed in ROADMAP.md** (allowlist form, with the derivation). **I executed both paths.** Real bundle: exits 0, import set is exactly `crypto`. Fails (exit 1, naming the specifier) on all five criterion-named specifiers — `zlib`, `util`, `stream`, `perf_hooks`, `process` — plus `node:crypto` and `caido:crypto`. Missing file exits 2. |
-| 7 | A Caido build below the declared minimum produces a clear message, not an obscure failure | ✓ VERIFIED | `compat-smoke.json` leg C, on the **real 0.55.3 binary**: `refusal_mode: guard_refused`, `guard_reached: true`, `artifact_rows_after_proxied_js: 0`, `database_file_present: false`. Message names both versions: "DefMiner requires Caido 0.57.1 or newer; this instance reports 0.55.3." |
-| 8 | **[backstop, 01-05]** Under a 200-chunk load the max sync slice stays within budget and the plugin's RPC keeps answering an external prober | ✓ VERIFIED | Not abstained — closed by the measured `spa-load.json` above. `recordSlice` is called from production code (`consumer.ts:567`, paired with the `finishAnalysis` write), not from the harness, so the number the prober reads is fed by the pipeline. |
-| 9 | **[backstop, 01-06]** A below-minimum build refuses legibly, confirmed on the real 0.55.3 binary | ✓ VERIFIED | Not abstained — closed by leg C above, on the genuine binary at `/Users/six2dez/.caido/caido-cli`, version-asserted (`expected_version` == `reported_version` == 0.55.3). |
+| 1 | `onInterceptResponse` is non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `passive.ts:120` is `export function onResponse(...)`, not async. Unchanged since the prior verification's independent probe (returns `undefined`, no `.then`); regression-checked. |
+| 2 | Work queue is bounded, overflow count visible, can never grow without limit | ✓ VERIFIED | `queue.ts` exposes `overflowCount` as a getter that a take does not reset; `index.ts:130` surfaces `queueOverflowCount` on `getStatus()`. Prior verification probed cap=500 / 501st offer / FIFO drop independently; regression-checked. |
+| 3 | 200-chunk SPA leaves UI and RPC responsive, max sync slice recorded and under the Phase 0 threshold | ✓ VERIFIED | `results/spa-load.json` holds `max_slice_ms: 0.029000043869018555` against a 25 ms budget, gated by `tests/phase1-load.spec.ts`, which still pins `EXPECTED_CAIDO_VERSION = "0.57.1"` (line 34). The `P1_EXPECT_VERSION` move to 0.58.0 is a harness default only — see the note below. |
+| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | Unchanged. Live restart in `spa-load.json` (`identical: true`, `plugin_reattached: true`, 200/200/200 rows); dedup proven on a real instance in `results/runs/20260821T075936Z-12874/`. |
+| 5 | Offsets and hashes derive from `toRaw()` bytes; a non-UTF-8 fixture round-trips without corruption | ✓ VERIFIED | `consumer.ts:189` `body.toRaw()`; the `toText()` AST gate in `admit.spec.ts` passes and is itself fixture-proven. Digests host-reproduced in the prior verification. |
+| 6 | A CI gate fails the build if the backend bundle imports any specifier outside the Phase 0 allowlist | ✓ VERIFIED | **Re-executed:** `node scripts/ci/check-bundle-imports.mjs` -> `packages/backend/dist/index.js: 1 import specifier(s): crypto`, exit 0. Fail paths were executed against seven planted specifiers in the prior verification. CR-04 concerns the CORE-01 *source* gate, not this one. |
+| 7 | A Caido build below the declared minimum produces a clear message, not an obscure failure | ✓ VERIFIED | `MIN_CAIDO = "0.57.1"` unchanged in `compat.ts:43`; three distinct refusal messages at `:352/:363/:372` naming both versions. Proven on the real 0.55.3 binary in `compat-smoke.json` leg C. |
+| 8 | **[UAT gap 1]** `observations.url` does not persist query-string values verbatim | ✗ FAILED (partial) | `name=value` closed and live-proven. Bare `=`-less segments under 64 chars survive byte-for-byte — I executed this. See gaps. |
+| 9 | **[UAT gap 2]** No shipped code can introduce outbound traffic without failing a gate | ✗ FAILED (partial) | Gate real and mutation-proven; misses four call forms, the `globalThis` idiom, and the whole engine package. See gaps. |
 
-**Score:** 9/9 truths verified (0 present, behavior-unverified)
+**Score:** 7/9 truths verified (0 present, behavior-unverified)
 
-### The two post-plan code-review changes, verified against current code
+### What the gap-closure work genuinely delivered
 
-| Finding | Claim | Status | Evidence |
-|---|---|---|---|
-| CR-01 (blocker) | A failed `onProjectChange` registration left all CORE-09 epoch re-checks inert | ✓ FIX COMPLETE | `installLifecycle` returns `projectChangeArmed` (`lifecycle.ts:284-330`); on failure it sets the flag false, forces `activeProjectId = null`, and aborts the live token. `index.ts:278-285` refuses at step 5b — no consumer, no ready latch, no `onInterceptResponse`. The test at `lifecycle.spec.ts:572` now asserts the CORRECT behaviour end-to-end **through the real `init()` against a real SQLite fixture**: `interceptResponseHandlers.length === 0`, reason contains "project isolation unavailable", and `listArtifacts`/`listObservations` are empty for BOTH projects. The prior inverted assertion is gone. Also covers `onProjectChange` being absent, not merely throwing. |
-| WR-01 | Retention cascade delete was unbounded per digest (measured 3001 against a 512 cap) | ✓ FIX COMPLETE — **mutation-proven** | The cascade now enumerates child KEYS under `LIMIT` within the remaining budget (`retention.ts:143-155`, `deleteDigest`) instead of deleting by digest. The spec seeds a **non-degenerate** fan-out of `cap * 3` (`retention.spec.ts:324`). I reintroduced the defect (unbounded `obsLimit`, guard removed) and the test went **red**; restoring turned it green. The cap is real, not asserted on degenerate input. |
+Adversarial verification is not one-sided, and three things here are stronger than the SUMMARYs claimed rather than weaker:
 
-### Gate honesty audit
-
-The context flagged four historical gates that could not fail. I checked each class directly rather than trusting the fix:
-
-| Historical defect | Current state | How I confirmed |
+| Deliverable | Status | Evidence I executed or re-derived |
 |---|---|---|
-| `project_id` rule matched a bare column list | ✓ Closed | `sql-discipline.spec.ts:481` — "project_id in the SELECT LIST is not scoping — only the predicate counts". **I planted an unscoped multi-row `SELECT … FROM observations WHERE observed_at < ?`** and the gate failed with `unscoped-multi-row … does not scope on project_id in its WHERE clause`. |
-| `ON CONFLICT … DO UPDATE SET` parsed as a table named `set` | ✓ Closed | `sql-discipline.spec.ts:469` — "an upsert is not a multi-row UPDATE just because it says DO UPDATE SET". |
-| Retention spec seeded one observation per artifact | ✓ Closed | Fan-out spec uses `cap * 3`; mutation-proven above. |
-| `lifecycle.spec.ts:507` asserted the CR-01 defect was correct | ✓ Closed | Replaced by the DISARMS test; I read it and ran it. |
-| Vacuous enumeration generally | ✓ Guarded | Non-vacuity assertions present at `schema.spec.ts:148/175`, `sql-discipline.spec.ts:325/379`, `boundary.spec.ts`, and `phase1-load.spec.ts` (`digest_sample.length > 0`). |
+| Live end-to-end redaction proof | ✓ REAL, and better than a spec assertion | `results/runs/README-01-07.md` documents three runs against live Caido 0.58.0. The middle one is a **committed mutation run**: `redactQueryValues` removed, 8 assertions fired including the raw-column one. The final run's `observations-url-raw.txt`, read by `sqlite3` from OUTSIDE Caido, contains `…?v=<redacted>&access_token=<redacted>`. The distinction between a read-path redaction and a write-path one is exactly the one that matters, and the artifact settles it against the file. |
+| CORE-01 gate mutation-proof on the real tree | ✓ REAL — I performed it myself | I appended `sdk.requests.send(req)` to the real `packages/backend/src/hooks/passive.ts`, ran the gate, and it failed naming the file, the surface and the full consequence text; `git checkout` restored it and the tree is clean. |
+| Pre-policy exposure measurement | ✓ REAL, and unusually honest | `results/observation-url-exposure.json` reports a **measured** zero and says so in as many words — "a MEASURED zero taken against a database that was found and read, not a zero produced by finding no database — those are different facts and only the first one is a clean bill of health". 8 plugin databases scanned, 1 DefMiner, counts only, no URL value recorded anywhere. The operator's `leave` disposition is recorded against a count. |
+| Store-layer error redaction | ✓ WIRED | Zero residual `String(e)`/template/concat of a caught binding anywhere under `packages/backend/src/store/` (independently grepped). `describeError` redacts scheme-prefixed URLs BEFORE truncating. The gate's `unredacted-persisted-error` rule genuinely reaches the non-catch parameter at `analyses.ts:194`, which is the one line that writes the `analyses.error` column. |
+| Plan/code policy agreement | ✓ DONE | `01-01-PLAN.md` truth #2 is amended in place, and says plainly that the POLICY changed rather than that the implementation was wrong. |
+| COVERAGE.md prose -> gate | ✓ DONE | Rows 9, 27 and 38 each now name `outbound-prohibition.spec.ts` and the specific rule. |
+
+### Independently executed gate-reach probes
+
+I imported `auditSource` from both new gates and probed them directly. Controls first, so a `MISSED` cannot be read as the probe being broken.
+
+**CORE-01 gate — `outbound-prohibition.spec.ts`**
+
+| Shape | Result |
+|---|---|
+| `sdk.requests.send(q)` | ✓ CAUGHT (control) |
+| `const r = sdk.requests; r.send(q)` | ✓ CAUGHT (control) |
+| `const { send } = sdk.requests; send(q)` | ✓ CAUGHT (control) |
+| `fetch(u)` bare | ✓ CAUGHT (control) |
+| `import ... from "caido:http"` | ✓ CAUGHT (control) |
+| `sdk.net.connect(h,p)` | ✓ CAUGHT (control) |
+| `this.sdk.requests.send(q)` | ✓ CAUGHT |
+| `sdk.requests.send?.(q)` | ✓ CAUGHT |
+| `globalThis.fetch(u)` | ✗ MISSED |
+| `(globalThis as any).fetch(u)` | ✗ MISSED |
+| `window.fetch(u)` | ✗ MISSED |
+| `const { requests } = sdk; requests.send(q)` | ✗ MISSED |
+| `let r; r = sdk.requests; r.send(q)` | ✗ MISSED |
+| `sdk.requests.send.call(...)` / `.apply(...)` | ✗ MISSED |
+| `Reflect.apply(sdk.requests.send, ...)` | ✗ MISSED |
+| `const s = sdk.requests.send; s(q)` | ✗ MISSED |
+| `const m = "send"; sdk.requests[m](q)` | ✗ MISSED |
+| `const r = "requests"; sdk[r].send(q)` | ✗ MISSED |
+| `sdk.requests.sendRaw(q)` | ✗ MISSED |
+| `await import("caido:" + "http")` | ✗ MISSED |
+| `new XMLHttpRequest()` … `.send()` | ✗ MISSED |
+| `new WebSocket("wss://…")` | ✗ MISSED |
+
+**Correction to the orchestrator's brief, in the reviewer's favour.** The brief states that `01-REVIEW.md` CR-03 "wrongly lists `const r = sdk.requests; r.send()` as a miss — the reviewer over-stated it". CR-03 does not list that shape. Its executed table lists `assignment alias // let r; r = sdk.requests; await r.send(req)` — a *reassignment*, not a `const` initializer. I ran both: the `const` form is CAUGHT, the assignment form is MISSED, exactly as CR-03 reports. **CR-03's table is accurate as written and needs no correction.** The distinction is load-bearing, because `receiverAliases` is populated only from a `VariableDeclaration` initializer.
+
+**STORE-07 gate — `error-redaction.spec.ts`**
+
+| Shape | Result |
+|---|---|
+| `catch(e){ return String(e); }` | ✓ CAUGHT (control) |
+| `catch(ex){ return String(ex); }` (name outside the listed set) | ✓ CAUGHT — resolves from the catch clause, not the name |
+| `catch(e){ return (e as any).message; }` | ✗ MISSED |
+| `catch(e){ return "x: " + e.message; }` | ✗ MISSED |
+| `catch(e){ return String(e as Error); }` | ✗ MISSED |
+| `catch(e){ return e.toString(); }` | ✗ MISSED |
+| `catch(e){ return JSON.stringify(e); }` | ✗ MISSED |
+| `catch(e){ const x = e; return String(x); }` | ✗ MISSED |
+
+**Redaction — `normaliseObservedUrl`**
+
+| Input | Output |
+|---|---|
+| `…/a.js?token=ghp_AAAA…` (36 chars) | `…/a.js?token=<redacted>` ✓ |
+| `…/a.js?ghp_AAAA…` (bare, 36 chars) | `…/a.js?ghp_AAAA…` ✗ verbatim |
+| `…/a.js?eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdef` (bare, 63) | unchanged ✗ verbatim |
+| `…/a.js?a=1&sessionsecretvalue` | `…/a.js?a=<redacted>&sessionsecretvalue` ✗ partial |
+| `https://user:pass@cdn.test/a.js` | unchanged ✗ verbatim (userinfo — matches WR-11, reproduced independently) |
+| `…/a.js#tok=secret` | `…/a.js` ✓ fragment stripped |
+| idempotence on its own output | ✓ holds |
+
+### Open code-review findings — status re-derived, not read
+
+`01-REVIEW.md`'s `resolution.open` list contains **CR-02, CR-03, CR-04, CR-05, CR-06** plus WR-11 … WR-16 and IN-08 … IN-13. `fixed_at` is `08:05`, which is *before* the gap-closure review pass at `11:21`, so none of pass 2's findings has been addressed.
+
+| Finding | Severity | Re-verified? | Disposition here |
+|---|---|---|---|
+| CR-02 `globalThis.fetch` invisible | BLOCKER | ✓ executed | Folded into gap 2. Sharpened: `telemetry.ts:289` already uses this exact idiom for `globalThis.performance` |
+| CR-03 receiver forms missed | BLOCKER | ✓ executed, table confirmed accurate | Folded into gap 2 |
+| CR-04 `packages/engine/src` outside the walk | BLOCKER | ✓ confirmed — engine ships, is imported by index/consumer/lifecycle, and `boundary.spec.ts` checks imports only | Folded into gap 2 |
+| CR-05 `e.message` invisible | BLOCKER | ✓ executed | Folded into gap 2 |
+| CR-06 bare param < 64 chars verbatim | BLOCKER | ✓ executed | Folded into gap 1 |
+| WR-11 `;` params, path tokens, userinfo | WARNING | ✓ userinfo reproduced | Listed under gap 1's missing items |
+| WR-12 … WR-16, IN-08 … IN-13 | WARNING / INFO | Not re-derived | Remain open in `01-REVIEW.md` |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `packages/engine/src/queue.ts` | Bounded queue | ✓ VERIFIED | Behaviorally probed independently |
-| `packages/engine/src/chunker.ts` | 64 KiB / 4 KiB overlap windows | ✓ VERIFIED | Probed: 65536→1 window, 65537→2 with exactly 4096 overlap, absolute ascending offsets, 200000 bytes covered with no gap, 0 bytes→0 windows |
-| `packages/engine/src/deadline.ts`, `pipeline.ts`, `yield.ts` | Temporal yield, injected clock | ✓ VERIFIED | Clock injected, not captured; `walk` returns `partial` at deadline |
-| `packages/engine/src/decode.ts`, `digest.ts` | Byte-exact identity | ✓ VERIFIED | Host-reproduced digests |
-| `packages/engine/src/thresholds.generated.ts` / `thresholds.ts` | Byte-generated from `go-no-go.json` | ✓ VERIFIED | Ran `gen-thresholds.mjs` twice — byte-identical, `git diff --exit-code` clean |
-| `packages/backend/src/hooks/passive.ts`, `admit.ts` | Non-async hook, named reject reason | ✓ VERIFIED | Reject-reason union covered per member; `revalidation` distinct from `not_scriptish` |
-| `packages/backend/src/ingest/consumer.ts` | One drain loop, reload-after-await, all store call sites | ✓ VERIFIED | `upsertArtifact` + `recordObservation` unconditional in the same iteration; `recordSlice` paired with `finishAnalysis` |
-| `packages/backend/src/store/{migrations,artifacts,observations,analyses,settings,retention,db}.ts` | Forward-only ladder, content-addressed reads, retention | ✓ VERIFIED | 4 tables; ladder no-op on second boot proven live |
-| `packages/backend/src/lifecycle.ts` | `onProjectChange` incl. null branch, cancellation | ✓ VERIFIED | Synchronous `applyProjectChange`, abort→drain→swap→re-arm |
-| `packages/backend/src/telemetry.ts` | One counter object, `recordSlice`, `slimStatus` | ✓ VERIFIED | Single object; hook and consumer both increment it; URL redaction before truncation |
-| `packages/backend/src/compat.ts` | COMPAT-01 guard + capability probe | ✓ VERIFIED | See comparator note below |
-| `scripts/ci/check-bundle-imports.mjs` | DIST-05 allowlist gate | ✓ VERIFIED | Both paths executed |
-| `scripts/phase1/{tracer-e2e,runtime-answers,spa-load,compat-smoke,fetch-caido}.sh` | Live measurement harness | ✓ VERIFIED | Produced the committed results |
-| `results/runtime-answers.json` | SQLite version + reload readability | ✓ VERIFIED | `sqlite_version: 3.46.0` (≥3.24 required for the upsert); `sdk.requests.get(id)` readable **510/510** (10 immediate + 500 burst), `reloadMissing: 0`, `peakQueueDepth: 323` proving the queue genuinely filled |
-| `results/spa-load.json` | Max slice, RPC latency, restart persistence | ✓ VERIFIED | As above |
-| `results/compat-smoke.json` | Three-leg surface matrix | ✓ VERIFIED | Legs A (0.57.1) and B (0.58.0) both compatible, 16 surfaces each with SEPARATE `probe_ok` and `exercised` fields; leg C refuses |
+| `packages/backend/src/store/observations.ts` | Query-value redaction at the write path | ⚠️ PARTIAL | `redactQueryValues` + `QUERY_VALUE_REDACTION` + `QUERY_NAME_MAX` exported; `normaliseObservedUrl` calls it BEFORE `.slice(0, URL_MAX)` as required. Bare-segment branch is the hole. |
+| `packages/backend/src/store/observations.spec.ts` | Behavioural spec incl. token case and idempotence | ⚠️ PARTIAL | Idempotence, first-`=` split, empty segments, percent-encoding and fragment all covered. No case can fail on the bare-segment residual. |
+| `packages/backend/src/store/error-redaction.spec.ts` | Static gate, four rules, failure paths executed | ⚠️ PARTIAL | 415 lines; non-vacuity by name; all four rules' failure paths executed; correctly ignores a `String(x)` outside a catch and a type member named `error`. Bare-identifier reach only. |
+| `scripts/phase1/tracer-e2e.sh` | Live proof the secret never reaches the column | ✓ VERIFIED | `SECRET_VALUE` from `openssl rand -hex 16` per run; asserts absence from BOTH `sqlite3 SELECT url FROM observations` and the RPC json. Three committed runs incl. a failing mutation run. |
+| `results/observation-url-exposure.json` | Read-only per-database counts, values never recorded | ✓ VERIFIED | 8 plugin DBs scanned, 1 DefMiner, `unredacted_with_query` measured 0; three search roots each with a status and a note. |
+| `packages/backend/src/outbound-prohibition.spec.ts` | CORE-01's wired AST gate | ⚠️ PARTIAL | 564 lines; exports `auditSource` + `FORBIDDEN_OUTBOUND`; walks and asserts by name; documentation case live-asserted against the real `telemetry.ts`; mutation-proven by me on the real tree. Reach is narrower than its truth claims. |
+| `COVERAGE.md` rows 9 / 27 / 38 | Reference the enforcing gate | ✓ VERIFIED | All three rewritten from prose to a named gate + rule, in both the main table and the summary table. |
+| `01-01-PLAN.md` truth #2 | Amended to the new policy | ✓ VERIFIED | Amended in place with the reason recorded. |
 
 ### Key Link Verification
 
 | From | To | Via | Status |
 |---|---|---|---|
-| `index.ts` | `compat.ts` | `checkCompat` first in `init()`, returns before `meta.db()` | ✓ WIRED |
-| `index.ts` | `lifecycle.ts` | `onProjectChange` after migrate, before the ready latch; **refuses if unarmed** | ✓ WIRED |
-| `index.ts` | `hooks/passive.ts` | `onInterceptResponse` registered LAST, after the ready latch | ✓ WIRED |
-| `hooks/passive.ts` | `engine/queue.ts` | `queue.offer({id, bytes, kind})` | ✓ WIRED |
-| `hooks/passive.ts` | `telemetry.ts` | Hook increments the single counters object directly | ✓ WIRED |
-| `ingest/consumer.ts` | `store/{artifacts,observations,analyses}.ts` | Identity + edge + analysis writes, unconditional per iteration | ✓ WIRED |
-| `ingest/consumer.ts` | `telemetry.ts` | `recordSlice(result.maxSliceMs)` paired with `finishAnalysis` | ✓ WIRED |
-| `ingest/consumer.ts` | `store/retention.ts` | `sweepRetention` scheduled on the cadence from the drain loop | ✓ WIRED — live evidence: `retentionSweeps: 2` in `spa-load.json` with no external trigger |
-| `engine/*` | (nothing Caido) | SDK-free boundary | ✓ WIRED — zero `caido:`/`@caido/*` imports; `packages/engine/package.json` declares **no dependencies at all** |
+| `store/observations.ts` | itself | `normaliseObservedUrl` -> `redactQueryValues` before `slice(0, URL_MAX)` | ✓ WIRED — redact-then-truncate ordering confirmed |
+| `store/{observations,analyses,artifacts,settings,migrations,retention}.ts` | `telemetry.ts` | `describeError(e)` replaces every `String(e)` | ✓ WIRED — zero residual bare stringifications |
+| `scripts/phase1/tracer-e2e.sh` | `store/observations.ts` | `sqlite3 "$PLUGIN_DB" "SELECT url FROM observations"` | ✓ WIRED — output committed per run |
+| `outbound-prohibition.spec.ts` | `packages/backend/src` | recursive walk + `createSourceFile`, non-vacuity by name | ✓ WIRED |
+| `outbound-prohibition.spec.ts` | `packages/engine/src` | — | ✗ NOT WIRED — no gate walks the engine package for outbound surfaces |
+| `error-redaction.spec.ts` | `packages/backend/src/store` | recursive walk, non-vacuity by name + "finds error-shaped bindings to audit" | ✓ WIRED (scope is the store dir by design) |
+| `consumer.ts` | `store/observations.ts` | retention cadence / `runRetentionPass` | ✓ WIRED (no sweep needed — operator chose `leave` against a measured 0 rows) |
 
 ### Data-Flow Trace (Level 4)
 
 | Value | Source | Real data? | Status |
 |---|---|---|---|
-| `getStatus().maxSliceMs` | `telemetry.maxSliceMs` ← `recordSlice(walk().maxSliceMs)` in the consumer | Yes — 0.029 ms read by an external prober on a live instance | ✓ FLOWING |
-| `getStatus().queueDepth/Cap/OverflowCount` | Live `BoundedQueue` instance | Yes | ✓ FLOWING |
-| `getArtifacts()` / `getObservations()` | `listArtifacts`/`listObservations` SELECT against `sdk.meta.db()` | Yes — live run returned 1 artifact `seen_count=2` and 2 observations with real digests and URLs | ✓ FLOWING |
-| `getCompat().surfaces` | `probeSurfaces(surfaceCtx)` feature-detected inside QuickJS | Yes — 16 surfaces per leg, `probe_ok` and `exercised` recorded separately | ✓ FLOWING |
-| `analyses.max_slice_ms` / `bytes_walked` | The same `walk()` result as `recordSlice`, one statement apart | Yes — non-null on both `done` and `partial` paths | ✓ FLOWING |
+| `observations.url` as stored | `recordObservation` -> `normaliseObservedUrl` -> the column | Yes — read back with `sqlite3` from outside Caido | ✓ FLOWING |
+| `analyses.error` | `describeError(e)` at the write | Yes — plugin-generated, URL-redacted before truncation | ✓ FLOWING |
+| `observation-url-exposure.json` counts | Read-only `sqlite3` over 8 discovered plugin DBs | Yes — a measured 0, distinguished from a not-found 0 | ✓ FLOWING |
+| `getStatus().maxSliceMs` | `recordSlice(walk().maxSliceMs)` in the consumer | Yes — 0.029 ms read by an external prober | ✓ FLOWING |
 
 No hollow props, no static fallbacks, no mock-terminated chains.
 
@@ -142,87 +251,72 @@ No hollow props, no static fallbacks, no mock-terminated chains.
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Full suite | `pnpm test` | 28 files / **637 tests** passed | ✓ PASS |
-| Typecheck | `pnpm typecheck` | exit 0 | ✓ PASS |
-| Lint | `pnpm lint` | exit 0 | ✓ PASS |
-| Knip | `pnpm knip` | exit 0 | ✓ PASS |
+| Full suite at HEAD | `pnpm test` | 31 files / 705 tests passed, 0 failures, 1.46 s | ✓ PASS |
 | DIST-05 pass path | `node scripts/ci/check-bundle-imports.mjs` | exit 0, import set = `crypto` | ✓ PASS |
-| DIST-05 fail path ×7 | same, against planted fixtures | exit 1 on zlib/util/stream/perf_hooks/process/node:crypto/caido:crypto | ✓ PASS |
-| Threshold determinism | `gen-thresholds.mjs` ×2 + `git diff --exit-code` | byte-identical | ✓ PASS |
-| DIST-06 pins | inspect `pnpm-lock.yaml` + `pnpm-workspace.yaml` | `primevue: 4.1.0`, `tailwindcss: 3.4.13` in overrides; `packages:` and `allowBuilds` (`esbuild: true`, `sharp: false`) both present and independent | ✓ PASS |
-| ENC-01 digests | independent host `crypto` reproduction | 222 B / `4dc8826e…`, 242 B / `9197a051…`, empty `e3b0c442…` — all match | ✓ PASS |
-| CORE-03/CORE-06 | verifier-authored probe spec | 3/3 passed | ✓ PASS |
-| CORE-09 mid-drain | `vitest -t "write NO row under either project when the change lands mid-drain"` | passed | ✓ PASS |
-| CORE-09 epoch abandon | `vitest packages/backend/src/ingest/consumer.spec.ts -t "project"` | passed | ✓ PASS |
-| WR-01 mutation | reintroduce unbounded cascade | test went RED, restored GREEN | ✓ PASS |
-| SQL-discipline mutation | plant unscoped multi-row SELECT | gate went RED, restored GREEN | ✓ PASS |
-
-Working tree left clean — all probes and mutations reverted (`git status` shows only pre-existing planning artifacts).
+| CORE-01 gate mutation-proof | Planted `sdk.requests.send(req)` in real `hooks/passive.ts`, ran the gate, restored | 1 failed / 31 passed; message named file + surface + reason; `git status` clean after | ✓ PASS |
+| CORE-01 gate reach | Imported `auditSource`, 22 shapes | 8 caught, 14 missed | ✗ FAIL (gap 2) |
+| STORE-07 gate reach | Imported `auditSource`, 8 shapes | 2 caught, 6 missed | ✗ FAIL (gap 2) |
+| Redaction reach | Imported `normaliseObservedUrl`, 7 shapes | 3 correct, 4 verbatim/partial | ✗ FAIL (gap 1) |
+| Engine outbound scan | grep `fetch(`/`XMLHttpRequest`/`WebSocket`/`requests.send` over `packages/engine/src` | zero hits — clean today, ungated tomorrow | ✓ PASS (state), ✗ FAIL (enforcement) |
 
 ### Probe Execution
 
-Step 7c is **N/A for this phase**. `01-PROBE.md` is an edge-probe *disposition ledger* (38 rows), not an executable `scripts/*/tests/probe-*.sh` suite; no such scripts exist in this repo. The phase's executable evidence is `scripts/phase1/*.sh`, whose committed outputs I validated above and which are gated by `tests/phase1-{runtime,load,compat}.spec.ts`.
+No `scripts/*/tests/probe-*.sh` exist in this repo. The phase's runnable evidence is the `scripts/phase1/*.sh` harness, whose committed outputs are gated by `tests/phase1-*.spec.ts` inside the suite run above.
 
-The 11 `unclassified` rows are **confirmed still surfaced** — present in the ledger (rows 2, 8, 15, 16, 19, 23, 24, 25, 26, 34, 37) and referenced across all six plans (01-01: 4, 01-02: 2, 01-03: 3, 01-04: 5, 01-05: 2, 01-06: 2). Not silently dropped.
+| Probe | Command | Result | Status |
+|---|---|---|---|
+| `scripts/phase1/tracer-e2e.sh` | Executor-run ×3, outputs committed under `results/runs/` | 2 PASS + 1 deliberate FAIL (mutation) | ✓ EVIDENCE VERIFIED — raw column dumps inspected directly |
+| `tests/phase1-load.spec.ts`, `phase1-runtime.spec.ts`, `phase1-compat.spec.ts` | in `pnpm test` | pass, still pinned to 0.57.1 | ✓ PASS |
 
 ### Requirements Coverage
 
-All 22 phase requirement IDs are claimed by a plan. **Zero orphaned** — no ID mapped to Phase 1 in REQUIREMENTS.md is unclaimed.
+All 22 IDs declared across the nine plans. `ROADMAP.md:375` maps exactly `CORE-01 … CORE-10, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06` to Phase 1 — the same 22. **No orphaned requirements.** `STORE-08` was split out at UAT and has owners (Phase 4 for `entities`/`evidence`, Phase 5 for `audit`) at `ROADMAP.md:378-379`.
 
-| Requirement | Plan | Status | Evidence |
+| Requirement | Source plan(s) | Status | Evidence |
 |---|---|---|---|
-| CORE-01 | 01-01, 01-03 | ✓ SATISFIED | Non-async hook returning `undefined`; scalars only |
-| CORE-02 | 01-03 | ✓ SATISFIED | `admit.ts` gates status→body→size→kind→scope; a named reason per reject, every union member covered; `revalidation` (304) distinct from `not_scriptish` |
-| CORE-03 | 01-03 | ✓ SATISFIED | Independently probed |
-| CORE-04 | 01-01, 01-03 | ✓ SATISFIED | In-flight latch — one drain loop; WR-06 fixed so a second `startConsumer` rebinds rather than orphaning |
-| CORE-05 | 01-01, 01-03 | ✓ SATISFIED | `sdk.requests.get(id)` after the await; `reloadMissing`/`reloadNoResponse` counted separately; AST assertion forbids referencing the result across an await |
-| CORE-06 | 01-03 | ✓ SATISFIED | Independently probed; yield is temporal, clock injected |
-| CORE-07 | 01-03 | ✓ SATISFIED | `scan_state='partial'` with non-null `max_slice_ms` and `bytes_walked` on deadline expiry |
-| CORE-08 | 01-03, 01-04 | ✓ SATISFIED | Corpus version is IN the primary key, so a stale-corpus hit is inexpressible; WR-05 fixed so a stranded `pending` claim reports stale, not cache-hit |
-| CORE-09 | 01-05 | ✓ SATISFIED | Abort→drain→swap→re-arm, synchronous; epoch re-checked before identity, edge, analysis, and finish; **CR-01 closed** |
-| CORE-10 | 01-05 | ✓ SATISFIED | One counter object; max slice measured externally at 0.029 ms |
-| STORE-01 | 01-01, 01-04 | ⚠️ **PARTIAL** | 3 of 6 named table groups exist (artifacts, occurrences=observations, analyses) plus `settings`. **`entities`, `evidence`, `audit` do not exist and no later phase claims them.** See human item 2. |
-| STORE-02 | 01-01, 01-04 | ✓ SATISFIED | `project_id` in every PRIMARY KEY by `PRAGMA table_info` pk ordinal; `''` reserved for `settings` only |
-| STORE-03 | 01-01, 01-03 | ✓ SATISFIED | `artifacts` has NO `url` column (asserted); identity is `(project_id, sha256)` |
-| STORE-04 | 01-04 | ✓ SATISFIED | `detector_set_hash` in the analyses key |
-| STORE-05 | 01-04 | ✓ SATISFIED | Forward-only ladder; populated-DB migration preserves rows; re-run is a no-op — proven live (v2→v2, `migration_advanced_version: false`) |
-| STORE-06 | 01-03, 01-04 | ✓ SATISFIED | Scheduled from the consumer loop (live: `retentionSweeps: 2`); cap invariant mutation-proven; WR-04 fixed so the interval counts rows written, not iterations |
-| STORE-07 | 01-01, 01-04 | ✓ SATISFIED | Positional `?` only; AST gate rejects named params, array-as-sole-arg, interpolation, RETURNING, `last_insert_rowid()`; WR-08 fixed so the gate audits the whole backend package as its header claimed |
-| COMPAT-01 | 01-06 | ✓ SATISFIED | Guard refuses below-minimum on the real 0.55.3 binary with a message naming both versions; no hook, no DB file |
-| COMPAT-02 | 01-06 | ✓ SATISFIED | Three-leg matrix incl. 0.58.0, the release that shipped after Phase 0 measured everything |
-| ENC-01 | 01-01, 01-03 | ✓ SATISFIED | Host-reproduced byte-exact digests; `toText()` AST-forbidden in hooks |
-| DIST-05 | 01-02 | ✓ SATISFIED | Allowlist gate, both paths executed |
-| DIST-06 | 01-02 | ✓ SATISFIED | Exact pins resolved in the lockfile; `allowBuilds` independent |
+| CORE-01 | 01-01, 01-09 | ⚠️ SATISFIED, enforcement partial | Handler non-async (`passive.ts:120`). The *prohibition* tagged CORE-01 is flagged — see frontmatter |
+| CORE-02 … CORE-08 | 01-03, 01-04 | ✓ SATISFIED | Admission gates, single consumer, `sdk.requests.get` reload, temporal yield, deadline degradation, dedup — all verified in the prior pass, regression-clean |
+| CORE-09, CORE-10 | 01-05 | ✓ SATISFIED | `onProjectChange` incl. the null branch and the CR-01 disarm path; `recordSlice` wired from production code |
+| STORE-01 | 01-01, 01-04 | ✓ SATISFIED (re-scoped at UAT) | Four tables; column allowlist read from `PRAGMA table_info`. Prohibition flagged |
+| STORE-02 | 01-01, 01-04 | ✓ SATISFIED | `project_id` in every PRIMARY KEY, asserted by pk ordinals not DDL text |
+| STORE-03 | 01-01, 01-03, 01-07, 01-08 | ⚠️ SATISFIED, enforcement partial | Content-addressed identity ✓; the redaction prohibition is flagged — gap 1 |
+| STORE-04, STORE-05, STORE-06 | 01-04, 01-08 | ✓ SATISFIED | Corpus version on analysis rows; forward-only ladder no-op on second boot proven live; retention cascade bounded and mutation-proven (WR-01) |
+| STORE-07 | 01-01, 01-04, 01-07 | ⚠️ SATISFIED, enforcement partial | Positional `?` only, enforced by `sql-discipline.spec.ts` ✓. The error-redaction prohibition sharing this ID is flagged — CR-05 |
+| COMPAT-01, COMPAT-02 | 01-06 | ✓ SATISFIED | `MIN_CAIDO = 0.57.1`, refusal proven on the real 0.55.3 binary; 16-surface matrix across three legs |
+| ENC-01 | 01-01, 01-03 | ✓ SATISFIED | `toRaw()` path; `toText()` AST-gated and the gate itself fixture-proven |
+| DIST-05 | 01-02 | ✓ SATISFIED | Re-executed; 1 specifier |
+| DIST-06 | 01-02 | ✓ SATISFIED | Pins present |
+
+**Traceability note (info, not a defect).** The prohibition in `01-09-PLAN.md` carries `requirement_id: CORE-01`, but `REQUIREMENTS.md:36`'s CORE-01 text is the non-async-handler requirement — it says nothing about outbound traffic. The must-NOT and the must are tagged with one id and mean different things. Worth a ledger tidy so a future reader is not misled about which one a gate is enforcing.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| — | — | `TBD` / `FIXME` / `XXX` | — | **NONE.** Zero debt markers across all 73 files changed in this phase. The blocker gate is clean. |
-| — | — | `TODO` / `HACK` / `PLACEHOLDER` | — | **NONE.** |
-| `consumer.ts` | 524 | `visit: () => {}` — the Phase 3 detector seam | ℹ️ Info | Declared, commented, and correct for this phase: the goal explicitly says "nothing analysed yet beyond a hash". Not a stub. |
-| `spa-load.json` | — | Max slice measured with an empty `visit` | ℹ️ Info | 0.029 ms of 25 ms is honest for a pipeline that hashes but does not analyse. It is **not predictive of Phase 3** — the headroom will be consumed by detectors. Re-measure when the first detector lands. |
-| `index.ts` 311/316, `admit.ts` 125, `queue.ts` 86 | — | `return []` / `return null` | ℹ️ Info | All legitimate guard clauses, not empty implementations. |
+| — | — | No `TBD`, `FIXME` or `XXX` in any file modified by this phase | — | Debt-marker gate: clean |
+| `packages/backend/src/store/observations.ts` | 57-62, 96-101 | Documented residual with no falsifying test | ⚠️ Warning | The disclosure is genuine (T-01-31 named in source), which is why this is a warning here and a blocker under gap 1 only in combination with the `schema.spec.ts` claim |
+| `packages/backend/src/outbound-prohibition.spec.ts` | header boundary 2 | Disclosed boundary narrower than the actual one | ⚠️ Warning | "an alias rebound in an inner scope" understates the reach; a reader trusting it is misled |
+| `packages/backend/src/store/schema.spec.ts` | 39-46 | Claim upgraded to TRUE without an executed case behind it | 🛑 Blocker | Folded into gap 1 |
 
-### Deferred Items
+### Note for the record — `P1_EXPECT_VERSION` 0.57.1 -> 0.58.0
 
-None. No gap identified in this phase is covered by a later milestone phase — notably **STORE-01's three missing tables are NOT deferred**, because ROADMAP.md:363 maps STORE-01 exclusively to Phase 1 and neither Phase 4 nor Phase 5 names them in a goal or success criterion. `01-PROBE.md` row 19 records the *intent* to land them in Phases 4/5, but that intent is unresolved and unwired, so it cannot be auto-confirmed as a deferral. Routed to human decision instead.
+Judged as asked, and it leaves **no Phase 0 threshold assertion weaker**.
 
-### Notable finding: a plan defect the executor caught
-
-Plan 01-06's `must_haves` truth #2 states "0.6.0 compares GREATER than 0.57.1 under the three-part numeric comparison". **That is backwards** — under numeric comparison minor 6 < minor 57, so 0.6.0 is LESS; GREATER is precisely what the string-compare trap produces. Verifying literally against the plan text would have flagged a false failure.
-
-The implementation is **correct**: I probed `cmpCaidoVersion("0.6.0", "0.57.1")` directly and it returns `-51` (6 − 57), and `checkCompat` refuses 0.6.0. `compat.spec.ts:43` executes the trap rather than describing it — asserting `"0.6.0" > "0.57.1"` is TRUE as raw strings, then that the comparator is negative, then that the guard refuses. `01-06-SUMMARY.md` Deviation 1 records the plan bug, the reasoning, and the fix (commit `86dead5`) accurately. Marked VERIFIED against corrected intent.
+`env.sh:79` sets the *harness default* to 0.58.0. Every artifact that gates a Phase 0 threshold was measured on 0.57.1 and is still asserted against 0.57.1: `tests/phase1-load.spec.ts:34` and `tests/phase1-runtime.spec.ts:18` both hard-code `EXPECTED_CAIDO_VERSION = "0.57.1"`, and `compat.ts:43` still declares `MIN_CAIDO = "0.57.1"`. The 0.58.0 runs are the three 01-07 tracer runs, which prove STORE-03 redaction — not a performance or compatibility threshold. The deliberate hard-coding is doing exactly the loud-failure job it was left to do: re-measuring `spa-load.json` on 0.58.0 without updating the pin fails the suite rather than silently rebaselining. The only residual is cosmetic (WR-15: `tracer-e2e.sh`'s header still names 0.57.1).
 
 ### Gaps Summary
 
-**No gaps.** No truth failed, no artifact is missing or a stub, no key link is unwired, and no blocker anti-pattern exists. The phase goal — installs, observes every proxied response without stalling, durably remembers what it saw, nothing analysed beyond a hash — is achieved and demonstrated on live Caido instances at three versions.
+Nine plans, 705 passing tests, a clean bundle gate, and seven ROADMAP criteria that all hold — this is a strong phase, and the goal in the roadmap is met. The two gaps are about the *last* thing the phase set out to do, which was to give two prohibitions teeth.
 
-The phase does not reach `passed` for one reason only: five items require human judgment. Three are the descriptor-less judgment-tier prohibitions, which correctly dispose `{status: unverified, flagged: true}` and must never be silently absorbed into a pass. The other two are decisions the phase deliberately left to a human — WR-07's persistence policy, and STORE-01's scope reconciliation.
+Both new gates are well-built where they reach: pure `auditSource` functions, by-name non-vacuity assertions, every rule's failure path executed, a documentation case proving the AST walk is not a text scan, and — for CORE-01 — a real mutation proof I reproduced against a shipped module. That is a higher standard than most gates in most repos.
 
-**One item deserves attention before Phase 4/5 planning:** STORE-01 is marked `[x]` complete in REQUIREMENTS.md while three of its six named table groups do not exist and no phase owns them. That is a ledger inconsistency that will silently drop `entities`, `evidence` and `audit` from v1 if nobody acts. It does not block Phase 2.
+The problem is what sits outside their reach, and how it was described. `globalThis.fetch` is missed by a gate whose own codebase already reaches globals that way. `const { requests } = sdk` is missed by a gate that already handles the inner destructure. `packages/engine/src` ships in the bundle and no gate walks it for outbound surfaces at all — including `pipeline.ts`, the module whose job is "no speculative retrieval". `e.message` is missed by a redaction gate in a codebase where TypeScript's `unknown` catch binding pushes authors toward exactly the casts the gate cannot see. And a bare query parameter under 64 characters — which is every common credential format on the web — is written whole into a durable column, under a spec file that was rewritten in the same batch to say it cannot be.
+
+None of these breaks the plugin. All of them break the claim, and the claim is the deliverable. The fixes are local and well-specified — `01-REVIEW.md` CR-02 … CR-06 already carry concrete patches, and I have added the two shapes I found independently (userinfo, and `sdk.requests.sendRaw` on a positively identified receiver) to the missing lists.
+
+**Recommended next step:** `/gsd-plan-phase --gaps` against this file. Both gaps are one focused plan each — gap 1 is a branch in `redactQueryValues` plus a failing case; gap 2 is widening two AST walks and adding a third over the engine package.
 
 ---
 
-_Verified: 2026-08-21T08:18:25Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-08-21T13:45:00Z_
+_Verifier: Claude (gsd-verifier) — re-verification after the `--gaps-only` run of plans 01-07, 01-08, 01-09_
