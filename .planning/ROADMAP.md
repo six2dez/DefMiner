@@ -67,7 +67,7 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (14 plans total)
+**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification, plus 3 further gap-closure plans in 3 waves from the 2026-08-21T17:40 re-verification (CR-07) — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (17 plans total)
 
 Plans:
 **Wave 1**
@@ -125,6 +125,18 @@ Plans:
 **Wave 14** *(blocked on 01-13 — needs every redaction change landed before the live tier can assert them)*
 
 - [x] 01-14-PLAN.md — **Live proof**: the tracer widened to every grammar this phase now redacts, reading the plugin database read-only, with one passing and one deliberately failing run committed against a real Caido — *wave 14*
+
+**Wave 15** *(gap closure round 3 — re-verification 2026-08-21T17:40 found UAT gap 1 still open through a different door; blocked on Wave 14)*
+
+- [ ] 01-15-PLAN.md — **CR-07, the blocker**: a segment that is entirely a credential and contains an `=` — every standard-base64-padded token — is parsed as `name=value` and the credential is kept. Fixed in the shared per-segment helper so both delimiters close together, with the adversarial set derived from the policy rather than the branch, absence asserted on the padding-stripped core, and the three artifacts that assert this cannot happen corrected — *wave 15*
+
+**Wave 16** *(blocked on 01-15 — shares `observations.spec.ts` and `schema.spec.ts`, and the whole round is serialised)*
+
+- [ ] 01-16-PLAN.md — **The gate widenings**: the CORE-11 gate reports an unreadable RECEIVER instead of dropping it and covers `navigator.sendBeacon` and dynamic code construction; the STORE-07 gate reaches `+=`, `.concat` and push-then-join; `describeError` stops being able to throw on the path it exists to contain; the `analyses.error` disclosure names the residual that exists; the pattern gate's claim is brought level with its enforcement — *wave 16*
+
+**Wave 17** *(blocked on 01-16 — the live tier needs every redaction and gate change landed and the tree quiet, which is the lesson 01-14 recorded)*
+
+- [ ] 01-17-PLAN.md — **Live proof and the missing gate**: two `openssl rand -base64` dyes carry a padded credential through a real Caido into the real database file, asserted absent under the padding-stripped spelling that would have made it recoverable, with one passing and one deliberately failing run committed — plus the no-version-literal gate the tracer's header has claimed since round 2 and which nothing in the repository performed — *wave 17*
 
 ### Phase 2: Error Containment & Observability
 
