@@ -24,6 +24,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { makeFakeSdk } from "../test/fixtures/fake-sdk";
 
 import { REJECT_REASONS } from "./hooks/admit";
+import { ERROR_MAX } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import {
   counters,
@@ -418,6 +419,37 @@ describe("describeError", () => {
   it("handles null and undefined without throwing", () => {
     expect(describeError(null)).toBe("null");
     expect(describeError(undefined)).toBe("undefined");
+  });
+
+  it("caps at ERROR_TEXT_LIMIT, and ERROR_TEXT_LIMIT <= ERROR_MAX (IN-11)", () => {
+    // THE RELATIONSHIP, ASSERTED RATHER THAN COMMENTED.
+    //
+    // `analyses.ts` writes `describeError(error).slice(0, ERROR_MAX)` and its
+    // comment called `ERROR_MAX` (300) unreachable "in practice". It is
+    // unreachable ALWAYS, for every input, by CONSTRUCTION: `describeError`
+    // returns at most `ERROR_TEXT_LIMIT` characters, so the outer slice can
+    // never remove a character. "In practice" is a claim about what usually
+    // happens; this is a claim about what CAN happen, and the two are not the
+    // same kind of statement. A bound whose comment overstates why it holds is
+    // the same family of defect as a claim wider than its enforcement, which is
+    // what this whole plan is about.
+    //
+    // `migrations.ts:176-183` reached the OPPOSITE conclusion from the same
+    // situation and DELETED its outer slice, calling it a deliberate 300 -> 240
+    // narrowing. Either choice is defensible; what was missing from both is the
+    // assertion. With this in place the two files agree on the RELATIONSHIP even
+    // where they differ on the slice, and moving either constant the wrong way
+    // fails loudly at the moment the relationship stops holding.
+    //
+    // BOTH CONSTANTS ARE REFERENCED BY NAME. No numeric literal appears here on
+    // purpose: a literal makes the test keep passing while the code that matters
+    // drifts, which is precisely the failure mode being closed.
+    expect(ERROR_TEXT_LIMIT).toBeLessThanOrEqual(ERROR_MAX);
+
+    const rendered = describeError(new Error("q".repeat(5_000)));
+    expect(rendered.length).toBe(ERROR_TEXT_LIMIT);
+    expect(rendered.length).toBeLessThanOrEqual(ERROR_MAX);
+    expect(rendered.slice(0, ERROR_MAX)).toBe(rendered);
   });
 });
 

@@ -96,8 +96,13 @@ export type AnalysisRow = {
 
 /** `error` is a PLUGIN-generated diagnostic and never target bytes, but it is
  *  still bounded: an error string that quoted an unbounded value would defeat
- *  T-01-21 by the back door. */
-const ERROR_MAX = 300;
+ *  T-01-21 by the back door.
+ *
+ *  EXPORTED FOR ONE REASON ONLY (IN-11): so `telemetry.spec.ts` can assert
+ *  `ERROR_TEXT_LIMIT <= ERROR_MAX` against THIS constant rather than against a
+ *  copy of its value. A test that restated `300` would keep passing while the
+ *  code that matters drifted. Nothing imports it at runtime. */
+export const ERROR_MAX = 300;
 
 // ONE statement. `DO NOTHING` rather than `DO UPDATE`, because a claim must not
 // disturb a row that already exists — that row is either a finished analysis
@@ -205,10 +210,21 @@ export async function finishAnalysis(
       // rule, `unredacted-persisted-error`, aimed at exactly this shape.
       //
       // `describeError` takes a string perfectly well: `typeof error` is not
-      // `object`, so no class name is prepended, the URL redaction still runs,
-      // and the result is capped at `ERROR_TEXT_LIMIT` (240). That makes
-      // `ERROR_MAX` (300) unreachable in practice. The outer slice stays anyway,
-      // because it documents the COLUMN's bound rather than the renderer's.
+      // `object`, so no class name is prepended, the redactions still run, and
+      // the result is capped at `ERROR_TEXT_LIMIT` (240). That makes `ERROR_MAX`
+      // (300) unreachable BY CONSTRUCTION — for every input, not merely "in
+      // practice", which is what this comment used to say (IN-11). The two are
+      // different kinds of claim: "in practice" is about what usually happens,
+      // and this is about what CAN happen. The outer slice stays anyway, because
+      // it documents the COLUMN's bound rather than the renderer's, and those
+      // are two different guarantees.
+      //
+      // `migrations.ts:176-183` reached the OPPOSITE conclusion from the same
+      // situation and DELETED its outer slice as a deliberate 300 -> 240
+      // narrowing. The two files still differ on the slice and now AGREE on the
+      // relationship, because `telemetry.spec.ts` asserts
+      // `ERROR_TEXT_LIMIT <= ERROR_MAX` by name — which is the thing that makes
+      // either choice safe when somebody moves a constant.
       error === null ? null : describeError(error).slice(0, ERROR_MAX),
       projectId,
       sha256,
