@@ -109,3 +109,66 @@ The sixteen `INTEGRATE` surfaces are not covered by prose. Plan 01-06 exports th
 `tests/phase1-compat.spec.ts` asserts that the surface-name set recorded by BOTH smoke-test legs equals that
 exported list — so a surface integrated here and later dropped from the compatibility test fails the build
 rather than drifting.
+
+---
+
+## Machine-readable matrix (canonical schema)
+
+The three tables above are the human-readable record and carry the full reasoning, the row
+numbers `REQUIRED_SURFACES` cites, and the "exercised by" column. They are **not** in the schema
+`gsd-tools check api-coverage.verify-pre` parses, which requires a header whose first column is
+literally `capability` and exactly three cells per row (`capability | decision | reason`).
+
+This table is that same 40-surface decision set rendered in the canonical schema, so the seal gate
+can read it. It is generated from the tables above — every surface, every disposition, and every
+opt-out reason is the same content, with long reasons truncated to the gate's 200-character cell
+limit. `INTEGRATE (source-only)` rows appear here as plain `INTEGRATE` with the source-only
+qualification moved into the reason, because the gate's decision vocabulary is exactly
+`{INTEGRATE, OPT-OUT}`.
+
+The numbered tables remain the source of truth: `tests/phase1-compat.spec.ts` parses them (its row
+regex requires a numeric first cell, so it does not see this table), and the `REQUIRED_SURFACES`
+cross-check runs against them.
+
+| capability | decision | reason |
+|---|---|---|
+| sdk.events.onInterceptResponse | INTEGRATE | exercised by 01-01 tracer; 01-03 task 1; smoke legs A+B |
+| sdk.events.onProjectChange | INTEGRATE | exercised by 01-05 task 1; smoke legs A+B |
+| sdk.events.onInterceptRequest | OPT-OUT | Phase 1 observes responses only; a request hook would fire on traffic that has no body to hash and would add a second admission surface with no Phase 1 consumer. |
+| sdk.events.onUpstream | OPT-OUT | Synchronous, called before the request leaves, and only fires when the operator enables Upstream Plugins for a domain. It exists to *modify* routing — DefMiner modifies nothing. |
+| sdk.requests.get | INTEGRATE | exercised by 01-01 tracer + task 2 (delay ladder); 01-03 task 3; smoke legs A+B |
+| sdk.requests.inScope | INTEGRATE | exercised by 01-03 task 1 (admit.ts scope axis); smoke legs A+B |
+| sdk.requests.query | OPT-OUT | HTTPQL push-down over existing traffic is FIND-03, the retroactive scan, in Phase 6. Phase 1 observes live proxied traffic only. |
+| sdk.requests.matches | OPT-OUT | Consumer is the Phase 6 retroactive filter and the Phase 5 suppression rules; no Phase 1 caller exists. |
+| sdk.requests.send | OPT-OUT | **Prohibited in this phase**, not merely unused: plan 01-01 authors a `must_haves.prohibitions` entry forbidding any outbound request. Active retrieval is Phase 8 (ACTIVE-*). |
+| sdk.projects.getCurrent | INTEGRATE | exercised by 01-01 tracer (project_id resolution); 01-05 task 1; smoke legs A+B |
+| sdk.meta.db | INTEGRATE | exercised by 01-01 tracer; 01-04 all tasks; smoke legs A+B (incl. sqlite_version() re-read on B) |
+| sdk.meta.path | OPT-OUT | Decision P1-D3: Phase 1 stores no response bytes on disk. Writing under this path pulls the Phase 6 quota, orphan-cleanup and server-side-delivery problem (DEPLOY-*) forward for no Phase 1 benefit. |
+| sdk.meta.assetsPath | OPT-OUT | Reads static plugin assets. The detector rule corpus that will live there does not exist until Phase 3. |
+| sdk.meta.id | OPT-OUT | The plugin id is a build-time constant in `packages/backend/caido.config.ts`; reading it back adds a runtime call with no consumer until the Phase 2 diagnostics export. |
+| sdk.meta.version | OPT-OUT | Consumer is UPGRADE-01's populated-database upgrade matrix (Phase 11) and the Phase 2 diagnostics export. Phase 1 has no migration keyed on plugin version — the schema ladder uses `PRAGMA… |
+| sdk.meta.updateAvailable | OPT-OUT | Documented to throw when Caido Cloud is offline, and the Caido Developer Policy forbids any plugin self-update mechanism (DIST-03). Never integrated, in any phase. |
+| sdk.runtime.version | INTEGRATE | exercised by 01-06 task 2 (compat.ts); smoke legs A+B+C |
+| sdk.console.log | INTEGRATE | exercised by 01-01 tracer (error containment); 01-06 (the COMPAT-01 message); smoke legs A+B |
+| sdk.api.register | INTEGRATE | exercised by 01-01 tracer (getStatus, getArtifacts); smoke legs A+B |
+| sdk.api.send | OPT-OUT | Pushes events to a frontend. Decision P1-D5/P6-D2: Phase 1 ships no frontend, so there is no subscriber. Phase 5 (UI-*) integrates it, with UI-02's event coalescing as the reason it needs designing… |
+| sdk.scope.getAll | OPT-OUT | `sdk.requests.inScope(request)` already evaluates the default scope, which is the whole Phase 1 requirement (CORE-02). Enumerating scopes is only needed to check against a *specific* scope, which no… |
+| sdk.findings.create / .exists / .get | OPT-OUT | Native Findings projection is FIND-01/FIND-02 in Phase 5, and gated on high-signal results with stable dedupe keys. Phase 1 produces no findings at all — no detector exists until Phase 3. |
+| sdk.replay.createSession / .getCollections | OPT-OUT | One-click Replay handoff is ENDP-04 in Phase 9, and it needs the AST substrate to synthesise a request worth replaying. |
+| sdk.env. (8 methods) | OPT-OUT | Environment variables are operator-managed request substitution. DefMiner reads no secrets from the environment; the SEC-04 HMAC key lifecycle is Phase 4 and deliberately does not create a key or… |
+| sdk.graphql | OPT-OUT | GraphQL *operation extraction* from bundles is ENDP-06/Phase 9 and is a parsing problem, not an SDK one. This surface issues GraphQL against Caido itself, which nothing in v1 needs. |
+| sdk.hostedFile.create / .getAll | OPT-OUT | The operator-facing delivery path is DEPLOY-04 in Phase 6, and Phase 7's reconstructed sources are the first artifact worth delivering. Phase 1 produces no file to deliver (P1-D3). |
+| sdk.net.connect | OPT-OUT | Raw outbound connection. Same prohibition as `sdk.requests.send`: no outbound traffic in this phase, by an authored `must_haves.prohibitions` entry. |
+| Database.exec(sql) | INTEGRATE | exercised by 01-01 tracer; 01-04 task 1 (DDL only, IF NOT EXISTS, plus the PRAGMA user_version write) |
+| Database.prepare(sql) | INTEGRATE | exercised by 01-01 tracer; 01-04 tasks 2 and 3 (prepare-per-write) |
+| Statement.run(...params) | INTEGRATE | exercised by 01-01 tracer; 01-04 task 2; gated by sql-discipline.spec.ts |
+| Statement.get(...params) | INTEGRATE | exercised by 01-01 tracer (PRAGMA user_version, sqlite_version()); 01-04 tasks 1-3 |
+| Statement.all(...params) | INTEGRATE | exercised by 01-04 task 2 (listArtifacts); 01-01 getArtifacts RPC |
+| open(options) / OpenOptions | OPT-OUT | `sdk.meta.db()` returns an already-opened pooled handle; the plugin never opens its own database and therefore cannot set `maxConnections`, `busyTimeout` or `foreignKeys`. Recorded because decision… |
+| crypto (bare) — createHash | INTEGRATE | exercised by 01-01 digest.ts; DIST-05 allowlist |
+| string_decoder — StringDecoder | INTEGRATE | source-only (tree-shaken from the shipped bundle; not in REQUIRED_SURFACES): 01-03 task 3 (decode.ts) — ENC-02 binds here specifically; NOT in the shipped bundle, NOT in REQUIRED_SURFACES |
+| buffer — Buffer | INTEGRATE | source-only (tree-shaken from the shipped bundle; not in REQUIRED_SURFACES): 01-03 task 3 (decode.ts, the cross-checked second path); NOT in the shipped bundle, NOT in REQUIRED_SURFACES |
+| caido:crypto | OPT-OUT | Measured to FAIL to load inside Caido 0.57.1 (`could not load module`). Bare `crypto` is the working path. Explicitly listed in the DIST-05 gate's failing set so a `caido:` prefix match cannot… |
+| caido:http — fetch | OPT-OUT | Loads successfully, and is deliberately not used: same outbound-traffic prohibition as `sdk.requests.send`. Phase 0 also measured that it delivers nothing back to `onInterceptResponse`. |
+| fs, os, path, url, events, sqlite | OPT-OUT | All load inside Caido and are on the DIST-05 allowlist, but Phase 1 has no caller: no bodies are written to disk (P1-D3) and `sqlite` is reached only through `sdk.meta.db()`. Allowlisted-but-unused… |
+| TextDecoder / TextEncoder | OPT-OUT | Not globals and exported by no module Phase 0 probed. This is *why* items 35 and 36 exist; recorded so nobody re-derives the finding. |
