@@ -52,7 +52,12 @@ import { getRetentionBounds } from "../store/settings";
 // THE counter object, and `recordSlice` — the two halves of CORE-10's wiring.
 // Imported rather than injected: there is exactly one counter object in this
 // plugin (plan 01-05), and a dependency-injected one would be a second.
-import { counters, recordError, recordSlice } from "../telemetry";
+import {
+  counters,
+  describeError,
+  recordError,
+  recordSlice,
+} from "../telemetry";
 
 /**
  * How long to wait before re-checking an EMPTY queue.
@@ -271,7 +276,7 @@ export function startConsumer(
       // problem, and the plugin stopping is a bigger one.
       counters.consumerErrors++;
       recordError(e);
-      log("retention sweep failed: " + String(e).slice(0, 160));
+      log("retention sweep failed: " + describeError(e));
     }
   }
 
@@ -526,7 +531,7 @@ export function startConsumer(
           // so this counter and this log line are the entire error surface.
           counters.consumerErrors++;
           recordError(e);
-          log("consumer iteration failed: " + String(e).slice(0, 160));
+          log("consumer iteration failed: " + describeError(e));
         } finally {
           deps.enqueuedAt.delete(entry.id);
         }
@@ -563,7 +568,7 @@ export function startConsumer(
         .catch((e) => {
           counters.consumerErrors++;
           recordError(e);
-          log("drain failed: " + String(e).slice(0, 160));
+          log("drain failed: " + describeError(e));
         })
         .then(schedule, schedule);
     }, IDLE_POLL_MS);

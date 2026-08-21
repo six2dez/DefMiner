@@ -21,7 +21,10 @@ import { MAX_SYNC_SLICE_MS } from "@defminer/engine/thresholds";
 import ts from "typescript";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { makeFakeSdk } from "../test/fixtures/fake-sdk";
+
 import { REJECT_REASONS } from "./hooks/admit";
+import { resetDbHandleForTest } from "./store/db";
 import {
   counters,
   describeError,
@@ -35,6 +38,8 @@ import {
   URL_REDACTION,
   zeroedRejectCounters,
 } from "./telemetry";
+
+import { init } from "./index";
 
 const BACKEND_SRC = "packages/backend/src";
 const TELEMETRY_FILE = join(BACKEND_SRC, "telemetry.ts");
@@ -204,6 +209,50 @@ describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
     );
     expect(slimStatus().lastError).not.toContain("victim.example");
     expect(slimStatus().lastError).toContain(URL_REDACTION);
+  });
+
+  it("covers the object getStatus() ACTUALLY returns, not slimStatus() alone", async () => {
+    // THE WALK ABOVE COULD NOT SEE THIS. `getStatus()` returns
+    // `{ ...status(), caidoVersion }`, and `status()` carries `reason` —
+    // init()'s own failure text — alongside the projection. That field was built
+    // from a raw `String(e).slice(0, 160)`: redacted nowhere, and TRUNCATED
+    // FIRST, which keeps the front half of a URL and the front half is the half
+    // carrying the host. A walk rooted at slimStatus() is structurally blind to
+    // it, which is why the leak survived the plan that fixed the other one.
+    const registered: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      db: () =>
+        Promise.reject(
+          new Error(
+            "could not open https://victim.example/private/app.js?token=secret",
+          ),
+        ),
+      register: (name: string, fn: unknown) => {
+        registered[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+
+    await init(sdk);
+    // The memo now holds a rejected promise; leaving it would poison any later
+    // case in this file that resolved a handle.
+    resetDbHandleForTest();
+
+    const status = registered.getStatus();
+    const urls = walkValues(status)
+      .filter((e) => typeof e.value === "string")
+      .filter((e) => /https?:\/\//i.test(e.value as string));
+    expect(
+      urls.map((e) => e.path + " = " + String(e.value)),
+      "a URL crossed the getStatus RPC. Redaction that covers one of the two " +
+        "strings this payload carries is not redaction (T-01-26).",
+    ).toEqual([]);
+
+    // Non-vacuity: the reason is present and says what happened.
+    const reason = String((status as Record<string, unknown>).reason);
+    expect(reason).toContain("init failed");
+    expect(reason).toContain(URL_REDACTION);
+    expect(reason).not.toContain("victim.example");
+    expect(reason).not.toContain("token=secret");
   });
 
   it("carries no value longer than the documented truncation limit", () => {

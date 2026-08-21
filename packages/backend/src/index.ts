@@ -66,7 +66,7 @@ import { listArtifacts } from "./store/artifacts";
 import { getDb, readSqliteVersion } from "./store/db";
 import { migrate } from "./store/migrations";
 import { listObservations } from "./store/observations";
-import { slimStatus } from "./telemetry";
+import { describeError, slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
 // durable failure recording is ERR-04 and the health surface is OBS-01, both
@@ -226,10 +226,7 @@ export async function init(sdk: any): Promise<void> {
       statement = await db.prepare("SELECT 1");
     } catch (e) {
       statement = undefined;
-      log(
-        sdk,
-        "could not prepare a probe statement: " + String(e).slice(0, 120),
-      );
+      log(sdk, "could not prepare a probe statement: " + describeError(e));
     }
     surfaceCtx = { sdk, db, statement, sqliteVersion, createHash };
     const runtimeSurfaces = checkRuntimeSurfaces(surfaceCtx);
@@ -318,7 +315,13 @@ export async function init(sdk: any): Promise<void> {
     // Caido surfaces neither a throw nor a rejection from plugin code, so an init
     // failure that is not caught here is completely invisible.
     compatible = false;
-    compatReason = "init failed: " + String(e).slice(0, 160);
+    // describeError, NOT String(e): `compatReason` is returned as `reason` by
+    // status() on every getStatus() call, so it crosses the same RPC boundary
+    // slimStatus().lastError does. It redacts URL-shaped substrings BEFORE
+    // truncating — truncating first keeps the front half, which is the half
+    // carrying the host — and init-stage errors routinely quote the SQLite file
+    // path from sdk.meta.path() (T-01-26, DEPLOY-02).
+    compatReason = "init failed: " + describeError(e);
     log(sdk, compatReason);
     try {
       sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
