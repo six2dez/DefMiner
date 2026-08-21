@@ -124,7 +124,7 @@ Plans:
 
 **Wave 14** *(blocked on 01-13 — needs every redaction change landed before the live tier can assert them)*
 
-- [ ] 01-14-PLAN.md — **Live proof**: the tracer widened to every grammar this phase now redacts, reading the plugin database read-only, with one passing and one deliberately failing run committed against a real Caido — *wave 14*
+- [x] 01-14-PLAN.md — **Live proof**: the tracer widened to every grammar this phase now redacts, reading the plugin database read-only, with one passing and one deliberately failing run committed against a real Caido — *wave 14*
 
 ### Phase 2: Error Containment & Observability
 

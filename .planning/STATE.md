@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-13-PLAN.md
-last_updated: "2026-08-21T14:35:48.071Z"
+stopped_at: Completed 01-14-PLAN.md — phase 01 plans complete
+last_updated: "2026-08-21T15:10:06.886Z"
 last_activity: 2026-08-21
 last_activity_desc: 01-11 gap closure — URL userinfo and `;` path parameters redacted at the write path, the plugin-database path (and the OS username in it) kept off the getStatus RPC, and the no-pattern gate re-anchored on the AST across both modules; six mutations run
-state_head: 4e16c11536a6853ccf2f77b376e04a97ace9a956
+state_head: cce34e4abc34ff16edde18c8b191efd82daa0dd2
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -28,15 +28,15 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 13 of 14 complete — gap-closure round 2 running, plans 01-12 … 01-14 remain
-Status: Ready to execute
-Last activity: 2026-08-21 — 01-11 executed: the URL head and the error-path filesystem path both redacted, `redactUrls` bounded by measurement, the pattern gate widened to `telemetry.ts` under a count-plus-anchor exemption
+Plan: 14 of 14 complete — gap-closure round 2 finished; every plan in phase 01 has a SUMMARY
+Status: Plans complete — ready for code review, regression gate and phase verification
+Last activity: 2026-08-21 — 01-14 executed: the live tracer widened from one credential grammar to four and run twice against a real Caido — one PASS proving the `;` path parameter redacted in the durable column, one committed MUTATION that failed naming the bare segment. URL userinfo measured as unreachable through this tier and recorded as such. Both database reads now read-only through P8-D2's ladder.
 
-Progress: [████████░░] 79% of phase 01 (11 of 14 plans)
+Progress: [██████████] 100% of phase 01 (14 of 14 plans)
 
 > The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it
-> has now done so on FIVE consecutive plans (01-07 … 01-11), so this is
+> has now done so on SIX consecutive plans (01-07 … 01-11, and 01-14), so this is
 > the handler's steady behaviour on this repo and not a transient. The figure above is
 > the phase-local one, computed from the 14 PLAN / 10 SUMMARY files on disk and stated
 > with its basis rather than as an unexplained number. It DROPPED from the 100% this
@@ -79,6 +79,7 @@ Progress: [████████░░] 79% of phase 01 (11 of 14 plans)
 | Phase 01 P11 | 30 min | 3 tasks | 7 files |
 | Phase 01 P12 | 22 min | 2 tasks | 2 files |
 | Phase 01 P13 | 13 min | 1 tasks | 1 files |
+| Phase 01 P14 | 18 min | 2 tasks | 26 files |
 
 ## Accumulated Context
 
@@ -158,6 +159,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The read-only allowlist for a requests receiver is get/query/inScope/matches, derived from what the backend actually calls (consumer.ts:344, admit.ts:197) plus COVERAGE.md rows 7 and 8 — so a future outbound method like sendRaw fails the CORE-11 gate without anybody having to enumerate it — Every one of those four reads EXISTING traffic and generates none; that is the whole membership test, which is what lets the rule be 'any member NOT on this list' rather than a list of forbidden method names that the next SDK release invalidates.
 - [Phase 01]: An AST gate that cannot READ a construct must report it, never pass it: outbound-unanalysable fires on a computed key on a positively identified outbound receiver and on an import specifier that will not reduce to a literal — check-bundle-imports.mjs ALLOWLISTS caido:http (it answers 'measured loadable', not 'permitted'), so a dynamic import through a variable was invisible to both gates simultaneously — the single combination the two-gate design exists to rule out. Silence is indistinguishable from a pass.
 - [Phase 01]: STORE-07's gate follows the binding (derivesFrom) rather than matching it, and every residual it does not cover carries a named owner with a checkable requirement id — isRefTo required a bare identifier, so e.message and every cast form useUnknownInCatchVariables pushes an author toward reported clean; a disclosure without an owner is read as somebody else's problem by every reader in turn
+- [Phase 01]: P14-D2/D3: the `;` path parameter DOES reach observations.url through live Caido and is proven redacted against the database file; URL userinfo does NOT reach it at all, because curl lifts user:pass@ into an Authorization header — measured from curl's own -v trace, recorded with the run, and enforced instead by the observations.spec.ts real-SQLite round trip.
+- [Phase 01]: P14-D5: Caido's own --debug logs carry the unredacted request URL and are not committed. Measured per file by the tracer's own secret sweep rather than assumed, and already excluded by .gitignore:35 — not force-added.
 
 ### Known Risks Carried Forward
 
@@ -200,8 +203,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T14:35:39.399Z
-**Stopped at:** Completed 01-13-PLAN.md
+**Last session:** 2026-08-21T15:10:06.871Z
+**Stopped at:** Completed 01-14-PLAN.md — phase 01 plans complete
 **Resume file:** None
 
 ### Blockers
