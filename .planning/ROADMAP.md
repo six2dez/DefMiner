@@ -67,7 +67,7 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT — fully serialised, because all three deliberately mutate the shared working tree to prove their gates can fail while each asserts whole-suite green (9 plans total)
+**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (14 plans total)
 
 Plans:
 **Wave 1**
@@ -105,6 +105,26 @@ Plans:
 **Wave 9** *(blocked on 01-08 — sequencing, not code: all three gap plans mutate the shared tree to prove their gates can fail, and each asserts whole-suite green)*
 
 - [x] 01-09-PLAN.md — **Gap 2**: CORE-01's no-outbound-traffic prohibition gets a wired AST gate over `packages/backend/src`, mutation-proven against real source — *wave 9*
+
+**Wave 10** *(gap closure round 2 — re-verification 2026-08-21T13:45 found both UAT gaps only PARTIALLY closed; blocked on Wave 9)*
+
+- [ ] 01-10-PLAN.md — **Gap 1a**: an operator decision on the bare (`=`-less) query segment, implemented at the write path with one falsifying case per credential format — every common format is shorter than the 64-character bound that was supposed to catch them — *wave 10*
+
+**Wave 11** *(blocked on 01-10 — shares `observations.ts`, and the whole round is serialised)*
+
+- [ ] 01-11-PLAN.md — **Gap 1b**: URL userinfo and `;` path-parameter values redacted by the same policy; the plugin-database path stops crossing the `getStatus` RPC; the no-pattern gate re-anchored on the AST — *wave 11*
+
+**Wave 12** *(blocked on 01-11 — sequencing, not code: each round-2 plan mutates the shared tree to prove its gate can fail, and each asserts whole-suite green)*
+
+- [ ] 01-12-PLAN.md — **Gap 2a**: the CORE-01 gate widened to the 14 shapes a 22-shape probe found it missing — `globalThis.fetch`, the destructured receiver, `.call`/`.apply`, computed keys — and extended to `packages/engine/src`, which ships in the bundle and was walked by no gate at all — *wave 12*
+
+**Wave 13** *(blocked on 01-12 — shares `outbound-prohibition.spec.ts`)*
+
+- [ ] 01-13-PLAN.md — **Gap 2b**: the STORE-07 redaction gate made to follow the binding rather than match it, so `e.message` and every cast form fail; and CORE-11 split out of CORE-01 so every gate enforces the requirement it names — *wave 13*
+
+**Wave 14** *(blocked on 01-13 — needs every redaction change landed before the live tier can assert them)*
+
+- [ ] 01-14-PLAN.md — **Live proof**: the tracer widened to every grammar this phase now redacts, reading the plugin database read-only, with one passing and one deliberately failing run committed against a real Caido — *wave 14*
 
 ### Phase 2: Error Containment & Observability
 
