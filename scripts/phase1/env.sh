@@ -44,5 +44,36 @@ export P1_CAIDO_BIN="${P1_CAIDO_BIN:-/Applications/Caido.app/Contents/Resources/
 # real below-minimum build for the COMPAT-01 negative leg.
 export P1_CAIDO_BIN_OLD="${P1_CAIDO_BIN_OLD:-$HOME/.caido/caido-cli}"
 
-# The Caido build every Phase 0 threshold was measured on.
-export P1_EXPECT_VERSION="${P1_EXPECT_VERSION:-0.57.1}"
+# The Caido build the live Phase 1 harnesses run against.
+#
+# CHANGED 0.57.1 -> 0.58.0 ON 2026-08-21. Operator decision, taken at plan 01-07's
+# blocking-human checkpoint. This is an EVIDENCE-CONTRACT change, not a version
+# bump, so it is recorded here rather than made silently:
+#
+#   WHY IT HAD TO CHANGE. 0.57.1 is GONE from this host and cannot be recovered.
+#   The app bundle at $P1_CAIDO_BIN auto-upgraded IN PLACE (mtime 2026-08-20
+#   12:49) — it is the same binary that ran leg A of compat-smoke.json as 0.57.1.
+#   It cannot be re-fetched either: `fetch-caido.sh`'s PINNED_SHA512 table has no
+#   0.57.1 entry, and decision P6-D5 recorded that api.caido.io publishes hashes
+#   for `latest` ONLY (/releases, /releases/0.57.1 and /releases/v0.57.1 all 404).
+#   Downloading it unpinned is precisely the supply-chain hole that gate exists to
+#   close. 0.58.0 is the only pinned build available.
+#
+#   THE COST, STATED PLAINLY RATHER THAN GLOSSED. This line used to read "The
+#   Caido build every Phase 0 threshold was measured on", and that sentence is now
+#   FALSE — which is why the sentence is gone rather than left standing. Phase 0's
+#   thresholds (MAX_SYNC_SLICE_MS, PASSIVE_MAX_BYTES, the send cliffs, everything
+#   in go-no-go.json) were measured on 0.57.1 and have NOT been re-measured on
+#   0.58.0. COMPATIBLE IS NOT RE-MEASURED: plan 01-06 proved all 16 SDK surfaces
+#   behave identically across the two builds and that leg B reports
+#   `compatible: true`, which is a statement about SURFACE BEHAVIOUR, not about
+#   timing or memory. A phase that wants to trust a Phase 0 NUMBER on 0.58.0 must
+#   re-measure it first. Accepted knowingly by the operator on 2026-08-21.
+#
+#   WHY IT IS SAFE FOR THE THING IT UNBLOCKED. Plan 01-07's tracer asserts query
+#   redaction, which is plugin-side string handling with no version-dependent
+#   behaviour whatsoever. It is not a threshold measurement.
+#
+# Override per-invocation if a 0.57.1 build is ever restored:
+#   P1_EXPECT_VERSION=0.57.1 bash scripts/phase1/tracer-e2e.sh
+export P1_EXPECT_VERSION="${P1_EXPECT_VERSION:-0.58.0}"
