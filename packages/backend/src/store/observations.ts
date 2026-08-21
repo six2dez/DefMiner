@@ -30,14 +30,109 @@ ON CONFLICT (project_id, sha256, request_id) DO UPDATE SET
 `;
 
 /**
- * Strip the fragment; KEEP the query.
+ * What a query VALUE reads as once it has crossed the persistence boundary.
  *
- * A cache-busting query parameter is exactly what makes a re-served bundle a MISS,
- * and dropping it would inflate the cache hit rate this data exists to measure. A
- * fragment never reaches an origin and carries no server-side meaning.
+ * Named and shaped to rhyme with `telemetry.ts`'s exported `URL_REDACTION` so the
+ * two redactions read as ONE policy rather than two accidents.
+ *
+ * Deliberately carries no length, no hash and no fingerprint of the original: a
+ * length leaks a token's scheme, and an unsalted digest of a low-entropy value
+ * (`?debug=true`, `?user=alice`) is a rainbow-table lookup. The keyed-fingerprint
+ * option is SEC-04's HMAC and it belongs to Phase 4 — `01-RESEARCH.md`'s security
+ * domain says in as many words that Phase 1 must not create a key it will then
+ * have to migrate.
+ *
+ * Idempotence falls out for free: the value is replaced regardless of what it
+ * was, so a second pass produces the same bytes.
+ */
+export const QUERY_VALUE_REDACTION = "<redacted>";
+
+/** The bound on a RETAINED parameter name. A segment with no `=` is syntactically
+ *  a name, so without this a token pasted as a bare parameter would survive
+ *  verbatim under a values-only rule (T-01-31). Residual, named rather than left
+ *  to be found: a secret shorter than this used as a bare parameter name still
+ *  survives. */
+export const QUERY_NAME_MAX = 64;
+
+/**
+ * Replace every query-string VALUE; keep every NAME, in order.
+ *
+ * The operator's UAT decision of 2026-08-21 (WR-07). Parameter names carry
+ * analytic value — an endpoint that takes an `access_token` parameter is worth
+ * being able to see — and values are credentials.
+ *
+ * STRING SPLITTING ONLY — no pattern execution of any kind, and this is not
+ * stylistic. `REDOS_RECOVERY` is "kill" on this runtime: SPIKE-01 measured that a
+ * catastrophic pattern hangs the QuickJS thread with no interrupt handler and
+ * that SIGKILL is the only exit, taking `caido-cli` down with the operator's real
+ * project data. `admit.ts` holds the hooks to indexOf/endsWith for exactly this
+ * reason and the store has no licence the hooks do not.
+ *
+ * The `URL` constructor is not used either, from `node:url` or from `globalThis`:
+ * the shipped bundle's entire import set is ONE specifier (`crypto`) and
+ * `check-bundle-imports.mjs` asserts it, and a global `URL` in Caido's QuickJS
+ * has never been measured on this build.
+ *
+ * Percent-encoded input is neither decoded nor re-encoded. Decoding would let an
+ * encoded `&` inside a value split into a fake parameter, whose "name" half would
+ * be a surviving slice of a real value (T-01-32). The bytes stay opaque.
+ */
+export function redactQueryValues(url: string): string {
+  const s = String(url);
+  const q = s.indexOf("?");
+  if (q === -1) return s;
+
+  const head = s.slice(0, q);
+  const out: string[] = [];
+  // Empty segments are PRESERVED as empty segments: `a=1&&b=2` came in with three
+  // and leaves with three. The function does not normalise the query's shape.
+  for (const segment of s.slice(q + 1).split("&")) {
+    const eq = segment.indexOf("=");
+    if (eq === -1) {
+      // No `=` — this is a NAME, and names are what the decision keeps.
+      out.push(segment.slice(0, QUERY_NAME_MAX));
+      continue;
+    }
+    // The FIRST `=` only, so an `=` inside a value cannot fabricate a second
+    // parameter and expose half a value as a "name".
+    out.push(
+      segment.slice(0, eq).slice(0, QUERY_NAME_MAX) +
+        "=" +
+        QUERY_VALUE_REDACTION,
+    );
+  }
+  return head + "?" + out.join("&");
+}
+
+/**
+ * Strip the fragment, redact the query VALUES, then bound the length — in that
+ * order.
+ *
+ * WHAT CHANGED AND WHY, because the comment this replaced said the opposite. It
+ * read "Strip the fragment; KEEP the query", on the reasoning that a cache-busting
+ * parameter is what makes a re-served bundle a MISS and dropping it would inflate
+ * the hit rate. Half of that survives and half of it was wrong. The parameter
+ * NAMES and their order are kept, and they are enough to see that a URL is
+ * cache-busted; what actually decides a hit or a miss is the content DIGEST, not
+ * the URL. The VALUES are credentials and they are gone.
+ *
+ * The asymmetry that forced this, named so the next reader finds the reason and
+ * not just the rule: `telemetry.ts` already redacts a URL out of a 240-character
+ * error string before it crosses the RPC, while this function was writing the same
+ * value verbatim into a database `db.ts` documents as never garbage-collected,
+ * surviving project deletion and surviving force-reinstall. The DURABLE store must
+ * not be looser than the TRANSIENT channel. Operator decision, UAT 2026-08-21,
+ * gap WR-07; enforced by `observations.spec.ts` and, end to end against the
+ * database file, by `scripts/phase1/tracer-e2e.sh`.
+ *
+ * REDACT FIRST, TRUNCATE SECOND — decision P5-D8, restated here. `telemetry.ts`
+ * learned by measurement that truncating first leaves the front half of the
+ * string. Here the ordering also decides whether parameter names past the bound
+ * survive at all, and it is what keeps the guarantee intact the moment any future
+ * redactor preserves a prefix or a length of a value.
  */
 export function normaliseObservedUrl(url: string): string {
-  return String(url).split("#")[0].slice(0, URL_MAX);
+  return redactQueryValues(String(url).split("#")[0]).slice(0, URL_MAX);
 }
 
 /**

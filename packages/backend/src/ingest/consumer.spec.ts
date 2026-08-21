@@ -215,7 +215,7 @@ describe("one reloaded entry produces BOTH an artifact and an observation", () =
     expect(rows.length).toBe(1);
     // The cache-busting query is exactly what makes a re-served bundle a MISS;
     // dropping it would inflate the hit rate this data exists to measure.
-    expect(rows[0].url).toBe("https://x.test/app.js?v=8c1f");
+    expect(rows[0].url).toBe("https://x.test/app.js?v=<redacted>");
     expect(rows[0].status).toBe(200);
     expect(rows[0].content_type).toBe("application/javascript");
     expect(rows[0].request_id).toBe("r1");
