@@ -67,7 +67,7 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6/6 plans executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel)
+**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 2 waves from the 2026-08-21 UAT (9 plans total)
 
 Plans:
 **Wave 1**
@@ -93,6 +93,15 @@ Plans:
 **Wave 6** *(blocked on Wave 5 completion)*
 
 - [x] 01-06-PLAN.md — Compatibility guard and a three-leg SDK smoke test against 0.57.1, 0.58.0 and the below-minimum 0.55.3 — *wave 6*
+
+**Wave 7** *(gap closure — UAT 2026-08-21; both plans blocked on Wave 6, no file overlap with each other)*
+
+- [ ] 01-07-PLAN.md — **Gap 1**: `observations.url` redacts query-string values at the write path; the store layer stops rendering caught exceptions unredacted; plan 01-01's `must_have` truth #2 amended to match — *wave 7*
+- [ ] 01-09-PLAN.md — **Gap 2**: CORE-01's no-outbound-traffic prohibition gets a wired AST gate over `packages/backend/src`, mutation-proven against real source — *wave 7*
+
+**Wave 8** *(blocked on 01-07 — needs its redactor)*
+
+- [ ] 01-08-PLAN.md — **Gap 1, one-way half**: measure the pre-policy row population read-only, then a `blocking-human` decision on whether those rows are redacted in place, purged, or left to age out — *wave 8*
 
 ### Phase 2: Error Containment & Observability
 
