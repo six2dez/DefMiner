@@ -83,6 +83,140 @@ export const QUERY_VALUE_REDACTION = "<redacted>";
 export const QUERY_NAME_MAX = 64;
 
 /**
+ * THE per-segment rule. ONE policy, and every delimiter that needs it calls
+ * THIS — the query loop on `&` and the path loop on `;`.
+ *
+ * Factored out rather than duplicated, and that is the whole reason it exists:
+ * "one policy, two delimiters" is a claim, and a shared implementation is what
+ * makes it TRUE rather than asserted. Two copies of these six lines would drift
+ * into two policies the first time one of them was amended, and the drift would
+ * be invisible — both halves would still pass their own cases.
+ *
+ * With an `=`: the name half is kept, bounded by {@link QUERY_NAME_MAX}, and the
+ * value is replaced. The FIRST `=` only, so an `=` inside a value cannot
+ * fabricate a second parameter and expose half a value as a "name".
+ *
+ * With no `=`: decision P10-D1 (operator, 2026-08-21) — a VALUE WITH NO NAME,
+ * redacted whole. An EMPTY segment pushes the empty string instead: there is
+ * nothing there to redact and `<redacted>` would invent a parameter that was
+ * never sent.
+ *
+ * Idempotent for free in both branches: `QUERY_VALUE_REDACTION` contains no `=`,
+ * so on a second pass it arrives here as a bare segment and is replaced with the
+ * same bytes.
+ */
+function redactDelimitedSegment(segment: string): string {
+  const eq = segment.indexOf("=");
+  if (eq === -1) return segment === "" ? "" : QUERY_VALUE_REDACTION;
+  return (
+    segment.slice(0, eq).slice(0, QUERY_NAME_MAX) + "=" + QUERY_VALUE_REDACTION
+  );
+}
+
+/**
+ * Redact the URL HEAD — everything before the first `?`. Two grammars: URL
+ * userinfo, and `;`-delimited path parameters.
+ *
+ * WHY THIS EXISTS. `redactQueryValues` keys entirely off the first `?`, so
+ * everything credential-bearing a URL can carry BEFORE it passed through
+ * untouched. `01-REVIEW.md` WR-11 executed all three shapes against the shipped
+ * function and all three came back byte-for-byte:
+ *
+ *   `https://user:pa55w0rd@cdn.test/app.js`            — HTTP Basic credentials
+ *   `https://cdn.test/a.js;jsessionid=SECRETSESSION`   — RFC 3986 path parameter
+ *   `https://cdn.test/download/eyJ…SECRET/app.js`      — a path-embedded token
+ *
+ * WHY IT IS A SEPARATE FUNCTION FROM {@link redactQueryValues} rather than one
+ * redactor over the whole string. `observations.spec.ts` carries an assertion
+ * that `redactQueryValues` leaves the scheme, host and path BYTE-IDENTICAL, and
+ * that assertion is worth keeping true of the function it was written about. One
+ * function rewriting both halves would make it untestable. They are composed in
+ * {@link normaliseObservedUrl} instead.
+ *
+ * USERINFO IS RESOLVED INSIDE THE AUTHORITY COMPONENT, never by searching the
+ * whole string for an `@`. The authority begins after the first `://` and ends
+ * at the first `/`, `?` or `#` after it; with no `://` there is no authority and
+ * the userinfo step does nothing at all. An `@`-anywhere rule is the obvious
+ * wrong implementation and it would silently corrupt `https://cdn.test/@vite/client.js`
+ * — which is what a Vite dev server serves — and every scoped npm package path.
+ *
+ * BOTH HALVES OF THE USERINFO GO, never just the password. A username is the
+ * same class of disclosure as the OS username `telemetry.ts`'s `redactPaths`
+ * strips out of the error path one module away. The `@` is KEPT: it records that
+ * the URL carried userinfo without carrying it — strictly more signal than
+ * WR-11's own recommendation, which was to drop userinfo entirely — and it is
+ * what makes the step idempotent, since a second pass finds `<redacted>` as the
+ * userinfo and replaces it with itself.
+ *
+ * THE PATH-EMBEDDED TOKEN IS A RESIDUAL AND IT IS NOT CLOSED HERE. The reason is
+ * specific, and "out of scope" is not it: telling a signed-URL segment from a
+ * legitimate path segment needs either ENTROPY SCORING — for which Phase 1 has
+ * no measured false-positive rate, and which would silently destroy the analytic
+ * core of this column by shredding ordinary hashed asset names — or a PATTERN,
+ * which `REDOS_RECOVERY = "kill"` forbids in this module. It is pinned by an
+ * executed case, `observations.spec.ts`'s "RESIDUAL, PINNED: a token embedded in
+ * a path SEGMENT is NOT redacted", which goes RED the day somebody closes it.
+ *
+ * STRING SPLITTING ONLY, for the reasons stated at length on
+ * {@link redactQueryValues}: no pattern, no `RegExp`, no `URL` constructor, no
+ * new import. Percent-encoded bytes stay opaque in the head exactly as they do
+ * in the query (T-01-32).
+ */
+export function redactUrlHead(head: string): string {
+  const s = String(head);
+
+  // Bound the work to the head even when handed a whole URL. The query belongs
+  // to `redactQueryValues` and is passed through untouched — double-processing
+  // it is exactly what would turn `?a=1;token=SECRET`, which is ALREADY correct,
+  // into two fabricated parameters.
+  const q = s.indexOf("?");
+  if (q !== -1) return redactUrlHead(s.slice(0, q)) + s.slice(q);
+
+  // --- the authority component ------------------------------------------
+  const schemeSep = s.indexOf("://");
+  let authority = "";
+  let pathStart = 0;
+  let prefix = "";
+  if (schemeSep !== -1) {
+    const authStart = schemeSep + 3;
+    let end = s.length;
+    for (const d of ["/", "?", "#"]) {
+      const i = s.indexOf(d, authStart);
+      if (i !== -1 && i < end) end = i;
+    }
+    prefix = s.slice(0, authStart);
+    authority = s.slice(authStart, end);
+    pathStart = end;
+  }
+
+  // The LAST `@` inside the authority, so an `@` in the userinfo itself cannot
+  // leave a tail of credential behind.
+  const at = authority.lastIndexOf("@");
+  if (at !== -1) {
+    authority = QUERY_VALUE_REDACTION + authority.slice(at);
+  }
+
+  // --- `;` path parameters, by the SAME rule as a query parameter --------
+  // Split the path on `/`; within each segment split on `;`. The first piece is
+  // the segment itself and is kept verbatim; every subsequent piece is a
+  // parameter and goes through `redactDelimitedSegment` — the same helper the
+  // query loop calls, which is what makes `;` a second DELIMITER rather than a
+  // second POLICY.
+  const path = s.slice(pathStart);
+  const segments = path.split("/");
+  for (let i = 0; i < segments.length; i += 1) {
+    const parts = segments[i].split(";");
+    if (parts.length === 1) continue;
+    for (let j = 1; j < parts.length; j += 1) {
+      parts[j] = redactDelimitedSegment(parts[j]);
+    }
+    segments[i] = parts.join(";");
+  }
+
+  return prefix + authority + segments.join("/");
+}
+
+/**
  * Replace every query-string VALUE; keep every NAME of a `name=value` pair, in
  * order. A segment with NO `=` is a value with no name and is replaced too.
  *
@@ -125,36 +259,25 @@ export function redactQueryValues(url: string): string {
   // Empty segments are PRESERVED as empty segments: `a=1&&b=2` came in with three
   // and leaves with three. The function does not normalise the query's shape.
   for (const segment of s.slice(q + 1).split("&")) {
-    const eq = segment.indexOf("=");
-    if (eq === -1) {
-      // No `=` — a VALUE WITH NO NAME, and it is redacted whole (decision
-      // P10-D1, operator, 2026-08-21). An unknown segment is exactly where a
-      // pasted token lands, and the segment carries no name to be worth keeping.
-      //
-      // An EMPTY segment pushes the empty string, not the marker: there is
-      // nothing there to redact, and `<redacted>` would invent a parameter that
-      // was never sent. `a=1&&b=2` came in with three segments and leaves with
-      // three.
-      //
-      // Idempotent for free: `QUERY_VALUE_REDACTION` contains no `=`, so on a
-      // second pass it arrives here itself and is replaced with the same bytes.
-      out.push(segment === "" ? "" : QUERY_VALUE_REDACTION);
-      continue;
-    }
-    // The FIRST `=` only, so an `=` inside a value cannot fabricate a second
-    // parameter and expose half a value as a "name".
-    out.push(
-      segment.slice(0, eq).slice(0, QUERY_NAME_MAX) +
-        "=" +
-        QUERY_VALUE_REDACTION,
-    );
+    // THE SHARED HELPER, not a local copy of it. `;` path parameters in
+    // {@link redactUrlHead} call the same function, so the two delimiters cannot
+    // drift into two policies — including the `=`-less branch, which is decision
+    // P10-D1 (operator, 2026-08-21) and whose reasoning lives on the helper.
+    out.push(redactDelimitedSegment(segment));
   }
   return head + "?" + out.join("&");
 }
 
 /**
- * Strip the fragment, redact the query VALUES, then bound the length — in that
- * order.
+ * Strip the fragment, redact the HEAD, redact the query VALUES, then bound the
+ * length — in that order.
+ *
+ * THE HEAD STEP (plan 01-11): {@link redactUrlHead} covers the two grammars a
+ * URL can carry before the first `?` — userinfo, and `;`-delimited path
+ * parameters. Both were reaching this column verbatim while the query half was
+ * being redacted, which made the guarantee narrower than the sentence describing
+ * it. The two functions are kept separate so each keeps its own assertions; see
+ * {@link redactUrlHead} for why.
  *
  * WHAT CHANGED AND WHY, because the comment this replaced said the opposite. It
  * read "Strip the fragment; KEEP the query", on the reasoning that a cache-busting
@@ -180,7 +303,10 @@ export function redactQueryValues(url: string): string {
  * redactor preserves a prefix or a length of a value.
  */
 export function normaliseObservedUrl(url: string): string {
-  return redactQueryValues(String(url).split("#")[0]).slice(0, URL_MAX);
+  return redactQueryValues(redactUrlHead(String(url).split("#")[0])).slice(
+    0,
+    URL_MAX,
+  );
 }
 
 /**
