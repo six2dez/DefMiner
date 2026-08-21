@@ -7,6 +7,13 @@
 
 import type { Database } from "sqlite";
 
+import { describeError } from "../telemetry";
+
+// Caught exceptions render through `describeError`, never a bare stringification.
+// The reasoning — a driver rejection carries the bound parameters, and one of them
+// is the observation URL — is stated once beside the first converted site in
+// `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
+
 import type { StoreWriteResult } from "./artifacts";
 
 // ADDITIVE ONLY (plan 01-04). `recordObservation`'s signature and SQL are exactly
@@ -170,7 +177,7 @@ export async function recordObservation(
     );
     return { ok: true, changes: res.changes };
   } catch (e) {
-    return { ok: false, error: String(e).slice(0, 200) };
+    return { ok: false, error: describeError(e).slice(0, 200) };
   }
 }
 

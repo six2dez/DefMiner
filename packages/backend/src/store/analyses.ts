@@ -14,6 +14,13 @@
 
 import type { Database } from "sqlite";
 
+import { describeError } from "../telemetry";
+
+// Caught exceptions render through `describeError`, never a bare stringification.
+// The reasoning — a driver rejection carries the bound parameters, and one of them
+// is the observation URL — is stated once beside the first converted site in
+// `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
+
 import type { StoreWriteResult } from "./artifacts";
 
 /**
@@ -153,7 +160,7 @@ export async function claimAnalysis(
       state: row?.scan_state,
     };
   } catch (e) {
-    return { ok: false, error: String(e).slice(0, 200) };
+    return { ok: false, error: describeError(e).slice(0, 200) };
   }
 }
 
@@ -191,14 +198,25 @@ export async function finishAnalysis(
       finishedAt,
       maxSliceMs,
       bytesWalked,
-      error === null ? null : String(error).slice(0, ERROR_MAX),
+      // THE ONE LINE IN THIS DIRECTORY THAT WRITES THE `analyses.error` COLUMN,
+      // and the only error render in it that is NOT inside a catch. The binding
+      // is a function PARAMETER, so a catch-scoped rule cannot reach it by
+      // construction — which is why `error-redaction.spec.ts` carries a fourth
+      // rule, `unredacted-persisted-error`, aimed at exactly this shape.
+      //
+      // `describeError` takes a string perfectly well: `typeof error` is not
+      // `object`, so no class name is prepended, the URL redaction still runs,
+      // and the result is capped at `ERROR_TEXT_LIMIT` (240). That makes
+      // `ERROR_MAX` (300) unreachable in practice. The outer slice stays anyway,
+      // because it documents the COLUMN's bound rather than the renderer's.
+      error === null ? null : describeError(error).slice(0, ERROR_MAX),
       projectId,
       sha256,
       detectorSetHash,
     );
     return { ok: true, changes: res.changes };
   } catch (e) {
-    return { ok: false, error: String(e).slice(0, 200) };
+    return { ok: false, error: describeError(e).slice(0, 200) };
   }
 }
 

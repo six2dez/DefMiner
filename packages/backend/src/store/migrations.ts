@@ -11,6 +11,13 @@
 
 import type { Database } from "sqlite";
 
+import { describeError } from "../telemetry";
+
+// Caught exceptions render through `describeError`, never a bare stringification.
+// The reasoning — a driver rejection carries the bound parameters, and one of them
+// is the observation URL — is stated once beside the first converted site in
+// `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
+
 /**
  * All DDL is `IF NOT EXISTS` and therefore cannot fail on a re-run, which is the
  * ONLY reason it is legal to batch it into a single multi-statement `exec`.
@@ -169,7 +176,11 @@ async function safe(
     await fn();
     return { step, ok: true };
   } catch (e) {
-    return { step, ok: false, error: String(e).slice(0, 300) };
+    // The outer `.slice(0, 300)` is GONE rather than kept: `describeError` caps
+    // at `ERROR_TEXT_LIMIT` (240), which is tighter, so the old bound could only
+    // ever be dead code claiming a looser guarantee than the code gives. A
+    // deliberate 300 -> 240 narrowing of this field.
+    return { step, ok: false, error: describeError(e) };
   }
 }
 

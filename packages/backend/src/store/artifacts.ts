@@ -8,6 +8,8 @@
 
 import type { Database } from "sqlite";
 
+import { describeError } from "../telemetry";
+
 // ADDITIVE ONLY (plan 01-04). `upsertArtifact`'s signature was settled by the
 // tracer in plan 01-01 and is called by plan 01-03's consumer; it takes no `url`
 // parameter (decision P1-D6) and nothing in this phase changes it. Everything
@@ -59,6 +61,42 @@ ON CONFLICT (project_id, sha256) DO UPDATE SET
  * driven in this runtime — the handler logs, returns, and the `.then()` simply
  * never runs.
  */
+/**
+ * WHY EVERY ERROR-SHAPED BINDING IN THIS DIRECTORY RENDERS THROUGH `describeError`.
+ *
+ * Stated ONCE here, beside the first converted site, and cross-referenced from the
+ * other five store modules rather than copy-pasted six times. Enforced statically
+ * by `error-redaction.spec.ts` over `packages/backend/src/store/`.
+ *
+ * A rejection from this pooled SQLite driver is NOT a plugin-authored string. It
+ * can carry the statement text and the BOUND PARAMETERS, and one of those
+ * parameters IS the observation URL — the same value `normaliseObservedUrl` now
+ * redacts on the way in. Rendering it raw would reintroduce through the ERROR path
+ * exactly what the WRITE path removes.
+ *
+ * The rendered text reaches THREE sinks. All three were read out of
+ * `ingest/consumer.ts` before this comment was written, rather than assumed:
+ *
+ *   1. `sdk.console.log`, on the `ARTIFACT_WRITE_FAILED`, `OBSERVATION_WRITE_FAILED`,
+ *      `ANALYSIS_CLAIM_FAILED` and `ANALYSIS_FINISH_FAILED` lines. That lands in
+ *      Caido's host log ON DISK: not a projection, not truncated by Caido, and never
+ *      reviewed before it is written.
+ *   2. `recordError`, which reaches the `getStatus` RPC. Already redacted at that
+ *      boundary today, so this leg is defence in depth rather than load-bearing.
+ *   3. `finishAnalysis`'s `error` parameter, which IS the `analyses.error` COLUMN —
+ *      wired, typed and allowlisted in `schema.spec.ts`. Stated precisely, because a
+ *      looser claim is falsifiable in one grep: the Phase 1 consumer passes `null`
+ *      there, so this is the destination the plumbing POINTS AT, not a value being
+ *      written today. ERR-02 and ERR-04 in Phase 2 are what will start filling it,
+ *      and their author will read the gate to learn what is already guaranteed.
+ *
+ * `describeError` also prepends the exception's CLASS NAME, which a bare
+ * stringification loses — a `TypeError` and a `RangeError` from the same line mean
+ * completely different things — and it redacts BEFORE truncating (decision P5-D8).
+ *
+ * No cycle: `telemetry.ts` imports only `./hooks/admit`, which imports only
+ * `@defminer/engine/thresholds`. Nothing under `store/` is reachable from either.
+ */
 export async function upsertArtifact(
   db: Database,
   projectId: string,
@@ -72,7 +110,7 @@ export async function upsertArtifact(
     const res = await stmt.run(projectId, sha256, byteLen, kind, nowMs, nowMs);
     return { ok: true, changes: res.changes };
   } catch (e) {
-    return { ok: false, error: String(e).slice(0, 200) };
+    return { ok: false, error: describeError(e).slice(0, 200) };
   }
 }
 

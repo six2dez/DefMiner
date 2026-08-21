@@ -43,6 +43,13 @@ import {
 } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
+import { describeError } from "../telemetry";
+
+// Caught exceptions render through `describeError`, never a bare stringification.
+// The reasoning — a driver rejection carries the bound parameters, and one of them
+// is the observation URL — is stated once beside the first converted site in
+// `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
+
 import type { RetentionBounds } from "./settings";
 
 /**
@@ -442,7 +449,7 @@ export async function sweepRetention(
     // threw away the only account of why retention stopped working — then report
     // what the pass managed and let the caller schedule another.
     failures.count += 1;
-    failures.last = String(e).slice(0, 200);
+    failures.last = describeError(e).slice(0, 200);
     moreWork = true;
   }
 
@@ -622,7 +629,7 @@ async function deleteOne(
     const res = await stmt.run(...params);
     return { deleted: Number(res.changes), error: null };
   } catch (e) {
-    return { deleted: 0, error: String(e).slice(0, 200) };
+    return { deleted: 0, error: describeError(e).slice(0, 200) };
   }
 }
 
