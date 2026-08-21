@@ -109,12 +109,49 @@ pnpm exec caido-dev build packages >/dev/null
 
 # --- instance ---------------------------------------------------------------
 ORIGIN_PID=""
+
+# --- the sweep, over the WHOLE run directory ---------------------------------
+# T-01-35: the artifact proving a secret was redacted must not itself carry one.
+# This MEASURES that per file rather than asserting it in prose, and it is a
+# MEASUREMENT rather than a gate on purpose — the mutation run is SUPPOSED to
+# leave the bare secret in `observations-url-raw.txt`, and a gate here would make
+# that run impossible to produce. What it exists to surface is the file nobody
+# thinks about: Caido's own `--debug` output records the full request URL,
+# unredacted, which is why those logs are NOT among the files this plan commits.
+#
+# IT RUNS FROM cleanup(), AFTER teardown, AND THAT ORDERING IS THE POINT. teardown
+# is what copies Caido's host log into the run directory. Swept from the end of the
+# script body instead — where it was first written — it reported `logging.<date>.log`
+# as clean because that file did not exist yet, which is precisely the confident
+# zero this phase keeps having to stamp out. Measured on the first live run of the
+# widened tracer; the file holds four occurrences of each wire value.
+secret_sweep() {
+  [ -n "${RUN_DIR:-}" ] && [ -d "${RUN_DIR:-}" ] || return 0
+  {
+    echo "# Occurrences of each per-run value across the run directory, per file."
+    echo "# Counts only, never the values. Swept AFTER teardown, so Caido's own"
+    echo "# host log is in scope. See README-01-14.md for what is committed."
+    for pair in "query-pair:$SECRET_VALUE" "bare-segment:$BARE_SECRET" \
+                "path-param:$PATHPARAM_SECRET" "userinfo-pass:$USERINFO_SECRET" \
+                "userinfo-user:$USERINFO_USER"; do
+      label="${pair%%:*}"; value="${pair#*:}"
+      while IFS= read -r f; do
+        n="$(grep -c -F -- "$value" "$f" 2>/dev/null || true)"
+        [ "${n:-0}" -gt 0 ] && echo "$label $(basename "$f") $n"
+      done < <(find "$RUN_DIR" -type f ! -name 'secret-sweep.txt')
+    done
+    echo "# end"
+  } > "$RUN_DIR/secret-sweep.txt"
+  echo "secret sweep : $(grep -v '^#' "$RUN_DIR/secret-sweep.txt" | awk '{print $2}' | sort -u | wc -l | tr -d ' ') file(s) in the run directory carry a per-run value, over $(grep -vc '^#' "$RUN_DIR/secret-sweep.txt" || true) (grammar, file) pair(s)"
+}
+
 cleanup() {
   [ -n "$ORIGIN_PID" ] && kill -9 "$ORIGIN_PID" 2>/dev/null || true
   # ALWAYS instance.sh's own teardown — never a new kill. It force-kills (a wedged
   # QuickJS thread never honours SIGTERM), copies the host log out, deletes the
   # guest token and removes the isolated data directory.
   if declare -F teardown >/dev/null 2>&1; then teardown || true; fi
+  secret_sweep || true
   rm -rf "$FIXDIR"
 }
 trap cleanup EXIT
@@ -613,29 +650,7 @@ print("schema version         :", st.get("schemaVersion"))
 print("max event->reload ms   :", st.get("maxEventToReloadMs"))
 PY
 
-# --- the sweep, over the WHOLE run directory ---------------------------------
-# T-01-35: the artifact proving a secret was redacted must not itself carry one.
-# This MEASURES it per file rather than asserting it in prose, and it is a
-# measurement rather than a gate on purpose — the mutation run is SUPPOSED to
-# leave the bare secret in `observations-url-raw.txt`, and a gate here would make
-# that run impossible to produce. What it exists to surface is the file that
-# nobody thinks about: Caido's own `--debug` log records the full request URL,
-# unredacted, which is why those logs are NOT among the files this plan commits.
-{
-  echo "# Occurrences of each per-run value across the run directory, per file."
-  echo "# Counts only, never the values. See README-01-14.md for what is committed."
-  for pair in "query-pair:$SECRET_VALUE" "bare-segment:$BARE_SECRET" \
-              "path-param:$PATHPARAM_SECRET" "userinfo-pass:$USERINFO_SECRET" \
-              "userinfo-user:$USERINFO_USER"; do
-    label="${pair%%:*}"; value="${pair#*:}"
-    while IFS= read -r f; do
-      n="$(grep -c -F -- "$value" "$f" 2>/dev/null || true)"
-      [ "${n:-0}" -gt 0 ] && echo "$label $(basename "$f") $n"
-    done < <(find "$RUN_DIR" -type f ! -name 'secret-sweep.txt')
-  done
-  echo "# end"
-} > "$RUN_DIR/secret-sweep.txt"
-echo "secret sweep : $(grep -v '^#' "$RUN_DIR/secret-sweep.txt" | awk '{print $2}' | sort -u | wc -l | tr -d ' ') file(s) in the run directory carry a per-run value, over $(grep -vc '^#' "$RUN_DIR/secret-sweep.txt" || true) (grammar, file) pair(s)"
-
 echo
 echo "TRACER PASSED"
+# The secret sweep runs from cleanup(), after teardown — see secret_sweep() for
+# why the ordering is load-bearing. Its line appears below this one.
