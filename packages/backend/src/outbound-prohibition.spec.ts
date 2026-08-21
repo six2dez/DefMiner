@@ -108,12 +108,35 @@
 //    against a walk that shrinks.
 
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { posix } from "node:path";
 
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const BACKEND_SRC = "packages/backend/src";
+/**
+ * THE SOURCE ROOTS THE PLUGIN SHIPS. Both of them, and the second one is a FACT
+ * rather than a preference.
+ *
+ * `packages/engine/src` is bundled into `packages/backend/dist` — seven modules —
+ * and production backend code imports it by name: `index.ts:41-42`
+ * (`@defminer/engine/queue`, `/thresholds`) and `ingest/consumer.ts:38-46`
+ * (`/digest`, `/pipeline`, `/yield`). `packages/engine/src/boundary.spec.ts`
+ * guards that package, but it checks IMPORTS — that the engine stays SDK-free for
+ * DET-03 — so a `globalThis.fetch(url)` in `pipeline.ts` needed no import and was
+ * invisible to EVERY gate in this repository at once: to boundary.spec.ts (no
+ * import), to check-bundle-imports.mjs (imports only), and to this one (wrong
+ * root). `pipeline.ts` is the detector walk, the module most likely to grow a
+ * "just fetch the sourcemap" line, and "no speculative retrieval of any kind" is
+ * CORE-11's literal wording.
+ *
+ * Exported so a reader can enumerate the scanned tree without re-deriving it.
+ */
+export const SOURCE_ROOTS: readonly string[] = Object.freeze([
+  "packages/backend/src",
+  "packages/engine/src",
+]);
+
+const BACKEND_SRC = SOURCE_ROOTS[0];
 
 // The surfaces, as tokens the walk matches on, so the rule table below and the
 // walk cannot drift apart.
@@ -272,17 +295,28 @@ export const FORBIDDEN_OUTBOUND: readonly OutboundRule[] = Object.freeze(
 type Violation = { file: string; rule: string; detail: string };
 
 /**
- * Every non-spec module in the BACKEND PACKAGE, at any depth.
+ * Every non-spec module the plugin SHIPS, under either source root, at any depth.
  *
- * The package, not a directory: `sdk.requests.send` needs no import, so the
- * surface it could appear on is every module the plugin ships, and `hooks/` and
- * `ingest/` are where a regression would most plausibly land.
+ * Not "the backend directory": `sdk.requests.send` needs no import and
+ * `globalThis.fetch` needs no import either, so the surface an outbound call
+ * could appear on is every module that reaches the bundle — which is both roots.
+ * `hooks/`, `ingest/` and the engine's `pipeline.ts` are where a regression would
+ * most plausibly land.
+ *
+ * ONE PATH CONVENTION, POSIX, END TO END (IN-09). Paths are built with
+ * `posix.join` and compared with `/`, rather than built with the platform
+ * separator and then compared against a hard-coded `/`. The old mix worked on
+ * this host and would have made every by-name assertion below silently stop
+ * matching on a non-POSIX one — a gate that quietly matches nothing is the same
+ * defect as a gate that quietly scans nothing. Adding a second root is exactly
+ * when that stops being theoretical. Node accepts `/` on every platform it
+ * supports, so building with it costs nothing.
  */
-function backendFiles(): string[] {
+function shippedFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
+      const full = posix.join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
       } else if (
@@ -293,8 +327,15 @@ function backendFiles(): string[] {
       }
     }
   };
-  walk(BACKEND_SRC);
+  for (const root of SOURCE_ROOTS) walk(root);
   return out.sort();
+}
+
+/** Does this root have a subdirectory to descend INTO? */
+function rootHasSubdirectory(root: string): boolean {
+  return readdirSync(root, { withFileTypes: true }).some((e) =>
+    e.isDirectory(),
+  );
 }
 
 /**
@@ -635,16 +676,22 @@ export function auditSource(file: string, source: string): Violation[] {
 // ---------------------------------------------------------------------------
 // THE REAL TREE
 // ---------------------------------------------------------------------------
-describe("CORE-11 — no outbound surface is reachable from packages/backend/src", () => {
-  const files = backendFiles();
+describe(`CORE-11 — no outbound surface is reachable from ${SOURCE_ROOTS.join(" or ")}`, () => {
+  // BOUND ONCE, AND EVERY CASE BELOW READS THIS BINDING (IN-08). The previous
+  // version called the walk twice: once for the non-vacuity assertions and again
+  // for `it.each`. Two filesystem walks means the assertions that say "the scan
+  // is not empty and contains these files" were made against a DIFFERENT array
+  // than the per-file cases iterated — the two could disagree about what was
+  // scanned and neither would say so. Asserted explicitly below.
+  const files = shippedFiles();
 
-  it("enumerates a NON-EMPTY set of backend modules, BY NAME", () => {
+  it("enumerates a NON-EMPTY set of shipped modules, BY NAME, ACROSS BOTH ROOTS", () => {
     // Without this the whole gate passes by measuring nothing. Names rather than
     // a count, so a rename or a moved directory is a VISIBLE change instead of a
     // silently shrunk scanned set.
     expect(
       files.length,
-      `no .ts modules found under ${BACKEND_SRC}`,
+      `no .ts modules found under ${SOURCE_ROOTS.join(" or ")}`,
     ).toBeGreaterThan(0);
     for (const expected of [
       "index.ts",
@@ -656,6 +703,16 @@ describe("CORE-11 — no outbound surface is reachable from packages/backend/src
       "ingest/consumer.ts",
       "store/observations.ts",
       "store/retention.ts",
+      // IN-10: db.ts is scanned by both gates in this package and was named by
+      // neither. It owns the pooled handle and it is the module whose rename
+      // would be least noticed.
+      "store/db.ts",
+      // The engine, named so a package split or a moved module is a loud failure
+      // rather than a quietly halved scan. pipeline.ts is the "no speculative
+      // retrieval" module CR-04 rates the widest hole.
+      "pipeline.ts",
+      "decode.ts",
+      "queue.ts",
     ]) {
       expect(
         files.some((f) => f.endsWith(`/${expected}`)),
@@ -664,22 +721,54 @@ describe("CORE-11 — no outbound surface is reachable from packages/backend/src
     }
   });
 
-  it("the walk really DESCENDED into subdirectories", () => {
+  it("every root contributes at least one file to the scan", () => {
+    // A root that vanishes, or a package that moves, must be a loud failure and
+    // not a scan that quietly halved. Per root, by prefix, so neither can hide
+    // behind the other's file count.
+    for (const root of SOURCE_ROOTS) {
+      expect(
+        files.filter((f) => f.startsWith(`${root}/`)).length,
+        `no file under ${root} reached the scan`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("the walk really DESCENDED into subdirectories, per root", () => {
     // A non-recursive read would enumerate index.ts, lifecycle.ts, telemetry.ts
     // and compat.ts and pass every rule below having never opened the hook, the
     // consumer or the store.
-    const relative = files.map((f) => f.slice(BACKEND_SRC.length + 1));
-    expect(
-      relative.filter((r) => r.includes("/")),
-      "no enumerated path contains a directory separator, so the walk is flat",
-    ).not.toEqual([]);
+    //
+    // Asserted per root and CONDITIONED ON THE ROOT ACTUALLY HAVING A
+    // SUBDIRECTORY, because packages/engine/src is flat today: an unconditional
+    // per-root descent assertion would fail there for a reason that is a fact
+    // about the engine's layout rather than a defect in this walk, and a test
+    // that fails because a directory is flat teaches nobody anything. The
+    // condition is read from disk, so the day the engine grows a subdirectory
+    // this assertion starts holding it to the same standard with no edit here.
+    for (const root of SOURCE_ROOTS) {
+      if (!rootHasSubdirectory(root)) continue;
+      const relative = files
+        .filter((f) => f.startsWith(`${root}/`))
+        .map((f) => f.slice(root.length + 1));
+      expect(
+        relative.filter((r) => r.includes("/")),
+        `${root} has subdirectories but no enumerated path under it contains a separator, so the walk is flat there`,
+      ).not.toEqual([]);
+    }
   });
 
-  it.each(backendFiles())("%s reaches no outbound surface", (file) => {
+  it("the per-file cases iterate the SAME binding the assertions above measured", () => {
+    // IN-08 made executable rather than asserted in a comment. `it.each` is given
+    // `files`, so this compares the binding to a fresh walk: if the two ever
+    // disagree, the non-vacuity guarantees above stop covering what is scanned.
+    expect(shippedFiles()).toEqual(files);
+  });
+
+  it.each(files)("%s reaches no outbound surface", (file) => {
     const violations = auditSource(file, readFileSync(file, "utf8"));
     expect(
       violations.map((v) => `${v.rule}: ${v.detail}`),
-      `${file} reaches an outbound network surface, which CORE-11 forbids`,
+      `${file} reaches an outbound network surface, which CORE-11 forbids in every module the plugin ships — ${SOURCE_ROOTS.join(" and ")}`,
     ).toEqual([]);
   });
 
@@ -688,7 +777,7 @@ describe("CORE-11 — no outbound surface is reachable from packages/backend/src
     // is ever reworded this fails loudly rather than leaving a case that proves
     // nothing — the same reason sql-discipline.spec.ts asserts its PRAGMA
     // exemption is still exercised.
-    const file = join(BACKEND_SRC, "telemetry.ts");
+    const file = posix.join(BACKEND_SRC, "telemetry.ts");
     const source = readFileSync(file, "utf8");
     expect(
       source,
@@ -708,7 +797,7 @@ describe("CORE-11 — no outbound surface is reachable from packages/backend/src
     // `performance` on the same receiver stays quiet. If this file ever stops
     // using the idiom, the containment assertion fails rather than leaving a case
     // that proves nothing.
-    const file = join(BACKEND_SRC, "telemetry.ts");
+    const file = posix.join(BACKEND_SRC, "telemetry.ts");
     const source = readFileSync(file, "utf8");
     expect(
       source,
