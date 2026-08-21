@@ -30,7 +30,7 @@ here and quietly dropped from the compatibility test.
 | 6 | `sdk.requests.inScope` | **INTEGRATE** | 01-03 task 1 (`admit.ts` scope axis); smoke legs A+B | — |
 | 7 | `sdk.requests.query` | OPT-OUT | — | HTTPQL push-down over existing traffic is FIND-03, the retroactive scan, in Phase 6. Phase 1 observes live proxied traffic only. |
 | 8 | `sdk.requests.matches` | OPT-OUT | — | Consumer is the Phase 6 retroactive filter and the Phase 5 suppression rules; no Phase 1 caller exists. |
-| 9 | `sdk.requests.send` | OPT-OUT | — | **Prohibited in this phase**, not merely unused: plan 01-01 authors a `must_haves.prohibitions` entry forbidding any outbound request. Active retrieval is Phase 8 (ACTIVE-*). |
+| 9 | `sdk.requests.send` | OPT-OUT | — | **Prohibited in this phase**, not merely unused — and ENFORCED rather than asserted: `packages/backend/src/outbound-prohibition.spec.ts` (rule `outbound-send`) fails `pnpm test` on any call from a non-spec module under `packages/backend/src`, in the direct, element-access, receiver-alias and destructured forms. Active retrieval is Phase 8 (ACTIVE-*). |
 | 10 | `sdk.projects.getCurrent` | **INTEGRATE** | 01-01 tracer (`project_id` resolution); 01-05 task 1; smoke legs A+B | — |
 | 11 | `sdk.meta.db` | **INTEGRATE** | 01-01 tracer; 01-04 all tasks; smoke legs A+B (incl. `sqlite_version()` re-read on B) | — |
 | 12 | `sdk.meta.path` | OPT-OUT | — | Decision P1-D3: Phase 1 stores no response bytes on disk. Writing under this path pulls the Phase 6 quota, orphan-cleanup and server-side-delivery problem (DEPLOY-*) forward for no Phase 1 benefit. |
@@ -48,7 +48,7 @@ here and quietly dropped from the compatibility test.
 | 24 | `sdk.env.*` (8 methods) | OPT-OUT | — | Environment variables are operator-managed request substitution. DefMiner reads no secrets from the environment; the SEC-04 HMAC key lifecycle is Phase 4 and deliberately does not create a key or key file Phase 1 would then have to migrate. |
 | 25 | `sdk.graphql` | OPT-OUT | — | GraphQL *operation extraction* from bundles is ENDP-06/Phase 9 and is a parsing problem, not an SDK one. This surface issues GraphQL against Caido itself, which nothing in v1 needs. |
 | 26 | `sdk.hostedFile.create` / `.getAll` | OPT-OUT | — | The operator-facing delivery path is DEPLOY-04 in Phase 6, and Phase 7's reconstructed sources are the first artifact worth delivering. Phase 1 produces no file to deliver (P1-D3). |
-| 27 | `sdk.net.connect` | OPT-OUT | — | Raw outbound connection. Same prohibition as `sdk.requests.send`: no outbound traffic in this phase, by an authored `must_haves.prohibitions` entry. |
+| 27 | `sdk.net.connect` | OPT-OUT | — | Raw outbound connection. Same prohibition as `sdk.requests.send`: no outbound traffic in this phase, enforced by the same gate — `packages/backend/src/outbound-prohibition.spec.ts`, rule `outbound-net`, over any method reached through a `net` receiver. |
 
 ## `sdk.meta.db()` — `Database` and `Statement` (`@caido/quickjs-types/src/extra/sqlite.d.ts`)
 
@@ -72,7 +72,7 @@ where the SDK's absence forces a choice.
 | 35 | `string_decoder` — `StringDecoder` | **INTEGRATE (source-only)** | 01-03 task 3 (`decode.ts`) — ENC-02 binds here specifically; NOT in the shipped bundle, NOT in `REQUIRED_SURFACES` | Reconciled during 01-06 against the built artifact: `decode.ts` has no consumer in the shipped path (Broken Windows entry 8), so it is tree-shaken out and `grep -c StringDecoder packages/backend/dist/index.js` is **0**. Requiring it at runtime would mean statically importing a module the plugin does not use, so a module-load failure on a future Caido would take the whole plugin down to satisfy a probe. Promote to `INTEGRATE` in the wave that gives `decode.ts` a shipped consumer (Phase 3/5). |
 | 36 | `buffer` — `Buffer` | **INTEGRATE (source-only)** | 01-03 task 3 (`decode.ts`, the cross-checked second path); NOT in the shipped bundle, NOT in `REQUIRED_SURFACES` | Same reconciliation as row 35, same measurement, same promotion condition. |
 | 37 | `caido:crypto` | OPT-OUT | — | Measured to FAIL to load inside Caido 0.57.1 (`could not load module`). Bare `crypto` is the working path. Explicitly listed in the DIST-05 gate's failing set so a `caido:` prefix match cannot blanket-allow it. |
-| 38 | `caido:http` — `fetch` | OPT-OUT | — | Loads successfully, and is deliberately not used: same outbound-traffic prohibition as `sdk.requests.send`. Phase 0 also measured that it delivers nothing back to `onInterceptResponse`. |
+| 38 | `caido:http` — `fetch` | OPT-OUT | — | Loads successfully, and is deliberately not used: same outbound-traffic prohibition as `sdk.requests.send`, enforced by `packages/backend/src/outbound-prohibition.spec.ts` (rule `outbound-import`, over all four specifier forms) — which is a source gate, deliberately distinct from the DIST-05 bundle allowlist that admits this specifier because Phase 0 measured it LOADABLE. Phase 0 also measured that it delivers nothing back to `onInterceptResponse`. |
 | 39 | `fs`, `os`, `path`, `url`, `events`, `sqlite` | OPT-OUT (allowlisted, unused) | — | All load inside Caido and are on the DIST-05 allowlist, but Phase 1 has no caller: no bodies are written to disk (P1-D3) and `sqlite` is reached only through `sdk.meta.db()`. Allowlisted-but-unused is recorded here so a future import is a deliberate change rather than a surprise. |
 | 40 | `TextDecoder` / `TextEncoder` | OPT-OUT (unavailable) | — | Not globals and exported by no module Phase 0 probed. This is *why* items 35 and 36 exist; recorded so nobody re-derives the finding. |
 
@@ -140,7 +140,7 @@ cross-check runs against them.
 | sdk.requests.inScope | INTEGRATE | exercised by 01-03 task 1 (admit.ts scope axis); smoke legs A+B |
 | sdk.requests.query | OPT-OUT | HTTPQL push-down over existing traffic is FIND-03, the retroactive scan, in Phase 6. Phase 1 observes live proxied traffic only. |
 | sdk.requests.matches | OPT-OUT | Consumer is the Phase 6 retroactive filter and the Phase 5 suppression rules; no Phase 1 caller exists. |
-| sdk.requests.send | OPT-OUT | **Prohibited in this phase**, not merely unused: plan 01-01 authors a `must_haves.prohibitions` entry forbidding any outbound request. Active retrieval is Phase 8 (ACTIVE-*). |
+| sdk.requests.send | OPT-OUT | **Prohibited in this phase**, not merely unused: enforced by packages/backend/src/outbound-prohibition.spec.ts (rule outbound-send), not by prose. Active retrieval is Phase 8 (ACTIVE-*). |
 | sdk.projects.getCurrent | INTEGRATE | exercised by 01-01 tracer (project_id resolution); 01-05 task 1; smoke legs A+B |
 | sdk.meta.db | INTEGRATE | exercised by 01-01 tracer; 01-04 all tasks; smoke legs A+B (incl. sqlite_version() re-read on B) |
 | sdk.meta.path | OPT-OUT | Decision P1-D3: Phase 1 stores no response bytes on disk. Writing under this path pulls the Phase 6 quota, orphan-cleanup and server-side-delivery problem (DEPLOY-*) forward for no Phase 1 benefit. |
@@ -158,7 +158,7 @@ cross-check runs against them.
 | sdk.env. (8 methods) | OPT-OUT | Environment variables are operator-managed request substitution. DefMiner reads no secrets from the environment; the SEC-04 HMAC key lifecycle is Phase 4 and deliberately does not create a key or… |
 | sdk.graphql | OPT-OUT | GraphQL *operation extraction* from bundles is ENDP-06/Phase 9 and is a parsing problem, not an SDK one. This surface issues GraphQL against Caido itself, which nothing in v1 needs. |
 | sdk.hostedFile.create / .getAll | OPT-OUT | The operator-facing delivery path is DEPLOY-04 in Phase 6, and Phase 7's reconstructed sources are the first artifact worth delivering. Phase 1 produces no file to deliver (P1-D3). |
-| sdk.net.connect | OPT-OUT | Raw outbound connection. Same prohibition as `sdk.requests.send`: no outbound traffic in this phase, by an authored `must_haves.prohibitions` entry. |
+| sdk.net.connect | OPT-OUT | Raw outbound connection. Same prohibition as sdk.requests.send: no outbound traffic in this phase, enforced by packages/backend/src/outbound-prohibition.spec.ts, rule outbound-net. |
 | Database.exec(sql) | INTEGRATE | exercised by 01-01 tracer; 01-04 task 1 (DDL only, IF NOT EXISTS, plus the PRAGMA user_version write) |
 | Database.prepare(sql) | INTEGRATE | exercised by 01-01 tracer; 01-04 tasks 2 and 3 (prepare-per-write) |
 | Statement.run(...params) | INTEGRATE | exercised by 01-01 tracer; 01-04 task 2; gated by sql-discipline.spec.ts |
@@ -169,6 +169,6 @@ cross-check runs against them.
 | string_decoder — StringDecoder | INTEGRATE | source-only (tree-shaken from the shipped bundle; not in REQUIRED_SURFACES): 01-03 task 3 (decode.ts) — ENC-02 binds here specifically; NOT in the shipped bundle, NOT in REQUIRED_SURFACES |
 | buffer — Buffer | INTEGRATE | source-only (tree-shaken from the shipped bundle; not in REQUIRED_SURFACES): 01-03 task 3 (decode.ts, the cross-checked second path); NOT in the shipped bundle, NOT in REQUIRED_SURFACES |
 | caido:crypto | OPT-OUT | Measured to FAIL to load inside Caido 0.57.1 (`could not load module`). Bare `crypto` is the working path. Explicitly listed in the DIST-05 gate's failing set so a `caido:` prefix match cannot… |
-| caido:http — fetch | OPT-OUT | Loads successfully, and is deliberately not used: same outbound-traffic prohibition as `sdk.requests.send`. Phase 0 also measured that it delivers nothing back to `onInterceptResponse`. |
+| caido:http — fetch | OPT-OUT | Loads successfully, deliberately not used: same outbound prohibition, enforced by packages/backend/src/outbound-prohibition.spec.ts (rule outbound-import, all four specifier forms). |
 | fs, os, path, url, events, sqlite | OPT-OUT | All load inside Caido and are on the DIST-05 allowlist, but Phase 1 has no caller: no bodies are written to disk (P1-D3) and `sqlite` is reached only through `sdk.meta.db()`. Allowlisted-but-unused… |
 | TextDecoder / TextEncoder | OPT-OUT | Not globals and exported by no module Phase 0 probed. This is *why* items 35 and 36 exist; recorded so nobody re-derives the finding. |
