@@ -72,7 +72,10 @@
   //   One `@public` JSDoc tag, on store/db.ts's `resetDbHandle` — the single
   //   remaining export with no consumer, named for plan 01-05 one wave away. The
   //   tag puts that claim in the file somebody would edit rather than in a config
-  //   comment they would not read.
+  //   comment they would not read. GONE as of the phase-1 review fixes: the seam
+  //   turned out to be a no-op in production (nothing calls getDb twice), so it
+  //   is now `resetDbHandleForTest`, consumed by the specs like the other three
+  //   reset seams, and needs no tag.
   //
   "ignoreExportsUsedInFile": true,
   "rules": {

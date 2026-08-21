@@ -33,15 +33,19 @@
 // ===========================================================================
 //   1. ABORT   the in-flight walk, with a reason naming the change.
 //   2. DISCARD every queued entry — see {@link applyProjectChange}.
-//   3. RESET   the memoised database handle.
-//   4. SWAP    the active project id (and bump the epoch).
-//   5. ALLOW   admission again, by installing a fresh controller.
+//   3. SWAP    the active project id (and bump the epoch).
+//   4. ALLOW   admission again, by installing a fresh controller.
 //
 // `applyProjectChange` contains NO `await`. That is the whole guarantee: this
-// runtime has one thread, so with no suspension point between step 1 and step 5
+// runtime has one thread, so with no suspension point between step 1 and step 4
 // there is no window in which a write can observe a half-applied swap. An async
 // version of this function would have to defend against interleaving at every
 // step; a synchronous one cannot be interleaved at all.
+//
+// The database handle is NOT reset here, and that is a decision rather than an
+// omission: `sdk.meta.db()` is one database for the plugin across every project,
+// `index.ts` resolves it once and hands that object to the consumer and to both
+// read RPCs, and isolation is `project_id` in the key. See store/db.ts.
 //
 // ===========================================================================
 // ISOLATION IS NOT OPTIONAL, SO ITS INSTALLATION IS NOT BEST-EFFORT
@@ -70,7 +74,6 @@ import type { AbortLike } from "@defminer/engine/pipeline";
 import type { BoundedQueue } from "@defminer/engine/queue";
 
 import type { EnqueueClock } from "./hooks/passive";
-import { resetDbHandle } from "./store/db";
 // Redact-then-truncate. Error text on this path routinely quotes the thing the
 // plugin was working on, and the thing this pipeline works on is a target URL
 // (T-01-26). The host log is a channel the threat model covers too, not only the
@@ -106,10 +109,6 @@ export type LifecycleDeps = {
   /** Enqueue instants for those entries. Cleared with them, or the map keeps
    *  timestamps for ids nothing will ever take. */
   enqueuedAt: EnqueueClock;
-  /** Drop the memoised `sdk.meta.db()` handle. Injected so a spec can COUNT the
-   *  resets against the real memoisation instead of trusting that one happened;
-   *  production passes `store/db.ts`'s `resetDbHandle`. */
-  resetDb?: () => void;
   log?: (msg: string) => void;
 };
 
@@ -236,19 +235,13 @@ export function applyProjectChange(
     // Anything still stamped belongs to an entry the queue already dropped at
     // cap; it would never be taken and its timestamp would leak.
     deps.enqueuedAt.clear();
-
-    // --- 3. RESET -----------------------------------------------------------
-    // The next write re-resolves the handle. `sqlite_version()` is deliberately
-    // NOT re-read: a project change invalidates the handle, not the build of
-    // SQLite behind it.
-    (deps.resetDb ?? resetDbHandle)();
   }
 
-  // --- 4. SWAP --------------------------------------------------------------
+  // --- 3. SWAP --------------------------------------------------------------
   activeProjectId = next;
   epoch += 1;
 
-  // --- 5. ALLOW -------------------------------------------------------------
+  // --- 4. ALLOW -------------------------------------------------------------
   // LAST. Admission is gated on the active id, and in-flight work is gated on
   // the token installed here — so nothing that started before this line can
   // write after it under the old project.

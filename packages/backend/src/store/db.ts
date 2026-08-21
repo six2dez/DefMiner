@@ -25,19 +25,29 @@ export function getDb(sdk: MetaSdk): Promise<Database> {
 }
 
 /**
- * Drop the memoised handle. Plan 01-05 calls this on project change; nothing in
- * Phase 1's tracer path calls it. Deliberately does not close the pool — the SDK
- * exposes no close, and Caido owns the lifetime.
+ * ONE POOLED HANDLE SPANS EVERY PROJECT, BY DESIGN.
  *
- * `@public` because plan 01-03 restored knip's `exports` rule to ERROR (01-02
- * left that instruction in knip.json), and this is the ONE export left with no
- * consumer. It is a seam with a named owner one wave away, not dead code — and
- * tagging it is how that claim gets written down where the next reader is,
- * instead of being smuggled in by leaving the whole gate at `warn`.
+ * There is deliberately no production reset. `sdk.meta.db()` returns the ONE
+ * database Caido keeps for this plugin across every project — switching project
+ * does not change which file is open, so re-resolving the handle on a change
+ * would open a second pool onto the same bytes and prove nothing. Isolation is
+ * `project_id` in every primary key and every WHERE clause (STORE-02); it is not
+ * and cannot be a fresh connection.
  *
- * @public
+ * This mattered because the code used to claim otherwise. `applyProjectChange`
+ * called a reset and a comment said "the next write re-resolves the handle" —
+ * but `index.ts` resolves the handle ONCE and hands that object to the consumer
+ * and to both read RPCs, so nothing ever consulted the memo again. The reset was
+ * a no-op dressed as a safety property, and the test that covered it called
+ * `getDb()` by hand rather than driving anything production does.
+ *
+ * What remains is a TEST SEAM, named like the other three (`resetLifecycleForTest`,
+ * `resetConsumerForTest`, `resetPassiveForTest`): module state is process-global,
+ * so a spec that did not clear it would inherit the previous case's fixture
+ * database. Deliberately does not close the pool — the SDK exposes no close, and
+ * Caido owns the lifetime.
  */
-export function resetDbHandle(): void {
+export function resetDbHandleForTest(): void {
   handle = undefined;
 }
 
@@ -50,9 +60,8 @@ export function resetDbHandle(): void {
 // from a version string.
 //
 // Cached process-wide rather than per-handle: the engine underneath does not
-// change when the operator switches project, so `resetDbHandle()` deliberately
-// does NOT clear it. What a project change invalidates is the handle, not the
-// build of SQLite behind it.
+// change when the operator switches project, and neither does the database. See
+// `resetDbHandleForTest` above for why there is no production reset of either.
 
 let sqliteVersion: string | null = null;
 

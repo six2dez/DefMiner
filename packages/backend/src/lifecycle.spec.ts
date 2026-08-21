@@ -55,7 +55,7 @@ import {
   resetLifecycleForTest,
 } from "./lifecycle";
 import { listArtifacts } from "./store/artifacts";
-import { getDb, resetDbHandle } from "./store/db";
+import { getDb, resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
 import { listObservations } from "./store/observations";
 import { counters, resetTelemetryForTest } from "./telemetry";
@@ -69,7 +69,6 @@ const B = "project-bravo";
 let fx: SqliteFixture;
 let queue: BoundedQueue;
 let enqueuedAt: EnqueueClock;
-let resets: number;
 
 beforeEach(async () => {
   resetLifecycleForTest();
@@ -77,35 +76,25 @@ beforeEach(async () => {
   resetConsumerForTest();
   // Process-global memoisation. A case that did not clear it would inherit the
   // previous case's handle and count the wrong number of `meta.db()` calls.
-  resetDbHandle();
+  resetDbHandleForTest();
   fx = createFixtureDb();
   const report = await migrate(fx.db);
   expect(report.ok, JSON.stringify(report.steps)).toBe(true);
   queue = new BoundedQueue(QUEUE_CAP);
   resetTelemetryForTest();
   enqueuedAt = new Map();
-  resets = 0;
 });
 
 afterEach(() => {
   resetLifecycleForTest();
   resetPassiveForTest();
   resetConsumerForTest();
-  resetDbHandle();
+  resetDbHandleForTest();
   fx.close();
 });
 
-function deps(over: { resetDb?: () => void } = {}) {
-  return {
-    queue,
-    enqueuedAt,
-    resetDb:
-      over.resetDb ??
-      ((): void => {
-        resets += 1;
-        resetDbHandle();
-      }),
-  };
+function deps() {
+  return { queue, enqueuedAt };
 }
 
 /** The plugin's OBSERVABLE lifecycle state — what a caller can actually see.
@@ -297,9 +286,16 @@ describe("entries queued under the previous project", () => {
 // ===========================================================================
 
 describe("the memoised database handle", () => {
-  it("is re-resolved after a project change, proven by counting meta.db() calls", async () => {
+  // These two cases used to assert a per-change RESET, by calling getDb() by
+  // hand and counting meta.db(). Nothing production does ever calls getDb()
+  // twice — index.ts resolves the handle once and hands that object to the
+  // consumer and to both read RPCs — so the reset cleared a memo no one would
+  // consult and the test proved a property that held neither before nor after
+  // the change. What follows asserts the design that is actually in force.
+
+  it("is ONE pool for every project: a change does not re-resolve it", async () => {
     const sdk = makeFakeSdk({ projectId: A, db: async () => fx.db });
-    await installLifecycle(sdk, { queue, enqueuedAt });
+    await installLifecycle(sdk, deps());
 
     await getDb(asMetaSdk(sdk));
     await getDb(asMetaSdk(sdk));
@@ -310,20 +306,61 @@ describe("the memoised database handle", () => {
     ).toBe(1);
 
     applyProjectChange(makeFakeProject(B));
-
+    applyProjectChange(null);
     await getDb(asMetaSdk(sdk));
+
     expect(
       sdk.calls.metaDb,
-      "the handle was not reset, so the next write would go through a handle " +
-        "resolved while the previous project was selected.",
-    ).toBe(2);
+      "a project change opened a second pool. sdk.meta.db() is ONE database " +
+        "for the plugin across every project — the same file, whichever " +
+        "project is selected — so re-resolving proves nothing and hides where " +
+        "isolation actually lives.",
+    ).toBe(1);
   });
 
-  it("resets on the null branch too", async () => {
-    await installLifecycle(makeFakeSdk({ projectId: A }), deps());
-    const before = resets;
-    applyProjectChange(null);
-    expect(resets).toBe(before + 1);
+  it("serves both projects through that one handle, keyed apart by project_id", async () => {
+    // The PRODUCTION path, which the previous version of this describe block
+    // never ran: init() resolves the handle once, the consumer holds that object
+    // across a change, and the rows land apart because project_id is in the key.
+    const sdk = makeFakeSdk({
+      projectId: A,
+      db: async () => fx.db,
+      get: async (id: string) => ({
+        request: makeFakeRequest({ id, url: "https://x.test/" + id + ".js" }),
+        response: makeFakeResponse({ id, bodyBytes: body(id) }),
+      }),
+    });
+    await installLifecycle(sdk, deps());
+    wireHook();
+    const db = await getDb(asMetaSdk(sdk));
+
+    const handle = startConsumer(sdk, {
+      queue,
+      db,
+      enqueuedAt,
+      getProjectId: () => Promise.resolve(currentProjectId() ?? ""),
+      projectEpoch,
+      get signal() {
+        return currentSignal();
+      },
+    });
+
+    onResponse(sdk, makeFakeRequest({ id: "a1" }), makeFakeResponse());
+    await handle.drainNow();
+
+    await emitProjectChange(sdk, makeFakeProject(B));
+
+    onResponse(sdk, makeFakeRequest({ id: "b1" }), makeFakeResponse());
+    await handle.drainNow();
+    handle.stop();
+
+    expect(sdk.calls.metaDb).toBe(1);
+    const rowsA = await listArtifacts(fx.db, A);
+    const rowsB = await listArtifacts(fx.db, B);
+    expect(rowsA.length).toBe(1);
+    expect(rowsB.length).toBe(1);
+    expect(rowsA[0].project_id).toBe(A);
+    expect(rowsB[0].project_id).toBe(B);
   });
 });
 
