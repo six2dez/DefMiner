@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-12-PLAN.md
-last_updated: "2026-08-21T14:19:23.523Z"
+stopped_at: Completed 01-13-PLAN.md
+last_updated: "2026-08-21T14:35:48.071Z"
 last_activity: 2026-08-21
 last_activity_desc: 01-11 gap closure — URL userinfo and `;` path parameters redacted at the write path, the plugin-database path (and the OS username in it) kept off the getStatus RPC, and the no-pattern gate re-anchored on the AST across both modules; six mutations run
-state_head: f7c8d21f044e07b118adab0e5d92e9298636f475
+state_head: 4e16c11536a6853ccf2f77b376e04a97ace9a956
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 12 of 14 complete — gap-closure round 2 running, plans 01-12 … 01-14 remain
+Plan: 13 of 14 complete — gap-closure round 2 running, plans 01-12 … 01-14 remain
 Status: Ready to execute
 Last activity: 2026-08-21 — 01-11 executed: the URL head and the error-path filesystem path both redacted, `redactUrls` bounded by measurement, the pattern gate widened to `telemetry.ts` under a count-plus-anchor exemption
 
@@ -78,6 +78,7 @@ Progress: [████████░░] 79% of phase 01 (11 of 14 plans)
 | Phase 01 P10 | 18 min | 4 tasks | 7 files |
 | Phase 01 P11 | 30 min | 3 tasks | 7 files |
 | Phase 01 P12 | 22 min | 2 tasks | 2 files |
+| Phase 01 P13 | 13 min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The no-pattern gate's `telemetry.ts` exemption is a COUNT plus an ANCHOR — exactly one regex literal, inside `redactUrls` — never a file-name skip, so moving or renaming it fails until a new linearity measurement is owed (plan 01-11).
 - [Phase 01]: The read-only allowlist for a requests receiver is get/query/inScope/matches, derived from what the backend actually calls (consumer.ts:344, admit.ts:197) plus COVERAGE.md rows 7 and 8 — so a future outbound method like sendRaw fails the CORE-11 gate without anybody having to enumerate it — Every one of those four reads EXISTING traffic and generates none; that is the whole membership test, which is what lets the rule be 'any member NOT on this list' rather than a list of forbidden method names that the next SDK release invalidates.
 - [Phase 01]: An AST gate that cannot READ a construct must report it, never pass it: outbound-unanalysable fires on a computed key on a positively identified outbound receiver and on an import specifier that will not reduce to a literal — check-bundle-imports.mjs ALLOWLISTS caido:http (it answers 'measured loadable', not 'permitted'), so a dynamic import through a variable was invisible to both gates simultaneously — the single combination the two-gate design exists to rule out. Silence is indistinguishable from a pass.
+- [Phase 01]: STORE-07's gate follows the binding (derivesFrom) rather than matching it, and every residual it does not cover carries a named owner with a checkable requirement id — isRefTo required a bare identifier, so e.message and every cast form useUnknownInCatchVariables pushes an author toward reported clean; a disclosure without an owner is read as somebody else's problem by every reader in turn
 
 ### Known Risks Carried Forward
 
@@ -198,8 +200,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T14:19:00.694Z
-**Stopped at:** Completed 01-12-PLAN.md
+**Last session:** 2026-08-21T14:35:39.399Z
+**Stopped at:** Completed 01-13-PLAN.md
 **Resume file:** None
 
 ### Blockers

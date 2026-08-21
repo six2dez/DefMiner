@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 15
 waived_count: 0
 fixed_count: 2
-total_count: 13
-last_updated: 2026-08-21T14:18:53.110Z
+total_count: 17
+last_updated: 2026-08-21T14:33:35.597Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,10 @@ last_updated: 2026-08-21T14:18:53.110Z
 | 11 | 01 | stub | packages/backend/src/store/observations.ts |  | Path-embedded token in a URL path SEGMENT is NOT redacted — named residual, pinned by observations.spec.ts's RESIDUAL case | open |  | 2026-08-21T13:56:33.328Z |  |
 | 12 | 01 | stub | packages/backend/src/telemetry.ts |  | Windows C:\\\\ paths are not redacted by redactPaths, and a path containing a space loses only the portion before the space — both named residuals | open |  | 2026-08-21T13:56:33.426Z |  |
 | 13 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | Accepted residual T-01-51: a value crossing a function boundary or more than one hop of indirection is beyond the walk; reported as outbound-unanalysable only where the walk can tell indirection is happening | open |  | 2026-08-21T14:18:53.110Z |  |
+| 14 | 01 | deviation | packages/backend/src/store/error-redaction.spec.ts |  | Accepted residual (boundary 2): the STORE-07 walk builds no symbol table and is scope-blind — the caught binding is resolved by NAME, copy tracking is ONE hop, and a value crossing a function boundary is beyond it | open |  | 2026-08-21T14:33:35.305Z |  |
+| 15 | 01 | deviation | packages/backend/src/compat.ts | 317 | T-01-37 accept: renders String(e).slice(0,160) into the per-surface error field, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-04 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.405Z |  |
+| 16 | 01 | deviation | packages/backend/src/hooks/passive.ts | 171 | T-01-37 accept: renders String(e).slice(0,160) into sdk.console.log on the hook error path, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-03 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.502Z |  |
+| 17 | 01 | deviation | .planning/REQUIREMENTS.md |  | T-01-76 accept: STORE-03 and STORE-07 are declared by redaction plans for work neither requirement's text mentions. Deferred WITH AN OWNER by plan 01-10 task 3 — the operator, at the next requirements pass | open |  | 2026-08-21T14:33:35.597Z |  |
 
 ````json
 [
@@ -185,6 +189,54 @@ last_updated: 2026-08-21T14:18:53.110Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T14:18:53.110Z",
+    "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/store/error-redaction.spec.ts",
+    "line": null,
+    "description": "Accepted residual (boundary 2): the STORE-07 walk builds no symbol table and is scope-blind — the caught binding is resolved by NAME, copy tracking is ONE hop, and a value crossing a function boundary is beyond it",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T14:33:35.305Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/compat.ts",
+    "line": 317,
+    "description": "T-01-37 accept: renders String(e).slice(0,160) into the per-surface error field, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-04 (ROADMAP.md:396)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T14:33:35.405Z",
+    "resolved_at": null
+  },
+  {
+    "id": 16,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/hooks/passive.ts",
+    "line": 171,
+    "description": "T-01-37 accept: renders String(e).slice(0,160) into sdk.console.log on the hook error path, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-03 (ROADMAP.md:396)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T14:33:35.502Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "deviation",
+    "phase": "01",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "T-01-76 accept: STORE-03 and STORE-07 are declared by redaction plans for work neither requirement's text mentions. Deferred WITH AN OWNER by plan 01-10 task 3 — the operator, at the next requirements pass",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-21T14:33:35.597Z",
     "resolved_at": null
   }
 ]

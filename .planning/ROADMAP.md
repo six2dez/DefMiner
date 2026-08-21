@@ -120,7 +120,7 @@ Plans:
 
 **Wave 13** *(blocked on 01-12 — shares `outbound-prohibition.spec.ts`)*
 
-- [ ] 01-13-PLAN.md — **Gap 2b**: the STORE-07 redaction gate made to follow the binding rather than match it, so `e.message` and every cast form fail, with an owner named for every bare render it does not cover — *wave 13*
+- [x] 01-13-PLAN.md — **Gap 2b**: the STORE-07 redaction gate made to follow the binding rather than match it, so `e.message` and every cast form fail, with an owner named for every bare render it does not cover — *wave 13*
 
 **Wave 14** *(blocked on 01-13 — needs every redaction change landed before the live tier can assert them)*
 
