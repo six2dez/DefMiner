@@ -100,7 +100,7 @@ Plans:
 
 **Wave 8** *(blocked on 01-07 — needs its redactor)*
 
-- [ ] 01-08-PLAN.md — **Gap 1, one-way half**: measure the pre-policy row population read-only, then a `blocking-human` decision on whether those rows are redacted in place, purged, or left to age out — *wave 8*
+- [x] 01-08-PLAN.md — **Gap 1, one-way half**: measure the pre-policy row population read-only, then a `blocking-human` decision on whether those rows are redacted in place, purged, or left to age out — *wave 8*
 
 **Wave 9** *(blocked on 01-08 — sequencing, not code: all three gap plans mutate the shared tree to prove their gates can fail, and each asserts whole-suite green)*
 

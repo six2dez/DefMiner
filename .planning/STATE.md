@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-08-21T10:29:08.394Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-08-21T10:52:56.833Z"
 last_activity: 2026-08-21
-last_activity_desc: 01-07 gap closure — write-path query redaction, store error-render gate, live tracer proof
-state_head: 4940ede0e5643e26721eeba9d8139c6713d0fab8
+last_activity_desc: 01-08 gap closure — pre-policy observation rows measured at 0 and left, by operator decision at a blocking-human checkpoint
+state_head: 36752ca0c288b252f3f850b502499992ca38cf28
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -28,14 +28,15 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 7 of 9 complete — next is 01-08 (gap 1's one-way half)
-Status: Ready to execute 01-08
-Last activity: 2026-08-21 — 01-07 executed: write-path query redaction, store error-render gate, live tracer proof
+Plan: 8 of 9 complete — next is 01-09, the last plan of the phase
+Status: Ready to execute 01-09
+Last activity: 2026-08-21 — 01-08 executed: pre-policy observation rows measured read-only at 0 across the 1 DefMiner database on this host; operator chose `leave` at a blocking-human checkpoint; no code shipped
 
-Progress: [███████░░░] 78% of phase 01 (7 of 9 plans)
+Progress: [████████░░] 89% of phase 01 (8 of 9 plans)
 
 > The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
-> returned `progress percent withheld by buildStateFrontmatter` on this run, and the
+> returned `progress percent withheld by buildStateFrontmatter` on this run too (it has
+> now done so on two consecutive plans), and the
 > previous value (8%) was already stale — it read 8% both at 0 and at 6 completed
 > plans. The figure above is the phase-local one, stated with its basis rather than
 > as an unexplained number.
@@ -68,6 +69,7 @@ Progress: [███████░░░] 78% of phase 01 (7 of 9 plans)
 | Phase 01 P05 | 35 min | 3 tasks | 14 files |
 | Phase 01 P06 | 24 min | 3 tasks | 37 files |
 | Phase 01 P07 | 49 min | 3 tasks | 35 files |
+| Phase 01 P08 | 18 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -134,6 +136,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P7-D3: the store redaction gate carries a FOURTH rule, `unredacted-persisted-error`, over error-shaped function PARAMETERS. The three catch-scoped rules cannot reach `analyses.ts:194` by construction — its binding is a parameter, not a caught exception — and :194 is the ONE line in the store layer that writes the `analyses.error` column. A catch-scoped-only gate would have had a hole one line below a site it does cover
 - [Phase 01]: P7-D4 (execution-time correction to plan 01-07): the plan's stated rationale for the redact-before-truncate test is WRONG FOR THIS REDACTOR. Because a value is replaced whole regardless of length and URL_MAX truncation removes only a tail, the first `=` of every segment is stable — so truncate-first cannot expose a value either, and the assertion the plan asked for would have passed under BOTH orderings. The ordering case instead asserts the difference that IS observable (parameter names past the cut survive redact-first, are lost truncate-first) and fails under the mutation. The ordering stays load-bearing: any future redactor that preserves a length, a prefix or a fingerprint makes truncate-first leak immediately
 - [Phase 01]: P7-D5 (operator decision at a blocking-human checkpoint, 2026-08-21): P1_EXPECT_VERSION moved 0.57.1 -> 0.58.0. An AUTHORISED EVIDENCE-CONTRACT CHANGE, not a version bump — 0.57.1 is unobtainable (the app bundle auto-upgraded in place; no PINNED_SHA512 entry; P6-D5 recorded api.caido.io 404s every non-`latest` version). COMPATIBLE IS NOT RE-MEASURED: 01-06 proved the 16 SDK surfaces behave identically, which is a claim about surface BEHAVIOUR, not timing or memory. Every go-no-go.json threshold was measured on 0.57.1 and none has been re-measured — a phase wanting to trust a Phase 0 NUMBER on 0.58.0 must re-measure first. Fail-closed tripwire verified in place: tests/phase1-load.spec.ts and tests/phase1-runtime.spec.ts still hard-code EXPECTED_CAIDO_VERSION "0.57.1", so re-running spa-load.sh or runtime-answers.sh FAILS loudly rather than contaminating a threshold artifact
+- [Phase 01]: P8-D1 (operator decision at a gate="blocking-human" checkpoint, 2026-08-21, resume signal `leave`): pre-policy `observations.url` rows are LEFT AS THEY ARE. The load-bearing reason is NOT that the measured count (0) is small — it is that the target population is CLOSED BY CONSTRUCTION. A pre-policy row can only be written by a build predating 01-07's write-path redactor; DefMiner has never shipped, so only a developer machine could hold one, and the one DefMiner database on this host holds zero. Every build from 01-07 onward redacts at write, so none can ever be added. A sweep would therefore be permanently dead code guarding an empty set that cannot grow — not machinery arriving early. STORE-06's 90-day window bounds an EMPTY SET: recorded as "no exposure to accept", not as an accepted exposure. T-01-36 closed by measurement; STORE-03 settled rather than dangling into 01-09
+- [Phase 01]: P8-D2: an exposure measurement prefers `sqlite3 -readonly` (WAL-aware) and falls back to `file:<db>?mode=ro&immutable=1` ONLY where no `-wal` sidecar exists; where a read-only open fails AND a non-empty `-wal` is present, NO count is taken and the database is reported as a named error, never as a zero. Proven necessary on this run rather than argued: an immutable read of the one DefMiner database (45,352-byte `-wal`) reports NO TABLES AT ALL, from which a COUNT(*) harness derives a confident zero indistinguishable from a clean bill of health. Seven of the eight plugin databases on this host refused `-readonly` outright, so the naive fallback was the obvious path and would have fabricated the number the operator then decided against
 
 ### Known Risks Carried Forward
 
@@ -176,8 +180,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T10:29:08.357Z
-**Stopped at:** Completed 01-07-PLAN.md
+**Last session:** 2026-08-21T10:52:30.613Z
+**Stopped at:** Completed 01-08-PLAN.md
 **Resume file:** None
 
 ### Blockers

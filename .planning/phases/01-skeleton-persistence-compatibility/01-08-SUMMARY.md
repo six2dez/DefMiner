@@ -102,9 +102,9 @@ metrics:
   files: 4
 
 actuals:
-  tokens: 8000
+  tokens: 12160
   tasks: 3
-  commits: 3
+  commits: 4
 ---
 
 # Phase 01 Plan 08: Pre-Policy Observation Rows — Disposition Summary
