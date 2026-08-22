@@ -73,12 +73,40 @@ export const QUERY_VALUE_REDACTION = "<redacted>";
  *
  * WHAT REPLACED IT: decision P10-D1 (operator, 2026-08-21, at a
  * `gate="blocking-human"` checkpoint) — a bare segment is a VALUE WITH NO NAME and
- * is redacted by construction, so no length of bare segment survives and there is
- * no "shorter than the bound" left for a future credential format to hide in.
- * This is a POLICY change, not a bug fix: decision P7-D2 was a faithful reading of
- * the operator's UAT words ("keeping the path and the parameter names"), and the
- * words were re-opened. Enforced by `observations.spec.ts`'s
- * `BARE_CREDENTIAL_SHAPES` block, one executed case per format.
+ * is redacted by construction. This is a POLICY change, not a bug fix: decision
+ * P7-D2 was a faithful reading of the operator's UAT words ("keeping the path and
+ * the parameter names"), and the words were re-opened. Enforced by
+ * `observations.spec.ts`'s `BARE_CREDENTIAL_SHAPES` block, one executed case per
+ * format.
+ *
+ * AMENDED 2026-08-22 (CR-07) — amended in place, because the sentence being
+ * removed is worth being able to read. This block used to END the paragraph above
+ * with:
+ *
+ *   "…so no length of bare segment survives and there is no 'shorter than the
+ *    bound' left for a future credential format to hide in."
+ *
+ * THAT SENTENCE WAS FALSE AS EXECUTED, and it was false in the direction that
+ * gets trusted: it tells the reader most likely to add a credential grammar not
+ * to bother looking. What P10-D1's CONSTRUCTION actually tested was the presence
+ * of an `=` BYTE — `indexOf("=") === -1` — and an `=` byte is not the same fact as
+ * a `name=value` pair. Standard base64 pads with `=`, so the most common shape of
+ * an opaque credential on the wire took the OTHER branch and was promoted into the
+ * retained name half: `?dXNlcjpwYTU1dzByZA==` was written into this column as
+ * `?dXNlcjpwYTU1dzByZA=<redacted>`, and one re-pad plus one `base64 -d` returns
+ * `user:pa55w0rd`. This bound never caught it — standard base64 of a 32-byte
+ * secret is 44 characters, comfortably inside 64.
+ *
+ * WHAT PROVED IT: the code review executed it through the shipped
+ * `normaliseObservedUrl` on both delimiters, and the end-to-end case titled
+ * "a PADDED credential does not reach the column on EITHER delimiter" was written
+ * RED against a real SQLite row before the branch that closes it existed.
+ *
+ * WHAT THE CORRECTED CONSTRUCTION TESTS: whether the segment is a GENUINE PAIR,
+ * which it is only when the value half is non-empty and not entirely `=` padding.
+ * A segment that is not a genuine pair is redacted whole on both delimiters. What
+ * is still kept, and kept BY POLICY rather than by oversight, is the NAME half of
+ * a genuine pair — see {@link redactDelimitedSegment}.
  */
 export const QUERY_NAME_MAX = 64;
 
@@ -100,6 +128,32 @@ export const QUERY_NAME_MAX = 64;
  * redacted whole. An EMPTY segment pushes the empty string instead: there is
  * nothing there to redact and `<redacted>` would invent a parameter that was
  * never sent.
+ *
+ * CORRECTED 2026-08-22 (CR-07). This block used to state the `=`-less branch as
+ * "with no `=` it is a VALUE WITH NO NAME" and leave the CONVERSE to be assumed —
+ * that WITH an `=` it is a name and a value. The converse was assumed and it was
+ * false, and one whole class of credential lives in the gap. So the predicate is
+ * stated here in BOTH directions rather than in one:
+ *
+ *   A segment is a GENUINE PAIR when, and only when, its value half — everything
+ *   after the FIRST `=` — is non-empty and is not entirely `=`. Only a genuine
+ *   pair keeps its name half.
+ *
+ *   Everything else — no `=` at all, an empty value half, a value half of
+ *   nothing but padding — was never a pair and is redacted WHOLE.
+ *
+ * THE RESIDUAL THIS DELIBERATELY LEAVES, named here because a reader of this
+ * helper is the reader who needs it: the name half of a genuine pair is retained
+ * up to {@link QUERY_NAME_MAX} WHATEVER IT CONTAINS, including a credential
+ * pasted where a parameter name goes, and including the prefix of a token that
+ * happens to carry an interior `=`. "Every VALUE is replaced" is NOT the sentence
+ * "no authorization token reaches this column", and the difference is kept by
+ * policy — parameter names are the analytic value the operator's UAT decision of
+ * 2026-08-21 chose to keep. Listed as an OPEN grammar in `schema.spec.ts` and
+ * pinned by the executed cases titled "RESIDUAL, PINNED: the retained NAME half
+ * of a GENUINE pair is kept whatever it contains" and "RESIDUAL, PINNED: the
+ * retained NAME half, second face", so the day somebody closes it they go RED and
+ * it is closed deliberately.
  *
  * WITH AN `=` THAT WAS PADDING RATHER THAN A SEPARATOR (added 2026-08-22, CR-07):
  * redacted whole, exactly as the `=`-less branch does. A pair whose VALUE half is

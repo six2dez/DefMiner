@@ -42,14 +42,40 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  * one sentence is what went wrong here before, so it is stated per URL grammar
  * and no wider than the cases that RUN at the moment you are reading this:
  *
- *   ENFORCED — the QUERY grammar, everything after the first `?`. Every VALUE of
- *     a `name=value` segment is replaced, and since 2026-08-21 (decision P10-D1)
- *     so is every BARE segment carrying no `=`. Enforcing spec:
- *     `observations.spec.ts`, whose `BARE_CREDENTIAL_SHAPES` block runs one case
- *     per credential format (PAT, AWS key id, Stripe secret, session id, UUID,
- *     JWT and two short opaque tokens) and each goes RED when the branch is
- *     reverted. Proven end to end by `scripts/phase1/tracer-e2e.sh`, which reads
- *     the column with sqlite3 from outside Caido.
+ *   ENFORCED — the QUERY grammar, everything after the first `?`, stated as the
+ *     rule the code implements rather than as the rule it was hoped to implement
+ *     (amended 2026-08-22, CR-07). A segment is a GENUINE PAIR only when its
+ *     value half — everything after the FIRST `=` — is non-empty and is not
+ *     entirely `=` padding. The VALUE of a genuine pair is replaced. A segment
+ *     that is NOT a genuine pair is redacted WHOLE: no `=` at all (decision
+ *     P10-D1, 2026-08-21), an EMPTY value half, or a value half of nothing but
+ *     padding — which is what every standard-base64 credential looks like on the
+ *     wire, since RFC 4648 §4 pads with `=`.
+ *     Enforcing spec: `observations.spec.ts`, whose `BARE_CREDENTIAL_SHAPES`
+ *     block runs one case per credential format and each goes RED when the branch
+ *     is reverted — the eight `=`-less formats (PAT, AWS key id, Stripe secret,
+ *     session id, UUID, JWT and two short opaque tokens) plus, since 2026-08-22,
+ *     the `=`-bearing ones: "HTTP Basic credential, standard base64 with TWO `=`
+ *     of padding", "HTTP Basic credential, standard base64 with ONE `=` of
+ *     padding" (the two sub-branches — a value half of a lone `=`, and an EMPTY
+ *     value half), "session id with a single trailing `=` and nothing after it",
+ *     percent-encoded padding and unpadded base64url. The whole-segment branch's
+ *     accepted cost is pinned by "ACCEPTED COST (CR-07): `?debug=` loses its NAME
+ *     as well as its value".
+ *     LIVE PROOF, SCOPED TO WHAT ACTUALLY RUNS TODAY (2026-08-22). This entry used
+ *     to end "Proven end to end by `scripts/phase1/tracer-e2e.sh`, which reads the
+ *     column with sqlite3 from outside Caido" — full stop, covering the whole
+ *     grammar. That sentence is true only of the grammars the tracer EXERCISES:
+ *     the `=`-less bare segment, userinfo, and `;` path parameters. All five of
+ *     that script's dye values come from `openssl rand -hex` and hex carries no
+ *     `=`, so NO live run has ever exercised the padded grammar. The padded
+ *     grammar is proven at the UNIT tier by the cases named above, including one
+ *     that reads the row back out of a real SQLite file
+ *     ("a PADDED credential does not reach the column on EITHER delimiter"). Its
+ *     LIVE proof is owned by PLAN 01-17, which adds a padded dye and amends this
+ *     sentence when its committed run exists. Widening the paragraph above while
+ *     leaving this sentence unscoped would assert an end-to-end run that does not
+ *     exist for two waves — the same defect this amendment exists to remove.
  *
  *   ENFORCED — URL USERINFO, since 2026-08-21 (plan 01-11). Resolved inside the
  *     AUTHORITY component only — after the first `://`, up to the first `/`, `?`
@@ -59,32 +85,65 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *     MUST-NOT-TOUCH half asserts that an `@` in a PATH — `/@vite/client.js`,
  *     `/@scope/pkg/index.js` — is byte-identical, because an `@`-anywhere rule
  *     is the obvious wrong implementation.
+ *     ITS PRECONDITION, STATED (2026-08-22, CR-07) rather than left implicit: the
+ *     guarantee holds only when the input CARRIES `://`. The authority is resolved
+ *     AFTER the first `://`, so a scheme-relative reference — `//user:pw@cdn/a.js`
+ *     — has no authority and keeps its userinfo verbatim. That is a precondition
+ *     on the CALLER, not a property of the redactor, and the caller is
+ *     `consumer.ts`'s `rr.request.getUrl()`, which is absolute — the only path
+ *     that reaches `recordObservation` with a target-controlled URL. Pinned by
+ *     "RESIDUAL, PINNED: a SCHEME-RELATIVE reference keeps its userinfo".
  *
- *   ENFORCED — `;`-DELIMITED PATH PARAMETERS, since 2026-08-21 (plan 01-11), by
- *     THE SAME RULE as a query parameter and through the same internal helper:
- *     `;jsessionid=SECRETSESSION` keeps its name and loses its value, and a bare
- *     `;` segment follows P10-D1 exactly as a bare query segment does. ONE
+ *   ENFORCED — `;`-DELIMITED PATH PARAMETERS IN THE PATH, since 2026-08-21 (plan
+ *     01-11), by THE SAME RULE as a query parameter and through the same internal
+ *     helper: `;jsessionid=SECRETSESSION` keeps its name and loses its value, and
+ *     a `;` segment that is not a genuine pair — no `=`, or an `=` that was
+ *     padding — is redacted whole exactly as its query counterpart is. ONE
  *     policy, two delimiters — `redactDelimitedSegment` in `observations.ts` is
  *     the single implementation both loops call, which is what makes that true
  *     rather than asserted. Enforcing spec: `observations.spec.ts`'s
- *     `HEAD_CASES`.
+ *     `HEAD_CASES`, which since 2026-08-22 carries the `;` mirror of every padded
+ *     shape the query table holds.
+ *     QUALIFIED TO THE PATH (2026-08-22, CR-07), and the qualifier is the whole
+ *     row's accuracy: the `;` loop runs over `s.slice(pathStart)`, so a `;`
+ *     parameter inside the AUTHORITY — `https://cdn.test;jsessionid=S/app.js` —
+ *     is returned byte-identical. Same precondition on the caller as the userinfo
+ *     row above. Pinned by "RESIDUAL, PINNED: a `;` parameter inside the
+ *     AUTHORITY".
  *
- *   OPEN — ONE grammar outside the query still reaches this column verbatim, and
- *     it is the only one:
+ *   OPEN — TWO grammars still reach this column verbatim. The count moved from
+ *     one to two on 2026-08-22 (CR-07); see the AMENDED note below.
  *       path-embedded tokens   `https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9…/app.js`
  *                              — stored whole. How signed CDN and object-store
  *                              URLs are shaped when the signature is not a query
  *                              parameter.
- *     NOT closed, and the reason is specific rather than "out of scope":
- *     distinguishing a signed-URL segment from a legitimate path segment needs
- *     either entropy scoring — for which Phase 1 has no measured false-positive
- *     rate, and which would shred ordinary hashed asset names, destroying the
- *     analytic core of this column — or a pattern, which `REDOS_RECOVERY =
- *     "kill"` forbids in that module. PINNED, not merely named: the case titled
- *     "RESIDUAL, PINNED: a token embedded in a path SEGMENT is NOT redacted" in
- *     `observations.spec.ts` asserts the current behaviour, so the day somebody
- *     closes it that case goes RED and they update it deliberately. SOURCE:
- *     WR-11.
+ *       the retained NAME HALF `https://cdn.test/a.js?ghp_AAAA…=1` — the name half
+ *       of a genuine pair      of a `name=value` segment is KEPT, bounded by
+ *                              `QUERY_NAME_MAX` = 64 and by nothing else, WHATEVER
+ *                              IT CONTAINS. So a credential pasted where a
+ *                              parameter name goes survives, and so does the
+ *                              prefix of a token carrying an interior `=`.
+ *                              SAY IT IN AS MANY WORDS, because the entry above
+ *                              reads as though it were already said: "every VALUE
+ *                              is replaced" is NOT the sentence "no authorization
+ *                              token reaches this column". They differ by exactly
+ *                              this grammar.
+ *     NEITHER is closed, and the reasons are specific rather than "out of scope".
+ *     For path-embedded tokens: distinguishing a signed-URL segment from a
+ *     legitimate path segment needs either entropy scoring — for which Phase 1 has
+ *     no measured false-positive rate, and which would shred ordinary hashed asset
+ *     names, destroying the analytic core of this column — or a pattern, which
+ *     `REDOS_RECOVERY = "kill"` forbids in that module. For the retained name
+ *     half: it is KEPT BY POLICY. Parameter names are the analytic value the
+ *     operator's UAT decision of 2026-08-21 deliberately chose to keep, and
+ *     redacting them would undo that decision rather than implement it.
+ *     PINNED, not merely named — the cases titled "RESIDUAL, PINNED: a token
+ *     embedded in a path SEGMENT is NOT redacted", "RESIDUAL, PINNED: the
+ *     retained NAME half of a GENUINE pair is kept whatever it contains" and
+ *     "RESIDUAL, PINNED: the retained NAME half, second face" in
+ *     `observations.spec.ts` assert the current behaviour, so the day somebody
+ *     closes one that case goes RED and they update it deliberately. SOURCES:
+ *     WR-11 (the first), CR-07 (the second).
  *
  * WHY THE WORDING CHANGED, recorded rather than quietly edited. This paragraph
  * used to read "Nothing below can hold … an authorization token", followed by
@@ -103,18 +162,33 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  * AMENDED 2026-08-21 (plan 01-11), and amended in place rather than rewritten.
  * When this paragraph was written it named THREE open grammars — userinfo, `;`
  * path parameters and path-embedded tokens — all owned by plan 01-11. Two of the
- * three are now ENFORCED and are listed as such above; ONE remains, and the
+ * three are now ENFORCED and are listed as such above; ONE remained, and the
  * count in this note is the record that the number moved from three to one on a
  * date rather than having always been one. The ownership note stopped being a
  * promise by the two grammars closing, not by the sentence being deleted.
  *
+ * AMENDED AGAIN 2026-08-22 (CR-07): the count moved from ONE to TWO. A count that
+ * only ever goes down is the shape of a claim being MANAGED rather than MEASURED,
+ * so the direction of this move is worth as much as the number. THE REASON: the
+ * grammar added is not newly opened — it was open the whole time and this list
+ * did not name it. The retained NAME half of a genuine pair keeps whatever it
+ * contains, and a credential pasted in name position therefore reaches this
+ * column. It sat INSIDE the grammar this list declared closed, which is the worst
+ * place for an omission: an OPEN list is trusted precisely for its completeness,
+ * and an incomplete one is worse than no list at all. Found by code review after
+ * the SAME review found that a padded credential took the pair branch at all;
+ * that half was a defect and is fixed, this half is policy and is now listed.
+ *
  * The four entries that could conceivably carry target bytes, and why each is
  * here deliberately rather than by omission:
  *   observations.url          — a URL with the fragment stripped, EVERY QUERY VALUE
- *                               REPLACED with `<redacted>` — including a BARE
- *                               `=`-less segment, which is a value with no name
- *                               (P10-D1) — the names of `name=value` pairs and
- *                               their order retained, truncated to 2048. It is the
+ *                               REPLACED with `<redacted>` — including any segment
+ *                               that is not a GENUINE PAIR, which is a bare
+ *                               `=`-less segment (P10-D1) and, since 2026-08-22
+ *                               (CR-07), one whose value half is empty or is only
+ *                               `=` padding — the names of genuine `name=value`
+ *                               pairs and their order retained, truncated to 2048.
+ *                               It is the
  *                               artifact->request edge; without it the plugin
  *                               records that bytes were seen but not WHERE. The
  *                               names are the analytic value the operator's UAT
@@ -127,10 +201,19 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               by the same helper the query loop uses. Enforced
  *                               by observations.spec.ts.
  *                               NOT REDACTED, and named here so this entry is not
- *                               read as a complete guarantee: a token embedded in
- *                               a path SEGMENT — the ONE grammar listed as OPEN
- *                               above, pinned by an executed case rather than left
- *                               as a sentence.
+ *                               read as a complete guarantee — BOTH grammars listed
+ *                               as OPEN above, matching that list rather than a
+ *                               subset of it (corrected 2026-08-22, CR-07): (1) a
+ *                               token embedded in a path SEGMENT, and (2) the
+ *                               retained NAME HALF of a genuine pair, which is kept
+ *                               by policy whatever it contains, so a credential
+ *                               pasted in name position reaches this column
+ *                               bounded only by `QUERY_NAME_MAX`. Each is pinned by
+ *                               an executed case rather than left as a sentence.
+ *                               Two preconditions also stated above rather than
+ *                               implied: the userinfo guarantee needs the input to
+ *                               carry `://`, and the `;` guarantee is a PATH
+ *                               guarantee.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission
