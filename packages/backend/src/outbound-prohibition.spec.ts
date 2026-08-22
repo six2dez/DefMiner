@@ -5,7 +5,10 @@
 // no sdk.requests.send in any spelling, no method of an identified requests or
 // net receiver outside a read-only allowlist, no global fetch by any receiver or
 // alias, no XMLHttpRequest, WebSocket or EventSource, and no speculative
-// retrieval of any kind".
+// retrieval of any kind". Two more surfaces joined the enumeration on 2026-08-22
+// under that same "of any kind": navigator.sendBeacon, and dynamic code
+// construction (eval, new Function) — a string this gate cannot read into is a
+// way to reach every surface above while reporting clean.
 //
 // WHICH REQUIREMENT, AND WHY IT CHANGED ON 2026-08-21. This prohibition was
 // tagged CORE-01 until that date. `REQUIREMENTS.md`'s CORE-01 is the
@@ -93,13 +96,45 @@
 //        specifier it cannot reduce to a literal, is REPORTED as
 //        `outbound-unanalysable`. "Could not read" does not mean "clean"; that
 //        equivalence is the specific defect this rewrite removes.
+//      - EXTENDED 2026-08-22 (WR-19), because the sentence above was true of
+//        computed MEMBERS and false of computed RECEIVERS, which is the same
+//        equivalence standing one level up. `sdk["req" + "uests"].send(req)` and
+//        `globalThis["fet" + "ch"](u)` both returned an EMPTY list while
+//        `import("caido:" + "http")` correctly reported. Now:
+//          - an element access whose key the walk can see being ASSEMBLED —
+//            concatenated, interpolated, or returned by a call — is an
+//            UNREADABLE RECEIVER, a third state distinct from "not a receiver",
+//            and it is reported wherever that value is used as one, including
+//            through a one-hop binding and through a destructure;
+//          - a member of a POSITIVELY IDENTIFIED global receiver whose name will
+//            not reduce is reported, which is the `globalThis["fet"+"ch"]` half.
+//      - `navigator.sendBeacon` is covered, RECEIVER-ANCHORED (the bare receiver,
+//        any of the four global receivers, or a one-hop alias) so that an
+//        ordinary object defining a method of that name stays quiet; and `eval`
+//        and `new Function` are refused outright, bare or on a global receiver,
+//        because no AST gate can see inside a string. Both surfaces were added
+//        2026-08-22 after the verifier probed them; both were previously quiet
+//        AND absent from this list, which is the failure mode this enumeration
+//        exists to prevent.
 //
-//    THE RESIDUAL, precisely: a value that flows through a FUNCTION BOUNDARY, or
-//    through MORE THAN ONE HOP of indirection, is beyond the walk. Where it can
-//    tell indirection is happening it reports it; where it cannot — a receiver
-//    returned by a helper, a two-hop string — it misses it silently. That is the
-//    honest bound, and `pnpm check:bundle` plus the mutation runs recorded in
-//    `01-12-SUMMARY.md` are what stand behind it.
+//    THE RESIDUAL, precisely, and it has THREE parts after the 2026-08-22
+//    widening:
+//      (a) a value that flows through a FUNCTION BOUNDARY, or through MORE THAN
+//          ONE HOP of indirection, is beyond the walk. `const a = "requests";
+//          const b = a; sdk[b].send(req)` reports nothing, and that is asserted
+//          below as a measured fact rather than left to be discovered.
+//      (b) a merely DYNAMIC key — a bare identifier or a parameter, `sdk[k]` —
+//          is NOT reported. That bound was set by measurement: reporting every
+//          key that would not reduce fired twice on the real tree, on
+//          `compat.ts`'s documented dotted-path walk and on array indexing, and
+//          a gate that calls those an outbound network surface gets deleted
+//          rather than fixed. The walk reports what it can see being HIDDEN and
+//          discloses what it merely cannot FOLLOW.
+//      (c) `navigator` reached through more than one hop, or returned by a
+//          helper, is outside the beacon rule for the same reason as (a).
+//    That is the honest bound, and `pnpm check:bundle` plus the mutation runs
+//    recorded in `01-12-SUMMARY.md` and `01-16-SUMMARY.md` are what stand behind
+//    it.
 // 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
 //    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
 //    `store/error-redaction.spec.ts` needs — both DELIBERATELY. Exporting one
@@ -199,6 +234,46 @@ const OUTBOUND_CONSTRUCTORS = new Set<string>([
   "EventSource",
 ]);
 
+/**
+ * The BEACON surface, and the receiver it lives on.
+ *
+ * Added 2026-08-22. `navigator.sendBeacon(url, data)` is an outbound POST that
+ * needs no import, no SDK call and no constructor, and it is the outbound global
+ * MOST likely to exist in a host that has none of the three above — it is part of
+ * the same "page teardown telemetry" cluster a browser-shaped runtime ships first.
+ * It was quiet AND undisclosed until this date, which is the worse of the two
+ * failure modes: the header enumerated what the gate covered and this was not on
+ * the list, so a reader had no way to know it was missing.
+ *
+ * The rule is RECEIVER-ANCHORED, not member-name-only, for the same reason
+ * `GLOBAL_RECEIVERS` restricts `fetch`: an ordinary object may perfectly well
+ * define a method called `sendBeacon`, and a gate that broke it would be reverted
+ * within the hour. What is flagged is a `sendBeacon` member of `navigator`, of
+ * `navigator` reached through any of the four global receivers, or of a one-hop
+ * alias of either — asserted both ways below.
+ */
+const NAVIGATOR = "navigator";
+const BEACON_METHOD = "sendBeacon";
+
+/**
+ * DYNAMIC CODE CONSTRUCTION, refused rather than analysed.
+ *
+ * Added 2026-08-22. `eval("sdk.requests.send(r)")` and
+ * `new Function("r", "return fetch(r)")` reached every surface this file forbids
+ * and reported CLEAN, because no AST gate can see inside a string literal — and
+ * that is precisely the argument for refusing the construct instead of trying to
+ * analyse it. It is the same two-identifier posture `OUTBOUND_CONSTRUCTORS` takes
+ * one paragraph up: the cost is two names, and a surface excluded because it is
+ * unlikely is a surface nobody checked.
+ *
+ * Both spellings of each are covered: the bare call (`eval(s)`, `Function(a, b)`),
+ * the construction (`new Function(...)`), and the member on a global receiver
+ * (`globalThis.eval`, `new globalThis.Function(...)`) — including a bare member
+ * REFERENCE with no call, the same way the receiver rules already catch
+ * `const s = sdk.requests.send`.
+ */
+const DYNAMIC_CODE = new Set<string>(["eval", "Function"]);
+
 type OutboundRule = Readonly<{ rule: string; surface: string; why: string }>;
 
 /**
@@ -267,12 +342,35 @@ const RULES = Object.freeze({
       "absent from Caido's QuickJS: that makes the rule cheap, not unnecessary — a surface " +
       "excluded because it probably does not exist is a surface nobody checked.",
   }),
+  "outbound-beacon": Object.freeze({
+    rule: "outbound-beacon",
+    surface: `${NAVIGATOR}.${BEACON_METHOD}, by any receiver or one-hop alias`,
+    why:
+      "sendBeacon is an outbound POST that needs no import, no SDK call and no constructor, " +
+      "and it is the outbound global most likely to EXIST in a host that has none of " +
+      "XMLHttpRequest, WebSocket or EventSource. CORE-11 forbids outbound traffic of any kind, " +
+      "and this one is fire-and-forget by design — it returns a boolean and delivers no " +
+      "response, so a leak through it would leave nothing behind to notice, not even a " +
+      "rejected promise. It was quiet AND undisclosed until 2026-08-22.",
+  }),
+  "outbound-dynamic-code": Object.freeze({
+    rule: "outbound-dynamic-code",
+    surface: "dynamic code construction (eval, new Function)",
+    why:
+      'no AST gate can see inside a string, so eval("sdk.requests.send(r)") defeats every ' +
+      "other rule in this file at once while reporting clean — the one shape that makes a " +
+      "passing gate meaningless rather than merely incomplete. The answer is to refuse the " +
+      "construct rather than to analyse it: this plugin has no legitimate use for either, " +
+      'the cost is two identifiers, and CORE-11\'s words are "of any kind".',
+  }),
   "outbound-unanalysable": Object.freeze({
     rule: "outbound-unanalysable",
     surface: "an outbound surface this walk cannot rule out",
     why:
       "this is the argument, not the rule. A computed key on a POSITIVELY IDENTIFIED " +
-      "outbound receiver, and a module specifier that will not reduce to a literal, are " +
+      "outbound receiver, a computed key that SELECTS the receiver itself, a computed " +
+      "member of an identified global receiver, and a module specifier that will not " +
+      "reduce to a literal, are " +
       "the one shape that defeats an AST gate SILENTLY — the walk returns nothing and the " +
       "file reports clean, which is indistinguishable from a pass. And an import() in a " +
       "plugin whose entire shipped import set is one specifier, `crypto`, is worth failing " +
@@ -368,6 +466,203 @@ function unwrap(node: ts.Expression): ts.Expression {
   }
 }
 
+/**
+ * THE THIRD STATE, and why `receiverKind` needs one.
+ *
+ * Added 2026-08-22 (WR-19). `receiverKind` used to answer a yes/no question — "is
+ * this receiver `requests` or `net`?" — and answered `undefined` for BOTH "no" and
+ * "I cannot tell". Every caller then treated the second as the first, so
+ * `sdk["req" + "uests"].send(req)` returned an EMPTY violation list while
+ * `sdk.requests[m](req)` and `import("caido:" + "http")` correctly reported
+ * `outbound-unanalysable` for the identical class of unreadable expression.
+ *
+ * That is the exact equivalence boundary 2 says this gate's rewrite removed —
+ * "could not read does not mean clean" — applied one level down and not one level
+ * up. This symbol is the third answer, and the walk now says it out loud.
+ */
+const UNREADABLE_RECEIVER = Symbol("unreadable-receiver");
+
+/** A named outbound receiver, a receiver the walk cannot read, or neither. */
+type ReceiverKind = string | typeof UNREADABLE_RECEIVER | undefined;
+
+/**
+ * The binary operators whose RESULT IS ALWAYS A NUMBER, whatever the operands.
+ *
+ * `+` is deliberately ABSENT and that absence is the point: `"req" + "uests"` is
+ * the assembly this gate exists to see, and `+` is the one arithmetic-looking
+ * operator that can produce a string. Every operator listed here coerces both
+ * operands with ToNumber (or ToNumeric) by the language definition, so an element
+ * access keyed on one of them cannot be spelling `requests`, `net` or `fetch`.
+ */
+const NUMERIC_BINARY_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.MinusToken,
+  ts.SyntaxKind.AsteriskToken,
+  ts.SyntaxKind.AsteriskAsteriskToken,
+  ts.SyntaxKind.SlashToken,
+  ts.SyntaxKind.PercentToken,
+  ts.SyntaxKind.AmpersandToken,
+  ts.SyntaxKind.BarToken,
+  ts.SyntaxKind.CaretToken,
+  ts.SyntaxKind.LessThanLessThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+]);
+
+/**
+ * The compound assignments whose result is always a number when the target
+ * already was one, and every other assignment operator — which is what poisons a
+ * name the walk would otherwise have exempted.
+ */
+const NUMERIC_COMPOUND_ASSIGNMENTS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.MinusEqualsToken,
+  ts.SyntaxKind.AsteriskEqualsToken,
+  ts.SyntaxKind.AsteriskAsteriskEqualsToken,
+  ts.SyntaxKind.SlashEqualsToken,
+  ts.SyntaxKind.PercentEqualsToken,
+  ts.SyntaxKind.AmpersandEqualsToken,
+  ts.SyntaxKind.BarEqualsToken,
+  ts.SyntaxKind.CaretEqualsToken,
+  ts.SyntaxKind.LessThanLessThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+  ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+]);
+
+const ASSIGNMENT_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsToken,
+  ts.SyntaxKind.PlusEqualsToken,
+  ...NUMERIC_COMPOUND_ASSIGNMENTS,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+
+/**
+ * Members and functions whose result is a NUMBER by their own definition.
+ *
+ * Enumerated rather than inferred, because the alternative is a type checker.
+ * Every entry is a length, an index, or an arithmetic rounding — none of them can
+ * return the string `requests`, `net` or `fetch`, which is the only question this
+ * set is asked. `store/observations.ts` computes `const i = s.indexOf(d, start)`
+ * and then indexes with it, so without `indexOf` here the walk would poison `i`
+ * and flag `segments[i + 1]` in a file that is doing ordinary string surgery.
+ */
+const NUMERIC_MEMBERS: ReadonlySet<string> = new Set([
+  "length",
+  "size",
+  "indexOf",
+  "lastIndexOf",
+  "search",
+  "charCodeAt",
+  "codePointAt",
+  "floor",
+  "ceil",
+  "round",
+  "trunc",
+  "abs",
+  "min",
+  "max",
+]);
+
+const NUMERIC_FUNCTIONS: ReadonlySet<string> = new Set([
+  "parseInt",
+  "parseFloat",
+  "Number",
+]);
+
+/**
+ * Can the walk PROVE this key is a number?
+ *
+ * A number cannot spell a property name this gate cares about, so a provably
+ * numeric key hides nothing. It PROVES rather than assumes and it fails SAFE:
+ * anything it cannot prove numeric is treated as possibly a name. `numeric` holds
+ * names seen bound to a provably numeric value; `poisoned` holds names seen bound
+ * to anything else ANYWHERE in the file, so `let k = 0; k = "requests";
+ * sdk[k].send(req)` is not exempted by the `0`.
+ *
+ * `+` is numeric ONLY when BOTH operands are — `i + 1` is an index and
+ * `"req" + "uests"` is an assembled name, and the difference is the whole point.
+ */
+function isProvablyNumeric(
+  node: ts.Expression | undefined,
+  numeric: ReadonlySet<string>,
+  poisoned: ReadonlySet<string>,
+): boolean {
+  if (node === undefined) return false;
+  const inner = unwrap(node);
+  if (ts.isNumericLiteral(inner)) return true;
+  if (
+    ts.isPrefixUnaryExpression(inner) &&
+    (inner.operator === ts.SyntaxKind.MinusToken ||
+      inner.operator === ts.SyntaxKind.PlusToken ||
+      inner.operator === ts.SyntaxKind.TildeToken)
+  ) {
+    return isProvablyNumeric(inner.operand, numeric, poisoned);
+  }
+  if (ts.isBinaryExpression(inner)) {
+    if (NUMERIC_BINARY_OPERATORS.has(inner.operatorToken.kind)) return true;
+    if (inner.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      return (
+        isProvablyNumeric(inner.left, numeric, poisoned) &&
+        isProvablyNumeric(inner.right, numeric, poisoned)
+      );
+    }
+    return false;
+  }
+  if (ts.isPropertyAccessExpression(inner)) {
+    return NUMERIC_MEMBERS.has(inner.name.text);
+  }
+  if (ts.isCallExpression(inner)) {
+    const callee = unwrap(inner.expression);
+    if (ts.isIdentifier(callee)) return NUMERIC_FUNCTIONS.has(callee.text);
+    if (ts.isPropertyAccessExpression(callee)) {
+      return NUMERIC_MEMBERS.has(callee.name.text);
+    }
+    return false;
+  }
+  if (ts.isIdentifier(inner)) {
+    return numeric.has(inner.text) && !poisoned.has(inner.text);
+  }
+  return false;
+}
+
+/**
+ * Is this key ASSEMBLED — built rather than merely dynamic?
+ *
+ * THIS IS THE BOUND ON WR-19, AND IT WAS DECIDED BY MEASUREMENT, NOT BY TASTE.
+ * The first implementation reported EVERY key that would not reduce to a literal.
+ * Run over the real tree it fired twice, and both hits were ordinary code doing
+ * exactly what it says: `compat.ts`'s `at()` walking a dotted path
+ * (`cur = (cur as Record<string, unknown>)[key]`), and `compat.ts:141`'s
+ * `ctx[root]`. A gate that calls a documented path walk an outbound network
+ * surface is a gate that gets deleted rather than fixed, and it would have told
+ * the reader nothing true.
+ *
+ * So the walk reports what it can SEE BEING HIDDEN — a key assembled out of
+ * pieces, interpolated, or returned by a call — and DISCLOSES what it merely
+ * cannot follow. A bare identifier key is the second: it is the one-more-hop
+ * residual boundary 2 already states, not evidence of concealment.
+ *
+ * Provably numeric keys are excluded first, so `x[i + 1]` and
+ * `MIGRATIONS[MIGRATIONS.length - 1]` are indexes rather than assembled names.
+ */
+function isAssembledKey(
+  node: ts.Expression | undefined,
+  numeric: ReadonlySet<string>,
+  poisoned: ReadonlySet<string>,
+): boolean {
+  if (node === undefined) return false;
+  if (isProvablyNumeric(node, numeric, poisoned)) return false;
+  const inner = unwrap(node);
+  if (
+    ts.isBinaryExpression(inner) &&
+    inner.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    return true;
+  }
+  if (ts.isTemplateExpression(inner)) return true;
+  return ts.isCallExpression(inner);
+}
+
 /** Is this expression one of the four receivers a global lives on? */
 function isGlobalReceiver(node: ts.Expression): boolean {
   const inner = unwrap(node);
@@ -424,9 +719,29 @@ export function auditSource(file: string, source: string): Violation[] {
   const receiverAliases = new Map<string, string>();
   const fetchAliases = new Set<string>([FETCH_GLOBAL]);
   const constStrings = new Map<string, string>();
+  /**
+   * Names bound to a receiver the walk COULD NOT READ — `const r = sdk[k]`.
+   *
+   * Remembering the unreadable binding is how the third state is handled at the
+   * COLLECT call site: the report is deferred to wherever the binding is actually
+   * used as a receiver, so `const r = sdk[k]; r.send(req)` fails at `r.send`,
+   * while an ordinary dictionary read that is never used as a receiver —
+   * `const v = record[name];` — stays quiet. Reporting at the binding instead
+   * would have flagged every dynamic lookup in the codebase, which is the kind of
+   * rule that gets a gate deleted rather than fixed.
+   */
+  const unreadableAliases = new Set<string>();
+  /** One-hop aliases of `navigator`, mirroring `fetchAliases` exactly. */
+  const navigatorAliases = new Set<string>([NAVIGATOR]);
+  /** Names bound only to provably numeric values, and names bound to anything else. */
+  const numericNames = new Set<string>();
+  const poisonedNumericNames = new Set<string>();
 
-  /** The outbound receiver an expression denotes, if it denotes one. */
-  const receiverKind = (node: ts.Expression): string | undefined => {
+  /**
+   * The outbound receiver an expression denotes — or the admission that the walk
+   * cannot tell, which is the third state and NOT the same as "not a receiver".
+   */
+  const receiverKind = (node: ts.Expression): ReceiverKind => {
     const inner = unwrap(node);
     if (
       ts.isPropertyAccessExpression(inner) &&
@@ -436,10 +751,25 @@ export function auditSource(file: string, source: string): Violation[] {
     }
     if (ts.isElementAccessExpression(inner)) {
       const key = literalOf(inner.argumentExpression);
-      if (key !== undefined && RECEIVERS.has(key)) return key;
-      return undefined;
+      if (key !== undefined) return RECEIVERS.has(key) ? key : undefined;
+      // The key will not reduce. If the walk can SEE it being assembled, it says
+      // so rather than treating the result as an ordinary object; a key it merely
+      // cannot follow is the disclosed one-more-hop residual, not concealment.
+      return isAssembledKey(
+        inner.argumentExpression,
+        numericNames,
+        poisonedNumericNames,
+      )
+        ? UNREADABLE_RECEIVER
+        : undefined;
     }
-    if (ts.isIdentifier(inner)) return receiverAliases.get(inner.text);
+    if (ts.isIdentifier(inner)) {
+      const alias = receiverAliases.get(inner.text);
+      if (alias !== undefined) return alias;
+      return unreadableAliases.has(inner.text)
+        ? UNREADABLE_RECEIVER
+        : undefined;
+    }
     return undefined;
   };
 
@@ -472,7 +802,7 @@ export function auditSource(file: string, source: string): Violation[] {
    * branch resolving to an outbound receiver makes the binding one, because a
    * receiver that is outbound on one path is outbound.
    */
-  const initializerReceiver = (node: ts.Expression): string | undefined => {
+  const initializerReceiver = (node: ts.Expression): ReceiverKind => {
     const inner = unwrap(node);
     if (ts.isConditionalExpression(inner)) {
       return receiverKind(inner.whenTrue) ?? receiverKind(inner.whenFalse);
@@ -495,6 +825,28 @@ export function auditSource(file: string, source: string): Violation[] {
     return false;
   };
 
+  /**
+   * Is this expression `navigator`, in any spelling the walk resolves?
+   *
+   * Deliberately shaped like `isFetchExpression`: the bare identifier and its
+   * one-hop aliases, or a `navigator` member of one of the four global receivers.
+   * An ordinary object that defines `sendBeacon` is not one of those, which is the
+   * whole reason the beacon rule is anchored here rather than on the method name.
+   */
+  const isNavigatorReceiver = (node: ts.Expression): boolean => {
+    const inner = unwrap(node);
+    if (ts.isIdentifier(inner)) return navigatorAliases.has(inner.text);
+    if (
+      ts.isPropertyAccessExpression(inner) ||
+      ts.isElementAccessExpression(inner)
+    ) {
+      return (
+        memberName(inner) === NAVIGATOR && isGlobalReceiver(inner.expression)
+      );
+    }
+    return false;
+  };
+
   const collect = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
       const init = unwrap(node.initializer);
@@ -506,8 +858,15 @@ export function auditSource(file: string, source: string): Violation[] {
           constStrings.set(node.name.text, literal);
         }
         if (isFetchExpression(init)) fetchAliases.add(node.name.text);
+        if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text);
         const kind = initializerReceiver(init);
-        if (kind !== undefined) receiverAliases.set(node.name.text, kind);
+        if (typeof kind === "string") {
+          receiverAliases.set(node.name.text, kind);
+        } else if (kind === UNREADABLE_RECEIVER) {
+          // Remember it; report where it is USED as a receiver. See the comment
+          // on `unreadableAliases`.
+          unreadableAliases.add(node.name.text);
+        }
       } else if (ts.isObjectBindingPattern(node.name)) {
         // `const { requests, net } = sdk` — keyed on the PROPERTY name, exactly
         // as the inner method destructure already worked one level down. This is
@@ -534,8 +893,49 @@ export function auditSource(file: string, source: string): Violation[] {
       ts.isIdentifier(node.left)
     ) {
       const kind = initializerReceiver(node.right);
-      if (kind !== undefined) receiverAliases.set(node.left.text, kind);
+      if (typeof kind === "string") {
+        receiverAliases.set(node.left.text, kind);
+      } else if (kind === UNREADABLE_RECEIVER) {
+        unreadableAliases.add(node.left.text);
+      }
       if (isFetchExpression(node.right)) fetchAliases.add(node.left.text);
+      if (isNavigatorReceiver(node.right)) navigatorAliases.add(node.left.text);
+    }
+
+    // --- what the walk knows about a name being a NUMBER ---------------------
+    // Collected in the same document-order pass, and poisoned by ANY binding the
+    // walk cannot prove numeric — a name is exempt only if every binding of it in
+    // the file is a number. This is what the numeric key exemption reads.
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      if (
+        node.initializer !== undefined &&
+        isProvablyNumeric(node.initializer, numericNames, poisonedNumericNames)
+      ) {
+        numericNames.add(node.name.text);
+      } else {
+        poisonedNumericNames.add(node.name.text);
+      }
+    }
+    if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left)) {
+      const op = node.operatorToken.kind;
+      const rightIsNumber = isProvablyNumeric(
+        node.right,
+        numericNames,
+        poisonedNumericNames,
+      );
+      if (op === ts.SyntaxKind.EqualsToken) {
+        if (rightIsNumber) numericNames.add(node.left.text);
+        else poisonedNumericNames.add(node.left.text);
+      } else if (op === ts.SyntaxKind.PlusEqualsToken) {
+        // `i += 1` leaves a numeric name numeric; `s += "requests"` does not.
+        if (!rightIsNumber) poisonedNumericNames.add(node.left.text);
+      } else if (
+        ASSIGNMENT_OPERATORS.has(op) &&
+        !NUMERIC_COMPOUND_ASSIGNMENTS.has(op)
+      ) {
+        // `x ||= sdk.requests` and friends can assign anything at all.
+        poisonedNumericNames.add(node.left.text);
+      }
     }
 
     ts.forEachChild(node, collect);
@@ -562,8 +962,29 @@ export function auditSource(file: string, source: string): Violation[] {
       node.initializer !== undefined &&
       ts.isObjectBindingPattern(node.name)
     ) {
+      if (isNavigatorReceiver(node.initializer)) {
+        for (const el of node.name.elements) {
+          const property = boundPropertyName(el);
+          if (property === undefined) {
+            add(
+              "outbound-unanalysable",
+              `a destructure off a \`${NAVIGATOR}\` receiver whose property name this walk cannot read`,
+            );
+          } else if (property === BEACON_METHOD) {
+            add(
+              "outbound-beacon",
+              `\`${property}\`, destructured from a \`${NAVIGATOR}\` receiver`,
+            );
+          }
+        }
+      }
       const kind = initializerReceiver(node.initializer);
-      if (kind !== undefined) {
+      if (kind === UNREADABLE_RECEIVER) {
+        add(
+          "outbound-unanalysable",
+          "a destructure off an element access whose key this walk cannot read, so the receiver it selects could be `requests` or `net`",
+        );
+      } else if (kind !== undefined) {
         for (const el of node.name.elements) {
           const property = boundPropertyName(el);
           if (property === undefined) {
@@ -595,7 +1016,18 @@ export function auditSource(file: string, source: string): Violation[] {
     ) {
       const kind = receiverKind(node.expression);
       const member = memberName(node);
-      if (kind === SEND_RECEIVER || kind === NET_RECEIVER) {
+      if (kind === UNREADABLE_RECEIVER) {
+        // WR-19: boundary 2's own rule, applied to the RECEIVER. The walk can see
+        // that a property is being selected by a key it cannot read, and that the
+        // result is then being used as a receiver — so it says so, rather than
+        // treating an unreadable receiver as an ordinary object.
+        add(
+          "outbound-unanalysable",
+          member === undefined
+            ? "a computed member on a receiver this walk cannot read either"
+            : `a reference to \`${member}\` on a receiver selected by a key this walk cannot read`,
+        );
+      } else if (kind === SEND_RECEIVER || kind === NET_RECEIVER) {
         if (member === undefined) {
           add(
             "outbound-unanalysable",
@@ -618,6 +1050,23 @@ export function auditSource(file: string, source: string): Violation[] {
           `a \`${FETCH_GLOBAL}\` member of \`${unwrap(node.expression).getText()}\``,
         );
       } else if (
+        member === BEACON_METHOD &&
+        isNavigatorReceiver(node.expression)
+      ) {
+        add(
+          "outbound-beacon",
+          `a reference to \`${BEACON_METHOD}\` on a \`${NAVIGATOR}\` receiver`,
+        );
+      } else if (
+        member !== undefined &&
+        DYNAMIC_CODE.has(member) &&
+        isGlobalReceiver(node.expression)
+      ) {
+        add(
+          "outbound-dynamic-code",
+          `a reference to \`${member}\` on a global receiver`,
+        );
+      } else if (
         member !== undefined &&
         OUTBOUND_CONSTRUCTORS.has(member) &&
         isGlobalReceiver(node.expression)
@@ -625,6 +1074,16 @@ export function auditSource(file: string, source: string): Violation[] {
         add(
           "outbound-global-ctor",
           `a reference to \`${member}\` on a global receiver`,
+        );
+      } else if (member === undefined && isGlobalReceiver(node.expression)) {
+        // The other half of WR-19, and the sharper of the two shapes:
+        // `globalThis["fet" + "ch"](u)`. The receiver is POSITIVELY identified —
+        // `isGlobalReceiver` says so — and the member name is the part that will
+        // not reduce, so the global branches above simply never ran and the file
+        // reported clean.
+        add(
+          "outbound-unanalysable",
+          `a computed member of \`${unwrap(node.expression).getText()}\` whose name this walk cannot read`,
         );
       }
     }
@@ -634,6 +1093,9 @@ export function auditSource(file: string, source: string): Violation[] {
       const target = unwrap(node.expression);
       if (ts.isIdentifier(target) && OUTBOUND_CONSTRUCTORS.has(target.text)) {
         add("outbound-global-ctor", `a construction of \`${target.text}\``);
+      }
+      if (ts.isIdentifier(target) && DYNAMIC_CODE.has(target.text)) {
+        add("outbound-dynamic-code", `a construction of \`${target.text}\``);
       }
     }
 
@@ -663,6 +1125,11 @@ export function auditSource(file: string, source: string): Violation[] {
       // --- the global fetch, by name or by alias ------------------------------
       if (ts.isIdentifier(callee) && fetchAliases.has(callee.text)) {
         add("outbound-fetch", `a call to \`${callee.text}(...)\``);
+      }
+
+      // --- code built from a string ------------------------------------------
+      if (ts.isIdentifier(callee) && DYNAMIC_CODE.has(callee.text)) {
+        add("outbound-dynamic-code", `a call to \`${callee.text}(...)\``);
       }
     }
 
@@ -949,7 +1416,7 @@ describe("the gate's own failure paths", () => {
 });
 
 describe("the rule set is data, not logic to trace", () => {
-  it("FORBIDDEN_OUTBOUND enumerates exactly the six surfaces CORE-11 names", () => {
+  it("FORBIDDEN_OUTBOUND enumerates exactly the eight surfaces CORE-11 names", () => {
     // WHY THE SET GREW FROM FOUR TO SIX on 2026-08-21, so the next reader does
     // not read it as drift. Four rules covered the surfaces CORE-01's sentence
     // listed by name. CORE-11 says "of any kind", and the verifier's 22-shape
@@ -958,12 +1425,22 @@ describe("the rule set is data, not logic to trace", () => {
     // not READ, which the round-1 gate silently treated as clean. The second is
     // not a surface at all; it is the admission that a gate which cannot see
     // something must say so rather than pass it.
+    //
+    // AND FROM SIX TO EIGHT on 2026-08-22, for the same reason one level out. The
+    // verifier probed two surfaces the round-2 review had not: `navigator.sendBeacon`
+    // — the outbound global most likely to EXIST in a host that has none of the
+    // three constructors — and dynamic code construction, where `eval("…send(r)")`
+    // defeats every other rule in this file at once while reporting clean. Both
+    // were quiet AND absent from the header's enumeration, which is the worse
+    // failure: a reader had no way to know they were missing.
     expect(FORBIDDEN_OUTBOUND.map((f) => f.rule)).toEqual([
       "outbound-send",
       "outbound-net",
       "outbound-fetch",
       "outbound-import",
       "outbound-global-ctor",
+      "outbound-beacon",
+      "outbound-dynamic-code",
       "outbound-unanalysable",
     ]);
     // Every entry carries a consequence, because that is what the failure text is
@@ -1202,6 +1679,168 @@ describe("a module specifier the walk can resolve, and one it cannot", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// WR-19 — THE UNREADABLE RECEIVER, one level up from the unreadable member
+// ---------------------------------------------------------------------------
+// Every shape below returned an EMPTY violation list before 2026-08-22, while
+// `sdk.requests[key](req)` and `import("caido:" + "http")` — the identical class
+// of unreadable expression, one level down — correctly reported
+// `outbound-unanalysable`. That asymmetry is what boundary 2 says this gate's
+// rewrite removed, so it was the gate's own stated rule that was not being
+// applied to itself.
+describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("outbound-unanalysable fires on an ASSEMBLED receiver key", () => {
+    expect(
+      rulesOf('await sdk["req" + "uests"].send(req);'),
+      'sdk["req" + "uests"].send(req) still reports clean',
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("outbound-unanalysable fires on an assembled receiver key bound to a name first", () => {
+    // The binding is remembered and the report lands where the name is USED as a
+    // receiver, which is what keeps an ordinary dictionary read that is never a
+    // receiver out of the violation list.
+    expect(
+      rulesOf('const r = sdk["re" + "quests"];\nawait r.send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("outbound-unanalysable fires on an assembled MEMBER of an identified global receiver", () => {
+    // The sharper of the two shapes: the receiver is POSITIVELY identified —
+    // `isGlobalReceiver` says so — and it is the member name that will not
+    // reduce, so every global branch simply never ran.
+    expect(
+      rulesOf('await globalThis["fet" + "ch"](url);'),
+      'globalThis["fet" + "ch"](url) still reports clean',
+    ).toContain("outbound-unanalysable");
+    expect(
+      rulesOf('export {};\nawait (globalThis as any)["fet" + "ch"](url);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("outbound-unanalysable fires on a DESTRUCTURE off an assembled receiver key", () => {
+    expect(
+      rulesOf('const { send } = sdk["req" + "uests"];\nawait send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("the TWO-HOP shape is still the DISCLOSED residual, and this asserts what it ACTUALLY reports", () => {
+    // Measured on 2026-08-22, not assumed: a bare identifier key is not evidence
+    // of concealment, it is the one-more-hop indirection boundary 2 states as the
+    // residual — so this reports NOTHING, and that fact is written down here
+    // rather than left for the next reader to discover with a probe.
+    expect(
+      rulesOf('const a = "requests";\nconst b = a;\nawait sdk[b].send(req);'),
+    ).toEqual([]);
+    // The ONE-hop version of the same shape is caught, which is what makes the
+    // residual a bound rather than a hole: `constStrings` resolves one hop.
+    expect(rulesOf('const r = "requests";\nawait sdk[r].send(req);')).toContain(
+      "outbound-send",
+    );
+  });
+
+  it("an ordinary DYNAMIC lookup is not an assembled key, and stays quiet", () => {
+    // THE false positives that decided the bound, both lifted verbatim from the
+    // real tree: `compat.ts`'s documented dotted-path walk, and array indexing in
+    // `store/observations.ts`. A gate that called either an outbound network
+    // surface would be deleted rather than fixed.
+    expect(
+      rulesOf(
+        'let cur = root;\nfor (const key of path.split(".")) { cur = (cur as Record<string, unknown>)[key]; }',
+      ),
+    ).toEqual([]);
+    expect(rulesOf('const seg = segments[i].split(";");')).toEqual([]);
+    expect(rulesOf("const v = MIGRATIONS[MIGRATIONS.length - 1].v;")).toEqual(
+      [],
+    );
+    expect(
+      rulesOf(
+        "const x = [1, 2];\nlet i = 0;\ni += 1;\nconst y = x[i + 1].toString();",
+      ),
+    ).toEqual([]);
+  });
+
+  it("a numeric name POISONED by a string binding stops exempting the key", () => {
+    // The over-approximation is deliberate and it fails SAFE: a name bound to a
+    // number somewhere and to something else somewhere else is not a proven index.
+    expect(
+      rulesOf('let k = 0;\nk = "requ" + "ests";\nawait sdk[k + ""].send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+});
+
+describe("the beacon surface — receiver-anchored, not member-name-only", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    ["the bare call", "navigator.sendBeacon(url, data);"],
+    [
+      "the call through a global receiver",
+      "globalThis.navigator.sendBeacon(url, data);",
+    ],
+    ["the window spelling", "window.navigator.sendBeacon(url, data);"],
+    [
+      "a bare member REFERENCE with no call",
+      "const s = navigator.sendBeacon;\ns(url, data);",
+    ],
+    [
+      "a one-hop alias of navigator",
+      "const n = navigator;\nn.sendBeacon(url, data);",
+    ],
+    [
+      "a destructured sendBeacon",
+      "const { sendBeacon } = navigator;\nsendBeacon(url, data);",
+    ],
+  ])("outbound-beacon fires on %s", (_shape, src) => {
+    expect(rulesOf(src)).toContain("outbound-beacon");
+  });
+
+  it("outbound-beacon does NOT fire on an ordinary object that defines the same method", () => {
+    // THE false positive the receiver anchor exists to rule out. Anything may
+    // define a method called sendBeacon; only `navigator` is the outbound one.
+    expect(
+      rulesOf(
+        "const o = { sendBeacon(u, d) { return d; } };\no.sendBeacon(url, data);",
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("dynamic code construction — refused rather than analysed", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    ["the bare eval call", 'eval("sdk.requests.send(r)");'],
+    ["eval through a global receiver", 'globalThis.eval("fetch(u)");'],
+    ["window.eval", 'window.eval("fetch(u)");'],
+    [
+      "new Function",
+      'const f = new Function("r", "return sdk.requests.send(r)");',
+    ],
+    ["a bare Function call", 'const f = Function("r", "return fetch(r)");'],
+    [
+      "Function through a global receiver",
+      'const f = globalThis.Function("r", "return r");',
+    ],
+  ])("outbound-dynamic-code fires on %s", (_shape, src) => {
+    expect(rulesOf(src)).toContain("outbound-dynamic-code");
+  });
+
+  it("outbound-dynamic-code does NOT fire on a member of the same name on an ordinary object", () => {
+    expect(
+      rulesOf("const o = { eval(s) { return s; } };\no.eval(src);"),
+    ).toEqual([]);
+    expect(
+      rulesOf("const parser = { Function: 1 };\nreturn parser.Function;"),
+    ).toEqual([]);
+  });
+});
+
 describe('the outbound globals CORE-11 "of any kind" covers', () => {
   const rulesOf = (src: string, file = "fixture.ts"): string[] =>
     auditSource(file, src).map((v) => v.rule);
@@ -1246,6 +1885,19 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
       "an identifier merely NAMED net",
       "const net = { port: 443 };\nreturn net.port;",
     ],
+    [
+      "an ordinary object defining sendBeacon",
+      "const o = { sendBeacon(u, d) { return d; } };\no.sendBeacon(url, data);",
+    ],
+    [
+      "an ordinary object defining eval",
+      "const o = { eval(s) { return s; } };\no.eval(src);",
+    ],
+    [
+      "compat.ts's documented dotted-path walk",
+      'let cur = root;\nfor (const key of path.split(".")) { cur = (cur as Record<string, unknown>)[key]; }',
+    ],
+    ["array indexing through a name", 'const seg = segments[i].split(";");'],
     ["a crypto import", 'import { createHash } from "crypto";'],
     ["a local re-export", 'export { x } from "./telemetry";'],
     ["a node:fs dynamic import", 'const m = await import("node:fs");'],
