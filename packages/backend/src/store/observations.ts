@@ -101,13 +101,47 @@ export const QUERY_NAME_MAX = 64;
  * nothing there to redact and `<redacted>` would invent a parameter that was
  * never sent.
  *
- * Idempotent for free in both branches: `QUERY_VALUE_REDACTION` contains no `=`,
- * so on a second pass it arrives here as a bare segment and is replaced with the
- * same bytes.
+ * WITH AN `=` THAT WAS PADDING RATHER THAN A SEPARATOR (added 2026-08-22, CR-07):
+ * redacted whole, exactly as the `=`-less branch does. A pair whose VALUE half is
+ * empty, or whose value half is nothing but `=`, was never a pair. Standard
+ * base64 pads with `=`, so the most common shape of an opaque credential on the
+ * wire is exactly this shape — and before this branch existed
+ * `?dXNlcjpwYTU1dzByZA==` was stored as `?dXNlcjpwYTU1dzByZA=<redacted>`, from
+ * which one re-pad and one `base64 -d` returns `user:pa55w0rd`.
+ *
+ * THE ACCEPTED COST, stated here rather than left to be discovered. A parameter
+ * with an EMPTY value — `?debug=` — now loses its NAME as well as its value, and
+ * that is one analytic signal the operator's decision did not explicitly price.
+ * It is the faithful reading of decision P10-D1 rather than an extension of it:
+ * `?debug` with NO `=` at all is ALREADY redacted whole under that decision, and
+ * treating `?debug=` differently would make the policy turn on a byte that
+ * carries nothing. Pinned by the executed case titled "ACCEPTED COST (CR-07):
+ * `?debug=` loses its NAME as well as its value".
+ *
+ * Idempotent for free in all three branches: `QUERY_VALUE_REDACTION` contains no
+ * `=`, so on a second pass it arrives here as a bare segment and is replaced with
+ * the same bytes.
  */
 function redactDelimitedSegment(segment: string): string {
   const eq = segment.indexOf("=");
   if (eq === -1) return segment === "" ? "" : QUERY_VALUE_REDACTION;
+
+  // WAS THAT `=` A SEPARATOR OR WAS IT PADDING? The VALUE half answers it, and
+  // nothing else can. Walk it: if it is EMPTY, or if every byte in it is `=`,
+  // the segment was never a `name=value` pair — it is one opaque token that
+  // happens to end in base64 padding, and the whole segment goes.
+  //
+  // A plain character loop, never a pattern: `REDOS_RECOVERY` is "kill" on this
+  // runtime and the shipped bundle's entire import set is one specifier.
+  let valueIsOnlyPadding = true;
+  for (let i = eq + 1; i < segment.length; i += 1) {
+    if (segment[i] !== "=") {
+      valueIsOnlyPadding = false;
+      break;
+    }
+  }
+  if (valueIsOnlyPadding) return QUERY_VALUE_REDACTION;
+
   return (
     segment.slice(0, eq).slice(0, QUERY_NAME_MAX) + "=" + QUERY_VALUE_REDACTION
   );

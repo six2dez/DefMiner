@@ -94,9 +94,10 @@ function expectSecretAbsent(out: string, literal: string, label: string): void {
     core.length,
     `${label}: ${literal} is entirely padding — it has no recoverable core and does not belong in an absence assertion`,
   ).toBeGreaterThan(0);
-  expect(out.includes(literal), `${label}: the LITERAL survived in ${out}`).toBe(
-    false,
-  );
+  expect(
+    out.includes(literal),
+    `${label}: the LITERAL survived in ${out}`,
+  ).toBe(false);
   expect(
     out.includes(core),
     `${label}: the PADDING-STRIPPED CORE \`${core}\` survived in ${out} — re-pad it and \`base64 -d\` returns the secret`,
@@ -109,6 +110,13 @@ function expectSecretAbsent(out: string, literal: string, label: string): void {
  * the bound never helped: base64 of a 32-byte secret is 44 characters.
  */
 const PADDED_BASIC_TWO_PAD = "dXNlcjpwYTU1dzByZA==";
+
+/**
+ * Standard base64 of `admin:hunter22` — ONE `=` of padding, so the value half of
+ * this segment is EMPTY rather than a lone `=`. A DIFFERENT PATH through the same
+ * predicate, and covering only one of the two is covering half the rule.
+ */
+const PADDED_BASIC_ONE_PAD = "YWRtaW46aHVudGVyMjI=";
 
 /**
  * The adversarial fixture table for decision P10-D1 (operator, 2026-08-21) — one
@@ -420,6 +428,102 @@ describe("a BARE query segment carrying a credential (P10-D1, T-01-53)", () => {
     expect(redactQueryValues("https://x.test/app.js?debug&nocache&v=1")).toBe(
       `https://x.test/app.js?${QUERY_VALUE_REDACTION}&${QUERY_VALUE_REDACTION}&v=${QUERY_VALUE_REDACTION}`,
     );
+  });
+});
+
+describe("a PADDED credential segment — the `=` was padding, not a separator (CR-07, T-01-78)", () => {
+  // The rule under test, stated once: a pair whose VALUE half is empty, or whose
+  // value half is nothing but `=`, was never a pair. Standard base64 pads with
+  // `=`, so the most common shape of an opaque credential on the wire is exactly
+  // that shape, and `QUERY_NAME_MAX` = 64 never bounded it — base64 of a 32-byte
+  // secret is 44 characters, comfortably inside the retained name half.
+
+  it("BOTH sub-branches: a value half of only `=` (two-pad) and an EMPTY value half (one-pad) redact WHOLE", () => {
+    // Two pads: the value half is the single character `=`.
+    const twoPad = redactQueryValues(
+      `https://cdn.test/a.js?${PADDED_BASIC_TWO_PAD}`,
+    );
+    expectSecretAbsent(twoPad, PADDED_BASIC_TWO_PAD, "two-pad bare segment");
+    expect(twoPad).toBe(`https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`);
+
+    // One pad: the value half is EMPTY. A different path through the same
+    // predicate — the character loop never runs a single iteration.
+    const onePad = redactQueryValues(
+      `https://cdn.test/a.js?${PADDED_BASIC_ONE_PAD}`,
+    );
+    expectSecretAbsent(onePad, PADDED_BASIC_ONE_PAD, "one-pad bare segment");
+    expect(onePad).toBe(`https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`);
+  });
+
+  it("the SAME rule on the SAME helper covers the `;` delimiter — one policy, two delimiters", () => {
+    // `redactDelimitedSegment` is deliberately THE one shared helper, so this is
+    // not a second implementation being checked; it is the claim "one policy, two
+    // delimiters" being kept true by execution rather than by a sentence about a
+    // shared function nobody re-tested.
+    for (const literal of [PADDED_BASIC_TWO_PAD, PADDED_BASIC_ONE_PAD]) {
+      const out = normaliseObservedUrl(`https://cdn.test/a.js;${literal}`);
+      expectSecretAbsent(out, literal, "`;` path parameter");
+      expect(out).toBe(`https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`);
+    }
+  });
+
+  it("a GENUINE pair is untouched by the new branch — the name half is kept and only the value goes", () => {
+    // The new branch must not have been implemented by weakening the branch that
+    // already worked.
+    expect(redactQueryValues("https://x.test/a.js?v=8c1f")).toBe(
+      `https://x.test/a.js?v=${QUERY_VALUE_REDACTION}`,
+    );
+    expect(redactQueryValues("https://x.test/a.js?sig=a=b=c")).toBe(
+      `https://x.test/a.js?sig=${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("a PADDED token in VALUE position still keeps its name and loses its value", () => {
+    for (const literal of [PADDED_BASIC_TWO_PAD, PADDED_BASIC_ONE_PAD]) {
+      const out = redactQueryValues(`https://cdn.test/a.js?token=${literal}`);
+      expectSecretAbsent(out, literal, `?token=${literal}`);
+      expect(out).toBe(`https://cdn.test/a.js?token=${QUERY_VALUE_REDACTION}`);
+    }
+  });
+
+  it("ACCEPTED COST (CR-07): `?debug=` loses its NAME as well as its value", () => {
+    // Stated in the title rather than left to be discovered. This is the faithful
+    // reading of decision P10-D1, not an extension of it: `?debug` with NO `=` at
+    // all is ALREADY redacted whole under that decision, and treating `?debug=`
+    // differently would make the policy turn on a byte that carries nothing.
+    expect(redactQueryValues("https://x.test/app.js?debug=")).toBe(
+      `https://x.test/app.js?${QUERY_VALUE_REDACTION}`,
+    );
+    expect(normaliseObservedUrl("https://x.test/app.js;debug=")).toBe(
+      `https://x.test/app.js;${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("redaction stays IDEMPOTENT over every padded shape, on both delimiters", () => {
+    // `<redacted>` carries no `=`, so on a second pass it arrives as a bare
+    // segment and is replaced with the same bytes. Asserted, because it is the
+    // property that makes rewriting a row through the redactor safe any number of
+    // times — and the new branch is the one that could have broken it.
+    for (const literal of [PADDED_BASIC_TWO_PAD, PADDED_BASIC_ONE_PAD]) {
+      for (const input of [
+        `https://cdn.test/a.js?${literal}`,
+        `https://cdn.test/a.js;${literal}`,
+        `https://cdn.test/a.js?token=${literal}`,
+        "https://x.test/app.js?debug=",
+      ]) {
+        const once = normaliseObservedUrl(input);
+        expect(normaliseObservedUrl(once), input).toBe(once);
+      }
+    }
+  });
+
+  it("the scheme, the host and the path stay byte-identical across every padded shape", () => {
+    for (const literal of [PADDED_BASIC_TWO_PAD, PADDED_BASIC_ONE_PAD]) {
+      const input = `https://cdn.test/a.js?${literal}`;
+      expect(normaliseObservedUrl(input).split("?")[0]).toBe(
+        input.split("?")[0],
+      );
+    }
   });
 });
 
