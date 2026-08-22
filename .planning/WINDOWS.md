@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 18
+open_count: 19
 waived_count: 0
 fixed_count: 2
-total_count: 20
-last_updated: 2026-08-22T09:33:22.689Z
+total_count: 21
+last_updated: 2026-08-22T09:56:52.151Z
 ---
 
 # Broken Windows Ledger
@@ -35,6 +35,7 @@ last_updated: 2026-08-22T09:33:22.689Z
 | 18 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo redaction cannot be proven at the live tier: curl lifts user:pass@ into an Authorization: Basic header, so userinfo never reaches observations.url. Measured in run 20260821T150022Z-16902 (userinfo-measurement.txt) and enforced instead by the observations.spec.ts real-SQLite round trip. Live-tier coverage for this one grammar is a documented gap, not a passing assertion. | open |  | 2026-08-21T15:10:49.050Z |  |
 | 19 | 1 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary | open |  | 2026-08-22T08:54:33.504Z |  |
 | 20 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | WR-19 narrowed from every-non-reducing-key to ASSEMBLED-KEY; a merely dynamic key (sdk[k]) is a disclosed residual, not reported | open |  | 2026-08-22T09:33:22.689Z |  |
+| 21 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo cannot be exercised through the live curl tier — lifted into an Authorization: Basic header before the request line exists. MEASURED per run (userinfo-measurement.txt), enforced at the unit tier by observations.spec.ts HEAD_CASES. A live userinfo proof needs a client that does not do this lift. | open |  | 2026-08-22T09:56:52.151Z |  |
 
 ````json
 [
@@ -276,6 +277,18 @@ last_updated: 2026-08-22T09:33:22.689Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T09:33:22.689Z",
+    "resolved_at": null
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "scripts/phase1/tracer-e2e.sh",
+    "line": null,
+    "description": "URL userinfo cannot be exercised through the live curl tier — lifted into an Authorization: Basic header before the request line exists. MEASURED per run (userinfo-measurement.txt), enforced at the unit tier by observations.spec.ts HEAD_CASES. A live userinfo proof needs a client that does not do this lift.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T09:56:52.151Z",
     "resolved_at": null
   }
 ]

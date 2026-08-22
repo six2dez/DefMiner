@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-16-PLAN.md
-last_updated: "2026-08-22T09:33:06.007Z"
+stopped_at: Completed 01-17-PLAN.md
+last_updated: "2026-08-22T09:55:49.454Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 01 execution started
-state_head: 33d8d070565a0886848db3122331dec812151f5c
+state_head: 6064d30d6b0afe0a990f733498184f574992dab3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
 ---
 
 # Project State
@@ -28,22 +28,25 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 3 of 17
-Status: Ready to execute
-Last activity: 2026-08-22 — Phase 01 execution started
+Plan: 17 of 17 — ALL PLANS EXECUTED
+Status: Phase 01 execution complete; ready for phase verification
+Last activity: 2026-08-22 — Phase 01 execution complete (01-17 was the last gap-closure plan)
 
-Progress: [██████████] 100% of phase 01 (14 of 14 plans)
+Progress: [██████████] 100% of phase 01 (17 of 17 plans)
 
-> The frontmatter's project-wide bar is not recomputed here: `state.update-progress`
-> returned `progress percent withheld by buildStateFrontmatter` on this run too — it
-> has now done so on SIX consecutive plans (01-07 … 01-11, and 01-14), so this is
-> the handler's steady behaviour on this repo and not a transient. The figure above is
-> the phase-local one, computed from the 14 PLAN / 10 SUMMARY files on disk and stated
-> with its basis rather than as an unexplained number. It DROPPED from the 100% this
-> line read after 01-09, and that is correct rather than a regression: re-verification
-> on 2026-08-21T13:45 found both UAT gaps only partially closed and added five plans,
-> so the denominator grew. A progress bar that could only go up would be measuring
-> nothing.
+> The frontmatter's project-wide bar is still not recomputed here: `state.update-progress`
+> returned `progress percent withheld by buildStateFrontmatter` on this run too — it has
+> now done so on SEVEN consecutive plans (01-07 … 01-11, 01-14 and 01-17), so this is the
+> handler's steady behaviour on this repo and not a transient. The figure above is the
+> phase-local one, computed from the 17 PLAN / 17 SUMMARY files on disk and stated with
+> its basis rather than as an unexplained number.
+>
+> THE PROSE ABOVE WAS STALE UNTIL THIS PLAN, and correcting it is worth naming rather
+> than doing quietly. It read "Plan: 4 of 17" and "100% of phase 01 (14 of 14 plans)"
+> after the re-verification of 2026-08-21 grew the denominator from 14 to 17 — so the bar
+> read 100% while three plans were unwritten, which is the confident-green shape this
+> phase has spent five rounds removing from its gates. It is now recomputed from the
+> files on disk, which is the only number that cannot drift.
 
 ## Performance Metrics
 
@@ -82,6 +85,7 @@ Progress: [██████████] 100% of phase 01 (14 of 14 plans)
 | Phase 01 P14 | 18 min | 2 tasks | 26 files |
 | Phase 01 P15 | 18 min | 3 tasks | 4 files |
 | Phase 01 P16 | 34 min | 3 tasks | 8 files |
+| Phase 01 P17 | 19 min | 2 tasks | 28 files |
 
 ## Accumulated Context
 
@@ -213,8 +217,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-22T09:32:57.506Z
-**Stopped at:** Completed 01-16-PLAN.md
+**Last session:** 2026-08-22T09:55:49.438Z
+**Stopped at:** Completed 01-17-PLAN.md
 **Resume file:** None
 
 ### Blockers

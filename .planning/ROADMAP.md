@@ -136,7 +136,7 @@ Plans:
 
 **Wave 17** *(blocked on 01-16 — the live tier needs every redaction and gate change landed and the tree quiet, which is the lesson 01-14 recorded)*
 
-- [ ] 01-17-PLAN.md — **Live proof and the missing gate**: two `openssl rand -base64` dyes carry a padded credential through a real Caido into the real database file, asserted absent under the padding-stripped spelling that would have made it recoverable, with one passing and one deliberately failing run committed — plus the no-version-literal gate the tracer's header has claimed since round 2 and which nothing in the repository performed — *wave 17*
+- [x] 01-17-PLAN.md — **Live proof and the missing gate**: two `openssl rand -base64` dyes carry a padded credential through a real Caido into the real database file, asserted absent under the padding-stripped spelling that would have made it recoverable, with one passing and one deliberately failing run committed — plus the no-version-literal gate the tracer's header has claimed since round 2 and which nothing in the repository performed — *wave 17*
 
 ### Phase 2: Error Containment & Observability
 
