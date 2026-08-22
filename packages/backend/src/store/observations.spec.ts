@@ -54,6 +54,63 @@ const BACKEND_SRC = "packages/backend/src";
 const TOKEN = "eyJhbGciOiJIUzI1NiJ9";
 
 /**
+ * THE RECOVERABLE SPELLING of a padded token — the literal minus its trailing
+ * `=` padding — derived ONCE here and called at EVERY absence assertion in this
+ * file. Two populations of absence assertion exist (the
+ * `BARE_CREDENTIAL_SHAPES` loop and the HEAD-side `do not survive ANYWHERE`
+ * block) and they must not come to disagree about what "recoverable" spells.
+ *
+ * WHY THIS EXISTS AT ALL, and it is the sharpest lesson of round 3. Against the
+ * defect this file's padded cases were written to catch, the column stores the
+ * token MINUS ONE BYTE of padding: `?dXNlcjpwYTU1dzByZA==` was written as
+ * `?dXNlcjpwYTU1dzByZA=<redacted>`. A substring search for the PADDED LITERAL
+ * therefore returns false and the assertion PASSES while a whole HTTP Basic
+ * credential is sitting in the row — re-pad the retained half, run `base64 -d`,
+ * and it comes back byte-for-byte. Padding carries no information; it is not
+ * part of the secret. So the question an absence assertion has to ask is "what
+ * bytes make this recoverable?", and the answer is the core, never the literal.
+ *
+ * A PLAIN CHARACTER SCAN, not a pattern — this file's whole subject is a module
+ * under `REDOS_RECOVERY = "kill"`, and a spec that reached for a pattern to
+ * check a module forbidden one would be the wrong example to leave behind.
+ */
+function paddingStrippedCore(literal: string): string {
+  let end = literal.length;
+  while (end > 0 && literal[end - 1] === "=") end -= 1;
+  return literal.slice(0, end);
+}
+
+/**
+ * ONE absence assertion, BOTH spellings. Never `out.includes(literal)` alone.
+ *
+ * The core is asserted non-empty first: a literal that is ENTIRELY padding has
+ * an empty core, `"x".includes("")` is always true, and the assertion would
+ * report a survival that never happened. Degenerate all-`=` shapes get their own
+ * titled cases instead of going through here.
+ */
+function expectSecretAbsent(out: string, literal: string, label: string): void {
+  const core = paddingStrippedCore(literal);
+  expect(
+    core.length,
+    `${label}: ${literal} is entirely padding — it has no recoverable core and does not belong in an absence assertion`,
+  ).toBeGreaterThan(0);
+  expect(out.includes(literal), `${label}: the LITERAL survived in ${out}`).toBe(
+    false,
+  );
+  expect(
+    out.includes(core),
+    `${label}: the PADDING-STRIPPED CORE \`${core}\` survived in ${out} — re-pad it and \`base64 -d\` returns the secret`,
+  ).toBe(false);
+}
+
+/**
+ * Standard base64 of `user:pa55w0rd` — a whole HTTP Basic credential, TWO `=` of
+ * padding, 20 characters. Comfortably inside `QUERY_NAME_MAX` = 64, which is why
+ * the bound never helped: base64 of a 32-byte secret is 44 characters.
+ */
+const PADDED_BASIC_TWO_PAD = "dXNlcjpwYTU1dzByZA==";
+
+/**
  * The adversarial fixture table for decision P10-D1 (operator, 2026-08-21) — one
  * entry per common credential format, and EVERY ONE of them shorter than
  * `QUERY_NAME_MAX` = 64, which is the bound that was supposed to catch them.
@@ -759,6 +816,68 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
     expect(rows[0].url.includes("SECRETSESSION"), rows[0].url).toBe(false);
     expect(rows[0].url).toBe(
       `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js;jsessionid=${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("a PADDED credential does not reach the column on EITHER delimiter (CR-07, T-01-78, T-01-79)", async () => {
+    // THE TRACER SLICE. One padded credential in at `normaliseObservedUrl`,
+    // through `redactDelimitedSegment` on BOTH delimiters, through
+    // `recordObservation`'s INSERT, into a real SQLite file, and back out
+    // through `listObservations` — asserted on the bytes that were STORED, not
+    // on the value the function returned. A pure-function case cannot tell
+    // whether the redactor is wired into the write.
+    //
+    // BOTH DELIMITERS IN ONE CASE, deliberately. `redactDelimitedSegment` is THE
+    // one shared helper — the `&` query loop and the `;` path loop both call it —
+    // so a fix proven on `&` alone is a claim wider than its evidence, and the
+    // code review executed the `;` form and reproduced the defect there.
+    //
+    // WHAT THIS LOOKED LIKE BEFORE THE FIX, reproduced by execution rather than
+    // described: the column held
+    //   https://cdn.test/a.js?dXNlcjpwYTU1dzByZA=<redacted>
+    //   https://cdn.test/a.js;dXNlcjpwYTU1dzByZA=<redacted>
+    // The `=` was PADDING and was read as a separator, so the credential was
+    // promoted into the half the policy KEEPS.
+    const query = await recordObservation(
+      fx.db,
+      "project-one",
+      "e".repeat(64),
+      "r5",
+      `https://cdn.test/a.js?${PADDED_BASIC_TWO_PAD}`,
+      200,
+      null,
+      1_700_000_000_004,
+    );
+    expect(query.ok, JSON.stringify(query)).toBe(true);
+
+    const path = await recordObservation(
+      fx.db,
+      "project-one",
+      "f".repeat(64),
+      "r6",
+      `https://cdn.test/a.js;${PADDED_BASIC_TWO_PAD}`,
+      200,
+      null,
+      1_700_000_000_005,
+    );
+    expect(path.ok, JSON.stringify(path)).toBe(true);
+
+    const rows = await listObservations(fx.db, "project-one");
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expectSecretAbsent(
+        row.url,
+        PADDED_BASIC_TWO_PAD,
+        `stored row ${row.request_id}`,
+      );
+    }
+
+    const byId = new Map(rows.map((r) => [r.request_id, r.url]));
+    expect(byId.get("r5")).toBe(
+      `https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`,
+    );
+    expect(byId.get("r6")).toBe(
+      `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
     );
   });
 
