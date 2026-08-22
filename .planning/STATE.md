@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-15-PLAN.md
-last_updated: "2026-08-22T08:54:15.197Z"
+stopped_at: Completed 01-16-PLAN.md
+last_updated: "2026-08-22T09:33:06.007Z"
 last_activity: 2026-08-22
 last_activity_desc: Phase 01 execution started
-state_head: 35a7c329d7dfdeef9f8b80d28a4c9b88bb1dcb28
+state_head: 33d8d070565a0886848db3122331dec812151f5c
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 2 of 17
+Plan: 3 of 17
 Status: Ready to execute
 Last activity: 2026-08-22 — Phase 01 execution started
 
@@ -81,6 +81,7 @@ Progress: [██████████] 100% of phase 01 (14 of 14 plans)
 | Phase 01 P13 | 13 min | 1 tasks | 1 files |
 | Phase 01 P14 | 18 min | 2 tasks | 26 files |
 | Phase 01 P15 | 18 min | 3 tasks | 4 files |
+| Phase 01 P16 | 34 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: Rows already written are LEFT, on decision P8-D1's CLOSURE half alone; the MEASURED half is explicitly not claimed and no new count was performed
 - [Phase 01]: The retained NAME half of a genuine pair is kept BY POLICY and is now the second entry in schema.spec.ts's OPEN list rather than closed
 - [Phase 01]: The QUERY ENFORCED entry's live-proof sentence is scoped to the grammars tracer-e2e.sh exercises today, with plan 01-17 named by number as the owner of the padded grammar's live proof
+- [Phase 01]: WR-19 bound is ASSEMBLED-KEY, set by a real-tree measurement: reporting every non-reducing element-access key fired on compat.ts dotted-path walk and on array indexing, so the CORE-11 walk reports what it can see being HIDDEN and discloses what it merely cannot FOLLOW.
+- [Phase 01]: Pattern gate took option (a) — the rule. The one permitted regex literal stays permitted through the SAME count-plus-anchor: rule 4 passes a regex-literal first argument through without a verdict, so the call is covered by its literal being covered. No file-name skip added.
+- [Phase 01]: describeError cannot throw (IN-17): both reads wrapped, one shared UNRENDERABLE_ERROR literal with recordError. Six store call sites invoke it unwrapped, so a handled store failure would have become an unhandled rejection out of recordObservation.
 
 ### Known Risks Carried Forward
 
@@ -209,8 +213,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-22T08:54:06.567Z
-**Stopped at:** Completed 01-15-PLAN.md
+**Last session:** 2026-08-22T09:32:57.506Z
+**Stopped at:** Completed 01-16-PLAN.md
 **Resume file:** None
 
 ### Blockers

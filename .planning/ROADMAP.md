@@ -132,7 +132,7 @@ Plans:
 
 **Wave 16** *(blocked on 01-15 — shares `observations.spec.ts` and `schema.spec.ts`, and the whole round is serialised)*
 
-- [ ] 01-16-PLAN.md — **The gate widenings**: the CORE-11 gate reports an unreadable RECEIVER instead of dropping it and covers `navigator.sendBeacon` and dynamic code construction; the STORE-07 gate reaches `+=`, `.concat` and push-then-join; `describeError` stops being able to throw on the path it exists to contain; the `analyses.error` disclosure names the residual that exists; the pattern gate's claim is brought level with its enforcement — *wave 16*
+- [x] 01-16-PLAN.md — **The gate widenings**: the CORE-11 gate reports an unreadable RECEIVER instead of dropping it and covers `navigator.sendBeacon` and dynamic code construction; the STORE-07 gate reaches `+=`, `.concat` and push-then-join; `describeError` stops being able to throw on the path it exists to contain; the `analyses.error` disclosure names the residual that exists; the pattern gate's claim is brought level with its enforcement — *wave 16*
 
 **Wave 17** *(blocked on 01-16 — the live tier needs every redaction and gate change landed and the tree quiet, which is the lesson 01-14 recorded)*
 
