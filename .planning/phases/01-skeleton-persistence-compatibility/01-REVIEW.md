@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-21T15:23:01Z
+reviewed: 2026-08-22T10:20:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -20,8 +20,20 @@ reviews:
       a bare query/path segment that CONTAINS an `=` (every base64-padded
       credential) is still parsed as `name=value` and survives verbatim into
       `observations.url`.
+  - pass: gap-closure-round-3
+    reviewed: 2026-08-22T10:20:00Z
+    scope: 9 files changed by plans 01-15, 01-16, 01-17
+    findings: CR-08, WR-22...WR-26, IN-20...IN-22
+    verdict: >-
+      CR-07 verified CLOSED by execution on both delimiters. WR-17...WR-21
+      verified CLOSED; IN-14...IN-17 and IN-19 closed; IN-18 remains pinned and
+      its deferral rationale is now itself defective. One NEW BLOCKER, and it is
+      the fourth instance of this phase's signature defect in the same shape: the
+      WR-19 assembled-key widening is defeated by ONE `const`, and the fixture
+      that asserts the one-hop bound uses a LITERAL key so it cannot fail against
+      the concealment the rule exists to catch.
 depth: standard
-files_reviewed: 58
+files_reviewed: 59
 files_reviewed_list:
   - packages/engine/src/queue.ts
   - packages/engine/src/chunker.ts
@@ -70,6 +82,7 @@ files_reviewed_list:
   - scripts/phase1/env.sh
   - scripts/phase1/fetch-caido.sh
   - scripts/phase1/tracer-e2e.sh
+  - tests/pins.spec.ts
   - tests/phase1-compat.spec.ts
   - tests/phase1-load.spec.ts
   - vitest.config.ts
@@ -82,10 +95,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 7
-  warning: 21
-  info: 19
-  total: 47
+  critical: 8
+  warning: 26
+  info: 22
+  total: 56
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -117,19 +130,6 @@ resolution:
       IN-11,
       IN-12,
       IN-13,
-    ]
-  partially_fixed: [IN-09]
-  deferred: [WR-07]
-  open:
-    [
-      IN-01,
-      IN-02,
-      IN-03,
-      IN-04,
-      IN-05,
-      IN-06,
-      IN-07,
-      IN-09,
       CR-07,
       WR-17,
       WR-18,
@@ -140,8 +140,31 @@ resolution:
       IN-15,
       IN-16,
       IN-17,
-      IN-18,
       IN-19,
+    ]
+  partially_fixed: [IN-09]
+  deferred: [WR-07]
+  pinned: [IN-18]
+  open:
+    [
+      IN-01,
+      IN-02,
+      IN-03,
+      IN-04,
+      IN-05,
+      IN-06,
+      IN-07,
+      IN-09,
+      IN-18,
+      CR-08,
+      WR-22,
+      WR-23,
+      WR-24,
+      WR-25,
+      WR-26,
+      IN-20,
+      IN-21,
+      IN-22,
     ]
 fix_commits:
   CR-01: 910c382
@@ -171,16 +194,27 @@ fix_commits:
   IN-11: 02ceee5
   IN-12: a3a2cc9
   IN-13: 59c9c67
+  CR-07: 0fdac5c
+  WR-17: 897598e
+  WR-18: 897598e
+  WR-19: 0ec1e02
+  WR-20: e129f10
+  WR-21: ce5f3a5
+  IN-14: 6d32e01
+  IN-15: 897598e
+  IN-16: 897598e
+  IN-17: 897598e
+  IN-19: 9fffb52
 tests_before: 27 files / 616 tests
 tests_after: 28 files / 637 tests
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files) and 2026-08-21T15:23:01Z (gap closure round 2, 9 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files) and 2026-08-22T10:20:00Z (gap closure round 3, 9 files)
 **Depth:** standard
-**Files Reviewed:** 58 (union of all three passes)
-**Status:** issues_found — five new BLOCKERs from the gap-closure pass, on top of `WR-07` (deferred) and `IN-01…IN-07` (open)
+**Files Reviewed:** 59 (union of all four passes)
+**Status:** issues_found — one new BLOCKER from round 3 (`CR-08`), on top of `WR-07` (deferred), `IN-18` (pinned) and `IN-01…IN-07` (open)
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
 > 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
@@ -1678,9 +1712,558 @@ grammar as ENFORCED without qualifying it to the path, and one clause on that
 line would make the statement true.
 
 ---
+---
+
+# --- PASS 4 --- Gap-Closure ROUND 3 Review (plans 01-15, 01-16, 01-17)
+
+**Reviewed:** 2026-08-22T10:20:00Z
+**Depth:** standard
+**Files Reviewed:** 9 (the files plans 01-15/01-16/01-17 changed after the pass-3 review)
+**Status:** issues_found — 1 BLOCKER, 5 WARNING, 3 INFO, on top of a clean sweep of round 2's twelve
+
+New findings use a fresh ID series (`CR-08`, `WR-22+`, `IN-20+`) so nothing collides
+with the three ledgers above, all of which are preserved verbatim.
+
+## Resolution of pass 3 (2026-08-22, round 3)
+
+**Every disposition below was decided by EXECUTION.** I bundled the shipped
+`store/observations.ts` with esbuild and drove 30-plus URL shapes through
+`normaliseObservedUrl` at both the current HEAD and at `506ee3d` (the commit before
+plan 01-15) so "the branch changed this" is a diff and not an argument; I imported
+`auditSource` from both gates into a throwaway spec, ran 30 outbound shapes and 16
+redaction-gate shapes through them, and deleted the probe. `pnpm test` is
+**31 files / 1044 tests, all green**, which is a fact about the fixtures and not
+about any of the below.
+
+| Finding | Status | Commit | The evidence |
+|---|---|---|---|
+| CR-07 | **fixed** | `0fdac5c` / `9fffb52` | `redactDelimitedSegment` now walks the VALUE half. Executed: `?dXNlcjpwYTU1dzByZA==` → `?<redacted>`, `?YWRtaW46aHVudGVyMjI=` → `?<redacted>`, `;dXNlcjpwYTU1dzByZA==` → `;<redacted>`, `?=` and `?==` → `?<redacted>`, `?token=dXNlcjpwYTU1dzByZA==` still → `?token=<redacted>` (the branch that worked was not weakened). `BARE_CREDENTIAL_SHAPES` grew from 8 to 13 and now carries a structural assertion that ≥3 shapes contain an `=` and that BOTH sub-branches (one pad, two pads) are represented — the assertion round 2 did not have. `expectSecretAbsent` searches the padding-stripped CORE as well as the literal and refuses an all-padding literal first, so it cannot pass vacuously. **The claimed `?debug=` cost is NOT the only behaviour change — see `WR-22`.** |
+| WR-17 | **fixed** | `897598e` | Executed: `m += e.message` → `["unredacted-concat"]`, `"x: ".concat(e.message)` → `["unredacted-concat"]`, `parts.push(e.message); parts.join(" ")` → `["unredacted-string-call"]`. All three stay QUIET on the `describeError(e)` spelling of the same idiom, so the rule bans the leak and not the idiom. Render-form residual re-derived — incompletely → `WR-24` |
+| WR-18 | **fixed** | `897598e` | Both directions executed through the real `describeError`: `//cdn.victim.example/app.js?token=SECRET` → `Error: failed to load <path-redacted>` (the named residual was CLOSED), `cdn.victim.example/app.js?token=SECRET` → verbatim (the unnamed one is OPEN). `telemetry.ts`'s residual list moved from two to three and now names the schemeless shape; `schema.spec.ts`'s `analyses.error` entry names the same two surviving shapes, so the cross-reference the entry makes is true for the first time |
+| WR-19 | **fixed (NARROWED — and the narrowing has a hole)** | `0ec1e02` | `UNREADABLE_RECEIVER` is a real third state. Executed: `sdk["req"+"uests"].send(req)` → `["outbound-unanalysable"]`, `globalThis["fet"+"ch"](u)` → same, `const { send } = sdk["req"+"uests"]` → same, `const r = sdk["re"+"quests"]; r.send(req)` → same, and the two real-tree false positives (`cur[key]`, `MIGRATIONS[MIGRATIONS.length - 1]`) stay silent. **But the rule reads the key expression INLINE only** → `CR-08` |
+| WR-20 | **fixed** | `e129f10` | Option (a). Rule 4 fires on `.replace`/`.replaceAll`/`.split` whose first argument is not a string literal — `t.replaceAll(cfg.url, "x")` → `["smuggled-pattern"]` — and stays quiet on `s.split("&").join("&").replace("a","b").replaceAll("c","d")`, which IS the implementation. A regex-literal first argument still falls through to rule 1's count-plus-anchor exemption, so `telemetry.ts`'s one permitted literal keeps its call |
+| WR-21 | **fixed** | `ce5f3a5` | The gate exists, runs, and is scoped: `tests/pins.spec.ts` reads `scripts/phase1/tracer-e2e.sh` as raw text, comments included, and fails on any dotted-numeric run of exactly three components. Non-vacuous against a moved/emptied script. The tracer's header no longer claims a `grep -c` and names the describe block instead. It has no EXECUTED failing path → `WR-25` |
+| IN-14 | fixed | `6d32e01` | `grep -a -o -F -- "$value" "$f" | wc -l` replaces `grep -c`, and the block records the negative result that the two counters happened to agree on run 1 |
+| IN-15 | fixed | `897598e` | `error-redaction.spec.ts` builds every path with `posix.join`, so the `.split("/")` at `:311` and `:647` are now consistent with the construction rather than at odds with it |
+| IN-16 | fixed | `897598e` | `ERROR_BINDING_NAMES` gained `reason`, `detail`, `failure`, `message`. Executed: a parameter named `reason` rendered with `String()` into `{ error: … }` now reports `unredacted-persisted-error`, and so does `message`. `problem` still does not, and the comment now states that as a COVERAGE bound rather than as a false-positive claim |
+| IN-17 | fixed | `897598e` | Both reads in `describeError` are wrapped separately. Executed: a null-prototype object, a throwing `toString` and a `constructor`-trapping Proxy all return rather than throw, and `recordError` and `describeError` produce the SAME fallback string |
+| IN-18 | **NOT fixed — PINNED, and the pin's own rationale is defective** | — | The `…&p133=<re` fragment is still stored and is still idempotent. The reason given for deferring — that the obvious repair would break idempotence via plan 01-15's new branch — is stated in the pinned case; the new branch already broke idempotence on a neighbouring cut point → `WR-22` |
+| IN-19 | fixed (as a disclosure) | `9fffb52` | `schema.spec.ts`'s `;` row is now QUALIFIED TO THE PATH and the authority case is pinned by "RESIDUAL, PINNED: a `;` parameter inside the AUTHORITY" |
+
+## Summary (pass 4)
+
+Round 3 did the work on the column. The padded-credential class is genuinely closed
+on both delimiters, the fixture table was re-derived from the ENCODING FACTS rather
+than from the branch, the absence assertions now search the recoverable spelling
+instead of the literal, and the live tier carries two padded dyes plus a committed
+mutation run whose `observations-url-raw.txt` reads
+
+```
+…&9xUbJAATIR5fA3NpO+WUHA=<redacted>&Hf0sCN7lYIrnsKODDtzkUOZDO1/mumKR1nqAH0duYwU=<redacted>
+```
+
+— the defect, on a real Caido 0.58.0, in a file anyone can `git show`. That is the
+strongest evidence artifact this phase has produced.
+
+**And the signature defect is back, in the gate this time, for the fourth review in
+a row.** `WR-19` asked the outbound gate to stop treating "could not read" as
+"clean" at the RECEIVER level. It now does — for a key written INLINE at the element
+access. Bind that key to a name first and the whole widening evaporates:
+
+```
+sdk["req" + "uests"].send(req)                     ["outbound-unanalysable"]
+const k = "req" + "uests"; sdk[k].send(req)        []
+const k = `req${"uests"}`; sdk[k].send(req)        []
+const k = ["req","uests"].join(""); sdk[k].send(req)   []
+sdk[b ? "requests" : "net"].send(req)              []
+```
+
+All three assembly forms the header enumerates — "concatenated, interpolated, or
+returned by a call" — are defeated by one `const`. The last shape is sharper still:
+both keys are LITERALS naming outbound receivers, so nothing was hidden and nothing
+could not be read; the walk simply never looks at a conditional in key position,
+one function away from `initializerReceiver`, which handles conditionals for exactly
+this reason. And the fixture that claims to bound the residual —
+
+> The ONE-hop version of the same shape is caught, which is what makes the residual
+> a bound rather than a hole
+
+— is asserted with `const r = "requests"`, a LITERAL key resolved by `constStrings`.
+It exercises a different mechanism entirely and cannot fail against the concealment
+the assembled-key rule exists for. That is `CR-08`.
+
+Three smaller things are right and are recorded so nobody re-litigates them. The
+`;`-mirror table really does mirror: every `=`-bearing shape added to
+`BARE_CREDENTIAL_SHAPES` has a `HEAD_CASES` twin, including `;=` and `;==`, so "one
+policy, two delimiters" stays a measured statement. `describeError` genuinely cannot
+throw now — I checked every read on the path, including `body.startsWith(name)`,
+`redactUrls`' `String.prototype.replace` and `redactPaths`' two-pointer scan, and
+none of them can raise on a string. And the tracer's padded dyes are asserted INTO
+SHAPE before the run (padding-byte count and non-empty core, on both sides of the
+parameter file), so a dye that arrived unpadded aborts rather than producing a
+green run that proves nothing.
+
+---
+
+## Critical Issues (pass 4)
+
+### CR-08: The WR-19 assembled-key rule reads the key INLINE only — one `const` defeats it, and the fixture that bounds the residual uses a literal so it cannot fail
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:648-661` (`isAssembledKey`), `:757-765` (`receiverKind`'s element-access branch), claim at `:20-32` and `:48-65`, fixture at `:1730-1744`
+**Severity:** BLOCKER
+
+**Issue:** `receiverKind` reaches for the third state only when the argument
+expression IS the assembly:
+
+```ts
+if (ts.isElementAccessExpression(inner)) {
+  const key = literalOf(inner.argumentExpression);
+  if (key !== undefined) return RECEIVERS.has(key) ? key : undefined;
+  return isAssembledKey(inner.argumentExpression, numericNames, poisonedNumericNames)
+    ? UNREADABLE_RECEIVER
+    : undefined;
+}
+```
+
+and `isAssembledKey` inspects that one node: a `+` binary, a template expression, or
+a call. A bare identifier is none of those, and `constStrings` only resolves an
+identifier bound to a single string LITERAL. So a key assembled and then bound —
+one hop, in the same file, in document order, with the assembly right there in the
+AST — resolves to neither a literal nor an assembly and the site is dropped.
+Executed against `auditSource("probe.ts", src)`:
+
+```
+sdk["req" + "uests"].send(req)                          ["outbound-unanalysable"]
+const k = "req" + "uests"; await sdk[k].send(req)       []
+let   k = "req" + "uests"; await sdk[k].send(req)       []
+const k = `req${"uests"}`; await sdk[k].send(req)       []
+const k = ["req","uests"].join(""); await sdk[k].send(req)   []
+const k = g(); await sdk[k].send(req)                   []      // inline `sdk[g()]` reports
+sdk[b ? "requests" : "net"].send(req)                   []
+sdk[(0, "requests")].send(req)                          []
+```
+
+Compare the same defect one level down, which the gate gets right: `const m = "se" +
+"nd"; sdk.requests[m](req)` DOES report `outbound-unanalysable`, because there the
+receiver is positively identified and `memberName` returning `undefined` is enough.
+The gate therefore reports an unreadable MEMBER however many hops away it was
+assembled, and an unreadable RECEIVER only when the assembly is written in place.
+That asymmetry is exactly what WR-19 was raised to remove, moved up one level.
+
+**Why this is a BLOCKER and not a documented residual.** Three artifacts say
+otherwise, and they contradict each other:
+
+- Header boundary 2 (`:26-30`) — "an element access whose key the walk can see being
+  ASSEMBLED — concatenated, interpolated, or returned by a call — is an UNREADABLE
+  RECEIVER … and it is reported wherever that value is used as one". All three named
+  forms are silent one `const` away.
+- Residual (a) (`:50-53`) — "a value that flows through a FUNCTION BOUNDARY, or
+  through MORE THAN ONE HOP of indirection, is beyond the walk", with a TWO-hop
+  example. `const k = "req" + "uests"` is one hop.
+- Residual (b) (`:54-60`) textually covers it ("a bare identifier key … is NOT
+  reported"), but its stated justification does not: the bound "was set by
+  measurement" against two real-tree hits — `compat.ts`'s dotted-path walk
+  (`cur[key]`, `key` a loop variable) and `ctx[root]`. Neither is a name bound to an
+  assembled expression, so tracking that one shape would not have re-fired either.
+  The measurement justifies exempting a merely dynamic key; it does not justify
+  exempting a demonstrably assembled one.
+
+And the fixture at `:1730-1744` closes the loop the wrong way. It asserts the
+TWO-hop shape reports `[]` (correct, disclosed) and then asserts
+
+```ts
+expect(rulesOf('const r = "requests";\nawait sdk[r].send(req);')).toContain("outbound-send");
+```
+
+under the comment "The ONE-hop version of the same shape is caught, which is what
+makes the residual a bound rather than a hole." That case passes through
+`constStrings`, not through `isAssembledKey`, so it is green whether or not the
+assembled-key rule can see one hop. It is a green-because-it-cannot-fail assertion
+sitting directly under the rule it appears to bound — the shape this file's own
+header says the phase has had to remove four times.
+
+The conditional key is the sharper half. `sdk[b ? "requests" : "net"]` hides nothing
+— both keys are literals naming outbound receivers — and `initializerReceiver`
+already resolves conditionals when they appear as an INITIALIZER (`const r = b ?
+sdk.requests : sdk.requests` correctly reports `outbound-send`). The same handling
+is simply absent in key position, so a site the walk can read completely is neither
+reported nor disclosed.
+
+**Fix:** resolve one hop for the key the same way the gate already resolves one hop
+for the receiver and for `fetch`, and read a conditional key on both branches.
+
+```ts
+// beside `constStrings`, in the same collect pass:
+/** Names bound to an expression the walk can see being ASSEMBLED. */
+const assembledNames = new Set<string>();
+// in collect, on VariableDeclaration with an identifier name, and on `x = …`:
+if (isAssembledKey(init, numericNames, poisonedNumericNames)) {
+  assembledNames.add(node.name.text);
+}
+
+// in receiverKind's ElementAccess branch, replacing the single-node test:
+const arg = unwrap(inner.argumentExpression);
+if (ts.isConditionalExpression(arg)) {
+  // Both keys are readable: a receiver that is outbound on one branch is outbound.
+  return receiverKind(ts.factory.createElementAccessExpression(inner.expression, arg.whenTrue))
+      ?? receiverKind(ts.factory.createElementAccessExpression(inner.expression, arg.whenFalse));
+}
+if (isAssembledKey(arg, numericNames, poisonedNumericNames)) return UNREADABLE_RECEIVER;
+if (ts.isIdentifier(arg) && assembledNames.has(arg.text)) return UNREADABLE_RECEIVER;
+return undefined;
+```
+
+`assembledNames` fires on neither real-tree false positive — `key` is a `for…of`
+binding over `path.split(".")` and `root` is a parameter, and neither is a
+`VariableDeclaration` whose initializer is a `+`, a template or a call — so the
+measured bound that decided residual (b) is preserved. Then:
+
+1. Add every executed shape above as a failing-path case beside `:1702-1727`.
+2. Replace the misleading comment at `:1740-1744` with a case that actually
+   exercises one hop of ASSEMBLY (`const k = "req" + "uests"`), and keep the literal
+   case under its own title so it is not read as bounding a rule it does not touch.
+3. Re-run the gate over the real tree and record the zero-false-positive result in
+   the header the way `isAssembledKey`'s own docblock already does.
+
+---
+
+## Warnings (pass 4)
+
+### WR-22: The CR-07 branch cost `normaliseObservedUrl` its idempotence at the `URL_MAX` boundary — a NEW residual, undisclosed, and the pinned IN-18 case defers on the strength of the invariant it broke
+
+**File:** `packages/backend/src/store/observations.ts:179-202` with `:393-398`; the claim at `packages/backend/src/store/observations.spec.ts:755-791`
+
+**Issue:** The new branch removes the NAME half when the value half is empty. That
+shortens the segment, so a `URL_MAX` truncation that lands immediately after a `=`
+is no longer a fixed point. Executed against the shipped module at HEAD and at
+`506ee3d` (the commit before plan 01-15), same input, esbuild-bundled and run:
+
+```
+input: "https://cdn.test/a.js?" + 800 × "ppppN=v" joined with "&"
+
+NEW  once  tail "cted>&pppp112="   len 2048
+NEW  twice tail "cted>&<redacte"   len 2048   IDEMPOTENT? false
+OLD  once  tail "cted>&pppp112="   len 2048
+OLD  twice tail "cted>&pppp112="   len 2048   IDEMPOTENT? true
+```
+
+and the mechanism, minimally:
+
+```
+NEW  "https://x.test/a.js?p133="  ->  "https://x.test/a.js?<redacted>"
+OLD  "https://x.test/a.js?p133="  ->  "https://x.test/a.js?p133=<redacted>"
+```
+
+Under the old rule the truncated tail `…&p133=` re-expanded to `…&p133=<redacted>`
+and the 2048-byte cut fell on the same byte, so the value was its own fixed point.
+Under the new rule the name is destroyed, the string shrinks, and the cut moves.
+
+Two things make this a finding rather than a curiosity.
+
+**(1) It is a NEW residual and nothing discloses it.** `redactDelimitedSegment`'s
+docblock names exactly one accepted cost — "A parameter with an EMPTY value —
+`?debug=` — now loses its NAME as well as its value" — and closes with "Idempotent
+for free in all three branches", which is true of the helper and false of the
+composed function the column is actually written through. `schema.spec.ts`'s
+`observations.url` entry does not mention it either.
+
+**(2) The IN-18 pin now defers on a broken premise.** `observations.spec.ts:755-791`
+declines to fix the severed-marker truncation with this reasoning:
+
+> The obvious repair — drop the partial marker so the string ends `…&p133=` —
+> INTERACTS with this plan's new branch: a segment whose value half is empty now
+> redacts WHOLE, so a second pass over `…&p133=` produces `…&<redacted>` and the
+> idempotence invariant asserted across every case in this file breaks.
+
+The invariant is already broken, by that same branch, on an input the repair has
+nothing to do with — and the case's own closing assertion
+(`normaliseObservedUrl("https://cdn.test/a.js?p133=")` → `?<redacted>`) is one
+`URL_MAX` cut away from being the whole problem rather than a hypothetical. The
+existing idempotence assertions cannot see it: `CASES` and the
+`BARE_CREDENTIAL_SHAPES` loop assert idempotence over `redactQueryValues` on short
+URLs, `HEAD_CASES` asserts it over `redactUrlHead`, and the ONLY
+`normaliseObservedUrl` idempotence assertion in the file is the 140-parameter
+fixture at `:775-785`, whose cut happens to land mid-marker rather than on a `=`.
+
+Not a BLOCKER: nothing leaks (the destroyed half is a parameter NAME, retained by
+policy anyway) and no production path applies `normaliseObservedUrl` twice — it runs
+once per `recordObservation`. It is a WARNING because a stated invariant is false, a
+new residual is undisclosed, and a separate finding is being deferred on the
+strength of both.
+
+**Fix:** do the `&`-boundary truncation IN-18 already scopes, which removes the
+class rather than the symptom, and correct the two claims either way:
+
+```ts
+export function normaliseObservedUrl(url: string): string {
+  const redacted = redactQueryValues(redactUrlHead(String(url).split("#")[0]));
+  if (redacted.length <= URL_MAX) return redacted;
+  const cut = redacted.slice(0, URL_MAX);
+  const lastAmp = cut.lastIndexOf("&");
+  // Drop the whole partial segment, never half of one: a segment cut after its
+  // `=` is a segment the next pass would redact WHOLE, and one cut inside the
+  // marker leaves a fragment consumers can miscount.
+  return lastAmp === -1 ? cut : cut.slice(0, lastAmp);
+}
+```
+
+Then add an idempotence case over `normaliseObservedUrl` that SEARCHES for the
+adversarial cut instead of hard-coding one fixture — sweep a parameter-name length
+until the truncation lands on a `=`, which is what found this — and delete the
+"Idempotent for free in all three branches" sentence or scope it to the helper.
+
+### WR-23: `outbound-dynamic-code` has no alias tracking, so `const e = eval; e(s)` reports clean — the rule whose whole argument is "the one shape that makes a passing gate meaningless"
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:94-111` (the docblock), `:1124-1131` (the call rule), `:1091-1100` (the `new` rule)
+
+**Issue:** `DYNAMIC_CODE` is matched only when the callee is a bare identifier
+`eval`/`Function`, or a member of one of the four `GLOBAL_RECEIVERS`. One binding
+removes it. Executed:
+
+```
+eval(s)                                            ["outbound-dynamic-code"]
+const e = eval; e(s)                               []
+const { eval: ev } = globalThis as any; ev(s)      []
+new Function("a", s)                               ["outbound-dynamic-code"]
+const F = Function; new F("a", s)                  []
+```
+
+The gate already knows how to do this: `fetchAliases` is seeded with `FETCH_GLOBAL`
+and grown from `const f = fetch`, `const f = globalThis.fetch` and
+`const { fetch: f } = globalThis`, and `navigatorAliases` mirrors it exactly. The
+dynamic-code rule was written beside both and given neither, and its docblock cites
+the receiver rules' alias handling as its model:
+
+> including a bare member REFERENCE with no call, the same way the receiver rules
+> already catch `const s = sdk.requests.send`.
+
+A reader is therefore told the rule reaches as far as the ones next to it. It
+reaches one spelling less far than any of them, and the residual list names only
+function boundaries, >1 hop and multi-hop `navigator` — a one-hop alias is none of
+those. `outbound-global-ctor` has the identical gap (`const W = WebSocket; new
+W(url)` → `[]`); that half is pre-existing rather than new in this batch, but it is
+the same two lines to close.
+
+**Fix:** one alias set, seeded and grown exactly as `fetchAliases` is.
+
+```ts
+const dynamicCodeAliases = new Map<string, string>();   // localName -> "eval" | "Function"
+// in collect, beside the fetch/navigator branches:
+//   const e = eval;                  -> dynamicCodeAliases.set("e", "eval")
+//   const F = globalThis.Function;   -> dynamicCodeAliases.set("F", "Function")
+//   const { eval: ev } = globalThis; -> dynamicCodeAliases.set("ev", "eval")
+// in visit, replacing the bare-identifier tests in the call and `new` rules:
+const dyn = ts.isIdentifier(callee)
+  ? (DYNAMIC_CODE.has(callee.text) ? callee.text : dynamicCodeAliases.get(callee.text))
+  : undefined;
+if (dyn !== undefined) add("outbound-dynamic-code", `a call to \`${callee.text}(...)\``);
+```
+
+Do the same for `OUTBOUND_CONSTRUCTORS`, and add each executed shape above as a
+failing-path case beside `:1815-1830`. Keep an ordinary object defining a method
+named `eval` quiet, the way the beacon rule's negative fixture does.
+
+### WR-24: The STORE-07 gate is blind to the OPERATOR class of render — `? :`, `??` and `||` — and the residual it re-derived in the same commit does not name it
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:262-291` (`derivesFrom`), residual claim at `:29-34`
+
+**Issue:** `derivesFrom` unwraps parentheses, casts, non-null assertions, member
+access and member calls, then requires an identifier at the bottom. A
+`ConditionalExpression`, a `??` and a `||` are none of those, so the descent stops
+and the render is invisible. Executed against `auditSource("store/x.ts", src)`:
+
+```
+catch(e){ return { ok:false, error: e.message }; }                            ["unredacted-object-value"]
+catch(e){ return { ok:false, error: e instanceof Error ? e.message : "x" }; } []
+catch(e){ return { ok:false, error: e.message ?? "x" }; }                     []
+catch(e){ return { ok:false, error: e.message || "x" }; }                     []
+```
+
+`e instanceof Error ? e.message : String(e)` is not an exotic spelling. Under
+`useUnknownInCatchVariables` — which this repo enables, and which the gate's own
+header cites as the reason cast forms matter — it is the standard way to narrow a
+caught `unknown` before rendering it, and it is likelier in a Phase 2
+`finishAnalysis` than either of the two accumulator idioms WR-17 just added.
+
+What makes it a finding rather than a gap is the paragraph shipped in the same
+commit. WR-17's fix rewrote the render-form list and added:
+
+> THE RESIDUAL OF THE RENDER-FORM LIST, RE-DERIVED against the widened rules rather
+> than carried forward: a render that goes through a method this list does not name
+> (`padEnd`, `repeat`, `replace`, a user helper), or through an accumulator that is
+> neither a `+=` nor a `.push`, is not seen.
+
+The re-derivation enumerates two classes — methods and accumulators — and the class
+that is actually open is a third: an OPERATOR between the binding and the render
+position. A residual list that announces it was re-derived is trusted for its
+completeness, which is the argument `schema.spec.ts`'s OPEN list already makes about
+itself one directory away.
+
+**Fix:** descend through the operator forms, which costs three branches in the
+function that already descends through five, and then re-derive the residual again
+against the widened rule.
+
+```ts
+if (ts.isConditionalExpression(current)) {
+  return derivesFrom(current.whenTrue, names) || derivesFrom(current.whenFalse, names);
+}
+if (
+  ts.isBinaryExpression(current) &&
+  (current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+   current.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+   current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+) {
+  return derivesFrom(current.left, names) || derivesFrom(current.right, names);
+}
+```
+
+Add all four executed shapes as failing-path cases, add the `describeError(e)`
+spelling of each as a must-stay-quiet case, and amend the residual paragraph to name
+the operator class it now covers and whatever is left after it.
+
+### WR-25: The WR-21 gate has no executed failing path, so its DETECTION predicate cannot be shown to work — in the one file arguing hardest against exactly that
+
+**File:** `tests/pins.spec.ts:274-348`
+
+**Issue:** The gate is written inline:
+
+```ts
+const hits = (tracerText.match(DOTTED_NUMERIC) ?? []).filter(
+  (run) => run.split(".").length === 3,
+);
+expect(hits, …).toEqual([]);
+```
+
+`tracer-e2e.sh` currently contains `0.25` (two components) and five `127.0.0.1`
+(four), and no three-component run at all, so the filter's true branch never
+executes anywhere in the suite. Break the predicate in any of several plausible
+ways — `=== 4`, `>= 4`, dropping the `?? []`, replacing `match` with `search`,
+tightening `DOTTED_NUMERIC` to require a leading `v` — and the gate stays green
+forever while enforcing nothing. The two non-vacuity assertions guard a different
+property: that the right file was read and is non-empty. They cannot detect an inert
+predicate.
+
+Every other gate this phase built avoids this by exporting a pure `auditSource` and
+running its failing path on a synthetic fixture —
+`outbound-prohibition.spec.ts`, `error-redaction.spec.ts` and
+`observations.spec.ts`'s `auditPatternUse` all do. The WR-21 gate is the one that
+does not, and its subject is a file whose header states, at length, that "a gate
+whose failure path has never run is a gate nobody has tested" and that a
+green-because-it-cannot-fail gate is "the shape this phase has already had to remove
+four times". The tracer's header says the gate "has been OBSERVED failing: a planted
+literal drives it red" — that observation is not in the repository.
+
+**Fix:** lift the predicate out, keep the file scan as its only caller, and execute
+both directions.
+
+```ts
+/** Semver-shaped tokens in raw text. Exported so its FAILING path can run. */
+export function versionLiterals(text: string): string[] {
+  return (text.match(/\d+(?:\.\d+)+/g) ?? []).filter((r) => r.split(".").length === 3);
+}
+
+it("the scan DETECTS a planted literal, and ignores the two shapes that must stay", () => {
+  expect(versionLiterals("# expected Caido 0.58.0")).toEqual(["0.58.0"]);
+  expect(versionLiterals("sleep 0.25; curl http://127.0.0.1:8080/")).toEqual([]);
+  expect(versionLiterals(`${tracerText}\n# expected Caido 0.58.0\n`)).toEqual(["0.58.0"]);
+});
+```
+
+The third assertion is the load-bearing one: it plants the literal into the REAL
+file's text, so the gate is proven to go red on the actual input rather than on a
+one-line fixture.
+
+### WR-26: `isProvablyNumeric` says it "PROVES rather than assumes and fails SAFE"; for a property access it assumes, by member NAME, and fails open
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:569-624` (docblock at `:573-583`, the branch at `:608-610`)
+
+**Issue:** The docblock states the discipline in as many words:
+
+> It PROVES rather than assumes and it fails SAFE: anything it cannot prove numeric
+> is treated as possibly a name.
+
+The property-access branch does the opposite:
+
+```ts
+if (ts.isPropertyAccessExpression(inner)) {
+  return NUMERIC_MEMBERS.has(inner.name.text);
+}
+```
+
+Any expression ending in `.length`, `.size`, `.min`, `.max`, `.abs`, `.indexOf`,
+`.search`, `.floor` … is declared numeric regardless of what it is a member OF, and
+a numeric key short-circuits `isAssembledKey` before any other test runs. Executed:
+
+```
+sdk[o.length].send(req)        []
+sdk[o.name].send(req)          []      // not numeric, but a bare member is not "assembled" either
+```
+
+`o.length` is a string on any ordinary configuration object (`{ max: "requests" }`,
+`{ size: "net" }`), so the exemption is an assumption about a name, and the failure
+direction is open rather than safe. `NUMERIC_MEMBERS`'s own comment concedes the
+mechanism ("Enumerated rather than inferred, because the alternative is a type
+checker") without conceding the direction.
+
+The exposure today is nil — neither scanned root indexes an outbound receiver by a
+member-named key — which is why this is a WARNING and not part of `CR-08`. The
+exposure the day the exemption is relied on is silent, and the docblock is what a
+future author will rely on.
+
+**Fix:** cheapest correct version is to require the RECEIVER to be something the
+walk can also see is not an outbound object, or simply to restrict the branch to the
+shapes that motivated it:
+
+```ts
+if (ts.isPropertyAccessExpression(inner)) {
+  // `x.length` / `MIGRATIONS.length` only. A member of a call result or of an
+  // unresolvable expression is not proven anything.
+  return NUMERIC_MEMBERS.has(inner.name.text) && ts.isIdentifier(unwrap(inner.expression));
+}
+```
+
+Whatever is chosen, correct the docblock: the set is a NAME heuristic exactly as
+`ERROR_BINDING_NAMES` is one directory away, and that file states its heuristic as a
+coverage bound rather than as a proof.
+
+---
+
+## Info (pass 4)
+
+### IN-20: `globalThis` itself has no one-hop alias, while `navigator` does
+
+`outbound-prohibition.spec.ts:663-667` (`isGlobalReceiver`) matches a bare identifier
+in `GLOBAL_RECEIVERS` only. Executed: `const g = globalThis; await g.fetch(u)` → `[]`,
+and `const g = globalThis; await g["fet"+"ch"](u)` → `[]`. `navigatorAliases` and
+`fetchAliases` both resolve one hop; the receiver they sit on does not. Pre-existing
+rather than new in this batch, and it is the same `Set<string>` pattern to close.
+
+### IN-21: `padded_segments_reached` is an `all()` over a filtered generator and is `True` when no row carries a `?`
+
+`scripts/phase1/tracer-e2e.sh:816-819`. `bool(raw_rows)` guards an empty list but not
+the case where every row lacks a `?`, so the generator is empty and `all()` returns
+`True` — the run would then RECORD that the padded grammar reached the plugin while
+having measured nothing. It is unreachable in a passing run because
+`check(len(q_seg) == 5, …)` fails first, which is why this is INFO; but the note it
+writes into `grammar-reachability.txt` is the committed artifact a reader cites, and
+its truth should not depend on another assertion having already failed. Add
+`any("?" in r for r in raw_rows)` to the conjunction.
+
+### IN-22: the `push`→`join` rule needs a bare-identifier receiver and depends on document order
+
+`error-redaction.spec.ts:409-421`. `names.add(receiver.text)` runs only when the push
+receiver is an identifier, so `o.parts.push(e.message); o.parts.join("")` reports `[]`;
+and because `names` grows during the walk, a `join` that appears BEFORE the `push` in
+document order is missed (`const out = a.join(""); a.push(e.message)` → `[]`). Both
+are inside boundary 2's stated document-order limit, and neither is reachable in the
+store tree today. Worth one sentence in the render-form residual alongside the
+operator class `WR-24` adds, since the list now enumerates accumulators explicitly.
+
+---
 
 _Pass 1 reviewed: 2026-08-21T00:30:00Z_
 _Pass 2 reviewed: 2026-08-21T11:21:31Z_
 _Pass 3 reviewed: 2026-08-21T15:23:01Z_
+_Pass 4 reviewed: 2026-08-22T10:20:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
