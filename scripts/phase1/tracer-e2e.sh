@@ -15,8 +15,20 @@
 # unciteable. Naming the CURRENT build here would only reset the clock on the same
 # failure. The prose cites the variable; the RESOLVED value is written into every
 # run directory as `caido-version.txt` beside `status.json`, so the evidence CARRIES
-# the build rather than a comment claiming it. A literal in this file is a bug, and
-# a `grep -c` for the superseded one returning zero is how that is enforced.
+# the build rather than a comment claiming it. A version literal in this file is a
+# bug, and `tests/pins.spec.ts` — describe block "WR-21 — the tracer's own
+# no-version-literal rule is ENFORCED, not merely claimed" — is what enforces it: it
+# reads this whole file, COMMENTS INCLUDED, and fails on any semver-shaped token.
+#
+# THAT SENTENCE USED TO BE FALSE, AND THAT IS WHY IT NOW NAMES A FILE (01-VERIFICATION.md
+# WR-21). Until 2026-08-22 it read "a `grep -c` for the superseded one returning zero
+# is how that is enforced", and NOTHING in the repository performed that grep — a
+# search for this script's own name over `*.ts`, `*.mjs`, `*.sh` and `*.json` outside
+# `.planning/` returned seven hits and every one was prose. A claim that a check
+# EXISTS is the claim a reader will not re-verify, and it sat in the file whose entire
+# purpose is producing citeable evidence. Plan 01-17 wrote the gate rather than
+# deleting the sentence, and the gate has been OBSERVED failing: a planted literal
+# drives it red, and so does removing the marker that makes its scan non-vacuous.
 #
 # The three deliberate pins elsewhere in the tree — tests/phase1-load.spec.ts,
 # tests/phase1-runtime.spec.ts and packages/backend/src/compat.ts — are NOT drift and
@@ -42,14 +54,13 @@ source scripts/phase1/env.sh
 GO_NO_GO=".planning/phases/00-runtime-reality-check/results/go-no-go.json"
 FIXTURE_NAME="defminer-tracer-fixture.js"
 CACHE_BUSTER="v=tracer1"
-# STORE-03's live probe. EVERY secret below is sixteen random bytes rendered as hex
-# and generated FRESH at every run: a value that cannot appear in the database by
-# coincidence, cannot be satisfied by a hard-coded expectation, and is a tracer dye
-# rather than a credential — which is what makes committing a FAILING run's raw dump
-# an honest artifact instead of a leak.
+# STORE-03's live probe. EVERY secret below is random bytes generated FRESH at every
+# run: a value that cannot appear in the database by coincidence, cannot be satisfied
+# by a hard-coded expectation, and is a tracer dye rather than a credential — which is
+# what makes committing a FAILING run's raw dump an honest artifact instead of a leak.
 #
 # ONE SECRET PER GRAMMAR, and they are distinct on purpose: a single value reused
-# across all four would tell you that SOMETHING leaked without telling you WHICH
+# across all of them would tell you that SOMETHING leaked without telling you WHICH
 # grammar leaked it, and the whole reason plan 01-14 exists is that the live tier
 # had only ever exercised one of them.
 #
@@ -58,6 +69,8 @@ CACHE_BUSTER="v=tracer1"
 #   PATHPARAM_SECRET `;`-delimited path param  — plan 01-11, redactUrlHead
 #   USERINFO_SECRET  `user:pass@host` password — plan 01-11, redactUrlHead
 #   USERINFO_USER    `user:pass@host` username — plan 01-11, "BOTH halves go"
+#   PAD_TWO_SECRET   bare segment, TWO `=`     — plan 01-17, CR-07
+#   PAD_ONE_SECRET   bare segment, ONE `=`     — plan 01-17, CR-07
 SECRET_PARAM="access_token"
 SECRET_VALUE="$(openssl rand -hex 16)"
 BARE_SECRET="$(openssl rand -hex 16)"
@@ -72,6 +85,46 @@ PATHPARAM_SECRET="$(openssl rand -hex 16)"
 USERINFO_USER="$(openssl rand -hex 8)"
 USERINFO_SECRET="$(openssl rand -hex 16)"
 
+# ---- THE PADDED PAIR (plan 01-17, CR-07) -----------------------------------
+# Every dye above is `openssl rand -hex`, AND HEX NEVER CONTAINS AN `=`. That one
+# fact is why the live tier could not go red on CR-07: the whole class of credential
+# whose redaction turns on an `=` was unreachable from here, in exactly the same blind
+# spot the unit tier had, at the same moment. `observations.spec.ts` closed it at the
+# unit tier; these two dyes close it at the tier that reads the real database file.
+#
+# TWO DYES, NOT ONE, BECAUSE THE RULE HAS TWO SUB-BRANCHES. `redactDelimitedSegment`
+# redacts a segment WHOLE when its value half — everything after the FIRST `=` — is
+# empty OR is nothing but `=`. Standard base64 of 16 raw bytes is 24 characters with
+# TWO `=` of padding, so its value half is a lone `=`; standard base64 of 32 raw bytes
+# is 44 characters with exactly ONE, so its value half is EMPTY. Those are different
+# paths through one predicate, and a live tier that exercises one of them proves half
+# the rule.
+#
+# THE CORES ARE THE POINT, AND THIS IS THE LOAD-BEARING PART OF THIS BLOCK. Against
+# the defect the column stores the dye MINUS ONE BYTE of padding followed by the
+# marker — `dXNlcjpwYTU1dzByZA==` lands as `dXNlcjpwYTU1dzByZA=<redacted>`, from which
+# one re-pad and one `base64 -d` returns the credential. So the PADDED literal is NOT
+# a substring of the stored value, a fixed-string search for it returns zero, and a
+# tracer that asserted only that would PASS with a whole credential in the row. The
+# recoverable spelling is the PADDING-STRIPPED CORE, so every absence assertion below
+# and every entry in `secret_sweep` carries both.
+#
+# The stripper is a loop over parameter expansion, not a pattern, and it strips only
+# TRAILING `=` — byte-for-byte the same derivation as `paddingStrippedCore` in
+# `packages/backend/src/store/observations.spec.ts`, so the two tiers cannot come to
+# disagree about what "the recoverable half" spells.
+strip_padding() {
+  local s="$1"
+  while [ "${s%=}" != "$s" ]; do s="${s%=}"; done
+  printf '%s' "$s"
+}
+PAD_TWO_SECRET="$(openssl rand -base64 16 | tr -d '\n')"
+PAD_ONE_SECRET="$(openssl rand -base64 32 | tr -d '\n')"
+PAD_TWO_CORE="$(strip_padding "$PAD_TWO_SECRET")"
+PAD_ONE_CORE="$(strip_padding "$PAD_ONE_SECRET")"
+PAD_TWO_PADDING=$(( ${#PAD_TWO_SECRET} - ${#PAD_TWO_CORE} ))
+PAD_ONE_PADDING=$(( ${#PAD_ONE_SECRET} - ${#PAD_ONE_CORE} ))
+
 # --- preflight: fail before touching anything ------------------------------
 [ -x "$P1_CAIDO_BIN" ] || { echo "FATAL: $P1_CAIDO_BIN is not executable" >&2; exit 1; }
 ACTUAL_VERSION="$("$P1_CAIDO_BIN" --version 2>/dev/null | awk '{print $2}')"
@@ -84,6 +137,26 @@ for p in "$P1_CAIDO_PORT" "$P1_ORIGIN_PORT"; do
     echo "FATAL: port $p is already in LISTEN state. Refusing to collide." >&2; exit 1
   fi
 done
+# THE PADDED DYES ARE ASSERTED INTO SHAPE BEFORE THE RUN, and this guard is not
+# ceremony. A dye that arrived with no padding would exercise the `=`-LESS branch
+# instead of the padding branch — a run that looks identical, passes identically, and
+# proves nothing about CR-07. That is a green-because-it-could-not-fail run, which is
+# the exact shape this phase has now had to stamp out four times (T-01-54). The core
+# is checked non-empty for the same reason `expectSecretAbsent` checks it: a literal
+# that is entirely padding has no recoverable core, and `"x".includes("")` is always
+# true, so an all-`=` dye would report a survival that never happened.
+[ "$PAD_TWO_PADDING" -eq 2 ] || {
+  echo "FATAL: the TWO-pad dye carries $PAD_TWO_PADDING '=' of padding, expected 2." >&2
+  echo "       Its value half would not be a lone '=' and the sub-branch under test" >&2
+  echo "       would not be exercised. Refusing to run a proof that cannot fail." >&2; exit 1; }
+[ "$PAD_ONE_PADDING" -eq 1 ] || {
+  echo "FATAL: the ONE-pad dye carries $PAD_ONE_PADDING '=' of padding, expected 1." >&2
+  echo "       Its value half would not be EMPTY and the sub-branch under test would" >&2
+  echo "       not be exercised. Refusing to run a proof that cannot fail." >&2; exit 1; }
+[ -n "$PAD_TWO_CORE" ] && [ -n "$PAD_ONE_CORE" ] || {
+  echo "FATAL: a padded dye stripped to an EMPTY core. A literal that is entirely" >&2
+  echo "       padding has no recoverable spelling to assert absent." >&2; exit 1; }
+echo "padded dyes : TWO-pad '=' x$PAD_TWO_PADDING (core ${#PAD_TWO_CORE}B), ONE-pad '=' x$PAD_ONE_PADDING (core ${#PAD_ONE_CORE}B)"
 
 # --- the fixture ------------------------------------------------------------
 # Generated here rather than taken from corpus/, which is gitignored: a proof
@@ -123,20 +196,49 @@ ORIGIN_PID=""
 # is what copies Caido's host log into the run directory. Swept from the end of the
 # script body instead — where it was first written — it reported `logging.<date>.log`
 # as clean because that file did not exist yet, which is precisely the confident
-# zero this phase keeps having to stamp out. Measured on the first live run of the
-# widened tracer; the file holds four occurrences of each wire value.
+# zero this phase keeps having to stamp out.
+#
+# IT COUNTS OCCURRENCES, NOT LINES (IN-14, corrected 2026-08-22). The header line
+# below says "occurrences" and the counter used to be `grep -c -F`, which counts
+# matching LINES. Two hits on one line reported as ONE — and that is not a corner
+# case here, it is the SHAPE OF THE INSTRUMENT'S MAIN SUBJECT: a proxy log records a
+# request line and a response line, and a single-line JSON dump records every value it
+# holds on one line. The number quoted in this comment before the fix ("four
+# occurrences of each wire value") was a number `grep -c` CANNOT PRODUCE, so it is
+# gone rather than adjusted. It now counts with `grep -o` piped through `wc -l`.
+#
+# NO CORRECTED NUMBER IS QUOTED HERE, and that is deliberate rather than an omission.
+# The corrected count is whatever the corrected instrument measures on a given run,
+# and every run writes it into its OWN `secret-sweep.txt`. Quoting one here would put
+# this comment back in the business of claiming a measurement instead of pointing at
+# it — the same discipline this file's header applies to the Caido version, and for
+# the same reason. Plan 01-17's measured figures are in `README-01-17.md`.
+#
+# `grep -a` because Caido's host log is not guaranteed to be valid text end to end and
+# `grep -o` on a file it decides is binary prints "Binary file matches" instead of the
+# matches — a silent undercount, in a sweep whose entire job is not to undercount.
+#
+# STILL A MEASUREMENT AND NOT A GATE, deliberately: the mutation run is SUPPOSED to
+# leave a secret in `observations-url-raw.txt`, and a gate here would make that run
+# impossible to produce.
 secret_sweep() {
   [ -n "${RUN_DIR:-}" ] && [ -d "${RUN_DIR:-}" ] || return 0
   {
     echo "# Occurrences of each per-run value across the run directory, per file."
     echo "# Counts only, never the values. Swept AFTER teardown, so Caido's own"
     echo "# host log is in scope. See README-01-14.md for what is committed."
+    echo "# The two padded dyes are swept under BOTH spellings: the padded literal"
+    echo "# and the PADDING-STRIPPED CORE. The core is the half that is recoverable"
+    echo "# (re-pad, base64 -d), and a sweep that checked only the padded spelling"
+    echo "# would be blind in exactly the place the assertions used to be (CR-07)."
     for pair in "query-pair:$SECRET_VALUE" "bare-segment:$BARE_SECRET" \
                 "path-param:$PATHPARAM_SECRET" "userinfo-pass:$USERINFO_SECRET" \
-                "userinfo-user:$USERINFO_USER"; do
+                "userinfo-user:$USERINFO_USER" \
+                "pad-two-literal:$PAD_TWO_SECRET" "pad-two-CORE:$PAD_TWO_CORE" \
+                "pad-one-literal:$PAD_ONE_SECRET" "pad-one-CORE:$PAD_ONE_CORE"; do
       label="${pair%%:*}"; value="${pair#*:}"
       while IFS= read -r f; do
-        n="$(grep -c -F -- "$value" "$f" 2>/dev/null || true)"
+        n="$({ grep -a -o -F -- "$value" "$f" 2>/dev/null || true; } | wc -l | tr -d ' ')"
         [ "${n:-0}" -gt 0 ] && echo "$label $(basename "$f") $n"
       done < <(find "$RUN_DIR" -type f ! -name 'secret-sweep.txt')
     done
@@ -229,8 +331,14 @@ probe_install packages/dist/plugin_package
 # `;`-delimited parameter off the LAST path segment into `.params`, so `.path`
 # resolves to the fixture file unchanged; the Authorization header the userinfo
 # becomes is ignored by the origin entirely.
+# THE LAST TWO SEGMENTS ARE THE PADDED PAIR, in this order, and the ORDER IS PART OF
+# THE ASSERTION: the query redactor preserves segment order, so the stored query's
+# final two segments are the two padded dyes' positions and each must read as exactly
+# the redaction marker. Appending them moved the bare `=`-less segment from LAST to
+# THIRD FROM LAST — the assertion block below is retargeted accordingly rather than
+# left describing a position that moved.
 FIXTURE_PATH="$FIXTURE_NAME;$PATHPARAM_NAME=$PATHPARAM_SECRET"
-FIXTURE_QUERY="$CACHE_BUSTER&$SECRET_PARAM=$SECRET_VALUE&$BARE_SECRET"
+FIXTURE_QUERY="$CACHE_BUSTER&$SECRET_PARAM=$SECRET_VALUE&$BARE_SECRET&$PAD_TWO_SECRET&$PAD_ONE_SECRET"
 FIXTURE_URL="http://$USERINFO_USER:$USERINFO_SECRET@127.0.0.1:$P1_ORIGIN_PORT/$FIXTURE_PATH?$FIXTURE_QUERY"
 
 # WHAT CURL ACTUALLY PUT ON THE WIRE, captured so the userinfo question is MEASURED
@@ -261,6 +369,14 @@ if grep -qi "^> Authorization: Basic" "$CURL_TRACE"; then
 else
   USERINFO_AS_AUTH_HEADER="no"
 fi
+# THE PADDED DYES ON THE WIRE, measured the same way and for the same reason. A dye
+# mangled in transit — `+` read as a space, padding stripped by a normaliser — would
+# make its absence from the column trivially true and the run a confident zero. This
+# is a FIXED-STRING search because base64 carries `+` and `/`, both of which a regex
+# would read as operators.
+wire_carries() { grep '^> GET ' "$CURL_TRACE" | grep -qF -- "$1"; }
+if wire_carries "$PAD_TWO_SECRET"; then PAD_TWO_ON_WIRE="yes"; else PAD_TWO_ON_WIRE="no"; fi
+if wire_carries "$PAD_ONE_SECRET"; then PAD_ONE_ON_WIRE="yes"; else PAD_ONE_ON_WIRE="no"; fi
 {
   echo "# Measured, not assumed: can URL userinfo be exercised through this tier?"
   echo "# Derived from curl's own -v request-line trace. No secret bytes here, and"
@@ -268,12 +384,24 @@ fi
   echo "userinfo_in_request_line=$USERINFO_ON_WIRE"
   echo "userinfo_sent_as_authorization_header=$USERINFO_AS_AUTH_HEADER"
   echo "request_lines_emitted=$(grep -c '^> GET ' "$CURL_TRACE" || true)"
+  echo "# The padded pair, on the wire, byte-for-byte as generated (plan 01-17)."
+  echo "pad_two_literal_in_request_line=$PAD_TWO_ON_WIRE"
+  echo "pad_one_literal_in_request_line=$PAD_ONE_ON_WIRE"
+  echo "pad_two_padding_bytes=$PAD_TWO_PADDING"
+  echo "pad_one_padding_bytes=$PAD_ONE_PADDING"
 } > "$RUN_DIR/userinfo-measurement.txt"
+[ "$PAD_TWO_ON_WIRE" = "yes" ] && [ "$PAD_ONE_ON_WIRE" = "yes" ] || {
+  echo "FATAL: a padded dye did not reach the request line byte-for-byte" >&2
+  echo "       (two-pad=$PAD_TWO_ON_WIRE one-pad=$PAD_ONE_ON_WIRE). Its absence from" >&2
+  echo "       the column would then be a property of the TRANSPORT and not of the" >&2
+  echo "       redactor, and every padded assertion below would pass for the wrong" >&2
+  echo "       reason. Refusing to report a zero this run did not earn." >&2; exit 1; }
 
 # Echo the URL with every secret masked. The two proxied requests are the thing
 # being reported; printing five live per-run values into the run log is not.
-echo "proxied 2 requests for http://<userinfo-user>:<userinfo-secret>@127.0.0.1:$P1_ORIGIN_PORT/$FIXTURE_NAME;$PATHPARAM_NAME=<secret>?$CACHE_BUSTER&$SECRET_PARAM=<secret>&<bare-secret>"
+echo "proxied 2 requests for http://<userinfo-user>:<userinfo-secret>@127.0.0.1:$P1_ORIGIN_PORT/$FIXTURE_NAME;$PATHPARAM_NAME=<secret>?$CACHE_BUSTER&$SECRET_PARAM=<secret>&<bare-secret>&<pad-two-secret>&<pad-one-secret>"
 echo "userinfo on wire       : $USERINFO_ON_WIRE (as Authorization header: $USERINFO_AS_AUTH_HEADER)"
+echo "padded pair on wire    : two-pad=$PAD_TWO_ON_WIRE one-pad=$PAD_ONE_ON_WIRE"
 
 # --- poll for the row -------------------------------------------------------
 ARTIFACTS_JSON=""
@@ -407,6 +535,10 @@ TP_SECRET_VALUE="$SECRET_VALUE" TP_BARE_SECRET="$BARE_SECRET" \
 TP_PATHPARAM_NAME="$PATHPARAM_NAME" TP_PATHPARAM_SECRET="$PATHPARAM_SECRET" \
 TP_USERINFO_USER="$USERINFO_USER" TP_USERINFO_SECRET="$USERINFO_SECRET" \
 TP_USERINFO_ON_WIRE="$USERINFO_ON_WIRE" TP_USERINFO_AS_AUTH="$USERINFO_AS_AUTH_HEADER" \
+TP_PAD_TWO_SECRET="$PAD_TWO_SECRET" TP_PAD_TWO_CORE="$PAD_TWO_CORE" \
+TP_PAD_ONE_SECRET="$PAD_ONE_SECRET" TP_PAD_ONE_CORE="$PAD_ONE_CORE" \
+TP_PAD_TWO_ON_WIRE="$PAD_TWO_ON_WIRE" TP_PAD_ONE_ON_WIRE="$PAD_ONE_ON_WIRE" \
+TP_PAD_TWO_PADDING="$PAD_TWO_PADDING" TP_PAD_ONE_PADDING="$PAD_ONE_PADDING" \
 TP_READ_MODE="$SQLITE_READ_MODE" \
 python3 - <<'PY'
 import json, os
@@ -445,13 +577,41 @@ REDACTION = "<redacted>"
 # ONE ROW PER GRAMMAR, and the LABEL is the point. A single reused value would say
 # that SOMETHING leaked without saying WHICH grammar leaked it — and plan 01-14
 # exists precisely because the live tier had only ever exercised the first row.
+#
+# THE PADDED PAIR CONTRIBUTES FOUR ROWS, NOT TWO (plan 01-17, CR-07). Each padded dye
+# is listed under its PADDED LITERAL and, separately, under its PADDING-STRIPPED CORE.
+# They are separate rows rather than one because they FAIL SEPARATELY and the failure
+# has to say which: against the defect the column stores the dye minus one byte of
+# padding, so the two-pad LITERAL is absent while its CORE is sitting in the row. A
+# table carrying only the literal would report `raw=0` and pass. That is the same
+# blindness the unit tier had, at the same spot, and closing it here is the whole
+# reason this dye exists.
+PAD_TWO_LABEL = "padded bare segment, TWO `=` — value half is a lone `=` (01-17)"
+PAD_ONE_LABEL = "padded bare segment, ONE `=` — value half is EMPTY (01-17)"
 GRAMMARS = [
     ("name=value query pair (01-07)",                P["secret_value"]),
     ("bare `=`-less query segment (01-10, P10-D1)",  P["bare_secret"]),
     ("`;` path parameter (01-11, redactUrlHead)",    P["pathparam_secret"]),
     ("userinfo PASSWORD half (01-11)",               P["userinfo_secret"]),
     ("userinfo USERNAME half (01-11)",               P["userinfo_user"]),
+    (PAD_TWO_LABEL,                                  P["pad_two_secret"]),
+    (PAD_TWO_LABEL + " [PADDING-STRIPPED CORE]",     P["pad_two_core"]),
+    (PAD_ONE_LABEL,                                  P["pad_one_secret"]),
+    (PAD_ONE_LABEL + " [PADDING-STRIPPED CORE]",     P["pad_one_core"]),
 ]
+
+# NON-VACUITY ON THE CORES THEMSELVES, first, in the shape `expectSecretAbsent` uses
+# in `observations.spec.ts`. A literal that is entirely padding strips to the empty
+# string, `"anything".count("")` is not zero but `"x" in "y"` on an empty needle is
+# ALWAYS True — either way the assertion would be reporting something other than what
+# it says. The shell preflight already refuses such a dye; this is the same guard on
+# the far side of the parameter file, so a hand-edited params.json cannot smuggle one
+# past it.
+for _core_label, _core in (("two-pad", P["pad_two_core"]), ("one-pad", P["pad_one_core"])):
+    if not _core:
+        print(f"FATAL: the {_core_label} core is EMPTY — an absence assertion on it "
+              f"would be meaningless", file=sys.stderr)
+        sys.exit(1)
 
 fails = []
 notes = []
@@ -546,15 +706,58 @@ for i, r in enumerate(raw_rows):
           f"raw column row {i} does not read {buster_name}={REDACTION}: {r!r}")
     check(f"{secret_param}={REDACTION}" in r,
           f"raw column row {i} does not read {secret_param}={REDACTION}: {r!r}")
-    # DECISION P10-D1 AGAINST THE FILE. The bare segment is LAST in the fixture
-    # query and `redactQueryValues` preserves segment order, so the stored query
-    # must END with `&<redacted>`. This is the assertion that goes red when the
-    # `eq === -1` branch is reverted: a 32-character hex value is shorter than
-    # QUERY_NAME_MAX, so the pre-01-10 branch stores it verbatim.
+    # THE SHAPE OF THE STORED TAIL, not only the absence of the secret. Absence
+    # alone is satisfiable by a URL that never reached the plugin at all, so the
+    # last three query segments are asserted to BE the redaction marker, by
+    # position. `redactQueryValues` preserves segment order, so position is a
+    # fact about the stored value rather than an assumption about it.
+    #
+    # RETARGETED BY PLAN 01-17, AND THE RETARGET IS THE POINT. This block used to
+    # be one `r.endswith(f"&{REDACTION}")` whose comment said "the bare segment is
+    # LAST in the fixture query". Appending the two padded dyes moved it to THIRD
+    # FROM LAST, and an `endswith` left in place would have gone on passing while
+    # silently checking a padded dye instead of the bare one — a comment describing
+    # a position that moved is how a gate stops testing what it says it tests.
+    # Asserted by INDEX now, one named assertion per segment.
+    q_seg = r.partition("?")[2].split("&") if "?" in r else []
+    # NON-VACUITY FIRST: the index arithmetic below is meaningless if the query did
+    # not arrive with the five segments the fixture sent.
+    check(len(q_seg) == 5,
+          f"raw column row {i} carries {len(q_seg)} query segment(s), expected the "
+          f"5 the fixture sent (v, {secret_param}, bare, two-pad, one-pad) — the "
+          f"positional assertions below would be indexing something else: {r!r}")
+    if len(q_seg) == 5:
+        # Decision P10-D1 against the file. Goes red when the `eq === -1` branch is
+        # reverted: a 32-character hex value is shorter than QUERY_NAME_MAX, so the
+        # pre-01-10 branch stores it verbatim.
+        check(q_seg[-3] == REDACTION,
+              f"raw column row {i}: query segment -3 reads {q_seg[-3]!r}, not "
+              f"{REDACTION} — the BARE (`=`-less) query segment did not reach the "
+              f"column redacted, which is decision P10-D1: {r!r}")
+        # CR-07, sub-branch ONE: an `=` that was PADDING and not a separator, value
+        # half a lone `=`. Goes red when plan 01-15's padding branch is reverted —
+        # the segment then stores as `<core>=<redacted>` instead.
+        check(q_seg[-2] == REDACTION,
+              f"raw column row {i}: query segment -2 reads {q_seg[-2]!r}, not "
+              f"{REDACTION} — SUB-BRANCH 'value half is a lone `=`' (the TWO-pad "
+              f"dye) did not reach the column redacted WHOLE. Against the defect "
+              f"this reads as the padding-stripped core, an `=`, and the marker, "
+              f"from which one re-pad and one `base64 -d` returns the credential: "
+              f"{r!r}")
+        # CR-07, sub-branch TWO: value half EMPTY.
+        check(q_seg[-1] == REDACTION,
+              f"raw column row {i}: query segment -1 reads {q_seg[-1]!r}, not "
+              f"{REDACTION} — SUB-BRANCH 'value half is EMPTY' (the ONE-pad dye) "
+              f"did not reach the column redacted WHOLE: {r!r}")
+    # The coarse whole-row spelling is KEPT, and it now covers the LAST segment,
+    # which since plan 01-17 is the ONE-pad dye rather than the bare one. It is
+    # redundant with `q_seg[-1]` above by construction and that is deliberate: it is
+    # the one check in this block that does not depend on the segment split being
+    # right, so a bug in the split cannot make the whole block vacuous.
     check(r.endswith(f"&{REDACTION}"),
-          f"raw column row {i} does not END with &{REDACTION} — the BARE "
-          f"(`=`-less) query segment did not reach the column redacted, which is "
-          f"decision P10-D1: {r!r}")
+          f"raw column row {i} does not END with &{REDACTION} — the LAST query "
+          f"segment, which is the ONE-pad dye since plan 01-17, did not reach the "
+          f"column redacted: {r!r}")
 
 # --- IN-13, half two: the raw row count must EQUAL the number of rows the RPC
 #     returned. A run where the RPC returned two rows and the table held ten used
@@ -604,6 +807,32 @@ else:
                  f"parameter value (WR-11)\", and by \"userinfo with a password: "
                  f"NEITHER half survives, and the `@` does\".")
 
+# --- the padded pair's reachability, MEASURED on two independent channels.
+#     Channel 1 is curl's own request-line trace: did the dye leave this host
+#     byte-for-byte, padding intact? (The shell aborts the run if not — a dye
+#     mangled in transit makes its own absence trivially true.) Channel 2 is the
+#     stored value: did the segment ARRIVE as its own query segment? Segment COUNT
+#     answers that without needing the secret to survive, which is the only way to
+#     ask the question on a run where the correct answer is that it did not.
+padded_segments_reached = bool(raw_rows) and all(
+    len(r.partition("?")[2].split("&")) == 5 for r in raw_rows if "?" in r
+)
+if padded_segments_reached:
+    notes.append("padded bare segments (TWO `=` and ONE `=`): REACHED the plugin — "
+                 "every raw row carries 5 query segments in fixture order, and the "
+                 "last two are asserted to BE the redaction marker. Both sub-branches "
+                 "of the CR-07 padding rule are exercised LIVE by this run.")
+else:
+    notes.append("padded bare segments: DID NOT REACH the plugin as distinct query "
+                 "segments — the stored query does not carry the 5 segments the "
+                 "fixture sent, so the absence of both dyes above is a property of "
+                 "the TIER and not of redactDelimitedSegment. Enforced instead by "
+                 "observations.spec.ts's BARE_CREDENTIAL_SHAPES entries \"HTTP Basic "
+                 "credential, standard base64 with TWO `=` of padding\" and \"... with "
+                 "ONE `=` of padding\", and by \"a PADDED credential does not reach the "
+                 "column on EITHER delimiter\", which reads the row back out of a real "
+                 "SQLite file.")
+
 # The measured reachability is WRITTEN INTO THE RUN DIRECTORY. A limit of the live
 # tier that is recorded with the run that measured it is evidence; the same limit
 # left in a terminal scrollback is a silence.
@@ -617,6 +846,12 @@ with open(P["reach_out"], "w", encoding="utf-8") as fh:
     fh.write(f"userinfo_reached={'yes' if userinfo_reached else 'no'}\n")
     fh.write(f"userinfo_in_request_line={P['userinfo_on_wire']}\n")
     fh.write(f"userinfo_as_authorization_header={P['userinfo_as_auth']}\n")
+    # The two padded grammars, one row each, on both measured channels (01-17).
+    fh.write(f"padded_segments_reached={'yes' if padded_segments_reached else 'no'}\n")
+    fh.write(f"pad_two_in_request_line={P['pad_two_on_wire']}\n")
+    fh.write(f"pad_one_in_request_line={P['pad_one_on_wire']}\n")
+    fh.write(f"pad_two_padding_bytes={P['pad_two_padding']}\n")
+    fh.write(f"pad_one_padding_bytes={P['pad_one_padding']}\n")
     for label, (rh, jh) in occurrences.items():
         fh.write(f"secret_occurrences[{label}] raw={rh} rpc={jh}\n")
     for n in notes:

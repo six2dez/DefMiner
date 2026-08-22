@@ -271,6 +271,82 @@ describe("the workspace conversion did not disturb the build allowlist", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// WR-21 — the tracer's own no-version-literal rule, ENFORCED
+// ---------------------------------------------------------------------------
+// `scripts/phase1/tracer-e2e.sh` produces this phase's citeable evidence, and its
+// header states a RULE: no Caido version literal lives in that file, because decision
+// P7-D5 moved `P1_EXPECT_VERSION` once already and the prose did not follow, leaving a
+// reader to find one build in the comment and another in the environment — which makes
+// every number in the artifact unciteable.
+//
+// UNTIL 2026-08-22 THE HEADER ALSO CLAIMED THE RULE WAS ENFORCED — "a `grep -c` for the
+// superseded one returning zero is how that is enforced" — AND NOTHING PERFORMED THAT
+// GREP. A search for the script's own name over `*.ts`, `*.mjs`, `*.sh` and `*.json`
+// outside `.planning/` returned seven hits and every one was prose; the verifier
+// confirmed it independently. That is worse than a stale literal, which a reader can
+// SEE is stale: a claim that a check EXISTS is the claim a reader will not re-verify,
+// and it sat in the file whose entire purpose is producing citeable evidence. This
+// block is that check. The header now names it.
+//
+// COMMENT LINES ARE DELIBERATELY *NOT* FILTERED OUT, AND THAT INVERSION IS STATED HERE
+// SO THE NEXT AUTHOR DOES NOT "FIX" IT. The usual hygiene for a count-based source gate
+// is to strip comments first, because a mention in prose is not an execution. Here the
+// rule is ABOUT THE PROSE: the defect WR-15 recorded was a comment naming a build the
+// script no longer ran on. A gate that skipped comments would scan past the only place
+// the bug can live and report clean forever — a green-because-it-cannot-fail gate, the
+// shape this phase has already had to remove four times (T-01-34). The scan reads the
+// whole file as raw text.
+//
+// SCOPE: `scripts/phase1/tracer-e2e.sh` ONLY, and the one nearby file that is
+// deliberately outside it is `scripts/phase1/env.sh`. That file's usage example sets
+// `P1_EXPECT_VERSION` on the command line, which DEMONSTRATES OVERRIDING the variable —
+// the exact opposite of embedding a claim about the build a measurement was taken on —
+// and it sits inside the P7-D5 block whose subject is that both builds exist and which
+// is which. Widening the scan to it would delete the documentation of the rule in order
+// to enforce the rule.
+//
+// WHAT A VERSION LITERAL IS, stated as a rule rather than as one superseded number: a
+// dotted-numeric run of EXACTLY THREE components. `127.0.0.1` is four and is the
+// loopback address this script cannot do without; `0.25` is two and is a sleep
+// interval. Pinning the scan to one superseded literal would be a gate that goes quiet
+// the day somebody pastes the CURRENT build in, which is precisely how the rule was
+// broken the first time.
+describe("WR-21 — the tracer's own no-version-literal rule is ENFORCED, not merely claimed", () => {
+  const TRACER = "scripts/phase1/tracer-e2e.sh";
+  const tracerText = readFileSync(TRACER, "utf8");
+
+  /** Maximal dotted-numeric runs, e.g. "0.57.1", "127.0.0.1", "0.25". */
+  const DOTTED_NUMERIC = /\d+(?:\.\d+)+/g;
+  /** The marker that makes the scan non-vacuous: the variable the prose must cite. */
+  const VERSION_VARIABLE = "P1_EXPECT_VERSION";
+
+  it("is scanning the real script, and the script still cites the variable", () => {
+    // NON-VACUITY, FIRST AND DELIBERATELY BEFORE THE RULE ITSELF. A renamed, moved
+    // or emptied script would otherwise scan nothing and report clean — the failure
+    // mode that makes a gate worse than no gate. Two independent facts, so neither a
+    // truncation nor a rename can pass quietly.
+    expect(
+      tracerText.length,
+      `${TRACER} read as empty. The no-version-literal scan below would pass having read nothing — restore the script or update this path.`,
+    ).toBeGreaterThan(1000);
+    expect(
+      tracerText.includes(VERSION_VARIABLE),
+      `${TRACER} no longer mentions \`${VERSION_VARIABLE}\`. Either the script moved (update TRACER here) or its version handling was rewritten — the scan below cannot be trusted until one of those is resolved.`,
+    ).toBe(true);
+  });
+
+  it("names no Caido version literal anywhere, COMMENTS INCLUDED", () => {
+    const hits = (tracerText.match(DOTTED_NUMERIC) ?? []).filter(
+      (run) => run.split(".").length === 3,
+    );
+    expect(
+      hits,
+      `${TRACER} names version literal(s) ${hits.join(", ")}. Its header states that a literal in that file is a bug: decision P7-D5 moved \`${VERSION_VARIABLE}\` once and the prose did not follow, so a reader found one build in the comment and another in the environment and every number in the artifact became unciteable. Cite \`${VERSION_VARIABLE}\` instead — the RESOLVED value is written into every run directory as \`caido-version.txt\`, so the evidence carries the build rather than a comment claiming it.`,
+    ).toEqual([]);
+  });
+});
+
 describe("DET-03 — the engine declares no Caido dependency of any kind", () => {
   const engine = loadJson(ENGINE_PKG);
 

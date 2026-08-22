@@ -62,20 +62,47 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *     percent-encoded padding and unpadded base64url. The whole-segment branch's
  *     accepted cost is pinned by "ACCEPTED COST (CR-07): `?debug=` loses its NAME
  *     as well as its value".
- *     LIVE PROOF, SCOPED TO WHAT ACTUALLY RUNS TODAY (2026-08-22). This entry used
- *     to end "Proven end to end by `scripts/phase1/tracer-e2e.sh`, which reads the
- *     column with sqlite3 from outside Caido" — full stop, covering the whole
- *     grammar. That sentence is true only of the grammars the tracer EXERCISES:
- *     the `=`-less bare segment, userinfo, and `;` path parameters. All five of
- *     that script's dye values come from `openssl rand -hex` and hex carries no
- *     `=`, so NO live run has ever exercised the padded grammar. The padded
- *     grammar is proven at the UNIT tier by the cases named above, including one
- *     that reads the row back out of a real SQLite file
- *     ("a PADDED credential does not reach the column on EITHER delimiter"). Its
- *     LIVE proof is owned by PLAN 01-17, which adds a padded dye and amends this
- *     sentence when its committed run exists. Widening the paragraph above while
- *     leaving this sentence unscoped would assert an end-to-end run that does not
- *     exist for two waves — the same defect this amendment exists to remove.
+ *     LIVE PROOF, PER GRAMMAR, WITH THE TIER THAT PROVES EACH ONE NAMED
+ *     (2026-08-22). This entry once ended "Proven end to end by
+ *     `scripts/phase1/tracer-e2e.sh`, which reads the column with sqlite3 from
+ *     outside Caido" — full stop, covering the whole grammar — and that was wider
+ *     than what ran: every dye in that script came from `openssl rand -hex`, and
+ *     hex carries no `=`, so the padded grammar was unreachable from the live tier
+ *     entirely. It is stated per grammar now:
+ *       `=`-less bare segment  UNIT and LIVE. `redactDelimitedSegment`'s `eq === -1`
+ *                              branch, plus the tracer's `openssl rand -hex` dye,
+ *                              asserted absent from `SELECT url FROM observations`
+ *                              read with `sqlite3` from OUTSIDE Caido.
+ *       PADDED segment, both   UNIT and LIVE. Unit: the `BARE_CREDENTIAL_SHAPES`
+ *       sub-branches           cases named above, including the one that reads the
+ *                              row back out of a real SQLite file ("a PADDED
+ *                              credential does not reach the column on EITHER
+ *                              delimiter"). Live: the tracer's per-run dye set
+ *                              carries TWO padded bare segments — `openssl rand
+ *                              -base64 16`, whose value half is a lone `=`, and
+ *                              `openssl rand -base64 32`, whose value half is EMPTY
+ *                              — and asserts each absent under BOTH its padded
+ *                              literal AND its PADDING-STRIPPED CORE, because
+ *                              against the defect the column stores the dye minus
+ *                              one byte of padding and a search for the padded
+ *                              spelling alone returns zero on a live credential.
+ *       `;` path parameter     UNIT and LIVE, measured — the `;` grammar is recorded
+ *                              per run in `grammar-reachability.txt` rather than
+ *                              assumed to arrive.
+ *       URL userinfo           UNIT only. MEASURED not assumed: curl lifts
+ *                              `user:pass@` into an `Authorization: Basic` header
+ *                              before the request line exists, so userinfo cannot be
+ *                              exercised through the live tier at all. Recorded per
+ *                              run in `userinfo-measurement.txt`; enforced by
+ *                              `observations.spec.ts`'s HEAD_CASES.
+ *     THE RUN EVIDENCE IS INDEXED AT
+ *     `.planning/phases/01-skeleton-persistence-compatibility/results/runs/README-01-17.md`,
+ *     which names each committed run, the resolved Caido build it ran on, the stored
+ *     URL read back out of the file, and the deliberate mutation run in which the
+ *     padded-segment assertions are driven RED. Read it before citing this entry:
+ *     what the sentence above claims is that the committed script EXERCISES each
+ *     grammar at the tier named beside it, which is a fact about the script; whether
+ *     a given run passed is a fact about that run, and only the index can tell you.
  *
  *   ENFORCED — URL USERINFO, since 2026-08-21 (plan 01-11). Resolved inside the
  *     AUTHORITY component only — after the first `://`, up to the first `/`, `?`
