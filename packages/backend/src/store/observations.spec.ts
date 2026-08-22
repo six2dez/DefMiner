@@ -83,6 +83,12 @@ function paddingStrippedCore(literal: string): string {
 /**
  * ONE absence assertion, BOTH spellings. Never `out.includes(literal)` alone.
  *
+ * EVERY absence assertion in this file goes through here, and "every" is the
+ * load-bearing word: scoping the rule to the table under test would be the same
+ * defect one level down. An unpadded literal is its own core, so the two
+ * assertions coincide and the call still reads correctly — which is why there is
+ * one helper rather than a padded population and an unpadded one.
+ *
  * The core is asserted non-empty first: a literal that is ENTIRELY padding has
  * an empty core, `"x".includes("")` is always true, and the assertion would
  * report a survival that never happened. Degenerate all-`=` shapes get their own
@@ -92,7 +98,7 @@ function expectSecretAbsent(out: string, literal: string, label: string): void {
   const core = paddingStrippedCore(literal);
   expect(
     core.length,
-    `${label}: ${literal} is entirely padding — it has no recoverable core and does not belong in an absence assertion`,
+    `${label}: \`${literal}\` is entirely padding — it has no recoverable core and does not belong in an absence assertion`,
   ).toBeGreaterThan(0);
   expect(
     out.includes(literal),
@@ -100,7 +106,7 @@ function expectSecretAbsent(out: string, literal: string, label: string): void {
   ).toBe(false);
   expect(
     out.includes(core),
-    `${label}: the PADDING-STRIPPED CORE \`${core}\` survived in ${out} — re-pad it and \`base64 -d\` returns the secret`,
+    `${label}: the PADDING-STRIPPED CORE \`${core}\` survived in ${out} — padding carries no information, so the core is the recoverable spelling`,
   ).toBe(false);
 }
 
@@ -135,6 +141,46 @@ const PADDED_BASIC_ONE_PAD = "YWRtaW46aHVudGVyMjI=";
  * still read as real flag names. They are listed under the option that WAS chosen
  * so the record states what the policy does with a SHORT credential rather than
  * leaving it unmeasured.
+ *
+ * ---------------------------------------------------------------------------
+ * WIDENED 2026-08-22 (CR-07), AND THE ORDER THE WIDENING WAS DERIVED IN MATTERS
+ * ---------------------------------------------------------------------------
+ * Round 2's eight entries were chosen against THE BRANCH — "what does this rule
+ * now catch?" — and not one of them contained an `=`, which is precisely the
+ * rule's blind spot. The table's own header warned about this and it came true
+ * anyway. So the derivation is written down here, and it runs POLICY FIRST:
+ *
+ *   THE QUESTION. What is a credential-bearing segment? — never "what does the
+ *   implementation do?"
+ *
+ *   THE ENCODING FACTS, enumerated before any shape is written:
+ *     1. Standard base64 (RFC 4648 §4) pads the output to a multiple of four
+ *        with `=`. A 3n+1-byte secret gets TWO pads, a 3n+2-byte secret gets ONE.
+ *     2. base64url unpadded (RFC 4648 §5, and what JWTs use) has NO `=` at all.
+ *     3. A URL-encoder turns `=` into `%3D`, so the same token arrives with its
+ *        padding spelled in three bytes that contain no literal `=`.
+ *     4. Padding carries no information: strip it, re-pad it, decode it, and the
+ *        secret is unchanged. The RECOVERABLE spelling is the core.
+ *
+ *   THE SHAPES EACH FACT IMPLIES, then checked against the implementation — in
+ *   that order, which is the order round 2 reversed:
+ *     fact 1 -> a two-pad literal (value half is a lone `=`) and a ONE-pad
+ *               literal (value half is EMPTY). Two different paths through one
+ *               predicate; covering one of them covers half the rule.
+ *     fact 1 -> a token with a single trailing `=` and nothing after it, which is
+ *               the same shape arriving from a non-base64 producer.
+ *     fact 2 -> an unpadded base64url token, asserted to STAY covered by the
+ *               `=`-less branch rather than assumed to be.
+ *     fact 3 -> percent-encoded padding, which takes the `=`-less branch and is
+ *               redacted whole with its bytes never decoded (T-01-32).
+ *     fact 4 -> every absence assertion below searches the padding-stripped core
+ *               as well as the literal, through `expectSecretAbsent`.
+ *
+ * WHAT IS DELIBERATELY NOT IN THIS TABLE. A literal that is ENTIRELY `=` — `=`
+ * and `==`. The loop below exercises each literal in VALUE form as
+ * `?token=<literal>`, and for an all-`=` literal that segment's own value half is
+ * pure padding, so the VALUE-form expectation legitimately differs. They get
+ * their own titled cases instead of a special case inside the loop.
  */
 const BARE_CREDENTIAL_SHAPES: ReadonlyArray<{
   label: string;
@@ -163,7 +209,41 @@ const BARE_CREDENTIAL_SHAPES: ReadonlyArray<{
   },
   { label: "opaque token (16)", literal: "s3cr3tt0k3n1234x" },
   { label: "opaque token (12)", literal: "s3cr3tt0k3n1" },
+  // ---- ADDED 2026-08-22 (CR-07) — the `=`-bearing half of the policy --------
+  {
+    label:
+      "HTTP Basic credential, standard base64 with TWO `=` of padding (20) — value half is a lone `=`",
+    literal: PADDED_BASIC_TWO_PAD,
+  },
+  {
+    label:
+      "HTTP Basic credential, standard base64 with ONE `=` of padding (20) — value half is EMPTY",
+    literal: PADDED_BASIC_ONE_PAD,
+  },
+  {
+    label: "session id with a single trailing `=` and nothing after it (26)",
+    literal: "sess10n1d0123456789abcdef=",
+  },
+  {
+    label:
+      "the two-pad credential with its padding PERCENT-ENCODED (24) — no literal `=`, so the `=`-less branch takes it and the bytes stay opaque (T-01-32)",
+    literal: "dXNlcjpwYTU1dzByZA%3D%3D",
+  },
+  {
+    label:
+      "unpadded base64url (24) — no `=` at all, asserted to STAY covered rather than assumed to be",
+    literal: "c2VjcmV0LXRva2VuLXZhbHVl",
+  },
 ]);
+
+/** How many `=` bytes a literal carries. A plain scan, for the same reason
+ *  `paddingStrippedCore` is one: this file guards a module that may execute no
+ *  pattern, and it should not set the opposite example. */
+function equalsSignCount(literal: string): number {
+  let n = 0;
+  for (const ch of literal) if (ch === "=") n += 1;
+  return n;
+}
 
 /**
  * The shared case list. Every case is exercised THREE ways: for its expected
@@ -254,7 +334,9 @@ describe("redactQueryValues", () => {
       `https://cdn.test/a.js?access_token=${TOKEN}&v=2`,
     );
     // Substring search over the whole string, deliberately — not an equality.
-    expect(out.includes(TOKEN)).toBe(false);
+    expectSecretAbsent(out, TOKEN, "the JWT prefix");
+    // PRESENCE, and the only reason a `.includes(` here is not an absence
+    // assertion: the parameter NAME is what the policy deliberately keeps.
     expect(out.includes("access_token=")).toBe(true);
   });
 
@@ -303,6 +385,9 @@ describe("redactQueryValues", () => {
 
   it("a fragment sitting inside a query value does not survive", () => {
     const out = redactQueryValues("https://x.test/a.js?v=1#frag");
+    // STRUCTURAL BYTE, not a credential — see the fragment case in the
+    // `normaliseObservedUrl` block for why that exempts it from the
+    // two-spelling rule rather than excusing it from one.
     expect(out.includes("#")).toBe(false);
     expect(out).toBe(`https://x.test/a.js?v=${QUERY_VALUE_REDACTION}`);
   });
@@ -342,12 +427,50 @@ describe("a BARE query segment carrying a credential (P10-D1, T-01-53)", () => {
     // the "under the old bound" half is what makes the table adversarial — a
     // shape LONGER than 64 was already caught by truncation and would let this
     // block pass without exercising the new branch at all.
-    expect(BARE_CREDENTIAL_SHAPES.length).toBeGreaterThanOrEqual(8);
+    expect(BARE_CREDENTIAL_SHAPES.length).toBeGreaterThanOrEqual(13);
     for (const s of BARE_CREDENTIAL_SHAPES) {
       expect(
         s.literal.length,
         `${s.label} is NOT shorter than QUERY_NAME_MAX — it proves nothing new`,
       ).toBeLessThan(QUERY_NAME_MAX);
+    }
+  });
+
+  it("the table is STRUCTURALLY CAPABLE of failing on a PADDED credential (CR-07)", () => {
+    // The assertion round 2 did not have, and its absence is the whole reason
+    // this round exists. The count assertion above protects the eight original
+    // shapes; this one protects the `=`-bearing ones the same way, so a table
+    // that silently loses them fails LOUDLY instead of quietly measuring nothing.
+    const withEquals = BARE_CREDENTIAL_SHAPES.filter((s) =>
+      s.literal.includes("="),
+    );
+    expect(
+      withEquals.length,
+      "the table has fewer than three `=`-bearing shapes — it is blind in exactly the rule's blind spot again",
+    ).toBeGreaterThanOrEqual(3);
+
+    // BOTH sub-branches of the padding predicate, not just one: one `=` leaves an
+    // EMPTY value half and two leave a value half that is only `=`. They are
+    // different paths through the same rule.
+    expect(
+      withEquals.filter((s) => equalsSignCount(s.literal) === 1).length,
+      "no shape carries exactly ONE `=` — the empty-value-half path is unexercised",
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      withEquals.filter((s) => equalsSignCount(s.literal) === 2).length,
+      "no shape carries exactly TWO `=` — the padding-only-value-half path is unexercised",
+    ).toBeGreaterThanOrEqual(1);
+
+    // And every `=`-bearing shape has a core that is worth searching for: a
+    // non-empty one, and one that actually DIFFERS from the literal — otherwise
+    // the two-spelling rule below would be searching for the same string twice.
+    for (const s of withEquals) {
+      const core = paddingStrippedCore(s.literal);
+      expect(core.length, `${s.label}: empty core`).toBeGreaterThan(0);
+      expect(
+        core,
+        `${s.label}: core does not differ from the literal`,
+      ).not.toBe(s.literal);
     }
   });
 
@@ -358,9 +481,12 @@ describe("a BARE query segment carrying a credential (P10-D1, T-01-53)", () => {
     it(`${label}: does not survive anywhere in the output as a BARE segment`, () => {
       // SUBSTRING SEARCH over the whole returned string, never an equality
       // against a hand-written expected value — an equality passes when both
-      // sides are wrong in the same way.
+      // sides are wrong in the same way. BOTH SPELLINGS, through the one shared
+      // helper: against the round-2 defect the output held the literal minus one
+      // byte of padding, so a search for the literal alone PASSED on a live
+      // credential.
       const out = redactQueryValues(bareIn);
-      expect(out.includes(literal), out).toBe(false);
+      expectSecretAbsent(out, literal, `${label}: bare form`);
       expect(out).toBe(`https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`);
     });
 
@@ -382,7 +508,7 @@ describe("a BARE query segment carrying a credential (P10-D1, T-01-53)", () => {
       // The new branch must not have been implemented by weakening the branch
       // that already worked.
       const out = redactQueryValues(valueIn);
-      expect(out.includes(literal), out).toBe(false);
+      expectSecretAbsent(out, literal, `${label}: VALUE form`);
       expect(out).toBe(`https://cdn.test/a.js?token=${QUERY_VALUE_REDACTION}`);
     });
 
@@ -393,7 +519,16 @@ describe("a BARE query segment carrying a credential (P10-D1, T-01-53)", () => {
       expect(out.slice(out.indexOf("?") + 1).split("&").length).toBe(
         mixed.slice(mixed.indexOf("?") + 1).split("&").length,
       );
-      expect(out.includes(literal), out).toBe(false);
+      expectSecretAbsent(out, literal, `${label}: parameter-count form`);
+    });
+
+    it(`${label}: the ";" delimiter gets the SAME policy — one policy, two delimiters`, () => {
+      // `redactDelimitedSegment` is THE one shared helper. Mirroring every shape
+      // here is what keeps that a measured statement rather than an assertion
+      // about a shared function nobody re-tested on the second delimiter.
+      const out = normaliseObservedUrl(`https://cdn.test/a.js;${literal}`);
+      expectSecretAbsent(out, literal, `${label}: ";" bare parameter`);
+      expect(out).toBe(`https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`);
     });
   }
 
@@ -525,12 +660,145 @@ describe("a PADDED credential segment — the `=` was padding, not a separator (
       );
     }
   });
+
+  it("THE DEGENERATE SHAPES: a segment that is exactly `=`, and one that is exactly `==`", () => {
+    // Kept OUT of `BARE_CREDENTIAL_SHAPES` on purpose and given their own case
+    // instead: that table's loop also exercises every literal in VALUE form as
+    // `?token=<literal>`, and for an all-`=` literal that segment's own value
+    // half is pure padding, so the VALUE-form expectation legitimately differs.
+    // A special case inside the loop would have been the wrong repair.
+    expect(redactQueryValues("https://x.test/a.js?=")).toBe(
+      `https://x.test/a.js?${QUERY_VALUE_REDACTION}`,
+    );
+    expect(redactQueryValues("https://x.test/a.js?==")).toBe(
+      `https://x.test/a.js?${QUERY_VALUE_REDACTION}`,
+    );
+    expect(normaliseObservedUrl("https://x.test/a.js;=")).toBe(
+      `https://x.test/a.js;${QUERY_VALUE_REDACTION}`,
+    );
+    expect(normaliseObservedUrl("https://x.test/a.js;==")).toBe(
+      `https://x.test/a.js;${QUERY_VALUE_REDACTION}`,
+    );
+    // And the VALUE form, which is why they are here rather than in the table:
+    // `?token==` has a value half of one `=`, so the WHOLE segment goes and the
+    // name `token` does not survive.
+    expect(redactQueryValues("https://x.test/a.js?token==")).toBe(
+      `https://x.test/a.js?${QUERY_VALUE_REDACTION}`,
+    );
+  });
+});
+
+describe("RESIDUALS this rule deliberately LEAVES — pinned by execution, not named in prose (CR-07)", () => {
+  // Every case below asserts the CURRENT behaviour, so the day somebody closes
+  // one it goes RED and they update it deliberately. That is the same form as
+  // "RESIDUAL, PINNED: a token embedded in a path SEGMENT is NOT redacted", and
+  // it is what makes a residual a measured statement rather than a silence.
+  //
+  // Each was EXECUTED to determine the bytes below. None was predicted.
+
+  it("RESIDUAL, PINNED: the retained NAME half of a GENUINE pair is kept whatever it contains — a credential pasted in NAME position survives", () => {
+    // KEPT BY POLICY, and this case is the reason the sentence "every VALUE is
+    // replaced" is NOT the sentence "no authorization token reaches this
+    // column". The operator's UAT decision keeps parameter names because an
+    // endpoint that takes an `access_token` parameter is worth being able to
+    // see; a credential pasted where a name goes is the cost of that.
+    //
+    // Bounded by `QUERY_NAME_MAX` = 64 and by nothing else. Listed as an OPEN
+    // grammar in `schema.spec.ts`.
+    const pat = "ghp_AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIII";
+    expect(redactQueryValues(`https://cdn.test/a.js?${pat}=1`)).toBe(
+      `https://cdn.test/a.js?${pat}=${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("RESIDUAL, PINNED: the retained NAME half, second face — a token with an INTERIOR `=` keeps its prefix", () => {
+    // The other way the same residual is reached: the `=` is neither padding nor
+    // a real separator, it is a byte inside one opaque token. The split is on the
+    // FIRST `=`, so the prefix is retained as a "name".
+    expect(redactQueryValues("https://cdn.test/a.js?dXNlcjpw=YTU1dzByZA")).toBe(
+      `https://cdn.test/a.js?dXNlcjpw=${QUERY_VALUE_REDACTION}`,
+    );
+  });
+
+  it("RESIDUAL, PINNED: a SCHEME-RELATIVE reference keeps its userinfo verbatim — there is no `://`, so there is no authority to resolve", () => {
+    // `redactUrlHead` resolves the authority AFTER the first `://` and does
+    // nothing at all without one. Closing this means resolving an authority with
+    // no scheme, which changes what `/@vite/client.js` means — the obvious wrong
+    // implementation this module is built to avoid.
+    //
+    // UNREACHABLE TODAY, and the precondition is on the CALLER rather than on the
+    // redactor: the only caller that reaches `recordObservation` with a
+    // target-controlled URL is `consumer.ts`'s `rr.request.getUrl()`, which is
+    // absolute. That is a fact about the caller and it is why this is ACCEPTED
+    // (T-01-82) rather than open.
+    expect(normaliseObservedUrl("//user:pa55w0rd@cdn.test/a.js")).toBe(
+      "//user:pa55w0rd@cdn.test/a.js",
+    );
+    expect(redactUrlHead("//user:pa55w0rd@cdn.test/a.js")).toBe(
+      "//user:pa55w0rd@cdn.test/a.js",
+    );
+  });
+
+  it("RESIDUAL, PINNED: a `;` parameter inside the AUTHORITY is returned byte-identical — the `;` loop runs over the PATH only", () => {
+    // Measured, not predicted: the authority is `s.slice(authStart, end)` where
+    // `end` is the first `/`, `?` or `#`, and the `;` loop runs over
+    // `s.slice(pathStart)`. A `;` in the reg-name never reaches the loop.
+    //
+    // Same acceptance and the same precondition as the case above: not reachable
+    // through `rr.request.getUrl()`. The `;` ENFORCED row in `schema.spec.ts` is
+    // qualified to the PATH because of this case.
+    expect(
+      normaliseObservedUrl("https://cdn.test;jsessionid=SECRETSESSION/app.js"),
+    ).toBe("https://cdn.test;jsessionid=SECRETSESSION/app.js");
+  });
+
+  it("RESIDUAL, PINNED: URL_MAX truncation can land INSIDE a `<redacted>` marker, and the fragment it leaves is IDEMPOTENT", () => {
+    // The bytes below were read off an execution, not reasoned to.
+    //
+    // WHY THIS IS PINNED RATHER THAN FIXED HERE, as a measured reason and not as
+    // "out of scope". The obvious repair — drop the partial marker so the string
+    // ends `…&p133=` — INTERACTS with this plan's new branch: a segment whose
+    // value half is empty now redacts WHOLE, so a second pass over `…&p133=`
+    // produces `…&<redacted>` and the idempotence invariant asserted across every
+    // case in this file breaks. Executed, not assumed:
+    //
+    //   normaliseObservedUrl("https://x.test/a.js?p133=")
+    //     -> "https://x.test/a.js?<redacted>"      // the name is gone
+    //
+    // THE JOB, stated so its size is known: truncate on a `&` boundary rather
+    // than mid-marker, which drops the whole trailing segment instead of half a
+    // marker and keeps both invariants. OWNER: a later phase, alongside the
+    // `URL_MAX` bound itself — this plan owns the per-segment rule, not the
+    // truncation strategy.
+    const parts: string[] = [];
+    for (let i = 0; i < 140; i += 1) parts.push(`p${String(i)}=v`);
+    const out = normaliseObservedUrl(
+      `https://cdn.test/a.js?${parts.join("&")}`,
+    );
+
+    expect(out.length).toBe(URL_MAX);
+    // The measured tail: a parameter name, its `=`, and a SEVERED marker.
+    expect(out.slice(out.lastIndexOf("&") + 1)).toBe("p133=<re");
+    // And the fragment is stable — a second pass re-expands the marker and
+    // re-truncates to the same byte, which is the property that makes this
+    // pinnable at all.
+    expect(normaliseObservedUrl(out)).toBe(out);
+
+    // The interaction the repair would break, executed here so the reason above
+    // is evidence rather than an argument.
+    expect(normaliseObservedUrl("https://cdn.test/a.js?p133=")).toBe(
+      `https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`,
+    );
+  });
 });
 
 describe("normaliseObservedUrl", () => {
   it("routes through the redaction and still strips the fragment", () => {
     const out = normaliseObservedUrl("https://x.test/a.js?t=secret#f");
-    expect(out.includes("secret")).toBe(false);
+    expectSecretAbsent(out, "secret", "the query value");
+    // STRUCTURAL BYTE, not a credential: `#` carries no padding, so its core is
+    // itself and the two-spelling rule is satisfied by identity. Named here
+    // rather than left to be classified by a later reader.
     expect(out.includes("#")).toBe(false);
     expect(out).toBe(`https://x.test/a.js?t=${QUERY_VALUE_REDACTION}`);
   });
@@ -562,7 +830,7 @@ describe("normaliseObservedUrl", () => {
     const out = normaliseObservedUrl(`https://x.test/a.js?t=${long}&marker=z`);
 
     expect(out.length).toBeLessThanOrEqual(URL_MAX);
-    expect(out.includes(long.slice(0, 200))).toBe(false);
+    expectSecretAbsent(out, long.slice(0, 200), "the oversized value");
     expect(out).toBe(
       `https://x.test/a.js?t=${QUERY_VALUE_REDACTION}&marker=${QUERY_VALUE_REDACTION}`,
     );
@@ -650,6 +918,57 @@ const HEAD_CASES: ReadonlyArray<{ name: string; in: string; out: string }> = [
     in: "https://cdn.test/a.js;",
     out: "https://cdn.test/a.js;",
   },
+  // ---- ADDED 2026-08-22 (CR-07) — the `;` MIRROR of every padded shape -----
+  // "One policy, two delimiters" is the claim; two tables exercising different
+  // shapes is how that claim quietly stops being true. Every shape added to
+  // `BARE_CREDENTIAL_SHAPES` has its mirror here.
+  {
+    name: "a PADDED bare `;` segment with TWO `=` of padding is redacted WHOLE — the `=` was padding, not a separator",
+    in: `https://cdn.test/a.js;${PADDED_BASIC_TWO_PAD}`,
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a PADDED bare `;` segment with ONE `=` of padding — the EMPTY value half, the other sub-branch",
+    in: `https://cdn.test/a.js;${PADDED_BASIC_ONE_PAD}`,
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a `;` segment that is a token with a single trailing `=` and nothing after it",
+    in: "https://cdn.test/a.js;sess10n1d0123456789abcdef=",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a `;` segment carrying PERCENT-ENCODED padding takes the `=`-less branch and stays opaque (T-01-32)",
+    in: "https://cdn.test/a.js;dXNlcjpwYTU1dzByZA%3D%3D",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "an UNPADDED base64url `;` segment stays covered by the `=`-less branch",
+    in: "https://cdn.test/a.js;c2VjcmV0LXRva2VuLXZhbHVl",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "ACCEPTED COST (CR-07) on the `;` delimiter too: `;debug=` loses its NAME as well as its value",
+    in: "https://cdn.test/a.js;debug=",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a `;` segment that is exactly `=` was never a pair",
+    in: "https://cdn.test/a.js;=",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    name: "a `;` segment that is exactly `==` was never a pair either",
+    in: "https://cdn.test/a.js;==",
+    out: `https://cdn.test/a.js;${QUERY_VALUE_REDACTION}`,
+  },
+  {
+    // The branch that already worked, asserted not to have been weakened to make
+    // the new one pass — on this delimiter as well as on `&`.
+    name: "a PADDED token in `;` VALUE position still keeps its name and loses its value",
+    in: `https://cdn.test/a.js;sid=${PADDED_BASIC_TWO_PAD}`,
+    out: `https://cdn.test/a.js;sid=${QUERY_VALUE_REDACTION}`,
+  },
   // ---- MUST NOT TOUCH ---------------------------------------------------
   {
     name: "an `@` in the PATH is untouched — a Vite dev server serves exactly this",
@@ -692,19 +1011,47 @@ const HEAD_CASES: ReadonlyArray<{ name: string; in: string; out: string }> = [
     in: "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js",
     out: "https://cdn.test/download/eyJhbGciOiJIUzI1NiJ9SECRET/app.js",
   },
+  {
+    // ADDED 2026-08-22 (CR-07), and stated as a PRECONDITION ON THE CALLER
+    // rather than as a property of the redactor: the authority is resolved after
+    // the first `://` and a scheme-relative reference has none. Not reachable
+    // through `consumer.ts`'s `rr.request.getUrl()`, which is absolute.
+    name: "RESIDUAL, PINNED: a SCHEME-RELATIVE reference keeps its userinfo — with no `://` there is no authority to resolve",
+    in: "//user:pa55w0rd@cdn.test/a.js",
+    out: "//user:pa55w0rd@cdn.test/a.js",
+  },
+  {
+    // ADDED 2026-08-22 (CR-07). Measured before it was pinned: the `;` loop runs
+    // over `s.slice(pathStart)`, so a `;` in the reg-name never reaches it. This
+    // case is why the `;` ENFORCED row in `schema.spec.ts` is qualified to the
+    // PATH.
+    name: "RESIDUAL, PINNED: a `;` parameter inside the AUTHORITY is byte-identical — the `;` rule is a PATH rule",
+    in: "https://cdn.test;jsessionid=SECRETSESSION/app.js",
+    out: "https://cdn.test;jsessionid=SECRETSESSION/app.js",
+  },
 ];
 
 describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-01-58)", () => {
   it("enumerates a NON-EMPTY table covering all three head grammars", () => {
     // Non-vacuity, in the shape `error-redaction.spec.ts` uses: a table-driven
     // gate over an empty table reports nothing wrong and proves nothing.
-    expect(HEAD_CASES.length).toBeGreaterThanOrEqual(13);
+    expect(HEAD_CASES.length).toBeGreaterThanOrEqual(24);
     expect(HEAD_CASES.filter((c) => c.in.includes("@")).length).toBeGreaterThan(
       2,
     );
+    // RAISED 2026-08-22 (CR-07) from 3 to 14 along with the `;` mirror of every
+    // padded shape. A floor that stays where it was while the table grows stops
+    // protecting anything: the point of the number is that DELETING the mirrors
+    // fails loudly.
     expect(HEAD_CASES.filter((c) => c.in.includes(";")).length).toBeGreaterThan(
-      3,
+      14,
     );
+    // And the `;` half must carry `=`-bearing shapes, for the same reason the
+    // query table must: the whole defect lived in the `=` branch.
+    expect(
+      HEAD_CASES.filter((c) => c.in.includes(";") && c.in.includes("=")).length,
+      "the `;` half of the table has fewer than six `=`-bearing shapes — it is blind where the rule is",
+    ).toBeGreaterThanOrEqual(6);
   });
 
   for (const c of HEAD_CASES) {
@@ -717,16 +1064,37 @@ describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-0
     // SUBSTRING SEARCH over the whole returned string, never an equality
     // against a hand-written expected value — an equality passes when both
     // sides are wrong in the same way.
+    //
+    // AND THE SEARCH RUNS ON BOTH SPELLINGS, through the SAME helper the
+    // `BARE_CREDENTIAL_SHAPES` loop calls (widened 2026-08-22, CR-07). This block
+    // is the SECOND population of absence assertion in this file — a hand-written
+    // list sitting BESIDE the table loop rather than inside it — and it was
+    // vulnerable to the identical blindness: against the defect the output held a
+    // padded literal minus one byte, so a search for the literal PASSED. The
+    // comment above warns that an equality "passes when both sides are wrong in
+    // the same way", and a literal-only substring search is exactly that failure
+    // wearing a different shape. Fixing only the table would have been the same
+    // defect one level down.
     const secrets: ReadonlyArray<readonly [string, string]> = [
       ["https://user:pa55w0rd@cdn.test/app.js", "pa55w0rd"],
       ["https://user:pa55w0rd@cdn.test/app.js", "user"],
       ["https://cdn.test/a.js;jsessionid=SECRETSESSION", "SECRETSESSION"],
       ["https://cdn.test/a.js;SECRETTOKEN", "SECRETTOKEN"],
       ["https://user:pw@cdn.test/a.js;jsessionid=S?token=T", "pw"],
+      // The padded shapes, on BOTH delimiters. Each goes in ONCE and is searched
+      // under both spellings by the helper — never hand-written twice, because
+      // two hand-written spellings are two chances to disagree.
+      [`https://cdn.test/a.js?${PADDED_BASIC_TWO_PAD}`, PADDED_BASIC_TWO_PAD],
+      [`https://cdn.test/a.js;${PADDED_BASIC_TWO_PAD}`, PADDED_BASIC_TWO_PAD],
+      [`https://cdn.test/a.js?${PADDED_BASIC_ONE_PAD}`, PADDED_BASIC_ONE_PAD],
+      [`https://cdn.test/a.js;${PADDED_BASIC_ONE_PAD}`, PADDED_BASIC_ONE_PAD],
+      [
+        "https://cdn.test/a.js;sess10n1d0123456789abcdef=",
+        "sess10n1d0123456789abcdef=",
+      ],
     ];
     for (const [input, secret] of secrets) {
-      const out = normaliseObservedUrl(input);
-      expect(out.includes(secret), `${secret} survived in ${out}`).toBe(false);
+      expectSecretAbsent(normaliseObservedUrl(input), secret, input);
     }
   });
 
@@ -737,6 +1105,8 @@ describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-0
     // second pass finds `<redacted>` as the userinfo and replaces it with
     // itself.
     const out = normaliseObservedUrl("https://user:pa55w0rd@cdn.test/app.js");
+    // PRESENCE assertions, both of them — the `@` and the host are what the
+    // policy deliberately KEEPS. Exempt from the two-spelling rule by kind.
     expect(out.includes("@")).toBe(true);
     expect(out.includes("cdn.test")).toBe(true);
     expect(out.startsWith("https://")).toBe(true);
@@ -866,8 +1236,9 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 
     const rows = await listObservations(fx.db, "project-one");
     expect(rows.length).toBe(1);
+    // PRESENCE: the parameter name is kept on purpose.
     expect(rows[0].url.includes("token=")).toBe(true);
-    expect(rows[0].url.includes("hunter2")).toBe(false);
+    expectSecretAbsent(rows[0].url, "hunter2", "the stored row");
     expect(rows[0].url).toBe(
       `https://x.test/app.js?token=${QUERY_VALUE_REDACTION}&v=${QUERY_VALUE_REDACTION}`,
     );
@@ -893,7 +1264,7 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 
     const rows = await listObservations(fx.db, "project-one");
     expect(rows.length).toBe(1);
-    expect(rows[0].url.includes(literal), rows[0].url).toBe(false);
+    expectSecretAbsent(rows[0].url, literal, "the stored row");
     expect(rows[0].url).toBe(`https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`);
   });
 
@@ -916,8 +1287,8 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 
     const rows = await listObservations(fx.db, "project-one");
     expect(rows.length).toBe(1);
-    expect(rows[0].url.includes("pa55w0rd"), rows[0].url).toBe(false);
-    expect(rows[0].url.includes("SECRETSESSION"), rows[0].url).toBe(false);
+    expectSecretAbsent(rows[0].url, "pa55w0rd", "the stored row");
+    expectSecretAbsent(rows[0].url, "SECRETSESSION", "the stored row");
     expect(rows[0].url).toBe(
       `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js;jsessionid=${QUERY_VALUE_REDACTION}`,
     );
@@ -1000,7 +1371,8 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 
     const rows = await listObservations(fx.db, "project-one");
     expect(rows.length).toBe(1);
-    expect(rows[0].url.includes(TOKEN)).toBe(false);
+    expectSecretAbsent(rows[0].url, TOKEN, "the stored row");
+    // PRESENCE: the parameter name is kept on purpose.
     expect(rows[0].url.includes("access_token=")).toBe(true);
   });
 });
