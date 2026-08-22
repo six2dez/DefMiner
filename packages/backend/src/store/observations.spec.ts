@@ -1384,7 +1384,53 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 // WHAT THIS GATE CLAIMS, and it is narrower than the sentence it replaced.
 //
 // `observations.ts`'s OWN CODE executes no pattern. That is what is enforced
-// here. The module-level claim — "the implementation is string splitting only" —
+// here.
+//
+// WIDENED 2026-08-22 (WR-20) SO THAT THE CLAIM AND THE ENFORCEMENT SAY THE SAME
+// THING. Until that date the claim was about CODE and the enforcement was about
+// TEXT: the rules banned a pattern being WRITTEN in the module — a regex literal,
+// a `RegExp` construction — and excluded `.replace`/`.replaceAll`/`.split`
+// outright, on the argument that with the first two banned there was no way to
+// hand them a pattern. That argument is sound for a pattern written HERE and says
+// nothing about one that ARRIVES: imported from a sibling module, passed in as a
+// parameter, or read off an object defeats it with none of the banned constructs
+// present anywhere in the file.
+//
+// OPTION (a) WAS TAKEN — the rule, not the restated bound. Rule 4 flags a call to
+// `replace`, `replaceAll` or `split` whose FIRST argument is not a string
+// literal. That permits every existing call site (`split("&")`, `split("/")`,
+// `split(";")`, `split("#")` — all four asserted quiet against the REAL file) and
+// rejects every identifier, property access, call and interpolating template,
+// which is the shape a smuggled pattern takes. What rule 4 does NOT catch is
+// stated below as a bound rather than left as a silence.
+//
+// AND THE ONE PERMITTED LITERAL IS STILL PERMITTED THROUGH THE SAME COUNT PLUS
+// ANCHOR. `telemetry.ts:269` calls `.replace` with a REGEX LITERAL as its first
+// argument, so the naive form of rule 4 fires on the one call the exemption
+// exists to allow, and the obvious repair — a file-name skip — is the thing this
+// header says at length a reader would copy. The actual mechanism: rule 4 passes
+// a regex-literal argument through WITHOUT a verdict, because rule 1 already
+// counts every regex literal in the module and judges it under the
+// count-plus-anchor exemption. So the call is covered BY ITS LITERAL BEING
+// COVERED. Add a second literal, or move that one out of `redactUrls`, and the
+// call goes red with it; put the identical call in `observations.ts` and it goes
+// red there. All three are executed below.
+//
+// WHAT RULE 4 DOES NOT CATCH, stated with the precision
+// `outbound-prohibition.spec.ts`'s boundary 2 uses:
+//   - A pattern reaching a scanned module through a method this gate does not
+//     name — a user helper, `String.raw`, a `for` loop doing its own matching.
+//     The set is `PATTERN_ARGUMENT_METHODS` plus `PATTERN_EXECUTING_METHODS` and
+//     it is an ENUMERATION, not a proof.
+//   - WHETHER the non-literal argument is actually a pattern. Rule 4 cannot know:
+//     `t.split(d)` with `d` a one-character string is flagged exactly like
+//     `t.replace(IMPORTED_PATTERN, x)`. That is deliberate — it fails toward the
+//     report — and the escape is a string literal, which every call site in both
+//     scanned modules already uses. It is also the reason this rule would be
+//     wrong for a general-purpose codebase and is right for these two files.
+//   - The scan is still TWO FILES. A pattern executing in a module neither of
+//     them names is outside this gate entirely; `PATTERN_SCAN_MARKERS` is what
+//     makes adding a third file a deliberate act. The module-level claim — "the implementation is string splitting only" —
 // became FALSE the day plan 01-07 added the `describeError` import at
 // `observations.ts:10`: `describeError` runs `redactUrls`, which is a
 // `String.replace` with a pattern, so this module reaches a pattern
@@ -1414,7 +1460,8 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 // is the patch task 2 declined.
 //
 // THE EXEMPTION IS A COUNT PLUS AN ANCHOR, NEVER A FILE-NAME SKIP, and the
-// difference is the whole mechanism. `telemetry.ts` may hold EXACTLY ONE regex
+// difference is the whole mechanism — including under rule 4, which is where the
+// temptation to add one first appeared. `telemetry.ts` may hold EXACTLY ONE regex
 // literal AND it must sit inside the `redactUrls` declaration. A second literal
 // anywhere in that module fails. MOVING the existing one, or renaming the
 // function around it, also fails — until somebody updates the exemption, which
@@ -1437,10 +1484,9 @@ type PatternFinding = { file: string; rule: string; detail: string };
 /**
  * The five method names that EXECUTE a pattern by definition.
  *
- * `split` and the two replace methods are deliberately ABSENT. With regex
- * literals and `RegExp` construction both banned there is no way to hand them a
- * pattern, and banning them outright would ban `split("&")` — which is the
- * implementation this gate exists to protect.
+ * `split` and the two replace methods are ABSENT FROM THIS SET and are covered by
+ * {@link PATTERN_ARGUMENT_METHODS} instead — see the note there for why the
+ * original reasoning for excluding them entirely did not hold.
  */
 const PATTERN_EXECUTING_METHODS = new Set([
   "test",
@@ -1449,6 +1495,40 @@ const PATTERN_EXECUTING_METHODS = new Set([
   "matchAll",
   "search",
 ]);
+
+/**
+ * The three method names that execute a pattern ONLY IF ONE IS HANDED TO THEM.
+ *
+ * ADDED 2026-08-22 (WR-20), AND THIS IS THE CLAIM-VERSUS-ENFORCEMENT GAP IT
+ * CLOSES. These three used to be excluded outright, on the argument that "with
+ * regex literals and `RegExp` construction both banned there is no way to hand
+ * them a pattern". That premise holds for a pattern WRITTEN IN THE SCANNED
+ * MODULE. It says nothing about a pattern that ARRIVES — imported from a sibling
+ * module, passed in as a parameter, or read off an object — which defeats it with
+ * none of the three banned constructs present anywhere in the file.
+ *
+ * Exposure today is ZERO: every call site in the scanned modules passes a string
+ * literal, and the four in `observations.ts` (`"/"`, `";"`, `"&"`, `"#"`) are
+ * asserted quiet below. Exposure the day somebody factors the redactors into a
+ * shared `patterns.ts` is TOTAL, and — this is the part that matters — SILENT,
+ * on a runtime where `REDOS_RECOVERY` is kill and the recovery is SIGKILL taking
+ * `caido-cli` down with the operator's live project data.
+ *
+ * THE RULE: the FIRST argument must be a string literal (or a
+ * no-substitution template, which is the same thing written differently). An
+ * identifier, a property access, a call, or an interpolating template is the
+ * shape a smuggled pattern takes, and is reported as `smuggled-pattern`.
+ *
+ * A REGEX LITERAL first argument is deliberately NOT reported by this rule — not
+ * because it is permitted, but because rule 1 already counts every regex literal
+ * in the module and judges it under the count-plus-anchor exemption. That is how
+ * `telemetry.ts:269`'s permitted `.replace(/…/gi, URL_REDACTION)` survives: NOT
+ * through a file-name skip, NOT through a line-number special case, but because
+ * the literal it passes is the one literal the exemption spends, anchored inside
+ * `redactUrls`. Add a second literal, or move that one out of `redactUrls`, and
+ * the call goes red with it — both executed below.
+ */
+const PATTERN_ARGUMENT_METHODS = new Set(["replace", "replaceAll", "split"]);
 
 /**
  * The ONE exemption, as a count and an anchor. See the header for why it is not
@@ -1580,6 +1660,28 @@ function auditPatternUse(file: string, source: string): PatternFinding[] {
         "pattern-execution",
         `${base}:${String(lineOf(node))} calls .${node.expression.name.text}(), which executes a pattern by definition.`,
       );
+    }
+
+    // ---- Rule 4: replace / replaceAll / split with a NON-LITERAL first arg. -
+    // WR-20. A regex literal argument falls through to rule 1's count-plus-anchor
+    // verdict rather than being judged here, which is what extends the ONE
+    // permitted literal's exemption to cover its call without a file-name skip.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      PATTERN_ARGUMENT_METHODS.has(node.expression.name.text)
+    ) {
+      const first = node.arguments[0];
+      if (
+        first !== undefined &&
+        !ts.isStringLiteralLike(first) &&
+        !ts.isRegularExpressionLiteral(first)
+      ) {
+        add(
+          "smuggled-pattern",
+          `${base}:${String(lineOf(node))} calls .${node.expression.name.text}() with a first argument this gate cannot read as a string literal. A pattern that ARRIVES — imported, passed in, or read off an object — needs none of the constructs rules 1 and 2 ban, and REDOS_RECOVERY is "kill" on this runtime: SIGKILL is the only exit and it takes caido-cli down with the operator's live project data. Pass a string literal, or measure the pattern's linearity and spend an exemption on it.`,
+        );
+      }
     }
 
     ts.forEachChild(node, visit);
@@ -1791,5 +1893,172 @@ describe("the pattern gate's own failure paths, EXECUTED", () => {
       "}",
     ].join("\n");
     expect(rulesOf(oneLiteral, "observations.ts")).toContain("regex-literal");
+  });
+});
+
+// ===========================================================================
+// WR-20 — A PATTERN THAT ARRIVES RATHER THAN BEING WRITTEN
+// ===========================================================================
+// THE THREAT, AND THE FIXTURES ARE DERIVED FROM IT RATHER THAN FROM THE RULE.
+// The gate's claim was "this module's OWN CODE executes no pattern"; its
+// enforcement was "no pattern is WRITTEN in this module". The gap between those
+// two sentences is every way a pattern can reach a scanned module without
+// appearing in it, so those are the shapes below: an import, a parameter, an
+// object property, and a module-level const initialised from an import. None of
+// them needs a regex literal or a `RegExp` construction anywhere in the file.
+describe("a pattern that ARRIVES defeats none of the banned constructs (WR-20)", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditPatternUse(file, src).map((f) => f.rule);
+
+  it("an IMPORTED pattern used in .replace is flagged", () => {
+    expect(
+      rulesOf(
+        [
+          'import { URL_PATTERN } from "./patterns";',
+          "export function f(t: string): string {",
+          '  return t.replace(URL_PATTERN, "<redacted>");',
+          "}",
+        ].join("\n"),
+      ),
+    ).toContain("smuggled-pattern");
+  });
+
+  it("a RegExp arriving as a PARAMETER and used in .split is flagged", () => {
+    expect(
+      rulesOf(
+        [
+          "export function f(t: string, p: RegExp): string[] {",
+          "  return t.split(p);",
+          "}",
+        ].join("\n"),
+      ),
+    ).toContain("smuggled-pattern");
+  });
+
+  it("a pattern read off an OBJECT PROPERTY is flagged", () => {
+    expect(
+      rulesOf(
+        [
+          "export function f(t: string, cfg: { url: RegExp }): string {",
+          '  return t.replaceAll(cfg.url, "x");',
+          "}",
+        ].join("\n"),
+      ),
+    ).toContain("smuggled-pattern");
+  });
+
+  it("a module-level const INITIALISED FROM AN IMPORT is flagged at the call", () => {
+    expect(
+      rulesOf(
+        [
+          'import { patterns } from "./patterns";',
+          "const URL_PATTERN = patterns.url;",
+          "export function f(t: string): string {",
+          '  return t.replace(URL_PATTERN, "<redacted>");',
+          "}",
+        ].join("\n"),
+      ),
+    ).toContain("smuggled-pattern");
+  });
+
+  it("an INTERPOLATING template argument is flagged; a no-substitution one is not", () => {
+    // A template with substitutions is assembled at runtime and the gate cannot
+    // read it; a bare backtick string is a string literal written differently.
+    expect(
+      rulesOf(
+        "export function f(t: string, d: string): string[] { return t.split(`${d}`); }",
+      ),
+    ).toContain("smuggled-pattern");
+    expect(
+      rulesOf(
+        "export function f(t: string): string[] { return t.split(`&`); }",
+      ),
+    ).toEqual([]);
+  });
+
+  // ---- THE MUST-STAY-QUIET SET -------------------------------------------
+  // A widening that breaks the implementation it protects is reverted within the
+  // hour. These are the real call sites, asserted against the REAL FILES rather
+  // than only against inline sources.
+
+  it("the FOUR literal .split calls in the real observations.ts stay quiet", () => {
+    const file = join(BACKEND_SRC, "store", "observations.ts");
+    const source = readFileSync(file, "utf8");
+    // Non-vacuity for this very assertion: if the implementation stops splitting
+    // on literals this case would pass by measuring nothing.
+    for (const literal of [
+      'split("/")',
+      'split(";")',
+      'split("&")',
+      'split("#")',
+    ]) {
+      expect(
+        source,
+        `${literal} is no longer in observations.ts, so this quiet-set case is vacuous`,
+      ).toContain(literal);
+    }
+    expect(auditPatternUse(file, source)).toEqual([]);
+  });
+
+  it("the ONE permitted .replace in the real telemetry.ts stays quiet — through the exemption, not a skip", () => {
+    const file = join(BACKEND_SRC, "telemetry.ts");
+    const source = readFileSync(file, "utf8");
+    expect(
+      source,
+      "telemetry.ts no longer calls .replace with the permitted literal, so this case is vacuous",
+    ).toContain(".replace(/");
+    expect(auditPatternUse(file, source)).toEqual([]);
+  });
+
+  it("EXEMPTION INTEGRITY under the widened rule — a SECOND literal still fails", () => {
+    // The mutation that would have been silently permitted by a file-name skip.
+    const twoLiterals = [
+      "export function redactUrls(t: string): string {",
+      '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
+      "}",
+      "export function redactPaths(t: string): string {",
+      '  return t.replace(/(?:\\/[A-Za-z0-9._-]+){2,}/g, "<path-redacted>");',
+      "}",
+    ].join("\n");
+    expect(rulesOf(twoLiterals, "telemetry.ts")).toContain(
+      "exemption-exceeded",
+    );
+  });
+
+  it("EXEMPTION INTEGRITY under the widened rule — the literal MOVED OUT of redactUrls still fails", () => {
+    const movedLiteral = [
+      "export function redactUrls(t: string): string {",
+      "  return applyPattern(t);",
+      "}",
+      "export function redactPaths(t: string): string {",
+      '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
+      "}",
+    ].join("\n");
+    expect(rulesOf(movedLiteral, "telemetry.ts")).toContain("exemption-anchor");
+  });
+
+  it("the exempted CALL does not travel either — the same call in observations.ts fails", () => {
+    // What proves the exemption covers the call BY COVERING ITS LITERAL rather
+    // than by naming the file: identical source, different module, red.
+    const sameCall = [
+      "export function redactQueryValues(t: string): string {",
+      '  return redactUrlHead(t).replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
+      "}",
+    ].join("\n");
+    expect(rulesOf(sameCall, "observations.ts")).toContain("regex-literal");
+  });
+
+  it("the documentation fixture STILL reports zero after the widening", () => {
+    // This module's comments name `.replace(`, `.split(` and every other
+    // forbidden construct by necessity. An AST walk is what keeps that possible.
+    const documentationFixture = [
+      "// This comment names RegExp, .test(, .match(, .replace(p, x), .split(p)",
+      "// and a pattern that looks like /[a-z]+/gi — on purpose.",
+      '/** Also in a doc comment: t.replace(SOME_IMPORTED_PATTERN, "x"). */',
+      "export function stringsOnly(s: string): string[] {",
+      '  return s.split("&");',
+      "}",
+    ].join("\n");
+    expect(auditPatternUse("fixture.ts", documentationFixture)).toEqual([]);
   });
 });
