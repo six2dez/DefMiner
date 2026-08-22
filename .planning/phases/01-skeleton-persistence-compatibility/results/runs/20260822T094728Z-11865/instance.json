@@ -1,0 +1,23 @@
+{
+  "run_id": "20260822T094728Z-11865",
+  "pid": 50938,
+  "port": 8971,
+  "listen": "127.0.0.1:8971",
+  "data_path": "/tmp/defminer-probe-20260822T094728Z-11865",
+  "fresh": true,
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.58.0",
+    "reported_version": "0.58.0",
+    "sha256": "1f489f8c6cb79671ef6089e44ed046920a0791a20f73c21e675edc5c626b175a"
+  },
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "started_at": "2026-08-22T09:47:30Z",
+  "exit_code": 137,
+  "stopped_at": "2026-08-22T09:47:30Z"
+}

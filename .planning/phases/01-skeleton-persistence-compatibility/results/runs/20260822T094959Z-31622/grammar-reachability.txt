@@ -1,0 +1,27 @@
+# Which credential-bearing URL grammars reached observations.url
+# through the LIVE tier on this run. Measured, not assumed.
+# No secret bytes here — occurrence counts only.
+db_read_mode=readonly
+raw_rows=2
+rpc_rows=2
+pathparam_reached=yes
+userinfo_reached=no
+userinfo_in_request_line=no
+userinfo_as_authorization_header=yes
+padded_segments_reached=yes
+pad_two_in_request_line=yes
+pad_one_in_request_line=yes
+pad_two_padding_bytes=2
+pad_one_padding_bytes=1
+secret_occurrences[name=value query pair (01-07)] raw=0 rpc=0
+secret_occurrences[bare `=`-less query segment (01-10, P10-D1)] raw=0 rpc=0
+secret_occurrences[`;` path parameter (01-11, redactUrlHead)] raw=0 rpc=0
+secret_occurrences[userinfo PASSWORD half (01-11)] raw=0 rpc=0
+secret_occurrences[userinfo USERNAME half (01-11)] raw=0 rpc=0
+secret_occurrences[padded bare segment, TWO `=` — value half is a lone `=` (01-17)] raw=0 rpc=0
+secret_occurrences[padded bare segment, TWO `=` — value half is a lone `=` (01-17) [PADDING-STRIPPED CORE]] raw=2 rpc=2
+secret_occurrences[padded bare segment, ONE `=` — value half is EMPTY (01-17)] raw=2 rpc=2
+secret_occurrences[padded bare segment, ONE `=` — value half is EMPTY (01-17) [PADDING-STRIPPED CORE]] raw=2 rpc=2
+note: `;` path parameter: REACHED the plugin; asserted as ;jsessionid=<redacted> in every raw row
+note: URL userinfo: DID NOT REACH the plugin — curl put userinfo in the request line: no; sent it as an Authorization: Basic header: yes. Userinfo cannot be exercised through this tier, so the absence of both halves above is a property of the TIER, not of redactUrlHead. Enforced instead by observations.spec.ts, "USERINFO does not reach the column either, nor does a `;` parameter value (WR-11)", and by "userinfo with a password: NEITHER half survives, and the `@` does".
+note: padded bare segments (TWO `=` and ONE `=`): REACHED the plugin — every raw row carries 5 query segments in fixture order, and the last two are asserted to BE the redaction marker. Both sub-branches of the CR-07 padding rule are exercised LIVE by this run.

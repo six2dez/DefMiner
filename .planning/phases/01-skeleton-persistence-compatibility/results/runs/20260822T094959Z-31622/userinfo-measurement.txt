@@ -1,0 +1,11 @@
+# Measured, not assumed: can URL userinfo be exercised through this tier?
+# Derived from curl's own -v request-line trace. No secret bytes here, and
+# no Authorization header value either — that is base64 of user:secret.
+userinfo_in_request_line=no
+userinfo_sent_as_authorization_header=yes
+request_lines_emitted=2
+# The padded pair, on the wire, byte-for-byte as generated (plan 01-17).
+pad_two_literal_in_request_line=yes
+pad_one_literal_in_request_line=yes
+pad_two_padding_bytes=2
+pad_one_padding_bytes=1

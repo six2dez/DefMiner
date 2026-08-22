@@ -203,16 +203,18 @@ ORIGIN_PID=""
 # matching LINES. Two hits on one line reported as ONE — and that is not a corner
 # case here, it is the SHAPE OF THE INSTRUMENT'S MAIN SUBJECT: a proxy log records a
 # request line and a response line, and a single-line JSON dump records every value it
-# holds on one line. The number quoted in this comment before the fix ("four
-# occurrences of each wire value") was a number `grep -c` CANNOT PRODUCE, so it is
-# gone rather than adjusted. It now counts with `grep -o` piped through `wc -l`.
+# holds on one line. It now counts with `grep -o` piped through `wc -l`.
 #
-# NO CORRECTED NUMBER IS QUOTED HERE, and that is deliberate rather than an omission.
-# The corrected count is whatever the corrected instrument measures on a given run,
-# and every run writes it into its OWN `secret-sweep.txt`. Quoting one here would put
-# this comment back in the business of claiming a measurement instead of pointing at
-# it — the same discipline this file's header applies to the Caido version, and for
-# the same reason. Plan 01-17's measured figures are in `README-01-17.md`.
+# WHAT THE CORRECTED INSTRUMENT ACTUALLY MEASURED, and the answer is a NEGATIVE
+# RESULT worth writing down rather than quietly dropping. On plan 01-17's live run 1
+# (`20260822T094728Z-11865`) it reports FOUR occurrences of each wire value in
+# `logging.<date>.log` and FOUR in `caido.stdout.log` — the SAME figure the line
+# counter reported. The old number was not wrong on this shape; it was UNSOUND, which
+# is a different fault and the one that matters. Caido happens to log each URL on its
+# own line here, so the two counters agree by luck of the log format, and nothing
+# about that is a property of the instrument or a guarantee for the next run. The
+# authoritative figure for any given run is in that run's own `secret-sweep.txt`;
+# `README-01-17.md` indexes plan 01-17's.
 #
 # `grep -a` because Caido's host log is not guaranteed to be valid text end to end and
 # `grep -o` on a file it decides is binary prints "Binary file matches" instead of the
