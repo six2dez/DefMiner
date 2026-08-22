@@ -128,7 +128,7 @@ Plans:
 
 **Wave 15** *(gap closure round 3 — re-verification 2026-08-21T17:40 found UAT gap 1 still open through a different door; blocked on Wave 14)*
 
-- [ ] 01-15-PLAN.md — **CR-07, the blocker**: a segment that is entirely a credential and contains an `=` — every standard-base64-padded token — is parsed as `name=value` and the credential is kept. Fixed in the shared per-segment helper so both delimiters close together, with the adversarial set derived from the policy rather than the branch, absence asserted on the padding-stripped core, and the three artifacts that assert this cannot happen corrected — *wave 15*
+- [x] 01-15-PLAN.md — **CR-07, the blocker**: a segment that is entirely a credential and contains an `=` — every standard-base64-padded token — is parsed as `name=value` and the credential is kept. Fixed in the shared per-segment helper so both delimiters close together, with the adversarial set derived from the policy rather than the branch, absence asserted on the padding-stripped core, and the three artifacts that assert this cannot happen corrected — *wave 15*
 
 **Wave 16** *(blocked on 01-15 — shares `observations.spec.ts` and `schema.spec.ts`, and the whole round is serialised)*
 

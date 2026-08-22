@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 16
+open_count: 17
 waived_count: 0
 fixed_count: 2
-total_count: 18
-last_updated: 2026-08-21T15:10:49.050Z
+total_count: 19
+last_updated: 2026-08-22T08:54:33.504Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,7 @@ last_updated: 2026-08-21T15:10:49.050Z
 | 16 | 01 | deviation | packages/backend/src/hooks/passive.ts | 171 | T-01-37 accept: renders String(e).slice(0,160) into sdk.console.log on the hook error path, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-03 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.502Z |  |
 | 17 | 01 | deviation | .planning/REQUIREMENTS.md |  | T-01-76 accept: STORE-03 and STORE-07 are declared by redaction plans for work neither requirement's text mentions. Deferred WITH AN OWNER by plan 01-10 task 3 — the operator, at the next requirements pass | open |  | 2026-08-21T14:33:35.597Z |  |
 | 18 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo redaction cannot be proven at the live tier: curl lifts user:pass@ into an Authorization: Basic header, so userinfo never reaches observations.url. Measured in run 20260821T150022Z-16902 (userinfo-measurement.txt) and enforced instead by the observations.spec.ts real-SQLite round trip. Live-tier coverage for this one grammar is a documented gap, not a passing assertion. | open |  | 2026-08-21T15:10:49.050Z |  |
+| 19 | 1 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary | open |  | 2026-08-22T08:54:33.504Z |  |
 
 ````json
 [
@@ -250,6 +251,18 @@ last_updated: 2026-08-21T15:10:49.050Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-21T15:10:49.050Z",
+    "resolved_at": null
+  },
+  {
+    "id": 19,
+    "kind": "deviation",
+    "phase": "1",
+    "file": "packages/backend/src/store/observations.ts",
+    "line": null,
+    "description": "RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-22T08:54:33.504Z",
     "resolved_at": null
   }
 ]

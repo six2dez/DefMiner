@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-14-PLAN.md — phase 01 plans complete
-last_updated: "2026-08-21T17:11:56.769Z"
-last_activity: 2026-08-21
-last_activity_desc: 01-11 gap closure — URL userinfo and `;` path parameters redacted at the write path, the plugin-database path (and the OS username in it) kept off the getStatus RPC, and the no-pattern gate re-anchored on the AST across both modules; six mutations run
-state_head: 49c1fd4e6381ce7faf888fa49697fd84e2db65b9
+stopped_at: Completed 01-15-PLAN.md
+last_updated: "2026-08-22T08:54:15.197Z"
+last_activity: 2026-08-22
+last_activity_desc: Phase 01 execution started
+state_head: 35a7c329d7dfdeef9f8b80d28a4c9b88bb1dcb28
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 14 of 14 complete — gap-closure round 2 finished; every plan in phase 01 has a SUMMARY
-Status: Plans complete — ready for code review, regression gate and phase verification
-Last activity: 2026-08-21 — 01-14 executed: the live tracer widened from one credential grammar to four and run twice against a real Caido — one PASS proving the `;` path parameter redacted in the durable column, one committed MUTATION that failed naming the bare segment. URL userinfo measured as unreachable through this tier and recorded as such. Both database reads now read-only through P8-D2's ladder.
+Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
+Plan: 2 of 17
+Status: Ready to execute
+Last activity: 2026-08-22 — Phase 01 execution started
 
 Progress: [██████████] 100% of phase 01 (14 of 14 plans)
 
@@ -80,6 +80,7 @@ Progress: [██████████] 100% of phase 01 (14 of 14 plans)
 | Phase 01 P12 | 22 min | 2 tasks | 2 files |
 | Phase 01 P13 | 13 min | 1 tasks | 1 files |
 | Phase 01 P14 | 18 min | 2 tasks | 26 files |
+| Phase 01 P15 | 18 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: STORE-07's gate follows the binding (derivesFrom) rather than matching it, and every residual it does not cover carries a named owner with a checkable requirement id — isRefTo required a bare identifier, so e.message and every cast form useUnknownInCatchVariables pushes an author toward reported clean; a disclosure without an owner is read as somebody else's problem by every reader in turn
 - [Phase 01]: P14-D2/D3: the `;` path parameter DOES reach observations.url through live Caido and is proven redacted against the database file; URL userinfo does NOT reach it at all, because curl lifts user:pass@ into an Authorization header — measured from curl's own -v trace, recorded with the run, and enforced instead by the observations.spec.ts real-SQLite round trip.
 - [Phase 01]: P14-D5: Caido's own --debug logs carry the unredacted request URL and are not committed. Measured per file by the tracer's own secret sweep rather than assumed, and already excluded by .gitignore:35 — not force-added.
+- [Phase 01]: A pair whose value half is empty or is entirely `=` padding was never a pair — the whole segment is redacted, on both delimiters through the one shared helper (CR-07)
+- [Phase 01]: ACCEPTED COST: `?debug=` loses its NAME as well as its value — the faithful reading of P10-D1, so no new operator checkpoint was opened
+- [Phase 01]: Rows already written are LEFT, on decision P8-D1's CLOSURE half alone; the MEASURED half is explicitly not claimed and no new count was performed
+- [Phase 01]: The retained NAME half of a genuine pair is kept BY POLICY and is now the second entry in schema.spec.ts's OPEN list rather than closed
+- [Phase 01]: The QUERY ENFORCED entry's live-proof sentence is scoped to the grammars tracer-e2e.sh exercises today, with plan 01-17 named by number as the owner of the padded grammar's live proof
 
 ### Known Risks Carried Forward
 
@@ -203,8 +209,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-21T15:10:06.871Z
-**Stopped at:** Completed 01-14-PLAN.md — phase 01 plans complete
+**Last session:** 2026-08-22T08:54:06.567Z
+**Stopped at:** Completed 01-15-PLAN.md
 **Resume file:** None
 
 ### Blockers
