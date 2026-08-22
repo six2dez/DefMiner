@@ -67,7 +67,7 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification, plus 3 further gap-closure plans in 3 waves from the 2026-08-21T17:40 re-verification (CR-07) — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (17 plans total)
+**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification, plus 3 further gap-closure plans in 3 waves from the 2026-08-21T17:40 re-verification (CR-07), plus 5 further gap-closure plans in 5 waves from the 2026-08-22T12:40 re-verification (CR-08 and WR-22 … WR-26) — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (22 plans total)
 
 Plans:
 **Wave 1**
@@ -137,6 +137,26 @@ Plans:
 **Wave 17** *(blocked on 01-16 — the live tier needs every redaction and gate change landed and the tree quiet, which is the lesson 01-14 recorded)*
 
 - [x] 01-17-PLAN.md — **Live proof and the missing gate**: two `openssl rand -base64` dyes carry a padded credential through a real Caido into the real database file, asserted absent under the padding-stripped spelling that would have made it recoverable, with one passing and one deliberately failing run committed — plus the no-version-literal gate the tracer's header has claimed since round 2 and which nothing in the repository performed — *wave 17*
+
+**Wave 18** *(gap closure round 4 — re-verification 2026-08-22T12:40 found UAT gap 2 REOPENED as CR-08: truth 8 moved up and truth 9 moved down, in the file fixed for this shape one round earlier; blocked on Wave 17)*
+
+- [ ] 01-18-PLAN.md — **CR-08, the blocker**: the CORE-11 gate reads a receiver key INLINE only, so one `const` defeats the WR-19 assembled-key rule and `sdk[b ? "requests" : "net"]` — two literals naming outbound receivers, nothing hidden from the walk — is reported by nothing and disclosed by nothing. `assembledNames` collected beside `constStrings`, a conditional key read on both branches, the eight executed shapes as failing fixtures each tied to the mechanism that resolves it, and the five disclosures that disagree with each other reconciled to one bound — *wave 18*
+
+**Wave 19** *(blocked on 01-18 — shares `outbound-prohibition.spec.ts`, and CORE-11's checkbox cannot flip until the last enumerated shape is enforced)*
+
+- [ ] 01-19-PLAN.md — **The last three CORE-11 blindnesses, and the checkbox**: `const e = eval; e(s)` reports clean in the rule whose whole argument is that a string this gate cannot read into makes a passing gate meaningless (WR-23); `isProvablyNumeric` claims it proves rather than assumes while deciding by member name and failing open (WR-26); `globalThis` has no one-hop alias while `navigator` does (IN-20). Then CORE-11 marked complete against an executed gate, its own enumeration discharged item by item — *wave 19*
+
+**Wave 20** *(blocked on 01-19 — the tree must be quiet for a deliberate mutation, and the whole round is serialised)*
+
+- [ ] 01-20-PLAN.md — **WR-22**: the CR-07 padding branch cost `normaliseObservedUrl` its idempotence at the `URL_MAX` cut, found independently at two different cut points; the truncation moved to a segment boundary, the invariant sentence scoped to what it is true of, the idempotence case rewritten to SEARCH for the adversarial cut instead of hard-coding one, and the IN-18 pin — which defers on the strength of the invariant this branch already broke — resolved by execution — *wave 20*
+
+**Wave 21** *(blocked on 01-20 — sequencing, not code: each plan mutates the shared tree to prove its gate can fail while asserting whole-suite green)*
+
+- [ ] 01-21-PLAN.md — **WR-24 + IN-22**: the STORE-07 redaction gate is blind to the OPERATOR class of render — `? :`, `??` and `||` — which is the standard way to narrow a caught `unknown` under the setting this repo enables; `derivesFrom` widened, every shape fixture-proven with its `describeError` twin quiet, and the render-form residual re-derived a third time from the code's branches rather than from the previous paragraph — *wave 21*
+
+**Wave 22** *(blocked on 01-21 — this plan breaks its own predicate five ways in turn and plants a literal into a committed script, so it needs the tree quiet)*
+
+- [ ] 01-22-PLAN.md — **WR-25 + IN-21, the two gates whose failing path has never run**: the WR-21 gate built last round has no executed failing path — the tracer carries no three-component version literal, so the filter's true branch never runs and five plausible breaks leave it green forever. The predicate lifted out as a pure export, executed against the real file's bytes with a literal planted in, and proven detectable one break at a time; plus `padded_segments_reached`, an `all()` over an empty generator that would record REACHED having measured nothing — *wave 22*
 
 ### Phase 2: Error Containment & Observability
 
