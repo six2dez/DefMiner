@@ -76,10 +76,28 @@
 //        binding records the new name as ALSO the binding, collected in document
 //        order in the same walk, so `const x = e; String(x)` is seen. One hop, and
 //        that is the honest bound — `const x = e; const y = x; String(y)` is not.
-//      - RENDER FORMS: `String(x)`, `JSON.stringify(x)` and `[x].join(…)`, a
-//        template span, and a `+` operand. `JSON.stringify` on an `Error` is worse
-//        than the others, not better: it serialises enumerable own properties, and
-//        a driver rejection's are exactly the bound parameters.
+//      - RENDER FORMS, and this enumeration is the reason this gate's residual
+//        reads as a BOUND rather than as an overclaim — so it is extended in the
+//        same commit as the rules, every time, or the file becomes the thing it
+//        protects against. As of 2026-08-22 they are: `String(x)`,
+//        `JSON.stringify(x)`, `[x].join(…)`, a template span, a `+` operand, a
+//        `+=` operand, `x.concat(…)`/`"…".concat(x)`, and `a.push(x)` followed by
+//        `a.join(…)` — the last three added on that date (WR-17). `JSON.stringify`
+//        on an `Error` is worse than the others, not better: it serialises
+//        enumerable own properties, and a driver rejection's are exactly the
+//        bound parameters. The three added forms are not exotic: `m += e.message`
+//        inside a catch is a complete, green, end-to-end path from a driver
+//        rejection into `StoreWriteResult.error`, and it was invisible while the
+//        one-line `"…" + e` beside it was caught. `a.push(x)` GROWS the tracked
+//        names by one — the array becomes the binding — which is what lets the
+//        join rule reach a container rather than only an array literal.
+//
+//        THE RESIDUAL OF THE RENDER-FORM LIST, RE-DERIVED against the widened
+//        rules rather than carried forward: a render that goes through a method
+//        this list does not name (`padEnd`, `repeat`, `replace`, a user helper),
+//        or through an accumulator that is neither a `+=` nor a `.push`, is not
+//        seen. The list is an ENUMERATION and it does not claim to be closed;
+//        what it claims is that everything on it is executed below.
 //      - POSITIONS: those render forms anywhere in scope, plus the binding (or
 //        anything derived from it) as a RETURN value or as an OBJECT-LITERAL
 //        property value — the two positions CR-05 names, and the two the
@@ -106,12 +124,26 @@
 //    assertions are the real protection against a walk that shrinks.
 
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { posix } from "node:path";
 
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-const STORE_DIR = join("packages", "backend", "src", "store");
+/**
+ * ONE PATH CONVENTION, POSIX, END TO END (IN-15). Converted 2026-08-22.
+ *
+ * This file used to BUILD its paths with the platform `join` and then take them
+ * apart with `.split("/")` — at `:279` and at the by-name non-vacuity assertion
+ * below. On a non-POSIX host the two halves disagree, and the half that breaks is
+ * the one PROTECTING the walk: `names` would stop matching and every `expected`
+ * in the non-vacuity list would fail at once. That is loud rather than silent,
+ * which is why it was INFO and not a defect — but the sibling gate
+ * `../outbound-prohibition.spec.ts` was converted for exactly this reason (its
+ * IN-09) and this one was not, so the two gates in the same package disagreed
+ * about a convention one of them documents at length. Node accepts `/` on every
+ * platform it supports, so building with it costs nothing.
+ */
+const STORE_DIR = posix.join("packages", "backend", "src", "store");
 
 /** The renderer every error-shaped binding must go through. */
 const SAFE_RENDERER = "describeError";
@@ -125,8 +157,37 @@ const SAFE_RENDERER = "describeError";
  * `String(...)` there renders `sha256`, `request_id`, `detector_set_hash`, `url`,
  * `contentType`, `row.v` or `row.value` — none of them error-shaped — so the rule
  * has zero false-positive surface today.
+ *
+ * WIDENED 2026-08-22 (IN-16), AND THE WIDENING WAS MEASURED, NOT GUESSED. The
+ * justification above is a claim about FALSE POSITIVES and says nothing about
+ * COVERAGE, and the difference is load-bearing: a parameter named `reason`
+ * holding an error string and placed straight into an object literal reported
+ * NOTHING, while the identical body with the parameter named `e` reported
+ * `unredacted-persisted-error`. The rule's reach was a spelling.
+ *
+ * The four plausible synonyms a widened `finishAnalysis` would use — `reason`,
+ * `detail`, `failure`, `message` — were added and then the gate was RUN over the
+ * real store tree. RESULT, recorded so the next reader does not have to re-run
+ * it: ZERO parameters and ZERO destructured parameters under any of the four
+ * names exist across all seven store modules, so all four were kept and none had
+ * to be dropped as a false positive. The set is therefore wider with the same
+ * zero false-positive surface it claimed before, and the claim is now about
+ * coverage as well.
+ *
+ * THE COVERAGE BOUND THAT REMAINS, by name: a parameter called anything else —
+ * `problem`, `why`, `info` — is not scanned. The set is a NAME heuristic, not a
+ * type analysis, and boundary 2 states that as one of the walk's limits.
  */
-const ERROR_BINDING_NAMES = new Set(["e", "err", "error", "cause"]);
+const ERROR_BINDING_NAMES = new Set([
+  "e",
+  "err",
+  "error",
+  "cause",
+  "reason",
+  "detail",
+  "failure",
+  "message",
+]);
 
 type Violation = { file: string; rule: string; detail: string };
 
@@ -137,7 +198,7 @@ function storeModules(): string[] {
       (d) =>
         d.isFile() && d.name.endsWith(".ts") && !d.name.endsWith(".spec.ts"),
     )
-    .map((d) => join(STORE_DIR, d.name))
+    .map((d) => posix.join(STORE_DIR, d.name))
     .sort();
 }
 
@@ -342,7 +403,24 @@ export function auditSource(file: string, source: string): Violation[] {
         }
       }
 
-      // ---- RENDER FORM: [x].join(...). --------------------------------------
+      // ---- ACCUMULATOR: `a.push(x)` makes `a` the binding too. --------------
+      // WR-17's third shape. Without this the join rule below reaches only an
+      // array the binding is a LITERAL element of, so the ordinary two-line
+      // accumulate — push in the catch, join at the end — walked straight past a
+      // rule that already existed. The array is not the error; it is a container
+      // that now holds the error's rendering, which is the same thing as far as
+      // `analyses.error` is concerned.
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "push" &&
+        node.arguments.some((argument) => derives(argument))
+      ) {
+        const receiver = unwrap(node.expression.expression);
+        if (ts.isIdentifier(receiver)) names.add(receiver.text);
+      }
+
+      // ---- RENDER FORM: [x].join(...) — and an array PUSHED into. -----------
       if (
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
@@ -350,14 +428,33 @@ export function auditSource(file: string, source: string): Violation[] {
       ) {
         const receiver = unwrap(node.expression.expression);
         if (
-          ts.isArrayLiteralExpression(receiver) &&
-          receiver.elements.some((el) => derives(el))
+          (ts.isArrayLiteralExpression(receiver) &&
+            receiver.elements.some((el) => derives(el))) ||
+          (ts.isIdentifier(receiver) && names.has(receiver.text))
         ) {
           add(
             ruleFor("unredacted-string-call"),
             `${where}: \`${name}\` is rendered by joining an array it is an element of, without ${SAFE_RENDERER}(). Join ${SAFE_RENDERER}(${name}) instead.`,
           );
         }
+      }
+
+      // ---- RENDER FORM: x.concat(...) / "…".concat(x). ----------------------
+      // WR-17's second shape, and the sibling of the join rule directly above:
+      // the same "build a string out of pieces" idiom with a different method
+      // name. Any argument that derives is enough — `"failed: ".concat(e.message)`
+      // renders the binding just as completely as `"failed: " + e.message`.
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === "concat" &&
+        (node.arguments.some((argument) => derives(argument)) ||
+          derives(node.expression.expression))
+      ) {
+        add(
+          ruleFor("unredacted-concat"),
+          `${where}: \`${name}\` is concatenated into a string with .concat(), without ${SAFE_RENDERER}(). Concatenate ${SAFE_RENDERER}(${name}) instead.`,
+        );
       }
 
       // ---- RENDER FORM: a template span. ------------------------------------
@@ -372,15 +469,22 @@ export function auditSource(file: string, source: string): Violation[] {
         }
       }
 
-      // ---- RENDER FORM: a `+` operand. --------------------------------------
+      // ---- RENDER FORM: a `+` or `+=` operand. ------------------------------
+      // `+=` added 2026-08-22 (WR-17). The rule matched `PlusToken` only, so the
+      // ACCUMULATE idiom — `let m = "…"; catch (e) { m += e.message; }` — was
+      // invisible while the one-line `"…" + e` beside it was caught. That is a
+      // complete, green, end-to-end path from a driver rejection into
+      // `StoreWriteResult.error`, and the offending expression is right there in
+      // the AST with the binding as an operand.
       if (
         ts.isBinaryExpression(node) &&
-        node.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+        (node.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+          node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) &&
         (derives(node.left) || derives(node.right))
       ) {
         add(
           ruleFor("unredacted-concat"),
-          `${where}: \`${name}\` is concatenated with + into a string. Concatenate ${SAFE_RENDERER}(${name}) instead.`,
+          `${where}: \`${name}\` is concatenated with ${node.operatorToken.kind === ts.SyntaxKind.PlusToken ? "+" : "+="} into a string. Concatenate ${SAFE_RENDERER}(${name}) instead.`,
         );
       }
 
@@ -610,6 +714,69 @@ describe("the gate's own failure paths", () => {
         "function f() { try { g(); } catch (e) { return `failed: ${e}`; } }",
       ),
     ).toContain("unredacted-template");
+  });
+
+  it("flags a += accumulate of the caught binding — unredacted-concat (WR-17)", () => {
+    // THE REVIEW'S EXACT SOURCE STRING, not a paraphrase of it, so this fixture
+    // IS the reproduction. It reported [] until 2026-08-22.
+    expect(
+      rulesOf(
+        'function f() { let m = "store write failed: "; try { g(); } catch (e) { m += e.message; return { ok: false, error: m }; } return { ok: true }; }',
+      ),
+    ).toContain("unredacted-concat");
+  });
+
+  it("flags a .concat() render of the caught binding — unredacted-concat (WR-17)", () => {
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { return { ok: false, error: "failed: ".concat(e.message) }; } }',
+      ),
+    ).toContain("unredacted-concat");
+  });
+
+  it("flags PUSH-then-JOIN of the caught binding — unredacted-string-call (WR-17)", () => {
+    // The array is not the error; it is a container that now holds the error's
+    // rendering, and `analyses.error` cannot tell the difference.
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { const parts = []; parts.push(e.message); return { ok: false, error: parts.join(" ") }; } }',
+      ),
+    ).toContain("unredacted-string-call");
+  });
+
+  it("the three WR-17 shapes stay QUIET when they render describeError(e)", () => {
+    // The other half of every widening: the safe spelling of the same idiom must
+    // still pass, or the rule is a ban on the idiom rather than on the leak.
+    expect(
+      rulesOf(
+        'function f() { let m = "store write failed: "; try { g(); } catch (e) { m += describeError(e); return { ok: false, error: m }; } return { ok: true }; }',
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { return { ok: false, error: "failed: ".concat(describeError(e)) }; } }',
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { const parts = []; parts.push(describeError(e)); return { ok: false, error: parts.join(" ") }; } }',
+      ),
+    ).toEqual([]);
+  });
+
+  it("a parameter named `reason` is scanned exactly as `e` is (IN-16)", () => {
+    // The measured defect: the rule's reach was a SPELLING. Both bodies below are
+    // identical apart from the parameter name.
+    expect(
+      rulesOf(
+        "export function fin(reason: unknown) { return { ok: false, error: String(reason) }; }",
+      ),
+    ).toContain("unredacted-persisted-error");
+    expect(
+      rulesOf(
+        "export function fin(e: unknown) { return { ok: false, error: String(e) }; }",
+      ),
+    ).toContain("unredacted-persisted-error");
   });
 
   it("flags a + concatenation of the caught binding — unredacted-concat", () => {

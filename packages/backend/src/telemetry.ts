@@ -269,6 +269,16 @@ function redactUrls(text: string): string {
   return text.replace(/[a-z][a-z0-9+.-]*:\/\/\S*/gi, URL_REDACTION);
 }
 
+/**
+ * What the operator sees when a value refuses to be rendered at all.
+ *
+ * ONE literal, referenced by both {@link describeError} and {@link recordError}
+ * (IN-17). It was previously written out inside `recordError` only, which was
+ * fine while that was the only fallback; the moment `describeError` grew its own
+ * the two could have drifted into two different words for one condition.
+ */
+const UNRENDERABLE_ERROR = "unrenderable error";
+
 /** What a redacted absolute filesystem path reads as in an error string.
  *
  *  Shaped to rhyme with {@link URL_REDACTION} so the two redactions on this path
@@ -357,8 +367,12 @@ function redactPathToken(token: string): string {
  * {@link redactUrls}, so a future rewrite of this function into WR-12's shape
  * fails a gate rather than depending on somebody re-reading this paragraph.
  *
- * TWO RESIDUALS, NAMED, because a redactor whose limits are unstated is trusted
- * further than it has earned:
+ * THREE RESIDUALS, NAMED, because a redactor whose limits are unstated is
+ * trusted further than it has earned. The count moved from TWO to THREE on
+ * 2026-08-22 and the direction matters: the third was open the whole time and
+ * this list did not name it, while the shape the downstream allowlist DID name
+ * had quietly been closed by the path scan. A list that only shrinks is being
+ * managed rather than measured.
  *
  *   WINDOWS. `C:\Users\<name>\AppData\…` uses a different separator and is NOT
  *   redacted by this rule. Caido runs on Windows, so this is real and not
@@ -368,6 +382,19 @@ function redactPathToken(token: string): string {
  *   crossing this boundary, and a rule written against an unmeasured shape is
  *   how `redactUrls` came to cover one of the two grammars it was believed to
  *   cover.
+ *
+ *   A SCHEMELESS HOST REFERENCE. `cdn.victim.example/a.js?token=T` — no scheme
+ *   and NO LEADING SEPARATOR — survives whole, query string included. It is not
+ *   URL-shaped to {@link redactUrls}, which requires a literal `://`, and it is
+ *   not path-shaped to this rule, which requires a leading separator. Recorded
+ *   here on 2026-08-22 (WR-18) because `store/schema.spec.ts`'s `analyses.error`
+ *   allowlist entry cites THIS block as the place its residuals are written down,
+ *   and until this date that cross-reference was true of neither shape the entry
+ *   named. The shape the entry USED to name — the SCHEME-RELATIVE
+ *   `//cdn/a.js?token=T`, with a leading separator — is CLOSED: it begins with a
+ *   separator and contains three, so `redactPathToken` consumes it whole. Both
+ *   directions are asserted in `telemetry.spec.ts`, so this paragraph is executed
+ *   rather than believed.
  *
  *   A PATH CONTAINING A SPACE loses only the portion before the space —
  *   `/Users/<name>/Library/Application` becomes the marker and
@@ -413,23 +440,57 @@ function redactPaths(text: string): string {
  * as a URL; with the path scan running first it would be shredded into a path
  * marker with the scheme still attached, which reads like a different failure
  * than the one that happened. `telemetry.spec.ts` asserts both orderings.
+ *
+ * IT CANNOT THROW, and that was made true on 2026-08-22 (IN-17) rather than
+ * assumed. BOTH of its reads could raise: `String(e)` raises
+ * `TypeError: Cannot convert object to primitive value` for a null-prototype
+ * object and propagates whatever a hostile `toString` throws, and
+ * `e.constructor?.name` runs a proxy trap. `recordError` below wraps its call and
+ * falls back; the SIX store call sites do not, so a HANDLED store failure would
+ * have become an UNHANDLED REJECTION out of `recordObservation` — the containment
+ * inverted at exactly the point it is load-bearing. Each read is wrapped
+ * separately, so a hostile `toString` still yields the class name and only the
+ * body is lost.
+ *
+ * ONE FALLBACK STRING, {@link UNRENDERABLE_ERROR}, referenced from here and from
+ * `recordError`. Two literals would drift, and the operator would eventually see
+ * two different words for the same condition.
  */
 export function describeError(e: unknown): string {
-  const name =
-    e !== null && e !== undefined && typeof e === "object"
-      ? (e.constructor?.name ?? "")
-      : "";
-  const body = String(e);
+  let name = "";
+  try {
+    name =
+      e !== null && e !== undefined && typeof e === "object"
+        ? (e.constructor?.name ?? "")
+        : "";
+  } catch {
+    name = "";
+  }
+
+  let body: string;
+  try {
+    body = String(e);
+  } catch {
+    // The value refuses to render. Say so, and keep whatever class name the read
+    // above survived to produce.
+    body = UNRENDERABLE_ERROR;
+  }
+
   const text = name === "" || body.startsWith(name) ? body : name + ": " + body;
   return redactPaths(redactUrls(text)).slice(0, ERROR_TEXT_LIMIT);
 }
 
-/** Record the most recent error. Never throws — it is the error path. */
+/** Record the most recent error. Never throws — it is the error path.
+ *
+ *  The `try` here is now a BELT-AND-BRACES second line rather than the only one:
+ *  {@link describeError} cannot throw as of 2026-08-22 (IN-17). It is kept
+ *  because "cannot throw" is a claim about code somebody will edit, which is the
+ *  same reason `compat.ts` catches around a probe documented as total. */
 export function recordError(e: unknown): void {
   try {
     lastError = describeError(e);
   } catch {
-    lastError = "unrenderable error";
+    lastError = UNRENDERABLE_ERROR;
   }
 }
 

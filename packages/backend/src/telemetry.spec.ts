@@ -591,6 +591,88 @@ describe("describeError does NOT redact things that are not absolute paths", () 
     );
   });
 
+  // -------------------------------------------------------------------------
+  // WR-18 — BOTH DIRECTIONS OF THE `analyses.error` DISCLOSURE, EXECUTED
+  // -------------------------------------------------------------------------
+  // `store/schema.spec.ts`'s allowlist entry for `analyses.error` is the stated
+  // justification for keeping that column on the T-01-21 allowlist, and until
+  // 2026-08-22 it named the WRONG shape as the open residual. A reader auditing
+  // that decision was told a closed grammar was dangerous and was not told about
+  // the open one. Both directions run here so the correction is a measurement
+  // rather than a rewording, and so re-opening either is a red test.
+
+  it("REDACTS a SCHEME-RELATIVE reference — it begins with a separator and has three", () => {
+    // The shape the allowlist entry used to name as surviving. It does NOT: it
+    // satisfies `redactPathToken`'s two conditions and is consumed whole,
+    // query string included.
+    expect(
+      describeError(
+        new Error("failed to load //cdn.victim.example/app.js?token=SECRET"),
+      ),
+    ).toBe(`Error: failed to load ${PATH_REDACTION}`);
+  });
+
+  it("RESIDUAL, PINNED: a SCHEMELESS host reference survives with its query intact", () => {
+    // The shape that IS open, and that appeared in NEITHER disclosure until
+    // 2026-08-22. No `://` for `redactUrls`, no leading separator for
+    // `redactPaths`. Pinned so the day somebody closes it this case goes red and
+    // they update both disclosures deliberately.
+    expect(
+      describeError(
+        new Error("failed to load cdn.victim.example/app.js?token=SECRET"),
+      ),
+    ).toBe("Error: failed to load cdn.victim.example/app.js?token=SECRET");
+  });
+
+  // -------------------------------------------------------------------------
+  // IN-17 — THE RENDERER THAT EXISTS TO STOP THE ERROR PATH THROWING
+  // -------------------------------------------------------------------------
+  // All three of these THREW before 2026-08-22, out of a function six store call
+  // sites invoke WITHOUT a wrapper — so a handled store failure became an
+  // unhandled rejection out of `recordObservation`.
+
+  it("returns the fallback for a NULL-PROTOTYPE object instead of throwing", () => {
+    // `String(x)` raises `TypeError: Cannot convert object to primitive value`.
+    const hostile = Object.assign(Object.create(null), { message: "x" });
+    expect(() => describeError(hostile)).not.toThrow();
+    expect(describeError(hostile)).toContain("unrenderable error");
+  });
+
+  it("returns the fallback for a THROWING toString instead of propagating", () => {
+    const hostile = {
+      toString() {
+        throw new Error("boom");
+      },
+    };
+    expect(() => describeError(hostile)).not.toThrow();
+    expect(describeError(hostile)).toContain("unrenderable error");
+  });
+
+  it("survives a PROXY whose constructor read raises", () => {
+    const hostile = new Proxy(
+      {},
+      {
+        get(_target, property) {
+          if (property === "constructor") throw new Error("nope");
+          return undefined;
+        },
+      },
+    );
+    expect(() => describeError(hostile)).not.toThrow();
+  });
+
+  it("the fallback is the SAME literal recordError uses, so the operator sees one word", () => {
+    // Referenced from one place in `telemetry.ts`; asserted here from the
+    // outside, through both functions, because that is where drift would show.
+    const hostile = {
+      toString() {
+        throw new Error("boom");
+      },
+    };
+    recordError(hostile);
+    expect(slimStatus().lastError).toBe(describeError(hostile));
+  });
+
   it("is IDEMPOTENT — applying it to its own output returns that output", () => {
     // The two redactions must not fight or accumulate markers.
     for (const message of [
