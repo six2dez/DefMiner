@@ -703,3 +703,23 @@ None — no external service configuration required.
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-24*
+
+## Self-Check: PASSED
+
+Files claimed modified, verified present on disk:
+```
+FOUND: packages/backend/src/outbound-prohibition.spec.ts
+FOUND: .planning/REQUIREMENTS.md
+FOUND: .planning/STATE.md
+FOUND: .planning/WINDOWS.md
+FOUND: .planning/phases/01-skeleton-persistence-compatibility/01-23-SUMMARY.md
+```
+
+Commits claimed, verified in `git log`:
+```
+FOUND: 181530f  test(01-23) — the corrected bound in four in-file locations, the split fixture
+FOUND: ca0e485  style(01-23) — prettier --fix output only
+FOUND: af8dd5b  test(01-23) — the remaining five CR-09 shapes, depth and inversion pairs
+FOUND: f3d3a06  docs(01-23) — both ledgers marked, WINDOWS closed through the tool
+FOUND: 4b95c7b  docs(01-23) — this summary
+```
