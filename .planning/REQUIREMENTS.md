@@ -45,6 +45,317 @@ These run first and can invalidate the design. Each is cheap; several change eve
 - [x] **CORE-10**: Telemetry records the maximum synchronous slice actually observed in the field, so the budget is provable rather than asserted.
 - [ ] **CORE-11**: No code that ships in the plugin issues an outbound network request in this phase — no `caido:http` fetch, no `sdk.requests.send` in any spelling, no method of an identified `requests` or `net` receiver outside a read-only allowlist (`get`/`query`/`inScope`), no global `fetch` by any receiver or alias, no `XMLHttpRequest`, `WebSocket` or `EventSource`, no `navigator.sendBeacon`, no dynamic code construction (`eval`, `new Function`) in shipped source, and no speculative retrieval of any kind. Gated by `packages/backend/src/outbound-prohibition.spec.ts` over BOTH shipped source roots — `packages/backend/src` and `packages/engine/src`. *(Split out of CORE-01 on 2026-08-21, in gap-closure round 2 wave 10, BEFORE the plan that owns the gate declares it. CORE-01's text is the non-async-handler requirement and says nothing about outbound traffic, while the prohibition tagged CORE-01 was entirely about outbound traffic. One id meaning two things misleads a future reader about which of them a gate enforces, and it misleads MOST in plan frontmatter, which is what a verifier reads — so the id had to exist before plan 01-12 ran. Settled the way the operator settled the structurally identical question at this phase's UAT — "Re-scope STORE-01 + open a new requirement" — the STORE-01 → STORE-08 precedent, not a planner's preference. HONEST STATUS: the must-NOT itself holds — no outbound call exists in any non-spec source under either root, and `check:bundle` reports the shipped bundle's whole import set as one specifier, `crypto` — but the wired ENFORCEMENT was still PARTIAL at the moment this id was opened: the 2026-08-21T13:45 re-verification found the gate blind to `globalThis.fetch`, a destructured receiver, `.call`/`.apply`, computed keys and the entire `packages/engine/src` tree. Plan 01-12 owns closing that, and owns retagging the gate's own header and failure strings. — CORRECTION 2026-08-22, plan 01-16: the PARTIAL status above is CLOSED and is retained only so the history reads straight. Plan 01-12 closed the five blindnesses it names; plan 01-16 then closed what the round-3 review and the verifier found left over — the gate applied "could not read does not mean clean" to computed MEMBERS but not to computed RECEIVERS, so `sdk["req" + "uests"].send(req)` and `globalThis["fet" + "ch"](u)` returned empty lists; and two surfaces were quiet AND undisclosed, `navigator.sendBeacon` and dynamic code construction. Both are now enumerated in the requirement text above and enforced by named rules — `outbound-beacon` and `outbound-dynamic-code` — with per-widening mutation proofs recorded in `01-16-SUMMARY.md`. The residual that REMAINS, and it is disclosed rather than closed: a merely dynamic key (`sdk[k]`), a value crossing a function boundary, and more than one hop of indirection, all stated in that gate's boundary 2 and accepted as T-01-51. — CORRECTION 2026-08-24, plan 01-18: the residual sentence immediately above was WRONG, and wrong in a way that mattered more than the shapes it missed. CR-08 executed the gate and found that a one-hop ASSEMBLED key — `const k = "req" + "uests"; sdk[k].send(req)` — reported NOTHING, while the member-level twin (`const m = "se" + "nd"; sdk.requests[m](req)`) and the global-level twin (`const k = "fet" + "ch"; globalThis[k](url)`) both reported: the WR-19 asymmetry surviving one level up, in the file rewritten for it one wave earlier. Sharper still, `sdk[b ? "requests" : "net"].send(req)` was silent and was named by NONE of the three residual categories listed above — a conditional of two string literals is not a merely dynamic key, not a function boundary and not more than one hop, so the disclosure did not merely understate the residual, it omitted a shape entirely. `sdk[(0, "requests")]` likewise. Nothing leaked: this was a PROSPECTIVE blindness in a gate that runs green over the real tree, not a live exposure. Plan 01-18 closed it. NOW REPORTED, each pinned by a mutation-proven fixture titled with the mechanism that resolves it: a literal key; a key bound ONE HOP to a literal (`constStrings`); a key assembled inline (`isAssembledKey`); a key bound ONE HOP to an assembly in EVERY spelling — `+`, a template, `.join("")`, an opaque call — through either a declaration or an assignment (`assembledNames`); a CONDITIONAL key resolved on both branches; and a COMMA SEQUENCE resolved to its rightmost operand. THE RESIDUAL THAT REMAINS, in the same words as that gate's boundary 2 and as `.planning/STATE.md`'s P9-D3 amendment: more than ONE HOP of indirection, a value crossing a FUNCTION BOUNDARY, and a key the walk NEVER SAW BOUND — a parameter, a loop binding, a name bound out of document order or in another file. That exemption was set by real-tree measurement (`compat.ts`'s `at()` `cur[key]` and `ctx[root]`; `observations.ts`'s `segments[i]`; `MIGRATIONS[MIGRATIONS.length - 1]`) and RE-MEASURED after the widening: 23 files over both roots, ZERO violations. All four are asserted quiet by name. THE BOX STAYS `[ ]` DELIBERATELY, AND THIS IS THE REASON, RECORDED HERE RATHER THAN ONLY IN A PLAN: the requirement's own text above enumerates "no dynamic code construction (`eval`, `new Function`)", and `const e = eval; e(s)` — a one-hop binding of `eval` — is STILL SILENT (WR-23), as is `const g = globalThis` (IN-20). While any shape this requirement's own text enumerates is unenforced, its stated reach exceeds its executed reach, which is precisely the defect this correction closes one level down. CORE-11 was reverted from `[x]` to `[ ]` at commit `e7cc4b6` for exactly this reason; re-checking it one blindness early would repeat the act that revert undid. Plan 01-19 closes WR-23 and IN-20 and OWNS flipping this box, against a discharge table. — CORRECTION 2026-08-24, plan 01-19: THIS BOX IS NOW `[x]`, AND IT IS FLIPPED AGAINST AN ITEM-BY-ITEM DISCHARGE OF THE ENUMERATION IN THIS REQUIREMENT'S OWN FIRST SENTENCE, NOT AGAINST AN INTENTION. What was open when plan 01-18 deliberately left it `[ ]`: CR-08 (the receiver key, closed by 01-18), WR-23 (`const e = eval; e(s)`, `const { eval: ev } = globalThis; ev(s)`, `const F = Function; new F("a", s)` and `const W = WebSocket; new W(url)` all reported NOTHING — the dynamic-code rule was written between `fetchAliases` and `navigatorAliases` and given the alias handling of neither, while its own docblock told a reader it reached as far as the receiver rules beside it), WR-26 (`isProvablyNumeric`'s docblock claimed it PROVES rather than assumes and fails SAFE, while two of its branches decide by MEMBER NAME and fail OPEN), and IN-20 (`const g = globalThis; g.fetch(u)` was silent — the aliases resolved one hop and the receiver they sit on did not). ALL FOUR ARE CLOSED, each by a fixture that has been OBSERVED FAILING and restored: four separate mutation proofs are pasted in `01-19-SUMMARY.md`, and the eight-row discharge table there names, per enumerated surface, the rule identifier that fires, the fixture that asserts it and the plan that watched that fixture fail. WR-26 was resolved by correcting the DOCBLOCK rather than the branch, and the choice was made by MEASUREMENT: the narrowing the review proposed was applied and run and changed nothing at all, while removing the branch entirely changed exactly two shapes, both ordinary `+` index compositions of the kind that got the broad WR-19 rule narrowed — and WR-26's own motivating shape `sdk[o.length].send(req)` is silent under EVERY variant, because a bare member is not an assembled key either, so it is residual (b) that silences it and never the numeric exemption. Nothing leaked at any point: all four were PROSPECTIVE blindnesses in a gate that runs green over the real tree, 23 files and ZERO violations re-measured after every widening. THE RESIDUAL THAT REMAINS, in the same words as that gate's `THE FINAL RESIDUAL, AFTER PLAN 01-19` block, `.planning/STATE.md`'s P9-D3 amendment and `.planning/WINDOWS.md`: CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as one. **FALSIFIED 2026-08-24 (CR-09) — the clause that begins here and ends at “no second pass” was EXECUTED and DISPROVED; its words below are preserved byte-for-byte as the record of what was believed, and the measured bound that replaces it is in the plan 01-23 correction at the end of this entry.** A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, but only in DOCUMENT ORDER: `const a = globalThis; const b = a; const g = b; g.fetch(u)` reports and so does the `sdk.requests` twin, while a chain read BEFORE its root is bound is SILENT, because there is no symbol table and no second pass. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is silent. Outside those, four things are beyond the walk: a value crossing a FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER FILE. And one thing is ASSUMED rather than proven: a member or method call named in `NUMERIC_MEMBERS` is taken to be numeric WHATEVER ITS RECEIVER, a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed because narrowing it was MEASURED to change nothing except to re-poison ordinary `+` indexing. Every exemption here is preserved BY MEASUREMENT, re-run after each widening in plan 01-19: 23 files over both `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()` `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. A CORRECTION TO THE PREVIOUS RESIDUAL, FOUND BY MEASUREMENT WHILE WRITING A FIXTURE FOR IT: every residual list before this one, back to the first, bounded the walk at `more than ONE HOP of indirection`. That is exactly right for a receiver KEY and it UNDERSTATED the walk for ALIASES, which chain to arbitrary depth because each set is grown by consulting the live set. It is the same text-versus-execution defect this phase has corrected four times, running for once in the direction of the gate reaching FURTHER than its disclosure — recorded because a residual list is trusted for its completeness in both directions. WHAT MAKES THIS CHECKING DIFFERENT FROM THE ONE `e7cc4b6` REVERTED: that revert was correct, and its reason was that the gate could not go red on a shape this requirement's own statement enumerated — dynamic code construction. It now can, in every spelling the neighbouring alias sets resolve, and the fixture for each has been watched failing rather than assumed to work. The box is flipped after the discharge table, not before it; the table is the evidence and the box is not. — CORRECTION 2026-08-24, plan 01-23: THE RESIDUAL SENTENCE PLAN 01-19 WROTE IMMEDIATELY ABOVE IS FALSE, AND THE BOX IS `[ ]` AGAIN. CR-09 executed the gate rather than reading it. `auditSource` runs `collect(sf)` to COMPLETION at `:1521` and only then runs `visit(sf)` at `:1726`, so every alias set, every string map and every poisoned name is fully populated before the first violation is considered — the position of a USE cannot bound anything at all. Seven shapes the marked clause above calls silent were executed and every one reports: `g.fetch(u); const g = globalThis;` → `["outbound-fetch"]`; `function z(){ return g.fetch(u); } const g = globalThis;` → `["outbound-fetch"]`; `sdk[r].send(req); const r = "requests";` → `["outbound-send"]`; `sdk[k].send(req); const k = "req"+"uests";` → `["outbound-unanalysable"]`; `s.send(req); const s = sdk.requests;` → `["outbound-send"]`; `n.sendBeacon(u,d); const n = navigator;` → `["outbound-beacon"]`; `e("x"); const e = eval;` → `["outbound-dynamic-code"]`. AND THE FIXTURE THAT CLAIMED TO PIN THE FALSE BOUND WAS GREEN THROUGH A DIFFERENT MECHANISM THAN ITS TITLE NAMED: the case titled for a chain read before its root was silenced by its INVERTED BINDINGS (`const g = a; const a = globalThis;`), proven both ways — wrapper removed and the read moved last, still `[]`; wrapper kept and the root bound directly, it reports. That is the same title-versus-mechanism substitution CR-08 was raised for, and it is its third instance in that file. Plan 01-23 split it into two halves, one varying the BINDINGS and one varying the READ, and added a three-case discrimination that distinguishes the two. THE MEASURED BOUND, IN THE GATE HEADER'S WORDS, copied from `packages/backend/src/outbound-prohibition.spec.ts`'s `THE FINAL RESIDUAL, AFTER PLAN 01-23` block rather than paraphrased from it: CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, provided each link's DECLARATION appears after the declaration of the name it is grown from. The MECHANISM is why, and it is stated here rather than only its consequence, because a consequence on its own is what the last four rounds each paraphrased wrongly: `auditSource` runs `collect(sf)` to COMPLETION and only then runs `visit(sf)`, and every alias set is grown by consulting the LIVE set during that one collect pass. So `const a = globalThis; const b = a; const g = b; g.fetch(u)` reports, the `sdk.requests` twin reports, and a four-hop chain reports with the USE written ABOVE all four declarations — the use site's POSITION IS IRRELEVANT. What is silent is an INVERTED BINDING: `const b = a; const a = fetch; b(u)` reports nothing, because `a` is not yet in the set when `b`'s declaration is read, and it stays silent wherever the read is placed. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is silent. Outside those, four things are beyond the walk: a value crossing a FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER FILE. And one thing is ASSUMED rather than proven: a member or method call named in `NUMERIC_MEMBERS` is taken to be numeric WHATEVER ITS RECEIVER, a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed because narrowing it was MEASURED to change nothing except to re-poison ordinary `+` indexing. Every exemption here is preserved BY MEASUREMENT, re-run after each widening in plan 01-19 and again in plan 01-23: 23 files over both `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()` `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. WHY THE BOX IS `[ ]` HERE. Commit `faca607` reverted CORE-11 from `[x]` to `[ ]` for exactly this reason — the `[x]` plan 01-19 set was flipped against the text marked FALSIFIED above, so it was checked against a disclosure whose stated reach exceeded its executed reach, which is the very defect the earlier `e7cc4b6` revert had already undone once. Plan 01-23 does NOT flip it back and does not argue that it could be flipped: wave 28 owns the flip, and only against wave 27's DERIVED residual, not against an authored one. WHAT THIS CORRECTION DOES NOT DO, STATED HERE RATHER THAN ONLY IN A SUMMARY, BECAUSE THE LEDGER IS WHERE AN OVERCLAIM WOULD DO ITS DAMAGE: it closes CR-09's INSTANCE and it does not close the CLASS. This is the FIFTH consecutive round in which a bound was authored rather than derived and then turned out false, and the only thing that changes that is the derivation wave 27 builds. THE POINTER-NOT-A-BOUND RULE THESE HISTORIES FOLLOW FROM WAVE 27 ONWARD IS A PROHIBITION WITH NO MECHANICAL CHECK: wave 27's byte comparison reaches the gate header and this file and nothing else, so nothing stops a round-6 author writing a fresh bound into `.planning/STATE.md` or into a `WINDOWS.md` entry. That limit is written down here rather than left implicit, because leaving it implicit is how this started. SEVERITY, NOT INFLATED: nothing leaked. The must-NOT holds, no outbound call exists in any non-spec source under either root, the gate runs green over the real tree — 23 files, ZERO violations — inside a 1117-test suite, and `pnpm check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. CR-09 is a false DISCLOSURE about a test-only gate, not an exposure.)*
 
+**CORE-11 — THE DERIVED RESIDUAL, INSTALLED 2026-08-24 BY PLAN 01-27 (gap-closure round 5, wave 27).**
+
+**WHICH HALF OF THIS ENTRY EACH RULE APPLIES TO, STATED IN ONE SENTENCE SO NOBODY HAS TO GUESS.** Everything ABOVE the BEGIN sentinel below — the requirement's own text and every dated correction, back to the 2026-08-21 split — is HAND-WRITTEN HISTORY and stays byte-identical under append-never-rewrite; the span BETWEEN the two sentinels is MACHINE-OWNED, is regenerated in place by `deriveResidual(RESOLVER_REGISTRY)` in `packages/backend/src/outbound-prohibition.spec.ts`, and is the only part of this entry a later plan may rewrite.
+
+**WHY THIS ENTRY CARRIES THE TEXT AND NOT A POINTER.** This is the text a requirement's COMPLETION is read against, and it is the copy that drifted through five consecutive rounds — CORE-11's box was flipped against it once and reverted twice. A pointer here would leave the ledger a reader trusts most as the one surface that can still be wrong. A test in the gate file reads THIS FILE at test time, extracts the span below with `extractDerivedBlock`, and compares it to the generated text byte for byte; editing one word of the span turns the suite red.
+
+**THE SURFACE DECISION, wave 27, written here because this is one of the four places the difference is visible.** The DERIVED text ships in exactly TWO surfaces — the gate header and this entry — and BOTH are byte-compared to `deriveResidual(RESOLVER_REGISTRY)` by the suite. `.planning/STATE.md` and `.planning/WINDOWS.md` carry a POINTER to those two and restate NO bound of their own, because they are append-only DATED HISTORIES: a block regenerated inside one would rewrite the record of what was believed and when, which is the only thing that makes a history worth keeping. That pointer-not-a-bound rule is a PROHIBITION WITH NO MECHANICAL CHECK — the byte comparison reaches these two surfaces and no further — and it is named as an unguarded limit rather than left implicit.
+
+**THE LIMITS, IN ONE SENTENCE, BECAUSE THE LEDGER IS WHERE AN OVERCLAIM DOES ITS DAMAGE:** this makes the class MECHANICALLY DETECTABLE and does not CLOSE it — every entry below is verified by execution, but the registry is not proven complete, the coverage guard reaches two enumerated populations and names its exemptions rather than covering every shape a resolver can be written in, and each entry's probes are examples rather than a proof of that resolver's domain.
+
+**THE BOX IS DELIBERATELY STILL `[ ]`.** Plan 01-27 does not flip it and does not argue that it could be flipped; wave 28 owns the flip, and only against the block below.
+
+<!-- BEGIN DERIVED RESIDUAL - generated by deriveResidual(RESOLVER_REGISTRY) in packages/backend/src/outbound-prohibition.spec.ts - MACHINE-OWNED, DO NOT HAND-EDIT -->
+THE RESIDUAL OF CORE-11's OUTBOUND WALK - DERIVED, NOT AUTHORED.
+This text is the output of deriveResidual(RESOLVER_REGISTRY) in
+packages/backend/src/outbound-prohibition.spec.ts. It is machine-owned: a test
+reads this file's own bytes, extracts the span between the sentinels, and
+compares it to that output. If the two disagree the GENERATED text is
+authoritative and the shipped text is the defect.
+
+WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
+1. Each entry below is verified by EXECUTION: its probe and its counter-probe
+   are run through auditSource and asserted against the rule identifiers
+   recorded here, so a branch removed from the walk turns its own entry red.
+2. It does NOT prove the registry enumerates every mechanism the walk has. A
+   coverage guard enumerates TWO populations out of this file's own source -
+   collectors matching a declared naming convention, and resolver functions
+   declared inside the audit function or at module scope in the resolver
+   region - and requires each member to be an entry below OR a NAMED, reasoned
+   entry on an explicit exemption list. The bound is REGISTERED OR LISTED over
+   those two populations. It is NOT `detectable`: a resolver written as NEITHER
+   shape - an inline branch in the walk, a differently-shaped binding, a
+   resolver declared inside another function - is enumerated by neither half
+   and is NOT caught.
+3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and
+   do not cover that resolver's whole domain.
+4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody
+   thought of is still silent and still unlisted here.
+
+RESOLVERS - 31 entries.
+
+* constStrings - a receiver or global KEY resolves when ANY string literal the name is bound to anywhere in the file names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates
+    read off:  auditSource > const constStrings = new Map<string, Set<string>>()
+    probe:     "const r = \"requests\";\nsdk[r].send(req);"
+    reports:   outbound-send
+    counter:   "const r = \"harmless\";\nsdk[r].send(req);"
+    reports:   [] - nothing
+
+* assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over any literal binding of the same name
+    read off:  auditSource > const assembledNames = new Set<string>()
+    probe:     "const k = \"req\" + \"uests\";\nsdk[k].send(req);"
+    reports:   outbound-unanalysable
+    counter:   "let i = 0;\ni += 1;\nsdk[i].send(req);"
+    reports:   [] - nothing
+
+* receiverAliases - a name bound to an outbound RECEIVER expression is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order
+    read off:  auditSource > const receiverAliases = new Map<string, string>()
+    probe:     "const r = sdk.requests;\nr.send(req);"
+    reports:   outbound-send
+    counter:   "const r = sdk.other;\nr.send(req);"
+    reports:   [] - nothing
+
+* unreadableAliases - a name bound to a receiver EXPRESSION the walk could not read is reported where the name is USED as a receiver, not where it was bound - so an ordinary dynamic lookup never used as a receiver stays quiet
+    read off:  auditSource > const unreadableAliases = new Set<string>()
+    probe:     "const r = sdk[\"req\" + \"uests\"];\nr.send(req);"
+    reports:   outbound-unanalysable
+    counter:   "const v = record[\"na\" + \"me\"];\nconsole.log(v);"
+    reports:   [] - nothing
+
+* fetchAliases - a name bound to the global fetch is the global fetch; seeded with the bare spelling and grown from the live set, so it chains in declaration order
+    read off:  auditSource > const fetchAliases = new Set<string>([FETCH_GLOBAL])
+    probe:     "const f = fetch;\nf(url);"
+    reports:   outbound-fetch
+    counter:   "const f = cache.fetch;\nf(url);"
+    reports:   [] - nothing
+
+* navigatorAliases - a name bound to navigator is navigator; RECEIVER-ANCHORED, so an ordinary object defining a method of the same name grows nothing
+    read off:  auditSource > const navigatorAliases = new Set<string>([NAVIGATOR])
+    probe:     "const n = navigator;\nn.sendBeacon(u, d);"
+    reports:   outbound-beacon
+    counter:   "const o = { sendBeacon(u, d) { return d; } };\no.sendBeacon(u, d);"
+    reports:   [] - nothing
+
+* globalAliases - a name bound to eval, Function or an outbound constructor maps to the global it names, so the violation detail can name the surface the local aliases; RECEIVER-ANCHORED off the four global receivers
+    read off:  auditSource > const globalAliases = new Map<string, string>()
+    probe:     "const e = eval;\ne(src);"
+    reports:   outbound-dynamic-code
+    counter:   "const o = { eval(s) { return s; } };\nconst e = o.eval;\ne(src);"
+    reports:   [] - nothing
+
+* globalThisAliases - a name WATCHED being bound to one of the four global receivers is a global receiver; seeded EMPTY so the bare-identifier answer is unchanged and the new behaviour is reachable only through what the walk saw bound
+    read off:  auditSource > const globalThisAliases = new Set<string>()
+    probe:     "const g = globalThis;\ng.fetch(url);"
+    reports:   outbound-fetch
+    counter:   "const g = helper;\ng.fetch(url);"
+    reports:   [] - nothing
+
+* shadowedGlobals - a NARROWING collector: a TOP-LEVEL function or class declaration of a dynamic-code or outbound-constructor name provably rebinds that name for the module, so the bare call is not the global. Its probe is the shape that stays QUIET and its counter-probe is the shape that REPORTS
+    read off:  auditSource > const shadowedGlobals = new Set<string>()
+    probe:     "function Function(a) { return a; }\nFunction(\"x\");"
+    reports:   [] - nothing
+    counter:   "Function(\"x\");"
+    reports:   outbound-dynamic-code
+
+* numericNames - a NARROWING collector: a name bound only to provably numeric values is an INDEX rather than a hidden receiver name, and is excluded before any receiver rule runs. Probe stays quiet, counter-probe reports
+    read off:  auditSource > const numericNames = new Set<string>()
+    probe:     "let i = 0;\nsdk[i].send(req);"
+    reports:   [] - nothing
+    counter:   "let i = \"requests\";\nsdk[i].send(req);"
+    reports:   outbound-send
+
+* poisonedNumericNames - the negative half of the numeric exemption: a name bound to ANYTHING non-numeric anywhere in the file stops being an index, so a numeric accumulator later assigned a receiver name reports
+    read off:  auditSource > const poisonedNumericNames = new Set<string>()
+    probe:     "let i = 0;\ni = \"requests\";\nsdk[i].send(req);"
+    reports:   outbound-send
+    counter:   "let i = 0;\ni = 2;\nsdk[i].send(req);"
+    reports:   [] - nothing
+
+* isGlobalReceiver - one-hop resolution of a GLOBAL receiver closed over the live alias set, so a member of an aliased global receiver that will not reduce is reported rather than dropped
+    read off:  auditSource > const isGlobalReceiver = (node: ts.Expression): boolean =>
+    probe:     "const g = globalThis;\ng[\"fet\" + \"ch\"](url);"
+    reports:   outbound-unanalysable
+    counter:   "const g = helper;\ng[\"fet\" + \"ch\"](url);"
+    reports:   [] - nothing
+
+* keyReceiver - the SINGLE definition of what a readable key is, in the order: watched assembly, then any literal binding, then inline assembly, then not a receiver; it descends operators through operatorReceiver passing ITSELF, so nesting resolves at any depth
+    read off:  auditSource > const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    probe:     "sdk[b ? \"requests\" : \"net\"].send(req);"
+    reports:   outbound-send
+    counter:   "sdk[b ? \"x\" : \"y\"].send(req);"
+    reports:   [] - nothing
+
+* receiverKind - the three-state answer for an expression in RECEIVER position - THAT RECEIVER, UNREADABLE, or NOT A RECEIVER - including a bare operator written directly in call position, which fell through every branch before wave 25
+    read off:  auditSource > const receiverKind = (node: ts.Expression): ReceiverKind => {
+    probe:     "(b ? sdk.requests : sdk.net).send(req);"
+    reports:   outbound-send
+    counter:   "(b ? cache : client).send(req);"
+    reports:   [] - nothing
+
+* literalsOf - the MULTI-valued string reader keyReceiver consults: every literal a name carries, so ANY of them naming a receiver reports
+    read off:  auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
+    probe:     "let k = \"harmless\";\nk = \"requests\";\nsdk[k].send(req);"
+    reports:   outbound-send
+    counter:   "let k = \"harmless\";\nk = \"other\";\nsdk[k].send(req);"
+    reports:   [] - nothing
+
+* literalOf - the SINGLE-valued string reader member names and module specifiers need: one binding resolves, two or more answer undefined, and undefined means COULD NOT READ at every call site - which reports
+    read off:  auditSource > function literalOf(node: ts.Node | undefined): string | undefined {
+    probe:     "const s = \"caido:http\";\nawait import(s);"
+    reports:   outbound-import
+    counter:   "const s = \"crypto\";\nawait import(s);"
+    reports:   [] - nothing
+
+* memberName - the member name of a positively identified receiver, read single-valued; a name that will not reduce to exactly one literal is reported as unreadable rather than assumed harmless
+    read off:  auditSource > const memberName = (
+    probe:     "let m = \"harmless\";\nm = \"send\";\nsdk.requests[m](req);"
+    reports:   outbound-unanalysable
+    counter:   "const m = \"get\";\nsdk.requests[m](id);"
+    reports:   [] - nothing
+
+* initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone
+    read off:  auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind =>
+    probe:     "const r = b ? sdk.requests : sdk.net;\nr.send(req);"
+    reports:   outbound-send
+    counter:   "const r = b ? cache : client;\nr.send(req);"
+    reports:   [] - nothing
+
+* isFetchExpression - the global fetch in every reachable spelling - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object
+    read off:  auditSource > const isFetchExpression = (node: ts.Expression): boolean => {
+    probe:     "globalThis.fetch(url);"
+    reports:   outbound-fetch
+    counter:   "client.fetch(url);"
+    reports:   [] - nothing
+
+* isNavigatorReceiver - navigator reached bare, through a global receiver, or through a one-hop alias; RECEIVER-ANCHORED so a member named sendBeacon on an ordinary object stays quiet
+    read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
+    probe:     "globalThis.navigator.sendBeacon(u, d);"
+    reports:   outbound-beacon
+    counter:   "o.navigator.sendBeacon(u, d);"
+    reports:   [] - nothing
+
+* globalNameOf - which global a spelling names - bare identifier, member of a global receiver, or a collected alias - so the violation detail names the aliased surface instead of leaving a reader to find the binding
+    read off:  auditSource > const globalNameOf = (node: ts.Expression): string | undefined => {
+    probe:     "const F = Function;\nnew F(src);"
+    reports:   outbound-dynamic-code
+    counter:   "const F = o.Function;\nnew F(src);"
+    reports:   [] - nothing
+
+* dynamicCodeOf - eval and Function in call position, refused outright rather than analysed, because no AST gate can see inside a string
+    read off:  auditSource > const dynamicCodeOf = (node: ts.Expression): string | undefined => {
+    probe:     "eval(src);"
+    reports:   outbound-dynamic-code
+    counter:   "o.eval(src);"
+    reports:   [] - nothing
+
+* outboundCtorOf - XMLHttpRequest, WebSocket and EventSource in construction position, bare or on a global receiver or through an alias
+    read off:  auditSource > const outboundCtorOf = (node: ts.Expression): string | undefined => {
+    probe:     "new XMLHttpRequest();"
+    reports:   outbound-global-ctor
+    counter:   "new Foo();"
+    reports:   [] - nothing
+
+* aliasedGlobalOf - the three binding shapes an outbound global can be aliased through - a bare identifier, a member of a global receiver, and a destructure off one - anchored so a destructure off an ordinary object grows nothing
+    read off:  auditSource > const aliasedGlobalOf = (init: ts.Expression): string | undefined => {
+    probe:     "const { eval: ev } = globalThis;\nev(src);"
+    reports:   outbound-dynamic-code
+    counter:   "const { eval: ev } = o;\nev(src);"
+    reports:   [] - nothing
+
+* unwrap - strips parentheses, `as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver
+    read off:  module scope > function unwrap(node: ts.Expression): ts.Expression {
+    probe:     "(0, sdk.net).connect(x);"
+    reports:   outbound-net
+    counter:   "(0, cache).send(req);"
+    reports:   [] - nothing
+
+* operatorReceiver - ONE descent for the four RECEIVER_OPERATORS (`? :`, `??`, `||`, `&&`) reached from receiverKind and keyReceiver and from NOWHERE ELSE: any operand naming a receiver makes the expression that receiver, else any unreadable operand makes it unreadable, else it is not a receiver
+    read off:  module scope > const operatorReceiver = (
+    probe:     "(sdk.requests ?? sdk.net).send(req);"
+    reports:   outbound-send
+    counter:   "(cache ?? client).send(req);"
+    reports:   [] - nothing
+
+* isProvablyNumeric - a NARROWING resolver: a key provably numeric - a numeric literal, a collected numeric name, `+`/`-` over two numeric operands, or a member or call named in NUMERIC_MEMBERS - is an INDEX and is excluded before any receiver rule runs. The NUMERIC_MEMBERS half is a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
+    read off:  module scope > function isProvablyNumeric(
+    probe:     "let i = 0;\nsdk[i + 1].send(req);"
+    reports:   [] - nothing
+    counter:   "const o = { max: \"requests\" };\nsdk[o.max + \"\"].send(req);"
+    reports:   outbound-unanalysable
+
+* isAssembledKey - a key the walk WATCHES being built inline - concatenated, interpolated, or returned by a call that is not provably numeric - is UNREADABLE, a third state distinct from `not a receiver`
+    read off:  module scope > function isAssembledKey(
+    probe:     "sdk[\"req\" + \"uests\"].send(req);"
+    reports:   outbound-unanalysable
+    counter:   "sdk[\"requests\"].send(req);"
+    reports:   outbound-send
+
+* isGlobalReceiverIn - whether an expression is one of the four global receivers or a collected one-hop alias of one; the depth question is answered by the alias entries above and NOT restated here (WR-30)
+    read off:  module scope > function isGlobalReceiverIn(
+    probe:     "globalThis[\"fet\" + \"ch\"](url);"
+    reports:   outbound-unanalysable
+    counter:   "o[\"fet\" + \"ch\"](url);"
+    reports:   [] - nothing
+
+* boundPropertyName - the property a binding element reads, including the RENAMED spelling `{ p: k }`, so a destructured assembly is bound to the local name rather than the source key
+    read off:  module scope > function boundPropertyName(el: ts.BindingElement): string | undefined {
+    probe:     "const { p: k } = { p: \"req\" + \"uests\" };\nsdk[k].send(req);"
+    reports:   outbound-unanalysable
+    counter:   "const { p: k } = { p: \"harmless\" };\nsdk[k].send(req);"
+    reports:   [] - nothing
+
+* destructuredInitializer - the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26)
+    read off:  module scope > function destructuredInitializer(
+    probe:     "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);"
+    reports:   outbound-unanalysable
+    counter:   "const [k] = [1];\nsdk[k].send(req);"
+    reports:   [] - nothing
+
+MEASURED SILENCES - 7 entries.
+
+* silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
+    read off:  auditSource > const constStrings = new Map<string, Set<string>>()
+    probe:     "const a = \"requests\";\nconst b = a;\nsdk[b].send(req);"
+    reports:   [] - nothing
+    counter:   "const b = \"requests\";\nsdk[b].send(req);"
+    reports:   outbound-send
+
+* silence-function-boundary - residual (a), FUNCTION half: a receiver crossing a function boundary is silent. The walk builds no symbol table and does not follow a return value. The one-hop binding of the same receiver reports - that is the counter-probe
+    read off:  auditSource > const receiverKind = (node: ts.Expression): ReceiverKind => {
+    probe:     "function pick() { return sdk.requests; }\npick().send(req);"
+    reports:   [] - nothing
+    counter:   "const r = sdk.requests;\nr.send(req);"
+    reports:   outbound-send
+
+* silence-parameter-key - residual (b): a key the walk never saw BOUND - here a parameter - is not reported. Set by real-tree MEASUREMENT, not preference: reporting every unreduced key fired on compat.ts:141's ctx[root]. The same site with a bound literal reports
+    read off:  auditSource > const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    probe:     "function at(root) { return sdk[root].send(req); }"
+    reports:   [] - nothing
+    counter:   "const root = \"requests\";\nsdk[root].send(req);"
+    reports:   outbound-send
+
+* silence-loop-binding-key - residual (b): a key bound by a for...of or for(;;) header is not reported. Measured on compat.ts's documented at() dotted-path walk. The same lookup with a bound literal reports
+    read off:  auditSource > const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    probe:     "for (const key of path.split(\".\")) { sdk[key].send(req); }"
+    reports:   [] - nothing
+    counter:   "const key = \"requests\";\nsdk[key].send(req);"
+    reports:   outbound-send
+
+* silence-destructured-plain-literal-key - residual (b2), NAMED BY MEASUREMENT in wave 26: a DESTRUCTURED PLAIN LITERAL used as a key is silent, because constStrings reads only the identifier spelling of a declaration that assembledNames now reads three ways. The ASSEMBLED twin of the same destructure reports - that is the counter-probe, and it is the shape IN-26 closed
+    read off:  auditSource > const constStrings = new Map<string, Set<string>>()
+    probe:     "const { k } = { k: \"requests\" };\nsdk[k].send(req);"
+    reports:   [] - nothing
+    counter:   "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);"
+    reports:   outbound-unanalysable
+
+* silence-inverted-binding-order - what actually bounds an ALIAS chain, corrected in wave 23: not where a name is READ but the DECLARATION ORDER of the bindings relative to each other. collect() finishes before visit() begins, so a use may sit above every declaration; invert one link and the root is not yet in the live set. The dependency-ordered spelling reports
+    read off:  auditSource > const collect = (node: ts.Node): void => {
+    probe:     "const b = a;\nconst a = fetch;\nb(url);"
+    reports:   [] - nothing
+    counter:   "const a = fetch;\nconst b = a;\nb(url);"
+    reports:   outbound-fetch
+
+* silence-operator-around-global-receiver - OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in every spelling. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator
+    read off:  module scope > const operatorReceiver = (
+    probe:     "(ok && globalThis).fetch(url);"
+    reports:   [] - nothing
+    counter:   "(ok && sdk.requests).send(req);"
+    reports:   outbound-send
+<!-- END DERIVED RESIDUAL -->
+
+
 ### Persistence (STORE)
 
 - [x] **STORE-01**: SQLite schema via `sdk.meta.db()` covering artifacts, occurrences (`observations`), analyses, and plugin settings. *(Re-scoped 2026-08-21 during Phase 1 UAT: the original wording also named `entities`, `evidence` and `audit`, which have no writer until the detector and secrets phases. Those three moved to STORE-08 so this requirement has one owner and an honest status.)*
