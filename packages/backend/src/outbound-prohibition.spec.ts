@@ -907,6 +907,90 @@ const NO_LITERALS: ReadonlySet<string> = new Set<string>();
 type ReceiverKind = string | typeof UNREADABLE_RECEIVER | undefined;
 
 /**
+ * "This expression is not an operator expression at all" — distinct from an
+ * operator expression that resolved to nothing.
+ *
+ * `ReceiverKind` already uses `undefined` for "not a receiver", so a descent that
+ * returned `undefined` for BOTH "no operator here" and "an operator whose operands
+ * name nothing" would force every caller to re-test the node kind to tell them
+ * apart. That re-test is a fourth copy of the question this function exists to
+ * answer once.
+ */
+const NOT_AN_OPERATOR = Symbol("not-an-operator");
+
+/**
+ * THE ONE DEFINITION OF HOW AN OPERATOR EXPRESSION IS READ FOR A RECEIVER.
+ * Added 2026-08-24 (WR-27).
+ *
+ * WHY IT EXISTS AT ALL, which is the finding and not a refactoring preference.
+ * Before this function the conditional descent was written THREE TIMES and
+ * therefore existed only TWICE: `initializerReceiver` unwrapped a conditional in
+ * INITIALIZER position, `receiverKind`'s element-access arm unwrapped one in KEY
+ * position, and CALL position — `(b ? sdk.requests : sdk.net).send(req)` — fell
+ * through every branch of `receiverKind` to `return undefined`, which every caller
+ * reads as "not a receiver". Both of the other two faces were TAUGHT IN THE SAME
+ * ROUND (CR-08, round 4) and the third was not, because there was no one place to
+ * teach. Three copies of one idea is how that happens.
+ *
+ * AND THE TWO COPIES DID NOT AGREE, MEASURED BEFORE THE COLLAPSE. Key position
+ * preferred a NAMED branch over an UNREADABLE one whichever side it sat on;
+ * initializer position was written as `receiverKind(whenTrue) ?? receiverKind(whenFalse)`,
+ * and `??` does not skip a symbol — so an UNREADABLE LEFT BRANCH SHADOWED A NAMED
+ * RIGHT BRANCH there and nowhere else:
+ *   `const r = b ? sdk[k1 + k2] : sdk.net; r.send(req)`  ->  outbound-unanalysable
+ *   `const r = b ? sdk.net : sdk[k1 + k2]; r.send(req)`  ->  outbound-net
+ * Two spellings of one shape, answered differently by operand ORDER. That was not
+ * in any residual list either. After the collapse both report `outbound-net`, and
+ * the pair is pinned by a fixture below.
+ *
+ * THE THREE-STATE ANSWER, IN THE ORDER THE ELEMENT-ACCESS ARM ALREADY USED — it is
+ * copied from there rather than reinvented with a second precedence:
+ *   1. ANY operand resolving to a NAMED receiver makes the whole expression that
+ *      receiver. A receiver that is outbound on one path is outbound; the site
+ *      hides nothing, so calling it unreadable would be an overclaim in the
+ *      quieter direction.
+ *   2. Otherwise, ANY operand the walk CANNOT READ makes the whole expression
+ *      unreadable. The third state survives the operator rather than collapsing
+ *      into silence.
+ *   3. Otherwise it is NOT A RECEIVER — which is the state that keeps
+ *      `(cache ?? client).send(req)` quiet, and which a widening gets wrong by
+ *      being too eager rather than too shy.
+ *
+ * `resolve` is the caller's own leaf resolver, so the SAME descent serves call
+ * position (`receiverKind`), key position (`keyReceiver`) and initializer position
+ * (`initializerReceiver`, which is now `receiverKind`). Recursion is the caller's
+ * too: each passes itself, so a nested operator resolves by construction.
+ */
+const operatorReceiver = (
+  node: ts.Expression,
+  resolve: (operand: ts.Expression) => ReceiverKind,
+): ReceiverKind | typeof NOT_AN_OPERATOR => {
+  const operands = operatorOperands(node);
+  if (operands === undefined) return NOT_AN_OPERATOR;
+  const kinds = operands.map((operand) => resolve(operand));
+  for (const kind of kinds) if (typeof kind === "string") return kind;
+  for (const kind of kinds) {
+    if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER;
+  }
+  return undefined;
+};
+
+/**
+ * The operands an operator expression selects between, or `undefined` if this is
+ * not one of the operators the descent covers.
+ *
+ * Kept separate from `operatorReceiver` so that WHAT COUNTS AS AN OPERATOR and HOW
+ * ITS OPERANDS COMBINE are two facts a reader can check independently — the second
+ * is the same for every entry, the first is the list that grows.
+ */
+const operatorOperands = (
+  node: ts.Expression,
+): readonly ts.Expression[] | undefined => {
+  if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
+  return undefined;
+};
+
+/**
  * The binary operators whose RESULT IS ALWAYS A NUMBER, whatever the operands.
  *
  * `+` is deliberately ABSENT and that absence is the point: `"req" + "uests"` is
@@ -1438,6 +1522,20 @@ export function auditSource(file: string, source: string): Violation[] {
    * `01-24-SUMMARY.md` section 2.
    */
   const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    // WR-27 step -1: AN OPERATOR KEY IS READ ON EVERY OPERAND, through the ONE
+    // shared descent. This is the recursion `keyReceiver`'s docblock has claimed
+    // since CR-08 — "called from the direct key and both conditional branches, so
+    // they cannot disagree about what the walk can read". It was a claim about two
+    // CALLERS, made by a function that did not itself handle the shape, so the
+    // moment a conditional appeared INSIDE a conditional branch the two did
+    // disagree: `sdk[b ? (c ? "requests" : "x") : "y"]` was silent. Recursing here
+    // makes the sentence a fact about the code.
+    // It runs FIRST and that is a no-op for every non-operator key: step 0 tests
+    // `isIdentifier`, the literal loop tests literals and identifiers, and
+    // `isAssembledKey` answers false for a conditional — an operator key reached
+    // `return undefined` by falling through all three.
+    const operatorKey = operatorReceiver(unwrap(key), keyReceiver);
+    if (operatorKey !== NOT_AN_OPERATOR) return operatorKey;
     // CR-10 step 0, THE PRECEDENCE, and it exists only because step 1 widened.
     // A name can now carry BOTH a literal binding and a watched assembly —
     // `let k = "requests"; k = a + b; sdk[k].send(req)`. The ASSEMBLY WINS: a
@@ -1486,6 +1584,15 @@ export function auditSource(file: string, source: string): Violation[] {
    */
   const receiverKind = (node: ts.Expression): ReceiverKind => {
     const inner = unwrap(node);
+    // WR-27: AN OPERATOR IN CALL-RECEIVER POSITION, read through the same descent
+    // key position and initializer position use. THE FALL-THROUGH BELOW IS THE
+    // FINDING: before this line `(b ? sdk.requests : sdk.net).send(req)` matched no
+    // branch and returned `undefined`, which every caller reads as "not a
+    // receiver" — a site with a literal `sdk.requests` written out in full,
+    // hiding nothing, classified as a site with nothing in it. That is the same
+    // equivalence boundary 2 exists to remove, one position over.
+    const operator = operatorReceiver(inner, receiverKind);
+    if (operator !== NOT_AN_OPERATOR) return operator;
     if (
       ts.isPropertyAccessExpression(inner) &&
       RECEIVERS.has(inner.name.text)
@@ -1493,25 +1600,15 @@ export function auditSource(file: string, source: string): Violation[] {
       return inner.name.text;
     }
     if (ts.isElementAccessExpression(inner)) {
-      const key = unwrap(inner.argumentExpression);
-      // A CONDITIONAL KEY IS READ ON BOTH BRANCHES, with `initializerReceiver`'s
-      // semantics mirrored rather than reinvented: a receiver that is outbound on
-      // one path is outbound. `sdk[b ? "requests" : "net"]` HIDES NOTHING — both
-      // keys are string literals naming outbound receivers — so it resolves to a
-      // NAMED receiver and reports `outbound-send`. Calling it unanalysable would
-      // be a second overclaim, quieter and in the opposite direction: a site the
-      // walk can read COMPLETELY, reported as one it cannot read.
-      if (ts.isConditionalExpression(key)) {
-        const whenTrue = keyReceiver(key.whenTrue);
-        const whenFalse = keyReceiver(key.whenFalse);
-        if (typeof whenTrue === "string") return whenTrue;
-        if (typeof whenFalse === "string") return whenFalse;
-        return whenTrue === UNREADABLE_RECEIVER ||
-          whenFalse === UNREADABLE_RECEIVER
-          ? UNREADABLE_RECEIVER
-          : undefined;
-      }
-      return keyReceiver(key);
+      // THE COLLAPSE, 2026-08-24 (WR-27). A hand-written conditional block stood
+      // here, calling `keyReceiver` on each branch and combining the three states
+      // itself. It is now `keyReceiver`'s own recursion through
+      // `operatorReceiver`, so the precedence exists in ONE place. Its behaviour
+      // for `sdk[b ? "requests" : "net"]` is unchanged and asserted by the
+      // round-4 fixture it was written for; what changed is that a NESTED
+      // conditional now resolves too, because the recursion is the resolver's
+      // rather than this arm's.
+      return keyReceiver(inner.argumentExpression);
     }
     if (ts.isIdentifier(inner)) {
       const alias = receiverAliases.get(inner.text);
@@ -1563,17 +1660,27 @@ export function auditSource(file: string, source: string): Violation[] {
       : literalOf(node.argumentExpression);
 
   /**
-   * The receiver an INITIALIZER denotes, including through a conditional: either
-   * branch resolving to an outbound receiver makes the binding one, because a
+   * The receiver an INITIALIZER denotes, including through an operator: any
+   * operand resolving to an outbound receiver makes the binding one, because a
    * receiver that is outbound on one path is outbound.
+   *
+   * THE COLLAPSE, 2026-08-24 (WR-27), AND IT IS THE HALF THAT STOPS THIS
+   * RECURRING. This function used to carry its own conditional unwrapping — the
+   * ONLY position that had one — and `receiverKind`, which it calls, did not. So
+   * the sentence above was true of a `const` binding and false of the identical
+   * expression written directly in call position. It is now a NAME for
+   * `receiverKind`, kept rather than inlined at its three call sites because
+   * "the receiver an INITIALIZER denotes" is the question those sites ask and the
+   * name is the disclosure that the answer is now the same one call position gets.
+   *
+   * IT ALSO CORRECTS A PRECEDENCE THIS FUNCTION HAD TO ITSELF. The old body read
+   * `receiverKind(whenTrue) ?? receiverKind(whenFalse)`, and `??` does not skip
+   * `UNREADABLE_RECEIVER` — a symbol is neither `null` nor `undefined` — so an
+   * unreadable LEFT branch shadowed a named RIGHT branch here and in no other
+   * position. Measured before the collapse and pinned by a fixture after it.
    */
-  const initializerReceiver = (node: ts.Expression): ReceiverKind => {
-    const inner = unwrap(node);
-    if (ts.isConditionalExpression(inner)) {
-      return receiverKind(inner.whenTrue) ?? receiverKind(inner.whenFalse);
-    }
-    return receiverKind(inner);
-  };
+  const initializerReceiver = (node: ts.Expression): ReceiverKind =>
+    receiverKind(node);
 
   /** Is this expression the global fetch, in any spelling the walk resolves? */
   const isFetchExpression = (node: ts.Expression): boolean => {
@@ -3101,9 +3208,12 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     // rule and named by no residual list. Both keys are string literals naming
     // outbound receivers, so this is a site the walk can read COMPLETELY.
     //
-    // MECHANISM: the conditional branch of `receiverKind`, mirroring
-    // `initializerReceiver`'s stated semantics — a receiver that is outbound on
-    // one path is outbound. Reverting that branch drives this red.
+    // MECHANISM, RESTATED 2026-08-24 (WR-27) BECAUSE THE MECHANISM MOVED: this
+    // used to name "the conditional branch of `receiverKind`", a hand-written
+    // block inside the element-access arm. That block is gone. The arm now calls
+    // `keyReceiver`, which descends through `operatorReceiver` — THE ONE
+    // definition, shared with call position and initializer position. Behaviour
+    // for this shape is unchanged; reverting the descent drives this red.
     const rules = rulesOf('await sdk[b ? "requests" : "net"].send(req);');
     expect(
       rules,
@@ -3127,6 +3237,100 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     expect(
       rulesOf('await sdk[b ? "req" + "uests" : "zzz"].send(req);'),
     ).toContain("outbound-unanalysable");
+  });
+
+  it("through operatorReceiver in CALL position: `(b ? sdk.requests : sdk.net).send(req)` reports outbound-send — WR-27, the third face of the operator", () => {
+    // THE FINDING, AND WHAT MAKES IT ONE. The two OTHER faces of this same
+    // operator were both taught in round 4 and both report: the conditional KEY
+    // `sdk[b ? "requests" : "net"]` and the conditional INITIALIZER
+    // `const r = b ? sdk.requests : sdk.net`. The operator written directly as the
+    // CALLEE'S RECEIVER was silent, for the reason the other two were not: the
+    // descent was written three times and therefore existed twice, and
+    // `receiverKind` — the function the property-access rule asks about a
+    // receiver — had no copy. A conditional landed on its final `return undefined`,
+    // which every caller reads as NOT A RECEIVER.
+    //
+    // This site hides NOTHING. `sdk.requests` is written out in full on one branch.
+    // Calling it "not a receiver" is the same equivalence boundary 2 exists to
+    // remove — "could not read does not mean clean" — with the extra insult that
+    // the walk could read it perfectly.
+    //
+    // MECHANISM: `operatorReceiver`, reached from `receiverKind` after `unwrap`.
+    //
+    // NO `await` IN THESE FIXTURES, and the reason is in `unwrap`'s docblock:
+    // `await (X).send(req)` parses as a CALL to something named `await` with
+    // `.send` a member of its RESULT, so an awaited fixture would be green for a
+    // parsing reason and prove nothing about any rule here. MEASURED: the awaited
+    // spelling of this exact shape reports `[]` both before and after this change.
+    const rules = rulesOf("(b ? sdk.requests : sdk.net).send(req);");
+    expect(
+      rules,
+      "(b ? sdk.requests : sdk.net).send(req) still reports clean",
+    ).toContain("outbound-send");
+    // AND NOT UNANALYSABLE — the same second overclaim the key-position fixture
+    // guards against, in the opposite direction from silence.
+    expect(
+      rules,
+      "a conditional of two literal receiver members was reported as UNREADABLE",
+    ).not.toContain("outbound-unanalysable");
+
+    // THE THREE-STATE ANSWER, ASSERTED IN ALL THREE DIRECTIONS AND NOT ONLY THE
+    // FIRING ONE. A widening asserted only where it fires is the one that gets a
+    // gate deleted rather than fixed.
+    // (1) NAMED — one outbound branch is enough, whichever side it sits on.
+    expect(rulesOf("(b ? sdk.requests : cache).send(req);")).toContain(
+      "outbound-send",
+    );
+    expect(rulesOf("(b ? cache : sdk.requests).send(req);")).toContain(
+      "outbound-send",
+    );
+    // (2) UNREADABLE — the third state survives the operator rather than
+    // collapsing into silence.
+    expect(rulesOf("(b ? sdk[k1 + k2] : cache).send(req);")).toContain(
+      "outbound-unanalysable",
+    );
+    // (3) NOT A RECEIVER — and this is the state the widening had to get right.
+    expect(rulesOf("(b ? cache : client).send(req);")).toEqual([]);
+  });
+
+  it("through THE COLLAPSE: initializer position and call position now give the SAME answer, and the `??` precedence initializer position had to ITSELF is gone", () => {
+    // MEASURED BEFORE THE COLLAPSE, NOT PREDICTED. `initializerReceiver` was
+    // `receiverKind(whenTrue) ?? receiverKind(whenFalse)`, and `??` does not skip
+    // `UNREADABLE_RECEIVER` — a symbol is neither `null` nor `undefined`. So an
+    // unreadable LEFT branch shadowed a named RIGHT branch in initializer position
+    // and in no other position:
+    //   const r = b ? sdk[k1 + k2] : sdk.net;  ->  ["outbound-unanalysable"]
+    //   const r = b ? sdk.net : sdk[k1 + k2];  ->  ["outbound-net"]
+    // Two spellings of one shape, answered differently by operand ORDER, in a
+    // function whose docblock promised "either branch resolving to an outbound
+    // receiver makes the binding one". NO RESIDUAL LIST NAMED THIS EITHER; it was
+    // found by reading the three copies side by side, which is the whole reason
+    // this wave collapses them.
+    //
+    // After the collapse both spellings take the element-access arm's ordering —
+    // a NAMED branch beats an UNREADABLE one whichever side it sits on — because
+    // there is now one ordering and not two.
+    expect(
+      rulesOf("const r = b ? sdk[k1 + k2] : sdk.net;\nr.send(req);"),
+      "an UNREADABLE left branch is shadowing a NAMED right branch again",
+    ).toContain("outbound-net");
+    expect(
+      rulesOf("const r = b ? sdk.net : sdk[k1 + k2];\nr.send(req);"),
+    ).toContain("outbound-net");
+    // Both directions REPORTED before and after — this corrects WHICH rule is
+    // named, and creates no new silence. Stated because a precedence change that
+    // quietly silenced one side would be a much larger change than this is.
+    expect(
+      rulesOf("const r = b ? sdk[k1 + k2] : sdk.net;\nr.send(req);"),
+    ).not.toEqual([]);
+    // AND THE ROUND-4 CONTROLS STILL REPORT. A widening that breaks the cases it
+    // was built beside has widened nothing.
+    expect(rulesOf('sdk[b ? "requests" : "net"].send(req);')).toContain(
+      "outbound-send",
+    );
+    expect(
+      rulesOf("const r = b ? sdk.requests : sdk.net;\nr.send(req);"),
+    ).toContain("outbound-send");
   });
 
   it('through the COMMA SEQUENCE rule plus constStrings: `sdk[(0, "requests")]` is its rightmost operand', () => {
@@ -3707,6 +3911,19 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
       'let cur = root;\nfor (const key of path.split(".")) { cur = (cur as Record<string, unknown>)[key]; }',
     ],
     ["array indexing through a name", 'const seg = segments[i].split(";");'],
+    // WR-27's TWINS, written in the SAME COMMIT as the operator descent rather
+    // than after it. An operator descent in CALL-RECEIVER position is the widening
+    // most likely to fire on ordinary shipped code — picking one of two ordinary
+    // collaborators with `? :` or `??` is common — and a gate that flags that gets
+    // deleted rather than fixed.
+    [
+      "an operator expression over two ORDINARY objects, in call position",
+      "(useCache ? cache : client).send(payload);",
+    ],
+    [
+      "an ORDINARY object defining a method named send",
+      "const bus = { send(x) { return x; } };\nbus.send(line);",
+    ],
     ["a crypto import", 'import { createHash } from "crypto";'],
     ["a local re-export", 'export { x } from "./telemetry";'],
     ["a node:fs dynamic import", 'const m = await import("node:fs");'],
