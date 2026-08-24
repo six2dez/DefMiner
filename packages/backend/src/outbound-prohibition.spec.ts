@@ -462,7 +462,9 @@
 //            SEPARATELY, which is the pair the single case here before could
 //            not distinguish.
 //      (b) A KEY THE WALK NEVER SAW BOUND — a parameter, a `for…of` or `for(;;)`
-//          loop binding, or a name bound in another file — is NOT reported.
+//          loop binding, or a name bound in another file — is NOT reported. The
+//          third of those three got its own executed row on 2026-08-24 (CR-13);
+//          see (b4).
 //          NARROWED BY DELETION 2026-08-24 (CR-09): this list used to carry a
 //          third item between the loop binding and the other file, exempting a
 //          name by WHERE IN THE FILE its binding sits. That item was THE
@@ -499,6 +501,34 @@
 //          because widening `constStrings` through binding patterns is a
 //          separate decision that needs its own real-tree measurement. Asserted
 //          below as a MEASURED SILENCE, so it goes red the day it is closed.
+//      (b3) A DESTRUCTURED OPERATOR LITERAL used as a key — `const { k } = { k:
+//          b ? "requests" : "net" }; sdk[k].send(req)` — is NOT reported. NAMED
+//          2026-08-24 (CR-13), BY MEASUREMENT WHILE WIDENING AND NOT BY REVIEW:
+//          the operator-literal descent was wired into `collect`'s two IDENTIFIER
+//          branches — the declaration and the assignment — and the two
+//          binding-pattern branches read `destructuredInitializer` through
+//          `isAssembledKey` alone. It is (b2)'s shape one operator over, it was
+//          RUN and found silent, and it is DISCLOSED rather than folded in for
+//          exactly (b2)'s reason: widening `constStrings` through binding
+//          patterns is a separate decision needing its own real-tree measurement.
+//          Asserted below as a MEASURED SILENCE, so it goes red the day it is
+//          closed.
+//      (b4) A KEY BOUND IN ANOTHER FILE is NOT reported, and until 2026-08-24
+//          (CR-13) it had no assertion of its own — it was named in (b)'s prose
+//          and executed nowhere. `auditSource` takes ONE file's text; there is no
+//          program, no module graph and no symbol table. Nothing about this
+//          changed in this plan; what changed is that the sentence is now a row
+//          with an executed probe and counter-probe, because a bound nobody has
+//          ever run is the artifact this whole round replaces.
+//      (b5) NOT SILENT, AND RECORDED HERE BECAUSE THIS PLAN PREDICTED OTHERWISE.
+//          A key bound to a FUNCTION RETURN — `function g() { return "requests";
+//          } const k = g(); sdk[k].send(req)` — REPORTS `outbound-unanalysable`,
+//          through `isAssembledKey`'s `returned by a call` branch. Plan 01-30
+//          listed it among the shapes still outside the walk; MEASURED, it is
+//          not, and the measurement wins. The RECEIVER half of the same boundary
+//          IS silent and is (a)'s function-boundary clause, asserted by
+//          `silence-function-boundary`; the KEY half is not the same fact and had
+//          been folded into it.
 //      (c) `navigator` RETURNED BY A HELPER is outside the beacon rule, for the
 //          same reason as (a)'s function-boundary half.
 //          CORRECTED 2026-08-24 (WR-30). This item used to also exempt
@@ -1204,7 +1234,7 @@ RESOLVERS - 32 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 7 entries.
+MEASURED SILENCES - 9 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1241,6 +1271,20 @@ MEASURED SILENCES - 7 entries.
     counter:   "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);"
     reports:   outbound-unanalysable
     branch:    "a declaration" at auditSource > collect > if (ts.isStringLiteralLike(init)) { - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
+
+* silence-destructured-operator-key - residual (b3), NAMED BY MEASUREMENT on 2026-08-24 (CR-13): a DESTRUCTURED OPERATOR literal used as a key is silent, because the operator-literal descent is wired at the two IDENTIFIER branches and not at either binding-pattern branch. The IDENTIFIER spelling of the same operator initializer reports - that is the counter-probe
+    read off:  auditSource > const collect = (node: ts.Node): void => {
+    probe:     "const { k } = { k: b ? \"requests\" : \"net\" };\nsdk[k].send(req);"
+    reports:   [] - nothing
+    counter:   "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
+    reports:   outbound-send
+
+* silence-cross-file-key - residual (b4), NAMED BY MEASUREMENT on 2026-08-24 (CR-13): a key bound in ANOTHER FILE is silent, because auditSource reads one file's text and builds no module graph. The same name bound in THIS file reports - that is the counter-probe
+    read off:  auditSource > export function auditSource(file: string, source: string): Violation[] {
+    probe:     "import { k } from \"./other\";\nsdk[k].send(req);"
+    reports:   [] - nothing
+    counter:   "const k = \"requests\";\nsdk[k].send(req);"
+    reports:   outbound-send
 
 * silence-inverted-binding-order - what actually bounds an ALIAS chain, corrected in wave 23: not where a name is READ but the DECLARATION ORDER of the bindings relative to each other. collect() finishes before visit() begins, so a use may sit above every declaration; invert one link and the root is not yet in the live set. The dependency-ordered spelling reports
     read off:  auditSource > const collect = (node: ts.Node): void => {
@@ -4418,6 +4462,43 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         expect: Object.freeze(["outbound-send"] as const),
       }),
     ] as readonly BranchProbe[]),
+  }),
+  Object.freeze({
+    // OPENED BY MEASUREMENT WHILE WIDENING, wave 30 (CR-13). The descent was
+    // wired into `collect`'s two IDENTIFIER branches - the declaration and the
+    // assignment - and NOT into the two binding-pattern branches, which read
+    // `destructuredInitializer` through `isAssembledKey` only. This row exists
+    // because the shape was RUN and found silent, not because the widening
+    // intended to leave it: naming it is what stops the next round rediscovering
+    // it as a surprise. Closing it is a separate decision with its own real-tree
+    // measurement, exactly as IN-26 was for the plain-literal twin.
+    id: "silence-destructured-operator-key",
+    kind: "measured-silence",
+    clause:
+      "residual (b3), NAMED BY MEASUREMENT on 2026-08-24 (CR-13): a DESTRUCTURED OPERATOR literal used as a key is silent, because the operator-literal descent is wired at the two IDENTIFIER branches and not at either binding-pattern branch. The IDENTIFIER spelling of the same operator initializer reports - that is the counter-probe",
+    site: "auditSource > const collect = (node: ts.Node): void => {",
+    probe: 'const { k } = { k: b ? "requests" : "net" };\nsdk[k].send(req);',
+    expect: Object.freeze([] as const),
+    counterProbe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    // MEASURED IN WAVE 30 AND FOUND TO HAVE NO ROW AT ALL. `auditSource` takes
+    // ONE file's text; there is no program, no module graph and no symbol table,
+    // so a name imported from another module is exactly a name the walk never saw
+    // bound. That was true before this plan and is unchanged by it - it is
+    // written down here because this plan's residual claims what a session
+    // MEASURED, and a bound nobody ever ran is the artifact this whole round
+    // replaces.
+    id: "silence-cross-file-key",
+    kind: "measured-silence",
+    clause:
+      "residual (b4), NAMED BY MEASUREMENT on 2026-08-24 (CR-13): a key bound in ANOTHER FILE is silent, because auditSource reads one file's text and builds no module graph. The same name bound in THIS file reports - that is the counter-probe",
+    site: "auditSource > export function auditSource(file: string, source: string): Violation[] {",
+    probe: 'import { k } from "./other";\nsdk[k].send(req);',
+    expect: Object.freeze([] as const),
+    counterProbe: 'const k = "requests";\nsdk[k].send(req);',
+    counterExpect: Object.freeze(["outbound-send"] as const),
   }),
   Object.freeze({
     id: "silence-inverted-binding-order",
