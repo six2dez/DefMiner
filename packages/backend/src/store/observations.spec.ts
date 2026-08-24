@@ -762,24 +762,43 @@ describe("RESIDUALS this rule deliberately LEAVES — pinned by execution, not n
     ).toBe("https://cdn.test;jsessionid=SECRETSESSION/app.js");
   });
 
-  it("RESIDUAL, PINNED: URL_MAX truncation can land INSIDE a `<redacted>` marker, and the fragment it leaves is IDEMPOTENT", () => {
-    // The bytes below were read off an execution, not reasoned to.
+  it("CLOSED 2026-08-22 (IN-18, by WR-22): the URL_MAX cut no longer lands INSIDE a `<redacted>` marker — it drops the WHOLE trailing segment, and this case now pins that", () => {
+    // The bytes below were read off an execution, not reasoned to — both the ones
+    // that used to be here and the ones that replaced them.
     //
-    // WHY THIS IS PINNED RATHER THAN FIXED HERE, as a measured reason and not as
-    // "out of scope". The obvious repair — drop the partial marker so the string
-    // ends `…&p133=` — INTERACTS with this plan's new branch: a segment whose
-    // value half is empty now redacts WHOLE, so a second pass over `…&p133=`
-    // produces `…&<redacted>` and the idempotence invariant asserted across every
-    // case in this file breaks. Executed, not assumed:
+    // WHAT THIS CASE USED TO BE, and why the record is kept rather than the
+    // history quietly rewritten. It was a RESIDUAL pin: the `URL_MAX` byte cut
+    // could land mid-marker, leaving a tail of `"p133=<re"`, and the case declined
+    // the obvious repair with this reasoning —
     //
-    //   normaliseObservedUrl("https://x.test/a.js?p133=")
-    //     -> "https://x.test/a.js?<redacted>"      // the name is gone
+    //   "The obvious repair — drop the partial marker so the string ends `…&p133=`
+    //    — INTERACTS with this plan's new branch: a segment whose value half is
+    //    empty now redacts WHOLE, so a second pass over `…&p133=` produces
+    //    `…&<redacted>` and the idempotence invariant asserted across every case in
+    //    this file breaks."
     //
-    // THE JOB, stated so its size is known: truncate on a `&` boundary rather
-    // than mid-marker, which drops the whole trailing segment instead of half a
-    // marker and keeps both invariants. OWNER: a later phase, alongside the
-    // `URL_MAX` bound itself — this plan owns the per-segment rule, not the
-    // truncation strategy.
+    // WHY THAT RATIONALE IS GONE, and it is gone under either outcome rather than
+    // superseded by a better one. It defers on the strength of an invariant THE
+    // SAME BRANCH HAD ALREADY BROKEN, on an input the repair has nothing to do
+    // with: swept at 900 parameters, `normaliseObservedUrl` was not a fixed point
+    // at 25 of 40 parameter-name lengths, the first at n=4. There was no invariant
+    // left to protect. A finding cannot be deferred to protect something already
+    // broken, and this comment is the record that it was.
+    //
+    // THE JOB IT SCOPED — "truncate on a `&` boundary rather than mid-marker,
+    // which drops the whole trailing segment instead of half a marker" — WAS DONE,
+    // by plan 01-20, in `normaliseObservedUrl`. It named "a later phase" as owner;
+    // that ownership is discharged here and the sentence does not survive.
+    //
+    // WHAT THIS CASE PINS NOW: the amended behaviour, on the same fixture, read
+    // off an execution —
+    //
+    //   len 2039 (BELOW `URL_MAX`, by exactly the dropped segment)
+    //   last segment "p132=<redacted>"   — whole, not severed
+    //   second pass === first pass
+    //
+    // so a future change to the truncation strategy goes RED here rather than
+    // silently reintroducing a severed marker.
     const parts: string[] = [];
     for (let i = 0; i < 140; i += 1) parts.push(`p${String(i)}=v`);
     const out = normaliseObservedUrl(
@@ -799,8 +818,10 @@ describe("RESIDUALS this rule deliberately LEAVES — pinned by execution, not n
     // because a severed marker happened to re-truncate to the same byte.
     expect(normaliseObservedUrl(out)).toBe(out);
 
-    // The interaction the repair would break, executed here so the reason above
-    // is evidence rather than an argument.
+    // The empty-value-half behaviour that the deleted rationale treated as an
+    // obstacle. It is unchanged — CR-07's branch is untouched by plan 01-20 — and
+    // it is kept here because it is worth pinning on its own account, not because
+    // it still blocks anything.
     expect(normaliseObservedUrl("https://cdn.test/a.js?p133=")).toBe(
       `https://cdn.test/a.js?${QUERY_VALUE_REDACTION}`,
     );

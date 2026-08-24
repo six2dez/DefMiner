@@ -241,6 +241,53 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               implied: the userinfo guarantee needs the input to
  *                               carry `://`, and the `;` guarantee is a PATH
  *                               guarantee.
+ *                               THE TRUNCATION, and what it costs (added
+ *                               2026-08-22, plan 01-20, WR-22). "Truncated to
+ *                               2048" above is an UPPER BOUND, not the stored
+ *                               length. Past `URL_MAX` the cut drops back to the
+ *                               last `&`, so the value ends on a WHOLE query
+ *                               segment rather than inside one — never inside a
+ *                               `<redacted>` marker. THE COST, measured and not
+ *                               estimated: exactly ONE trailing segment more than
+ *                               the old byte cut discarded, and that segment is a
+ *                               parameter NAME the operator's UAT decision of
+ *                               2026-08-21 chose to keep. It is accepted because
+ *                               the old rule already mangled that same fragment
+ *                               into a severed marker, so the direction is
+ *                               strictly LESS retention. Rows written before this
+ *                               date carry the old shape and are NOT rewritten
+ *                               (decision P8-D1), so this column holds both.
+ *                               UNIT — `observations.spec.ts`'s "the truncation
+ *                               drops a WHOLE trailing segment, never half of
+ *                               one, and never more than one (WR-22)".
+ *                               OPEN, and stated no wider than the evidence: the
+ *                               truncation is a FIXED POINT ACROSS THE RANGE
+ *                               SWEPT — parameter-name lengths 1..64 at 300 and
+ *                               900 parameters, 128 cuts — and NOT for every
+ *                               possible input. TWO classes the sweep does not
+ *                               reach, both in the NO-SEPARATOR branch, where
+ *                               there is no `&` inside the cut to drop back to
+ *                               and the byte cut therefore STANDS: (1) a cut
+ *                               landing in the HEAD can still sever a `;`
+ *                               parameter's marker — severed but STABLE, since a
+ *                               second pass re-expands and re-truncates to the
+ *                               same byte; and (2) a query of a SINGLE segment
+ *                               cut inside its NAME is NOT a fixed point at all —
+ *                               the partial name is a bare segment on the second
+ *                               pass and is redacted whole. NEITHER discloses
+ *                               anything new: no production path applies
+ *                               `normaliseObservedUrl` twice, since
+ *                               `recordObservation` runs it once per row. NOT
+ *                               CLOSED because the repair — dropping back to the
+ *                               last `/` or to the `?` — would truncate an
+ *                               oversized path back to its authority, discarding
+ *                               far more than one trailing segment and reopening
+ *                               a retention question decisions P8-D1 and P10-D1
+ *                               settled. PINNED by "THE NO-SEPARATOR BRANCH: with
+ *                               no `&` inside the cut the byte cut STANDS, and
+ *                               that is where the residual lives (WR-22)", which
+ *                               asserts BOTH classes and goes RED the day either
+ *                               is closed. UNIT.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission

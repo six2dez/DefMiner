@@ -172,9 +172,33 @@ export const QUERY_NAME_MAX = 64;
  * carries nothing. Pinned by the executed case titled "ACCEPTED COST (CR-07):
  * `?debug=` loses its NAME as well as its value".
  *
- * Idempotent for free in all three branches: `QUERY_VALUE_REDACTION` contains no
- * `=`, so on a second pass it arrives here as a bare segment and is replaced with
- * the same bytes.
+ * IDEMPOTENT IN ALL THREE BRANCHES — OF THIS HELPER, AND OF THIS HELPER ONLY.
+ * `QUERY_VALUE_REDACTION` contains no `=`, so on a second pass it arrives here as
+ * a bare segment and is replaced with the same bytes.
+ *
+ * SCOPED 2026-08-22 (WR-22) rather than deleted, because the reasoning above is
+ * sound and worth keeping — what was wrong was the sentence's SCOPE, and a reader
+ * needs to see which. It ended this docblock unqualified, and a reader took it for
+ * the function the durable column is actually written through. It was TRUE here
+ * and FALSE of {@link normaliseObservedUrl}, which TRUNCATES after redacting: a cut
+ * landing just after a `=` handed the second pass a segment with an EMPTY value
+ * half, which the padding branch immediately below redacts WHOLE — destroying the
+ * retained name. Swept at 900 parameters before the repair, 25 of 40
+ * parameter-name lengths were not fixed points, the first at n=4:
+ *
+ *   pass1  "…p111=<redacted>&pppp112="   len 2048
+ *   pass2  "…p111=<redacted>&<redacte"   len 2048
+ *
+ * NOTHING LEAKED and no sentence here should be read as saying otherwise: the half
+ * destroyed is a parameter NAME, which policy retains anyway, and
+ * `recordObservation` applies the composition ONCE per row.
+ *
+ * THE COMPOSED FUNCTION'S FIXED POINT IS NOT CLAIMED HERE. It is asserted by the
+ * sweep in `observations.spec.ts` titled "IDEMPOTENT AT THE `URL_MAX` CUT: swept
+ * across parameter-name length, not hard-coded (WR-22)", which proves it across the
+ * range it swept and no wider. The classes that sweep does not reach are DISCLOSED
+ * in `schema.spec.ts`'s `observations.url` entry and pinned by executed cases —
+ * never claimed away by a sentence in this module.
  */
 function redactDelimitedSegment(segment: string): string {
   const eq = segment.indexOf("=");
