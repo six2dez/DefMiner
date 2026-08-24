@@ -191,6 +191,27 @@
 //          FALSE for an assembled key until 2026-08-24 and is TRUE now. One hop
 //          is inside for a literal binding, for an assembled binding in every
 //          spelling, for a conditional and for a comma sequence. Two hops is out.
+//          SPLIT IN TWO 2026-08-24 (plan 01-19), BECAUSE "ONE HOP" WAS RIGHT
+//          ABOUT KEYS AND UNDERSTATED THE WALK FOR ALIASES, AND A SINGLE
+//          SENTENCE CANNOT BE BOTH. Measured, not reasoned:
+//            KEYS stop at exactly one hop. `constStrings` and `assembledNames`
+//            read the INITIALIZER's shape, never the live set, so they do not
+//            chain: `const a = "requests"; const b = a; sdk[b].send(req)` and
+//            the assembled twin are both silent. That is what (a) has always
+//            said and it is correct.
+//            ALIASES DO NOT. Every alias set here — `receiverAliases`,
+//            `fetchAliases`, `navigatorAliases`, `globalAliases`,
+//            `globalThisAliases` — is grown by consulting the LIVE set, so a
+//            chain resolves to ARBITRARY DEPTH: `const a = globalThis; const b
+//            = a; const g = b; g.fetch(u)` REPORTS, and so does
+//            `const r = sdk.requests; const r2 = r; r2.send(req)`. This was
+//            true of the first two sets from the day they were written and no
+//            residual list had ever said so — the same defect this file keeps
+//            finding, running for once in the direction of the gate reaching
+//            FURTHER than its own disclosure. What actually bounds an alias
+//            chain is DOCUMENT ORDER, not a hop count: a chain read before its
+//            root is bound is silent, because there is no symbol table and no
+//            second pass. All four shapes are asserted below.
 //      (b) A KEY THE WALK NEVER SAW BOUND — a parameter, a `for…of` or `for(;;)`
 //          loop binding, a name whose binding is out of document order or in
 //          another file — is NOT reported. That bound was set by MEASUREMENT and
@@ -741,6 +762,55 @@ const NUMERIC_FUNCTIONS: ReadonlySet<string> = new Set([
  *
  * `+` is numeric ONLY when BOTH operands are — `i + 1` is an index and
  * `"req" + "uests"` is an assembled name, and the difference is the whole point.
+ *
+ * CORRECTED 2026-08-24 (WR-26). THE PARAGRAPH ABOVE OVERCLAIMS, AND THE FUNCTION
+ * DOES NOT DO WHAT ITS OWN SECOND SENTENCE SAYS. Three of the branches below —
+ * the numeric literal, the arithmetic operators, the sign prefix — do prove.
+ * TWO DO NOT. The PROPERTY-ACCESS branch and the METHOD-CALL branch decide by
+ * MEMBER NAME alone, regardless of what the member is a member OF, and they fail
+ * OPEN: `{ max: "requests" }.max` is a string and this function calls it a
+ * number. `NUMERIC_MEMBERS` already conceded the mechanism ("Enumerated rather
+ * than inferred, because the alternative is a type checker") without conceding
+ * the direction. The direction is conceded here.
+ *
+ * SO READ THIS FUNCTION AS: PROVES for literals and arithmetic; ASSUMES BY NAME,
+ * AND FAILS OPEN, for a member or a method call — exactly the way
+ * `ERROR_BINDING_NAMES` states itself one directory away, as a coverage bound
+ * rather than as a proof.
+ *
+ * THE RESOLUTION WAS PICKED BY MEASUREMENT, NOT BY PREFERENCE, AND THE
+ * MEASUREMENT IS KEPT HERE BECAUSE IT IS THE EVIDENCE. WR-26 proposed narrowing
+ * the property-access branch to require an identifier receiver. That narrowing
+ * was applied and RUN, and it changed NOTHING — not its own motivating shape,
+ * not the exempt shapes, not the real tree. Removing the branch ENTIRELY was
+ * then applied and run, and the executed difference was exactly two shapes:
+ *
+ *     SHAPE                         as shipped   branch removed
+ *     sdk[o.length].send(req)       []           []        <- the MOTIVATING shape
+ *     sdk[o.length + 1].send(req)   []           outbound-unanalysable
+ *     sdk[buf.length + i].send(req) []           outbound-unanalysable
+ *     x[a.length + 1] (non-receiver)[]           []
+ *     real tree, 23 files            0            0
+ *
+ * TWO THINGS FOLLOW, AND BOTH ARE WHY THE DOCBLOCK IS WHAT CHANGED. First, the
+ * motivating shape `sdk[o.length].send(req)` is silent under EVERY variant,
+ * including the branch removed entirely — because a bare member is not an
+ * ASSEMBLED key either, so it is residual (b) that silences it and never this
+ * exemption. No narrowing available here can close WR-26's own example.
+ * Second, the only place the branch is load-bearing is `+` COMPOSITION —
+ * `sdk[o.length + 1]`, `sdk[buf.length + i]` — which is precisely the
+ * ordinary-indexing false-positive class that got the broad WR-19 rule narrowed
+ * by measurement, and `store/observations.ts`'s `segments[i + 1]` is a live
+ * instance of it. Narrowing would have bought nothing and cost the gate exactly
+ * the kind of false positive that gets a gate deleted rather than fixed.
+ *
+ * THE BOUND THAT REMAINS, BY NAME: a member or method call named in
+ * `NUMERIC_MEMBERS` is ASSUMED numeric whatever its receiver, so an object that
+ * happens to spell a receiver name under one of those keys is not seen. Nothing
+ * in either scanned root indexes an outbound receiver by a member-named key —
+ * measured, 23 files, zero violations — so the exposure today is nil and the
+ * exposure the day the exemption is relied on is silent. Both shapes are pinned
+ * by fixtures below, titled to say which resolution they encode.
  */
 function isProvablyNumeric(
   node: ts.Expression | undefined,
@@ -768,12 +838,18 @@ function isProvablyNumeric(
     }
     return false;
   }
+  // ASSUMES BY NAME AND FAILS OPEN (WR-26). Not a proof: the receiver is not
+  // examined, so `{ max: "requests" }.max` is called a number. Kept because
+  // narrowing it was measured to change nothing except to re-poison the `+`
+  // index composition this set exists to protect — see the docblock's table.
   if (ts.isPropertyAccessExpression(inner)) {
     return NUMERIC_MEMBERS.has(inner.name.text);
   }
   if (ts.isCallExpression(inner)) {
     const callee = unwrap(inner.expression);
     if (ts.isIdentifier(callee)) return NUMERIC_FUNCTIONS.has(callee.text);
+    // ASSUMES BY NAME AND FAILS OPEN (WR-26), for the same reason as above:
+    // `o.indexOf` is trusted whatever `o` is.
     if (ts.isPropertyAccessExpression(callee)) {
       return NUMERIC_MEMBERS.has(callee.name.text);
     }
@@ -844,10 +920,33 @@ function constructionDetail(target: ts.Expression, global: string): string {
   return `a construction of \`${spelling}\`${aliasSuffix(spelling, global)}`;
 }
 
-/** Is this expression one of the four receivers a global lives on? */
-function isGlobalReceiver(node: ts.Expression): boolean {
+/**
+ * Is this expression one of the four receivers a global lives on — bare, or
+ * through ONE HOP, which is the hop its own alias sets already resolve?
+ *
+ * WIDENED 2026-08-24 (IN-20). `fetchAliases` and `navigatorAliases` both resolve
+ * `const f = fetch` and `const n = navigator`; the RECEIVER those aliases sit on
+ * did not, so `const g = globalThis; g.fetch(u)` and
+ * `const g = globalThis; g["fet" + "ch"](u)` were both silent. That is the same
+ * asymmetry between a thing and its members that CR-08 was, standing one level
+ * further out — and it is what makes it a two-line fix rather than a new
+ * mechanism: the same `Set<string>` pattern, grown in the same collect pass.
+ *
+ * The set is passed in rather than closed over because this function is also
+ * called from module scope by `aliasedGlobalOf`'s helpers during collect, where
+ * the aliases are still being grown; every caller inside `auditSource` passes
+ * the live set, and the bare-identifier answer is unchanged for all of them.
+ *
+ * ONE HOP AND NO MORE: `const a = globalThis; const g = a; g.fetch(u)` is
+ * silent, and that is residual (a).
+ */
+function isGlobalReceiverIn(
+  node: ts.Expression,
+  aliases: ReadonlySet<string>,
+): boolean {
   const inner = unwrap(node);
-  return ts.isIdentifier(inner) && GLOBAL_RECEIVERS.has(inner.text);
+  if (!ts.isIdentifier(inner)) return false;
+  return GLOBAL_RECEIVERS.has(inner.text) || aliases.has(inner.text);
 }
 
 /** The property name a binding element takes FROM the object being destructured. */
@@ -1002,6 +1101,20 @@ export function auditSource(file: string, source: string): Violation[] {
    * that is to leave the variable spelling reporting.
    */
   const shadowedGlobals = new Set<string>();
+  /**
+   * One-hop aliases of the four `GLOBAL_RECEIVERS` (IN-20), mirroring
+   * `fetchAliases` and `navigatorAliases` exactly — which is the finding: those
+   * two resolved a hop that the receiver they sit on did not.
+   *
+   * Seeded EMPTY rather than with the four names, because `isGlobalReceiverIn`
+   * tests `GLOBAL_RECEIVERS` first; this set holds only what the walk WATCHED
+   * being bound, which keeps the bare-identifier answer literally unchanged and
+   * makes the new behaviour reachable only through this set.
+   */
+  const globalThisAliases = new Set<string>();
+  /** One-hop resolution of the receiver, closed over the live alias set. */
+  const isGlobalReceiver = (node: ts.Expression): boolean =>
+    isGlobalReceiverIn(node, globalThisAliases);
   /** Names bound only to provably numeric values, and names bound to anything else. */
   const numericNames = new Set<string>();
   const poisonedNumericNames = new Set<string>();
@@ -1268,6 +1381,9 @@ export function auditSource(file: string, source: string): Violation[] {
         // they were written beside and that was given neither.
         const aliased = aliasedGlobalOf(init);
         if (aliased !== undefined) globalAliases.set(node.name.text, aliased);
+        // IN-20: `const g = globalThis` — the receiver the two alias sets above
+        // sit on, given the hop they already resolve.
+        if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text);
         const kind = initializerReceiver(init);
         if (typeof kind === "string") {
           receiverAliases.set(node.name.text, kind);
@@ -1325,6 +1441,8 @@ export function auditSource(file: string, source: string): Violation[] {
       if (aliasedRight !== undefined) {
         globalAliases.set(node.left.text, aliasedRight);
       }
+      // IN-20, the assignment spelling of `const g = globalThis`.
+      if (isGlobalReceiver(node.right)) globalThisAliases.add(node.left.text);
       // `let k; k = "req" + "uests";` — the assignment spelling of the same
       // assembly, grown from the same two shapes every other set here is grown
       // from, so it is covered by construction rather than by a second edit.
@@ -2559,6 +2677,154 @@ describe('the outbound globals CORE-11 "of any kind" covers', () => {
         "const lib = { WebSocket: Shim };\nconst W = lib.WebSocket;\nnew W(u);",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("the RECEIVER the alias sets sit on resolves the hop they already resolve (IN-20)", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it.each([
+    [
+      "the global fetch — outbound-fetch",
+      "const g = globalThis;\nawait g.fetch(u);",
+      "outbound-fetch",
+    ],
+    [
+      "a COMPUTED member whose name will not reduce — outbound-unanalysable",
+      'const g = globalThis;\nawait g["fet" + "ch"](u);',
+      "outbound-unanalysable",
+    ],
+    [
+      "dynamic code on the aliased receiver — outbound-dynamic-code",
+      "const g = globalThis;\ng.eval(src);",
+      "outbound-dynamic-code",
+    ],
+    [
+      "an outbound constructor on the aliased receiver — outbound-global-ctor",
+      "const g = globalThis;\nnew g.WebSocket(url);",
+      "outbound-global-ctor",
+    ],
+    [
+      "the beacon receiver reached through the aliased receiver — outbound-beacon",
+      "const g = globalThis;\ng.navigator.sendBeacon(u, d);",
+      "outbound-beacon",
+    ],
+    [
+      "the ASSIGNMENT spelling — `let g; g = globalThis;`",
+      "let g;\ng = globalThis;\nawait g.fetch(u);",
+      "outbound-fetch",
+    ],
+  ])(
+    "through globalThisAliases: `const g = globalThis` is a global receiver — %s",
+    (_shape, src, rule) => {
+      // IN-20. Every one of these returned `[]` before 2026-08-24 while
+      // `fetchAliases` and `navigatorAliases` — which SIT ON this receiver —
+      // both resolved the identical hop. Reverting the `globalThisAliases`
+      // consultation in `isGlobalReceiver` drives all six red.
+      expect(rulesOf(src)).toContain(rule);
+    },
+  );
+
+  it("through globalThisAliases' one-hop bound: an ordinary local is NOT a global receiver and its members stay quiet", () => {
+    // The must-stay-quiet twin, in the same commit as the widening. `g` is an
+    // ordinary object here, so nothing it defines becomes an outbound surface.
+    expect(
+      rulesOf('const g = { fetch(u) { return u; } };\ng.fetch("u");'),
+    ).toEqual([]);
+    expect(
+      rulesOf('const g = { fetch(u) { return u; } };\ng["fet" + "ch"]("u");'),
+    ).toEqual([]);
+    expect(
+      rulesOf("const g = { eval(s) { return s; } };\ng.eval(src);"),
+    ).toEqual([]);
+  });
+
+  it("through globalThisAliases' TRANSITIVITY: an alias CHAIN resolves to ANY depth in document order — MEASURED, and not what residual (a) used to say", () => {
+    // MEASURED, NOT ASSUMED, AND THE MEASUREMENT CONTRADICTED THE EXPECTATION
+    // THIS CASE WAS FIRST WRITTEN WITH. Every alias set here is grown by
+    // consulting the LIVE set, so each new binding can be resolved from the
+    // previous one and the chain resolves to arbitrary depth. That is equally
+    // true of `fetchAliases`, `navigatorAliases`, `receiverAliases` and
+    // `globalAliases`, and it has been true of the first two since they were
+    // written — so residual (a)'s "more than ONE HOP is beyond the walk"
+    // UNDERSTATED the walk's reach for ALIASES while remaining exactly right
+    // for KEYS. Corrected 2026-08-24 (plan 01-19); see residual (a).
+    expect(
+      rulesOf("const a = globalThis;\nconst g = a;\nawait g.fetch(u);"),
+    ).toContain("outbound-fetch");
+    expect(
+      rulesOf(
+        "const a = globalThis;\nconst b = a;\nconst g = b;\nawait g.fetch(u);",
+      ),
+    ).toContain("outbound-fetch");
+    expect(rulesOf("const f = fetch;\nconst f2 = f;\nf2(u);")).toContain(
+      "outbound-fetch",
+    );
+    expect(
+      rulesOf("const r = sdk.requests;\nconst r2 = r;\nr2.send(req);"),
+    ).toContain("outbound-send");
+  });
+
+  it("through NOTHING: DOCUMENT ORDER, not a hop count, is what actually bounds an alias chain — a chain READ BEFORE ITS ROOT is silent", () => {
+    // A MEASURED SILENCE, labelled as one per plan 01-18's convention. This is
+    // the REAL bound on the alias sets, and it is what residual (a) now states
+    // for them in place of "more than one hop".
+    expect(
+      rulesOf(
+        "function z() { return g.fetch(u); }\nconst g = a;\nconst a = globalThis;",
+      ),
+    ).toEqual([]);
+  });
+
+  it("through NOTHING: a receiver KEY still stops at exactly ONE hop, which is where residual (a)'s original wording IS right", () => {
+    // The contrast that makes the corrected residual checkable. `constStrings`
+    // and `assembledNames` read the INITIALIZER's shape rather than the live
+    // set, so they do not chain: two hops of KEY is silent, in both spellings.
+    expect(
+      rulesOf('const a = "requests";\nconst b = a;\nsdk[b].send(req);'),
+    ).toEqual([]);
+    expect(
+      rulesOf('const a = "req" + "uests";\nconst b = a;\nsdk[b].send(req);'),
+    ).toEqual([]);
+  });
+});
+
+describe("what `isProvablyNumeric` ACTUALLY establishes, and what it merely assumes (WR-26)", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  it("RESOLUTION 2 — THE DOCBLOCK CHANGED, NOT THE BRANCH: a member-named key is still `[]`, and this pins the DISCLOSED COST of a NAME heuristic", () => {
+    // WR-26's motivating shape. It is silent, and the measurement recorded in
+    // `isProvablyNumeric`'s docblock is why the branch was not narrowed: this
+    // shape is silent under EVERY variant tried, including the property-access
+    // branch removed entirely, because a bare member is not an ASSEMBLED key
+    // either — residual (b) silences it and the numeric exemption never does.
+    // No narrowing available at this branch can close it.
+    expect(rulesOf("const o = q;\nsdk[o.length].send(req);")).toEqual([]);
+    expect(
+      rulesOf('const o = { max: "requests" };\nsdk[o.max].send(req);'),
+    ).toEqual([]);
+  });
+
+  it("RESOLUTION 2's COST, MEASURED: the property-access branch is load-bearing ONLY in `+` composition, which is the ordinary-INDEX class it exists to protect", () => {
+    // This is the case a revert CAN turn red, and it is what makes the
+    // measurement in the docblock checkable rather than asserted. Removing the
+    // property-access branch makes both of these report
+    // `outbound-unanalysable` — the false-positive class that got the broad
+    // WR-19 rule narrowed, with `observations.ts`'s `segments[i + 1]` live.
+    expect(rulesOf("const o = q;\nsdk[o.length + 1].send(req);")).toEqual([]);
+    expect(
+      rulesOf("const i = 1;\nconst buf = q;\nsdk[buf.length + i].send(req);"),
+    ).toEqual([]);
+  });
+
+  it("what the function DOES prove: an ASSEMBLED key composed with a member name is still unreadable, because `+` needs BOTH operands numeric", () => {
+    // The half of the docblock that was always true, asserted so the correction
+    // above cannot be read as saying the whole function assumes.
+    expect(
+      rulesOf('const o = { max: "requests" };\nsdk[o.max + ""].send(req);'),
+    ).toContain("outbound-unanalysable");
   });
 });
 
