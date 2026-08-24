@@ -164,7 +164,7 @@ Plans:
 
 **Wave 24** *(blocked on 01-23 — shares `outbound-prohibition.spec.ts`, and narrowing a false sentence produces a narrower false sentence)*
 
-- [ ] 01-24-PLAN.md — **CR-10, the blocker**: `keyReceiver` consults `literalOf` first and `constStrings` is written only at the declaration branch, so a stale harmless literal shadows every later rebinding — `let k = "harmless"; k = "requests"; sdk[k].send(req)` is silent while `let k; k = "requests"` reports. The collectors made to describe a name's bindings across the file, the compound assignment read as the assembly it is, the MIRROR direction measured rather than left for next round, and boundary 2's approximation claim restated per mechanism — *wave 24*
+- [x] 01-24-PLAN.md — **CR-10, the blocker**: `keyReceiver` consults `literalOf` first and `constStrings` is written only at the declaration branch, so a stale harmless literal shadows every later rebinding — `let k = "harmless"; k = "requests"; sdk[k].send(req)` is silent while `let k; k = "requests"` reports. The collectors made to describe a name's bindings across the file, the compound assignment read as the assembly it is, the MIRROR direction measured rather than left for next round, and boundary 2's approximation claim restated per mechanism — *wave 24*
 
 **Wave 25** *(blocked on 01-24 — recurses through the key resolver wave 24 rewrote)*
 

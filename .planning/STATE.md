@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-23-PLAN.md
-last_updated: "2026-08-24T11:43:24.704Z"
+stopped_at: Completed 01-24-PLAN.md
+last_updated: "2026-08-24T12:11:57.485Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 025e2691e3168c5ffa3f305c9afa0a93427f9fbf
+state_head: 57b2bfe75f90c8fd81213e55a0ede445c2899df3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 28
-  completed_plans: 23
+  completed_plans: 24
 ---
 
 # Project State
@@ -28,18 +28,26 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 24 of 28
-Status: Executing Phase 01 — 01-23 complete, 01-24 next
-Last activity: 2026-08-24 — Completed 01-23 (CR-09: the READ-position bound deleted and replaced with the collect/visit bound)
+Plan: 25 of 28
+Status: Executing Phase 01 — 01-24 complete, 01-25 next
+Last activity: 2026-08-24 — Completed 01-24 (CR-10: the stale first literal that shadowed every later rebinding)
 
-Progress: [████████░░] 82% of phase 01 (23 of 28 plans)
+Progress: [█████████░] 86% of phase 01 (24 of 28 plans)
 
 > The frontmatter's project-wide bar is still not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it has
-> now done so on EIGHT consecutive plans (01-07 … 01-11, 01-14, 01-17 and 01-23), so this
-> is the handler's steady behaviour on this repo and not a transient. The figure above is
-> the phase-local one, computed from the 28 PLAN / 23 SUMMARY files on disk and stated
+> now done so on NINE consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23 and 01-24), so
+> this is the handler's steady behaviour on this repo and not a transient. The figure above
+> is the phase-local one, computed from the 28 PLAN / 24 SUMMARY files on disk and stated
 > with its basis rather than as an unexplained number.
+>
+> WHAT WAS DIFFERENT THIS TIME, RECORDED BECAUSE IT IS THE FIRST TIME IN FOUR PLANS: the
+> `Plan:` counter did NOT drift. `state.advance-plan` reported `previous_plan: 24 ->
+> current_plan: 25` against a frontmatter that already read 24, because plan 01-23 set the
+> counter from the file count on disk rather than leaving it to increment from its own
+> previous value. The correction 01-23 made held for one wave. The prose bar above and the
+> `Last activity` line still had to be rewritten by hand, which is the part no handler
+> owns.
 >
 > THE PROSE ABOVE WENT STALE AGAIN AND IS CORRECTED AGAIN, named rather than fixed
 > quietly, because the SHAPE of the staleness is the point and it is the same shape a
@@ -99,6 +107,7 @@ Progress: [████████░░] 82% of phase 01 (23 of 28 plans)
 | Phase 01 P21 | 12 min | 2 tasks | 1 files |
 | Phase 01 P22 | 13 min | 2 tasks | 3 files |
 | Phase 01 P23 | 15 min | 3 tasks | 4 files |
+| Phase 01 P24 | 22 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -206,6 +215,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P23-D2: WINDOWS.md entry 25 — this correction's own first replacement entry — QUOTED the superseded wording instead of naming it, and was closed through `gsd-tools windows fixed` and superseded by entry 26 rather than hand-edited — Quoting put the falsified clause on an OPEN ledger entry, which is the exact thing the plan's own criterion forbids and the same restate-rather-than-name mistake the gate file's rule exists to prevent. Caught by running the criterion rather than by reading. Hand-editing the JSON block would have desynchronised the frontmatter counters and hidden the error; closing through the tool leaves the mistake visible in the record and keeps the ledger's tooling authoritative.
 - [Phase 01]: P23-D3: CORE-11's box stays `[ ]` after plan 01-23, deliberately — wave 28 owns the flip and only against wave 27's DERIVED residual, never an authored one — `faca607` reverted the box because the `[x]` plan 01-19 set had been flipped against the very sentence CR-09 falsified — the second time a flip was made against a disclosure whose stated reach exceeded its executed reach, after `e7cc4b6`. Flipping here would repeat the act that revert undid. Independently confirmed by the shared-ID gate: `requirements ready-ids` reports 0/1 ready, because sibling plans in this phase also declare CORE-11 and have not finished.
 - [Phase 01]: P23-D4: the measured bound on the outbound gate is the DECLARATION ORDER OF THE BINDINGS RELATIVE TO EACH OTHER, not the position of a read — `collect(sf)` completes before `visit(sf)` begins, so a use may sit above every declaration in the file — Derived from two lines of code rather than from the previous paragraph, which is what the last four rounds each did wrongly. Seven shapes the old sentence called silent were executed and all seven report. A chain resolves to ANY DEPTH provided each link's declaration follows the declaration of the name it is grown from, because every alias set is grown by consulting the LIVE set during that one collect pass; one inverted link silences it wherever the read sits. Keys stop at one hop for a different reason — `constStrings` and `assembledNames` read the INITIALIZER's shape and never the live set — and that contrast is now stated in one comment beside the key cases.
+- [Phase 01]: P24-D1: ANY-BINDING-WINS chosen over a poisoned map, BY MEASUREMENT — both mechanisms were implemented and run — The poisoned map left CR-10's own shapes 1 and 2 silent and created a new silence at the mirror; any-binding-wins closes both and over-approximates, the direction every other set in this pass already errs in. Both produce a zero real tree, so the real tree did not discriminate — the shapes did. The rejected mechanism survives as mutation MA3, the only mutation that reaches the mirror fixture.
+- [Phase 01]: P24-D2: THE PRECEDENCE — a watched assembly beats a literal binding of the same name — Task 1's widening created a case that could not exist before: a name carrying both. Both directions report, so the choice is between naming a surface off a string the file has since rebuilt and admitting the walk can no longer read the site. Written into the ordering docblock as step 0, numbered 0 rather than renumbering the four below because 'step 1' names the literal lookup in three other docblocks.
+- [Phase 01]: P24-D3: literalOf is SINGLE-VALUED — the rejected mechanism, used deliberately at the other callers — Member names and specifiers need one string, not a set, and at those call sites undefined already means COULD NOT READ, which reports. One principle covers both: each caller's unknown-direction is the reporting direction. Guarded by the allowlist fixture, which is the one that decides whether this is safe or gate-deleting.
+- [Phase 01]: P24-D4: REQUIREMENTS.md and STATE.md deliberately NOT amended with the narrowed residual in wave 24 — Both carry an authored residual and are one wave stale on purpose. Wave 27 derives the replacement and wave 28 reconciles both ledgers to it in one move; a fourth hand-authored copy would be another place the next drift can start, which is the mechanism behind six consecutive false bounds. The gate header and the tool-owned ledger carry this wave's narrowing.
+- [Phase 01]: P24-D5: keyReceiver's step 3 deleted as unreachable rather than left standing — Once step 0 tested the identical condition and returned first, step 3 was dead. Two identical tests in one function is how a reader learns to stop trusting an order the docblock calls load-bearing.
 
 ### Known Risks Carried Forward
 
@@ -248,11 +262,12 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T11:43:24.684Z
-**Stopped at:** Completed 01-23-PLAN.md
+**Last session:** 2026-08-24T12:11:01.745Z
+**Stopped at:** Completed 01-24-PLAN.md
 **Resume file:** None
 
 ### Blockers
 
 - SPIKE-10 cross-day cache hit rate is UNDEFINED (1 day sampled, denominator 0) and collection has STOPPED — the recorder LaunchAgent was uninstalled. **CORRECTION (2026-08-21, plan 01-08): the 8998 INSTANCE WAS NOT KILLED.** This line previously claimed it was, per plan 00-04's teardown responsibility; that claim is false. `caido-cli --data-path .spike/recorder-data --listen 127.0.0.1:8998 --no-open --debug` is pid 79273 and has been up since 2026-08-20 (16h44m elapsed when observed). It is deliberately LEFT RUNNING — 01-08 found it while enumerating plugin databases and has no mandate to kill an operator process. Its plugin database holds `cache_log`, not DefMiner's tables, so it affects no count in 01-08. **Worth an operator decision, not taken here and NOT assumed either way:** the uninstalled LaunchAgent is what drove collection, so a bare instance being up does not by itself mean sampling resumed — but this line's opening premise (collection stopped, cross-day denominator 0) now rests on a teardown that provably only half happened, so it should be checked rather than inherited. 01-08 did not check it: the SPIKE-10 question is outside this plan's scope and re-opening it is the operator's call. Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. To re-measure: bash scripts/spike/recorder-agent.sh install, let it span 2+ calendar days, then re-run analyse-spike-10.py + aggregate.py + render-go-no-go.py. Revisit after 2026-09-03.
 - DISCLOSED OPEN (plan 01-20, WR-22): normaliseObservedUrl is a fixed point across the swept range (parameter-name lengths 1..64 at 300/900 params, 128 cuts) but NOT for every input. Two no-separator classes remain — a head-side cut can sever a `;` parameter marker (severed but stable), and a single-segment query cut inside its NAME is not a fixed point at all. Neither discloses anything new (recordObservation applies the function once per row). Both pinned in observations.spec.ts and disclosed in schema.spec.ts.
+- CORE-11's residual class is still open: six consecutive rounds of bounds authored rather than derived. Wave 27 owns the derivation; wave 28 owns the CORE-11 checkbox flip, and only against the derived text.
