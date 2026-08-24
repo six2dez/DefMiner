@@ -803,9 +803,16 @@ compares it to that output. If the two disagree the GENERATED text is
 authoritative and the shipped text is the defect.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
-1. Each entry below is verified by EXECUTION: its probe and its counter-probe
-   are run through auditSource and asserted against the rule identifiers
-   recorded here, so a branch removed from the walk turns its own entry red.
+1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
+   and its counter-probe are run through auditSource and asserted against the
+   rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
+   carries its own probe, listed under it and executed the same way. So a
+   NAMED branch removed from the walk turns its own entry red. A branch the
+   clause does NOT name is covered by nothing here - see point 3, which this
+   point used to contradict. Until 2026-08-24 this point claimed that ANY
+   branch removed from the walk turned its entry red; it was FALSIFIED by
+   mutation (WR-32) and is corrected rather than deleted, because the
+   per-branch probes now support the narrower claim it makes.
 2. It does NOT prove the registry enumerates every mechanism the walk has. A
    coverage guard enumerates TWO populations out of this file's own source -
    collectors matching a declared naming convention, and resolver functions
@@ -820,6 +827,23 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
    do not cover that resolver's whole domain.
 4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody
    thought of is still silent and still unlisted here.
+5. WHAT CLAUSE-TO-BRANCH BINDING CANNOT PROVE - FOUR THINGS, STATED FLATLY.
+   (a) It does NOT prove a clause NAMES every branch the code has. A branch
+       the clause is silent about is bound to nothing, exactly as before.
+   (b) It does NOT prove BRANCH_VOCABULARY covers every way a branch can be
+       named in English. A clause phrased outside that list is unmatched, and
+       therefore unbound; its pinned hit count is what makes a vocabulary
+       that stopped matching visible, not a claim that it matches everything.
+   (c) It does NOT prove UNBOUNDED_QUANTIFIERS covers every way a universal
+       can be SPELLED. That list is the same kind of frozen, hand-maintained
+       phrase list, so a clause asserting a universal in an UNDECLARED
+       phrasing raises no obligation and passes. The quantifier guard reaches
+       the phrasings it declares and NO FURTHER. This is disclosed here on
+       the same terms as (b) rather than left for a later round to find by
+       rephrasing one clause.
+   (d) It does NOT prove the registry ENUMERATES every mechanism, which point
+       2 above already states and which is restated here only to keep the
+       four limits together.
 
 RESOLVERS - 31 entries.
 
@@ -4189,6 +4213,71 @@ export type FalsifiedHandoff = {
   readonly openAnswer: readonly RuleId[];
 };
 
+/**
+ * THE DECLARED QUANTIFIER PHRASINGS.
+ *
+ * WHY THIS LIST EXISTS. Two clauses in this registry asserted a UNIVERSAL, were
+ * green, and were FALSE: `ANY string literal the name is bound to anywhere in the
+ * file` and `silent in every spelling`. A universal a reviewer cannot execute and
+ * disagree with is the same artifact as an unnamed blind spot — it just wears a
+ * quantifier. Every clause carrying one of the phrasings below must appear on
+ * `QUANTIFIED_CLAUSES` with a MEASURED statement of what bounds it.
+ *
+ * THIS LIST WAS CHECKED AGAINST THE THREE UNIVERSALS THIS ROUND FALSIFIED, by
+ * running the scan rather than by reading: `constStrings`, `literalsOf` and
+ * `silence-operator-around-global-receiver` are all hits. A quantifier list that
+ * missed the universals that produced this round's blockers would miss round 7's.
+ *
+ * ITS REACH IS THE DECLARED PHRASINGS AND NO FURTHER, AND THAT IS STATED HERE
+ * RATHER THAN LEFT TO BE FOUND. This is the same class of frozen, hand-maintained
+ * phrase list as `BRANCH_VOCABULARY`, and English has many spellings for one
+ * universal. A clause asserting one OUTSIDE this list is unmatched, raises no
+ * `QUANTIFIED_CLAUSES` obligation and passes silently. NO SENTENCE IN THIS FILE MAY
+ * CLAIM THIS GUARD CATCHES EVERY UNIVERSAL. Caveating `BRANCH_VOCABULARY` and
+ * leaving this one uncaveated would be this round's own defect, one guard over —
+ * and it would invite round 7 to falsify the whole mechanism by rephrasing a
+ * single clause. The limit ships in the generated block on every surface.
+ */
+export const UNBOUNDED_QUANTIFIERS: readonly string[] = Object.freeze([
+  "anywhere in the file",
+  "everywhere in the file",
+  "any depth",
+  "every literal",
+  "ANY of them",
+  "every spelling",
+  "every reachable spelling",
+  "ANY string literal",
+  "ANY-BINDING-WINS",
+]);
+
+/**
+ * WHAT MEASURABLY BOUNDS EACH QUANTIFIED CLAUSE.
+ *
+ * Written in `RESOLVER_EXEMPTIONS`' shape and for the argument that list's own
+ * docblock already makes: a NAMED, REASONED entry is something a reviewer can
+ * execute and disagree with, and an unnamed blind spot is not. Each entry below
+ * is a STATEMENT OF WHAT WAS MEASURED — not a justification and not an excuse.
+ * Every probe quoted in it was RUN in wave 29 and its answer recorded in
+ * `01-29-SUMMARY.md`.
+ */
+export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
+  Object.freeze({
+    constStrings:
+      'Bounded by the TWO branches that call bindString: a string-literal declaration and a string-literal assignment. A literal reached only through a conditional, ?? or || initializer is in no collected set. MEASURED: `const r = ok ? "requests" : "x"; sdk[r].send(req)` reports NOTHING. That is CR-13, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.',
+    poisonedNumericNames:
+      "Bounded by the ARMS of the numeric pass that write it: a non-numeric VariableDeclaration initializer, an EqualsToken assignment, a += whose right side is non-numeric, and any other ASSIGNMENT_OPERATORS spelling. A binding shape outside those arms poisons nothing. MEASURED: `function f(i) { return sdk[i].send(req); }` reports NOTHING — a parameter is never poisoned because it is never bound in the pass.",
+    receiverAliases:
+      "Bounded by DECLARATION ORDER inside the single collect pass, and by the two branches that write the map. `everywhere in the file` is true of WHERE the alias is READ, not of where it may be BOUND. MEASURED: `const b = a; const a = sdk.requests; b.send(req)` reports NOTHING, while the dependency-ordered spelling reports — that inversion has its own registry row, silence-inverted-binding-order.",
+    keyReceiver:
+      'Bounded by operatorReceiver\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the leaf resolver. `any depth` is unbounded only WITHIN those four operators; a fifth operator spelling is not descended at any depth. MEASURED: `sdk[b ? (c ? "requests" : "x") : "y"].send(req)` reports outbound-send.',
+    literalsOf:
+      'Bounded by the collected set constStrings recorded — the SAME two branches, so this clause inherits constStrings\' bound exactly. MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` reports NOTHING. CR-13, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.',
+    isFetchExpression:
+      "Bounded by the THREE spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, and a one-hop alias. MEASURED: `(ok && fetch)(url)` reaches none of them and reports NOTHING, because operatorReceiver is not consulted here. CR-12, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.",
+    "silence-operator-around-global-receiver":
+      "Bounded by the FOUR RECEIVER_OPERATORS, and NOT by the wrappings unwrap strips first. MEASURED: `(0, globalThis).fetch(url)`, `(globalThis).fetch(url)`, `(globalThis as any).fetch(url)` and `globalThis!.fetch(url)` ALL report outbound-fetch, because unwrap removes them before any resolver is reached; only `(ok && globalThis).fetch(url)` is silent. CR-11, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.",
+  });
+
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
   Object.freeze({
     row: "constStrings",
@@ -4303,9 +4392,16 @@ export function deriveResidual(registry: readonly ResolverRecord[]): string {
     "authoritative and the shipped text is the defect.",
     "",
     "WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.",
-    "1. Each entry below is verified by EXECUTION: its probe and its counter-probe",
-    "   are run through auditSource and asserted against the rule identifiers",
-    "   recorded here, so a branch removed from the walk turns its own entry red.",
+    "1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe",
+    "   and its counter-probe are run through auditSource and asserted against the",
+    "   rule identifiers recorded here; and every branch the entry's CLAUSE NAMES",
+    "   carries its own probe, listed under it and executed the same way. So a",
+    "   NAMED branch removed from the walk turns its own entry red. A branch the",
+    "   clause does NOT name is covered by nothing here - see point 3, which this",
+    "   point used to contradict. Until 2026-08-24 this point claimed that ANY",
+    "   branch removed from the walk turned its entry red; it was FALSIFIED by",
+    "   mutation (WR-32) and is corrected rather than deleted, because the",
+    "   per-branch probes now support the narrower claim it makes.",
     "2. It does NOT prove the registry enumerates every mechanism the walk has. A",
     "   coverage guard enumerates TWO populations out of this file's own source -",
     "   collectors matching a declared naming convention, and resolver functions",
@@ -4320,6 +4416,23 @@ export function deriveResidual(registry: readonly ResolverRecord[]): string {
     "   do not cover that resolver's whole domain.",
     "4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody",
     "   thought of is still silent and still unlisted here.",
+    "5. WHAT CLAUSE-TO-BRANCH BINDING CANNOT PROVE - FOUR THINGS, STATED FLATLY.",
+    "   (a) It does NOT prove a clause NAMES every branch the code has. A branch",
+    "       the clause is silent about is bound to nothing, exactly as before.",
+    "   (b) It does NOT prove BRANCH_VOCABULARY covers every way a branch can be",
+    "       named in English. A clause phrased outside that list is unmatched, and",
+    "       therefore unbound; its pinned hit count is what makes a vocabulary",
+    "       that stopped matching visible, not a claim that it matches everything.",
+    "   (c) It does NOT prove UNBOUNDED_QUANTIFIERS covers every way a universal",
+    "       can be SPELLED. That list is the same kind of frozen, hand-maintained",
+    "       phrase list, so a clause asserting a universal in an UNDECLARED",
+    "       phrasing raises no obligation and passes. The quantifier guard reaches",
+    "       the phrasings it declares and NO FURTHER. This is disclosed here on",
+    "       the same terms as (b) rather than left for a later round to find by",
+    "       rephrasing one clause.",
+    "   (d) It does NOT prove the registry ENUMERATES every mechanism, which point",
+    "       2 above already states and which is restated here only to keep the",
+    "       four limits together.",
     "",
     `RESOLVERS - ${plural(resolvers.length)}.`,
   ];
@@ -6894,6 +7007,75 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       ).toEqual([...h.openAnswer]);
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // A UNIVERSAL IN A DECLARED PHRASING NAMES WHAT BOUNDS IT
+  // ---------------------------------------------------------------------------
+  it("UNBOUNDED_QUANTIFIERS is NON-EMPTY, its scan finds a non-empty hit set, and the hit count is PINNED", () => {
+    expect(
+      UNBOUNDED_QUANTIFIERS.length,
+      "UNBOUNDED_QUANTIFIERS is empty. The guard below would scan for nothing and pass having found no universal at all — a guard that enumerates zero is the failure this file exists to remove.",
+    ).toBeGreaterThan(0);
+    const hits = RESOLVER_REGISTRY.flatMap((row) =>
+      UNBOUNDED_QUANTIFIERS.filter((q) => row.clause.includes(q)).map(
+        (q) => `${row.id} :: ${q}`,
+      ),
+    );
+    expect(
+      hits.length,
+      "the quantifier scan matched NOTHING. Either every universal was rewritten out of every clause — possible, and then this pin changes in the same commit — or the phrasings stopped matching, which is the same silent break the vocabulary pin catches.",
+    ).toBeGreaterThan(0);
+    expect(
+      hits.length,
+      `the quantifier scan matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
+    ).toBe(11);
+  });
+
+  // THE LIST IS CHECKED AGAINST THE THREE UNIVERSALS THIS ROUND FALSIFIED, BY
+  // RUNNING THE SCAN. A quantifier list that misses the universals which produced
+  // this round's blockers is a list that will miss round 7's.
+  it("the quantifier scan catches ALL THREE universals this round falsified", () => {
+    const hit = (id: string): boolean => {
+      const row = RESOLVER_REGISTRY.find((r) => r.id === id);
+      return UNBOUNDED_QUANTIFIERS.some(
+        (q) => row?.clause.includes(q) === true,
+      );
+    };
+    for (const id of [
+      "constStrings",
+      "literalsOf",
+      "silence-operator-around-global-receiver",
+    ]) {
+      expect(
+        hit(id),
+        `row \`${id}\` carried one of the three universals round 6 falsified and the quantifier scan does NOT hit it. The list has stopped matching the shapes it was written for.`,
+      ).toBe(true);
+    }
+  });
+
+  it("every clause carrying a DECLARED quantifier phrasing names a MEASURED bound", () => {
+    const unbounded: string[] = [];
+    for (const row of RESOLVER_REGISTRY) {
+      for (const q of UNBOUNDED_QUANTIFIERS) {
+        if (!row.clause.includes(q)) continue;
+        if (QUANTIFIED_CLAUSES[row.id] === undefined) {
+          unbounded.push(`${row.id} asserts ${JSON.stringify(q)}`);
+        }
+      }
+    }
+    expect(
+      unbounded,
+      `clause(s) assert a universal with NO named bound: ${unbounded.join(" | ")}. There are two ways out. STATE THE BOUND — add a QUANTIFIED_CLAUSES entry saying what MEASURABLY limits it, in a sentence a reviewer can execute and disagree with. Or REWRITE THE CLAUSE so it does not assert a universal. A universal nobody can disagree with is an unnamed blind spot wearing a quantifier, and this round exists because two of them shipped green.`,
+    ).toEqual([]);
+    // Every entry carries a bound of a minimum length, exactly as the exemption
+    // reasons are checked — a one-word bound is an unexplained exemption.
+    for (const [id, bound] of Object.entries(QUANTIFIED_CLAUSES)) {
+      expect(
+        bound.trim().length,
+        `QUANTIFIED_CLAUSES entry \`${id}\` carries no real bound. A bound that cannot be executed is a justification, which is the thing this list exists instead of.`,
+      ).toBeGreaterThan(60);
+    }
+  });
 
   // NO OWNING WAVE IS RECORDED AS PROSE INSIDE A CLAUSE. The owner is DATA; a
   // clause that also names it would leave a note to go stale in a shipped span.
