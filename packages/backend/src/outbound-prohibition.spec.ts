@@ -845,9 +845,9 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
        2 above already states and which is restated here only to keep the
        four limits together.
 
-RESOLVERS - 31 entries.
+RESOLVERS - 32 entries.
 
-* constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration or a string-literal assignment names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer binds a literal neither this collector nor literalsOf reads
+* constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
     probe:     "const r = \"requests\";\nsdk[r].send(req);"
     reports:   outbound-send
@@ -855,6 +855,7 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     branch:    "a string-literal declaration" at auditSource > collect > if (ts.isStringLiteralLike(init)) { - probe "const r = \"requests\";\nsdk[r].send(req);" - reports outbound-send
     branch:    "a string-literal assignment" at auditSource > collect > if (ts.isStringLiteralLike(assignedString)) { - probe "let r;\nr = \"requests\";\nsdk[r].send(req);" - reports outbound-send
+    branch:    "an operator initializer" at auditSource > collect > for (const literal of operatorBinding.literals) { - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
 
 * assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grow nothing
     read off:  auditSource > const assembledNames = new Set<string>()
@@ -973,13 +974,14 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     branch:    "a bare operator written directly in call position" at auditSource > receiverKind > const operator = operatorReceiver(inner, receiverKind); - probe "(b ? sdk.requests : sdk.net).send(req);" - reports outbound-send
 
-* literalsOf - the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name, so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer is in no collected set and is not read
+* literalsOf - the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name - which since 2026-08-24 includes every literal an operator initializer bound - so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer was in no collected set and was not read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a literal reached only through a parameter, a loop binding, a name bound in another file or a second hop of key is still in no collected set
     read off:  auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
     probe:     "let k = \"harmless\";\nk = \"requests\";\nsdk[k].send(req);"
     reports:   outbound-send
     counter:   "let k = \"harmless\";\nk = \"other\";\nsdk[k].send(req);"
     reports:   [] - nothing
     branch:    "the collected set" at auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS; - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "an operator initializer" at auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS; - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
 
 * literalOf - the SINGLE-valued string reader member names and module specifiers need: one binding resolves, two or more answer undefined, and undefined means COULD NOT READ at every call site - which reports
     read off:  auditSource > function literalOf(node: ts.Node | undefined): string | undefined {
@@ -1076,6 +1078,17 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
     branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
+
+* operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
+    read off:  module scope > function operatorLiteralBinding(
+    probe:     "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
+    reports:   outbound-send
+    counter:   "const k = b ? \"harmless\" : \"other\";\nsdk[k].send(req);"
+    reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > const operatorBinding = operatorLiteralBinding( - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a literal operand" at module scope > operatorLiteralBinding > for (const literal of read(inner)) literals.add(literal); - probe "const k = b ?? \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "an operand the walk WATCHES BEING ASSEMBLED" at module scope > operatorLiteralBinding > isAssembledKey(inner, numeric, poisoned) || - probe "const k = b ? \"req\" + \"uests\" : \"net\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a nested operator" at module scope > operatorLiteralBinding > const nested = operatorLiteralBinding( - probe "const k = b ? (c ? \"requests\" : \"x\") : \"y\";\nsdk[k].send(req);" - reports outbound-send
 
 * isProvablyNumeric - a NARROWING resolver: a key provably numeric - a numeric literal, a collected numeric name, `+`/`-` over two numeric operands, or a member or call named in NUMERIC_MEMBERS - is an INDEX and is excluded before any receiver rule runs. The NUMERIC_MEMBERS half is a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
     read off:  module scope > function isProvablyNumeric(
@@ -1978,6 +1991,157 @@ function isAssembledKey(
   return ts.isCallExpression(inner);
 }
 
+/** What an operator INITIALIZER binds: the literals it can carry, and whether it hides one. */
+type OperatorLiteralBinding = {
+  /** Every literal reachable on any operand. */
+  readonly literals: ReadonlySet<string>;
+  /** Whether any operand is one the walk WATCHES BEING ASSEMBLED. */
+  readonly assembled: boolean;
+};
+
+/**
+ * THE LITERAL DESCENT OVER AN OPERATOR INITIALIZER — THE SECOND CONSUMER OF
+ * `operatorOperands`, NOT A SECOND COPY OF IT. Added 2026-08-24 (CR-13).
+ *
+ * WHY IT EXISTS. `keyReceiver` descends an operator INLINE at the KEY site
+ * through `operatorReceiver(unwrap(key), keyReceiver)`. `collect` did not descend
+ * one at the BINDING site: `bindString` requires a bare `isStringLiteralLike`
+ * initializer after `unwrap`, and `isAssembledKey` answers false for a
+ * `ConditionalExpression`. So `const k = b ? "requests" : "net"; sdk[k].send(req)`
+ * landed in NEITHER `constStrings` NOR `assembledNames` and the key lookup
+ * answered "not a receiver" — CLEAN, on a site with the literal `"requests"`
+ * written out in full. One expression shape, answered differently depending only
+ * on which POSITION it was bound for, and the answer at the silent position was
+ * the quiet one. All four twins of the identical conditional already reported.
+ *
+ * IT IS BUILT ON `operatorOperands` AND MUST STAY BUILT ON IT — WR-27 IS THE
+ * REASON, NAMED HERE RATHER THAN LEFT AS STYLE. WR-27 was ONE idea — the
+ * conditional descent — written THREE TIMES and therefore existing only TWICE,
+ * and the face nobody had was silent. A literal-reading descent carrying its own
+ * inline list of operator kinds would be the FOURTH copy of that list, free to
+ * disagree with `operatorReceiver` about which operators exist the day either
+ * one grows a fifth. `operatorOperands` is the separated statement of WHAT
+ * COUNTS AS AN OPERATOR; this function is its second CONSUMER, and
+ * `operatorReceiver` is the first. HOW THE OPERANDS COMBINE differs between the
+ * two — one selects a receiver, one collects literals — and that is exactly the
+ * half `operatorOperands`' own docblock says is allowed to differ.
+ *
+ * THE RECURSION IS THIS FUNCTION'S OWN, AND THAT IS A DEPARTURE FROM
+ * `operatorReceiver` WORTH STATING. `operatorReceiver` takes the caller's leaf
+ * resolver and lets the caller pass ITSELF, so nesting resolves by construction.
+ * That is not available here: the leaf reader is `literalsOf`, which returns a
+ * `ReadonlySet<string>` and has no third state to carry an "unreadable" answer
+ * back through, and making it operator-aware would put a fifth copy of the
+ * descent inside a function whose whole job is reading a map. So the descent
+ * recurses on itself and takes the reader as a leaf, which keeps the nesting
+ * property without teaching `literalsOf` a shape it has no vocabulary for.
+ *
+ * WHAT COUNTS AS AN UNREADABLE OPERAND — SETTLED BY MEASUREMENT, NOT BY THE FIX
+ * SKETCH, AND THE REJECTED READING IS RECORDED HERE THE WAY `RECEIVER_OPERATORS`
+ * RECORDS `&&`. The review proposed marking the name an assembly if ANY operand
+ * is unreadable. BOTH READINGS WERE IMPLEMENTED AND RUN — see `01-30-SUMMARY.md`
+ * section 3 for the full table. What decided it:
+ *
+ *   READING A, ANY OPERAND WITH NO LITERAL
+ *       const k = b ? "requests" : someName    ["outbound-unanalysable"]
+ *         but the INLINE twin sdk[b ? "requests" : someName]
+ *                                              ["outbound-send"]
+ *       const k = b ? someName : otherName     ["outbound-unanalysable"]
+ *         but the INLINE twin sdk[b ? someName : otherName]
+ *                                              []
+ *       const i = b ? 0 : 1; sdk[i]            ["outbound-unanalysable"]
+ *       const k = b ?? "requests"              ["outbound-unanalysable"]
+ *       real tree, both roots                  23 files, 0 violations
+ *
+ *   READING B, ONLY AN OPERAND THE WALK WATCHES BEING ASSEMBLED (implemented)
+ *       const k = b ? "requests" : someName    ["outbound-send"]
+ *       const k = b ? someName : otherName     []
+ *       const i = b ? 0 : 1; sdk[i]            []
+ *       const k = b ?? "requests"              ["outbound-send"]
+ *       const k = b ? "req" + "uests" : "net"  ["outbound-unanalysable"]
+ *       real tree, both roots                  23 files, 0 violations
+ *
+ * THE REAL TREE DID NOT DISCRIMINATE — both readings are ZERO on it, so nothing
+ * about shipped code chose this and it would be dishonest to claim it did. THE
+ * SHAPES DISCRIMINATED, IN THREE PLACES, AND ALL THREE ARE READING A OVER-
+ * APPROXIMATING FURTHER THAN THE TWINS THIS PLAN EXISTS TO MATCH:
+ *   1. `b ? "requests" : someName` is a site the walk reads COMPLETELY on one
+ *      branch, and the inline twin reports `outbound-send` for it. Reading A
+ *      answers `outbound-unanalysable` — the gate saying "I could not read this"
+ *      about something it read perfectly, which is the second overclaim the
+ *      round-4 fixtures were written to forbid.
+ *   2. `b ? someName : otherName` is SILENT at the inline site. Reading A reports
+ *      there — a NEW asymmetry between binding and use, in the opposite
+ *      direction from CR-13's, created by the commit closing CR-13.
+ *   3. `const i = b ? 0 : 1; sdk[i]` is an ORDINARY INDEX. Reading A calls it an
+ *      assembled name, which is the first WR-19 implementation's own rejected
+ *      behaviour — `isAssembledKey`'s docblock records that it fired on
+ *      `compat.ts`'s documented path walk and that "a gate that calls a
+ *      documented path walk an outbound network surface is a gate that gets
+ *      deleted rather than fixed".
+ *   And separately, reading A fails this plan's own stated requirement that the
+ *   `??` and `||` initializers answer as the conditional does: `b ?? "requests"`
+ *   has one operand with no literal BY CONSTRUCTION.
+ *
+ * SO THE ARM IS READ OFF `keyReceiver`, WHICH IS THE FUNCTION THE TWINS GO
+ * THROUGH: it produces UNREADABLE from exactly two branches — a name already in
+ * `assembledNames`, and `isAssembledKey` — and this descent marks an operand
+ * unreadable in exactly those two cases and no others. `isAssembledKey` excludes
+ * provably numeric expressions on its own first line, which is what keeps case 3
+ * an index without a second numeric guard here.
+ *
+ * WHAT READING B COSTS, STATED RATHER THAN LEFT IMPLICIT: an operand the walk
+ * genuinely cannot follow — a parameter, a call result already covered by
+ * `isAssembledKey`, a name bound in another file — contributes NO literal and NO
+ * unreadability, so `const k = b ? "requests" : mystery; sdk[k]` reports
+ * `outbound-send` off the readable branch and says nothing about the other one.
+ * That is the same either-side over-approximation `RECEIVER_OPERATORS` chose and
+ * for the same reason: a receiver named on one path is named.
+ */
+function operatorLiteralBinding(
+  node: ts.Expression | undefined,
+  read: (operand: ts.Expression) => ReadonlySet<string>,
+  assembled: ReadonlySet<string>,
+  numeric: ReadonlySet<string>,
+  poisoned: ReadonlySet<string>,
+): OperatorLiteralBinding | undefined {
+  if (node === undefined) return undefined;
+  const operands = operatorOperands(unwrap(node));
+  if (operands === undefined) return undefined;
+  const literals = new Set<string>();
+  let watched = false;
+  for (const operand of operands) {
+    const nested = operatorLiteralBinding(
+      operand,
+      read,
+      assembled,
+      numeric,
+      poisoned,
+    );
+    if (nested !== undefined) {
+      for (const literal of nested.literals) literals.add(literal);
+      if (nested.assembled) watched = true;
+      continue;
+    }
+    const inner = unwrap(operand);
+    // THE UNREADABLE-OPERAND ARM. An operand the walk WATCHES BEING ASSEMBLED
+    // makes the BOUND NAME an assembly, exactly as the inline key site already
+    // treats the same operand. `keyReceiver` produces UNREADABLE from precisely
+    // two branches — a name already in `assembledNames`, and `isAssembledKey` —
+    // and those two are what this arm tests. See the docblock for why it is NOT
+    // "any operand that yielded no literal".
+    if (
+      isAssembledKey(inner, numeric, poisoned) ||
+      (ts.isIdentifier(inner) && assembled.has(inner.text))
+    ) {
+      watched = true;
+      continue;
+    }
+    for (const literal of read(inner)) literals.add(literal);
+  }
+  return { literals, assembled: watched };
+}
+
 /**
  * How a violation NAMES a global reached through a local binding.
  *
@@ -2647,6 +2811,25 @@ export function auditSource(file: string, source: string): Violation[] {
         if (isAssembledKey(init, numericNames, poisonedNumericNames)) {
           assembledNames.add(node.name.text);
         }
+        // CR-13: `const k = b ? "requests" : "net"` — the operator initializer,
+        // read through the descent the KEY site has always performed inline.
+        // TASK-1 INTERIM NOTE: the assignment spelling `let k; k = b ? ... : ...`
+        // is wired in TASK 2 OF THIS SAME PLAN. It is named here rather than left
+        // implicit because the CR-10 correction eleven lines below records what
+        // growing one spelling and not its sibling costs.
+        const operatorBinding = operatorLiteralBinding(
+          init,
+          literalsOf,
+          assembledNames,
+          numericNames,
+          poisonedNumericNames,
+        );
+        if (operatorBinding !== undefined) {
+          for (const literal of operatorBinding.literals) {
+            bindString(node.name.text, literal);
+          }
+          if (operatorBinding.assembled) assembledNames.add(node.name.text);
+        }
         if (isFetchExpression(init)) fetchAliases.add(node.name.text);
         if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text);
         // WR-23: `const e = eval` / `const F = globalThis.Function` — the same
@@ -3172,7 +3355,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "constStrings",
     kind: "resolver",
     clause:
-      'a receiver or global KEY resolves when a string literal bound at a string-literal declaration or a string-literal assignment names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer binds a literal neither this collector nor literalsOf reads',
+      'a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing',
     site: "auditSource > const constStrings = new Map<string, Set<string>>()",
     probe: 'const r = "requests";\nsdk[r].send(req);',
     expect: Object.freeze(["outbound-send"] as const),
@@ -3190,6 +3373,16 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         anchor:
           "auditSource > collect > if (ts.isStringLiteralLike(assignedString)) {",
         probe: 'let r;\nr = "requests";\nsdk[r].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        // CR-13, closed 2026-08-24. The third binding shape that reaches
+        // `bindString`, and the one whose absence made this clause's universal
+        // false: the literals an operator initializer carries.
+        names: "an operator initializer",
+        anchor:
+          "auditSource > collect > for (const literal of operatorBinding.literals) {",
+        probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
         expect: Object.freeze(["outbound-send"] as const),
       }),
     ] as readonly BranchProbe[]),
@@ -3557,7 +3750,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "literalsOf",
     kind: "resolver",
     clause:
-      'the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name, so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer is in no collected set and is not read',
+      'the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name - which since 2026-08-24 includes every literal an operator initializer bound - so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer was in no collected set and was not read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a literal reached only through a parameter, a loop binding, a name bound in another file or a second hop of key is still in no collected set',
     site: "auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {",
     probe: 'let k = "harmless";\nk = "requests";\nsdk[k].send(req);',
     expect: Object.freeze(["outbound-send"] as const),
@@ -3569,6 +3762,20 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         anchor:
           "auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS;",
         probe: 'const k = "requests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        // CR-13, closed 2026-08-24. THE SAME LINE as the branch above, and that
+        // is the honest anchor rather than a defect: this reader has ONE code
+        // branch and its reach is entirely inherited from what constStrings
+        // collected. What the probe proves is that the SET now contains a
+        // literal only an operator initializer could have put there - delete
+        // the descent and this probe answers [] while the branch above stays
+        // green, which is exactly the granularity WR-32 was about.
+        names: "an operator initializer",
+        anchor:
+          "auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS;",
+        probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
         expect: Object.freeze(["outbound-send"] as const),
       }),
     ] as readonly BranchProbe[]),
@@ -3851,6 +4058,56 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     ] as readonly BranchProbe[]),
   }),
   Object.freeze({
+    // CR-13. The SECOND CONSUMER of `operatorOperands`, sitting beside the first
+    // deliberately: the two descents read ONE operator set and differ only in
+    // what they do with the operands, which is the half `operatorOperands`' own
+    // docblock says may differ.
+    id: "operatorLiteralBinding",
+    kind: "resolver",
+    clause:
+      "an operator-shaped INITIALIZER is read on every operand: at a declaration, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it",
+    site: "module scope > function operatorLiteralBinding(",
+    probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
+    expect: Object.freeze(["outbound-send"] as const),
+    counterProbe: 'const k = b ? "harmless" : "other";\nsdk[k].send(req);',
+    counterExpect: Object.freeze([] as const),
+    branches: Object.freeze([
+      Object.freeze({
+        // THE WIRING. Task 2 of plan 01-30 adds `an assignment` beside it, in
+        // the same plan, because closing one spelling and leaving its sibling
+        // open is how this file acquired CR-08 and CR-10.
+        names: "a declaration",
+        anchor:
+          "auditSource > collect > const operatorBinding = operatorLiteralBinding(",
+        probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        // The `??` spelling and not the `? :` one, so this probe exercises the
+        // literal arm through a DIFFERENT operator from the row's own probe.
+        names: "a literal operand",
+        anchor:
+          "module scope > operatorLiteralBinding > for (const literal of read(inner)) literals.add(literal);",
+        probe: 'const k = b ?? "requests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        names: "an operand the walk WATCHES BEING ASSEMBLED",
+        anchor:
+          "module scope > operatorLiteralBinding > isAssembledKey(inner, numeric, poisoned) ||",
+        probe: 'const k = b ? "req" + "uests" : "net";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        names: "a nested operator",
+        anchor:
+          "module scope > operatorLiteralBinding > const nested = operatorLiteralBinding(",
+        probe: 'const k = b ? (c ? "requests" : "x") : "y";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+    ] as readonly BranchProbe[]),
+  }),
+  Object.freeze({
     id: "isProvablyNumeric",
     kind: "resolver",
     clause:
@@ -4118,6 +4375,13 @@ export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
   "the object binding-pattern spelling",
   "a string-literal declaration",
   "a string-literal assignment",
+  // CR-13, 2026-08-24. The binding shape `constStrings` and `literalsOf` name.
+  // Spelled in lower case, which is what keeps it DISTINCT from
+  // `operatorLiteralBinding`'s own clause opening - that row names its OWN
+  // branches (`a literal operand`, `a nested operator`), and a phrase matching
+  // both rows would bind each to the other's branch. The two spellings are a
+  // decision, not an accident; see `01-30-SUMMARY.md`.
+  "an operator initializer",
   // The RESOLUTION-ORDER branches `keyReceiver`'s clause enumerates.
   "watched assembly",
   "any literal binding",
@@ -4141,6 +4405,13 @@ export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
   "a COMMA SEQUENCE",
   "any operand naming a receiver",
   "any unreadable operand",
+  // The OPERAND rules the LITERAL descent applies. Spelled differently from
+  // `operatorReceiver`'s two above ON PURPOSE: the two descents read the same
+  // operator set and do DIFFERENT things with the operands, so one phrase
+  // matching both rows would bind each row to the other's branch.
+  "a literal operand",
+  "an operand the walk WATCHES BEING ASSEMBLED",
+  "a nested operator",
   // The NUMERIC narrowing and the ASSEMBLY shapes.
   "a numeric literal",
   "a collected numeric name",
@@ -4263,7 +4534,7 @@ export const UNBOUNDED_QUANTIFIERS: readonly string[] = Object.freeze([
 export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
   Object.freeze({
     constStrings:
-      'Bounded by the TWO branches that call bindString: a string-literal declaration and a string-literal assignment. A literal reached only through a conditional, ?? or || initializer is in no collected set. MEASURED: `const r = ok ? "requests" : "x"; sdk[r].send(req)` reports NOTHING. That is CR-13, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.',
+      'Bounded by the THREE branches that call bindString: a string-literal declaration, a string-literal assignment and an operator initializer (2026-08-24, CR-13). MEASURED after the widening: `const r = ok ? "requests" : "x"; sdk[r].send(req)` reports outbound-send. The universal is STILL false and the bound is what remains outside those three branches, each MEASURED silent in this same session: a parameter (`function f(k) { return sdk[k].send(req); } f("requests")`), a loop binding (`for (const k of ["requests"]) { sdk[k].send(req); }`), a second hop of key (`const a = b ? "requests" : "net"; const k = a; sdk[k].send(req)`) and a name bound in another file - all four report NOTHING.',
     poisonedNumericNames:
       "Bounded by the ARMS of the numeric pass that write it: a non-numeric VariableDeclaration initializer, an EqualsToken assignment, a += whose right side is non-numeric, and any other ASSIGNMENT_OPERATORS spelling. A binding shape outside those arms poisons nothing. MEASURED: `function f(i) { return sdk[i].send(req); }` reports NOTHING — a parameter is never poisoned because it is never bound in the pass.",
     receiverAliases:
@@ -4271,7 +4542,7 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
     keyReceiver:
       'Bounded by operatorReceiver\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the leaf resolver. `any depth` is unbounded only WITHIN those four operators; a fifth operator spelling is not descended at any depth. MEASURED: `sdk[b ? (c ? "requests" : "x") : "y"].send(req)` reports outbound-send.',
     literalsOf:
-      'Bounded by the collected set constStrings recorded — the SAME two branches, so this clause inherits constStrings\' bound exactly. MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` reports NOTHING. CR-13, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.',
+      'Bounded by the collected set constStrings recorded — the SAME three branches, so this clause inherits constStrings\' bound exactly, widening with it (2026-08-24, CR-13). MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` now reports outbound-send. The universal is STILL false and inherits the same residual: parameter, loop binding, second hop of key and cross-file binding are each MEASURED silent.',
     isFetchExpression:
       "Bounded by the THREE spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, and a one-hop alias. MEASURED: `(ok && fetch)(url)` reaches none of them and reports NOTHING, because operatorReceiver is not consulted here. CR-12, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.",
     "silence-operator-around-global-receiver":
@@ -4279,22 +4550,6 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
   });
 
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
-  Object.freeze({
-    row: "constStrings",
-    phrase: "ANY string literal the name is bound to anywhere in the file",
-    finding: "CR-13",
-    wave: "30",
-    probe: 'const r = ok ? "requests" : "x";\nsdk[r].send(req);',
-    openAnswer: Object.freeze([] as const),
-  }),
-  Object.freeze({
-    row: "literalsOf",
-    phrase: "every literal a name carries",
-    finding: "CR-13",
-    wave: "30",
-    probe: 'const r = ok ? "requests" : "x";\nsdk[r].send(req);',
-    openAnswer: Object.freeze([] as const),
-  }),
   Object.freeze({
     row: "assembledNames",
     phrase: "a compound assignment",
@@ -4581,7 +4836,7 @@ const RESOLVER_EXEMPTIONS: Readonly<Record<string, string>> = Object.freeze({
   rootHasSubdirectory:
     "a non-vacuity check on that filesystem walk — it answers whether a root has any subdirectory at all.",
   operatorOperands:
-    "extracts the operands operatorReceiver descends into. Its behaviour is stated by the operatorReceiver row and it has no independent answer.",
+    "extracts the operands its two consumers descend into. Its behaviour is stated by the operatorReceiver and operatorLiteralBinding rows and it has no independent answer.",
   aliasSuffix:
     "formats the ` (an alias of \\`x\\`)` fragment of a violation message.",
   callDetail: "formats the violation detail for a call site.",
@@ -5849,6 +6104,52 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
+  it('through operatorLiteralBinding: a receiver key BOUND to a conditional — `const k = b ? "requests" : "net"; sdk[k].send(req)` — reports outbound-send, exactly as its INLINE twin does — CR-13', () => {
+    // CR-13, and the verifier put it first. ONE HOP, with the literal
+    // `"requests"` written out in full, on both branches of a two-branch
+    // operator this gate already resolves at four other positions — and it
+    // answered CLEAN. `keyReceiver` descends the operator INLINE at the KEY
+    // site; `collect` did not descend one at the BINDING site, so the name
+    // landed in NEITHER `constStrings` NOR `assembledNames`.
+    //
+    // MECHANISM: `operatorLiteralBinding`, the second consumer of
+    // `operatorOperands`, wired into `collect`'s declaration branch. Removing
+    // the descent drives this red AND drives the row's own branch case red —
+    // that is mutation proof 1 in `01-30-SUMMARY.md`.
+    const rules = rulesOf(
+      'const k = b ? "requests" : "net";\nsdk[k].send(req);',
+    );
+    expect(
+      rules,
+      'const k = b ? "requests" : "net"; sdk[k].send(req) is silent again — the BINDING site has stopped descending the operator the KEY site descends',
+    ).toContain("outbound-send");
+    // AND NOT UNANALYSABLE. Both branches are string literals the walk reads
+    // perfectly; answering "I could not read this" would be the second overclaim
+    // the round-4 fixtures forbid, in the quieter direction.
+    expect(
+      rules,
+      "a conditional of two readable literals was reported as UNREADABLE at the binding site",
+    ).not.toContain("outbound-unanalysable");
+    // THE INLINE TWIN, PINNED BESIDE IT IN THE SAME CASE. The asymmetry between
+    // these two spellings IS CR-13; a later narrowing that took one and left the
+    // other would recreate it exactly.
+    expect(rulesOf('sdk[b ? "requests" : "net"].send(req);')).toContain(
+      "outbound-send",
+    );
+  });
+
+  it('through operatorLiteralBinding, THE COUNTER-DIRECTION: a conditional of two HARMLESS literals stays silent — `const k = b ? "harmless" : "other"; sdk[k].send(req)`', () => {
+    // PINNED IN THE SAME COMMIT AS THE WIDENING. A widening asserted only where
+    // it fires is the one that gets a gate deleted rather than fixed: this case
+    // is what makes `operatorLiteralBinding` a resolver rather than a rubber
+    // stamp on every conditional-bound key. It is also the row's own
+    // counter-probe, so the registry's vacuity rule and this fixture fail
+    // together if the descent ever starts reporting unconditionally.
+    expect(
+      rulesOf('const k = b ? "harmless" : "other";\nsdk[k].send(req);'),
+    ).toEqual([]);
+  });
+
   it("through operatorReceiver in CALL position: `(b ? sdk.requests : sdk.net).send(req)` reports outbound-send — WR-27, the third face of the operator", () => {
     // THE FINDING, AND WHAT MAKES IT ONE. The two OTHER faces of this same
     // operator were both taught in round 4 and both report: the conditional KEY
@@ -6849,7 +7150,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(59);
+    ).toBe(65);
   });
 
   // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
@@ -6883,11 +7184,11 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       branches.length,
       `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(60);
+    ).toBe(66);
     expect(
       new Set(branches.map(([id]) => id)).size,
-      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 31 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
-    ).toBe(32);
+      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 32 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
+    ).toBe(33);
 
     // A PLAIN SUBSTRING SEARCH HERE WOULD BE VACUOUS, AND THIS TASK ADDED A THIRD
     // SURFACE THAT WOULD SATISFY ONE. The anchor text occurs (1) inside the
@@ -6972,8 +7273,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // required to delete is worse than none.
     expect(
       FALSIFIED_HANDOFFS.length,
-      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries. Waves 30, 31 and 32 each DELETE their entries and update this pin IN THE SAME COMMIT AS THEIR CODE. A count that moved without a widening beside it is the failure.`,
-    ).toBe(6);
+      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries. Waves 30, 31 and 32 each DELETE their entries and update this pin IN THE SAME COMMIT AS THEIR CODE. A count that moved without a widening beside it is the failure. WAVE 30 DISCHARGED ITS TWO ON 2026-08-24 (CR-13): 6 became 4, in the same commit as operatorLiteralBinding.`,
+    ).toBe(4);
     for (const h of FALSIFIED_HANDOFFS) {
       expect(
         RESOLVER_REGISTRY.some((r) => r.id === h.row),
@@ -7138,7 +7439,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // rather than silent. A guard that used to see 47 members and now sees 3 is
     // still "non-empty" and still broken.
     expect(collectors.length).toBe(11);
-    expect(functions.length).toBe(38);
+    expect(functions.length).toBe(39);
   });
 
   it("every member of BOTH populations is a registry row OR a named, reasoned exemption", () => {
