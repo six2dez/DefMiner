@@ -825,8 +825,18 @@ else:
 #     stored value: did the segment ARRIVE as its own query segment? Segment COUNT
 #     answers that without needing the secret to survive, which is the only way to
 #     ask the question on a run where the correct answer is that it did not.
-padded_segments_reached = bool(raw_rows) and all(
-    len(r.partition("?")[2].split("&")) == 5 for r in raw_rows if "?" in r
+#     THE `any(...)` CONJUNCT IS NOT REDUNDANT WITH `bool(raw_rows)` (01-REVIEW.md
+#     IN-21): an `all()` over an EMPTY generator is `True`, so a row list where NO row
+#     carries a `?` filters down to nothing and this predicate used to report REACHED
+#     having measured nothing — and what it reports is written into
+#     grammar-reachability.txt, which is committed evidence a reader cites, so its
+#     truth must not depend on the segment-count check above having already failed.
+padded_segments_reached = (
+    bool(raw_rows)
+    and any("?" in r for r in raw_rows)
+    and all(
+        len(r.partition("?")[2].split("&")) == 5 for r in raw_rows if "?" in r
+    )
 )
 if padded_segments_reached:
     notes.append("padded bare segments (TWO `=` and ONE `=`): REACHED the plugin — "

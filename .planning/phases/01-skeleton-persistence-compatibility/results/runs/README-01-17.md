@@ -191,3 +191,51 @@ comment block in `secret_sweep` to cite the count run 1 measured — a number th
 could not honestly be written before the run that produced it. The amendment is
 comment-only (`git diff` on the two commits shows no non-comment line changed) and
 run 2 was produced by the final text.
+---
+
+## AMENDMENT, 2026-08-24 (plan 01-22) — which predicate produced the `padded_segments_reached` row
+
+Appended, not edited. Nothing above this line is rewritten and neither run directory
+is touched; this phase amends evidence by pointer and dates the pointer.
+
+**What changed in the instrument.** `padded_segments_reached` in
+`scripts/phase1/tracer-e2e.sh` read `bool(raw_rows) and all(… for r in raw_rows if "?"
+in r)`. `bool(raw_rows)` catches an empty row LIST, but not a row list where no row
+carries a `?` — the generator is then empty and `all()` over an empty generator is
+`True`. On that input the pre-fix predicate would have written
+`padded_segments_reached=yes` into `grammar-reachability.txt` having measured nothing.
+Executed standalone under `python3` rather than read off the page (01-REVIEW.md IN-21):
+
+```
+--- padded_segments_reached, PRE-FIX form ---
+A. empty row list                                   -> padded_segments_reached=False  -> writes DID-NOT-REACH
+B. rows present, NONE carries a query string        -> padded_segments_reached=True   -> writes REACHED
+C. rows carrying the 5 segments the fixture sent    -> padded_segments_reached=True   -> writes REACHED
+D. rows carrying a query of the WRONG segment count -> padded_segments_reached=False  -> writes DID-NOT-REACH
+```
+
+Plan 01-22 adds `any("?" in r for r in raw_rows)` to the conjunction, keeping the
+existing `bool(raw_rows)` guard. Case B now reads `False`; A, C and D are unchanged.
+
+**WHAT THIS DOES AND DOES NOT PUT IN DOUBT, stated precisely, because overstating it
+would be the same fault aimed backwards.** The two runs indexed above, and the runs
+under `README-01-14.md`, carry `padded_segments_reached=yes` produced by the PRE-FIX
+predicate. Their note is NOT retrospectively in doubt: on those runs the segment-count
+assertion `check(len(q_seg) == 5, …)` PASSED for every row, which is only reachable on
+rows that carry a `?` and carry exactly five query segments. The reachability note was
+therefore independently corroborated on the runs that were taken, by an assertion that
+would have failed loudly on the input that makes the pre-fix predicate vacuous. What
+was wrong was the predicate's INDEPENDENCE, not its answer here: its truth depended on
+another assertion having already failed, and that is not a property an evidence file
+should have.
+
+**Scope of the correction.** Runs from plan 01-22 onward use the corrected
+conjunction. No live Caido cycle was run to establish any of the above: the predicate
+is pure, and its empty-generator branch is structurally unreachable on a passing live
+run — the segment-count check fails first — so the standalone execution exercises a
+branch a live run could not have reached.
+
+The two sibling predicates, `pathparam_reached` and `userinfo_reached`, were checked
+and are plain substring tests over the joined blob with no filtered generator; both
+read `False` on an empty blob. Non-vacuous by construction, confirmed by execution,
+and untouched.
