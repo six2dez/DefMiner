@@ -86,14 +86,16 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
 
 RESOLVERS - 31 entries.
 
-* constStrings - a receiver or global KEY resolves when ANY string literal the name is bound to anywhere in the file names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates
+* constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration or a string-literal assignment names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer binds a literal neither this collector nor literalsOf reads
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
     probe:     "const r = \"requests\";\nsdk[r].send(req);"
     reports:   outbound-send
     counter:   "const r = \"harmless\";\nsdk[r].send(req);"
     reports:   [] - nothing
+    branch:    "a string-literal declaration" at auditSource > collect > if (ts.isStringLiteralLike(init)) { - probe "const r = \"requests\";\nsdk[r].send(req);" - reports outbound-send
+    branch:    "a string-literal assignment" at auditSource > collect > if (ts.isStringLiteralLike(assignedString)) { - probe "let r;\nr = \"requests\";\nsdk[r].send(req);" - reports outbound-send
 
-* assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over any literal binding of the same name
+* assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grow nothing
     read off:  auditSource > const assembledNames = new Set<string>()
     probe:     "const k = \"req\" + \"uests\";\nsdk[k].send(req);"
     reports:   outbound-unanalysable
@@ -101,16 +103,18 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > if (isAssembledKey(init, numericNames, poisonedNumericNames)) { - probe "const k = \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "an assignment" at auditSource > collect > if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) { - probe "let k;\nk = \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
-    branch:    "a compound assignment" at auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken && - probe "let k = \"re\";\nk += \"quests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a `+=` compound assignment" at auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken && - probe "let k = \"re\";\nk += \"quests\";\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, 0), - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, index), - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-* receiverAliases - a name bound to an outbound RECEIVER expression is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order
+* receiverAliases - a name bound to an outbound RECEIVER expression at a declaration or an assignment is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a name bound to an outbound RECEIVER expression" without qualification - measured, a logical-assignment binding grows nothing
     read off:  auditSource > const receiverAliases = new Map<string, string>()
     probe:     "const r = sdk.requests;\nr.send(req);"
     reports:   outbound-send
     counter:   "const r = sdk.other;\nr.send(req);"
     reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > receiverAliases.set(node.name.text, kind); - probe "const r = sdk.requests;\nr.send(req);" - reports outbound-send
+    branch:    "an assignment" at auditSource > collect > receiverAliases.set(node.left.text, kind); - probe "let r;\nr = sdk.requests;\nr.send(req);" - reports outbound-send
 
 * unreadableAliases - a name bound to a receiver EXPRESSION the walk could not read is reported where the name is USED as a receiver, not where it was bound - so an ordinary dynamic lookup never used as a receiver stays quiet
     read off:  auditSource > const unreadableAliases = new Set<string>()
@@ -118,34 +122,45 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "const v = record[\"na\" + \"me\"];\nconsole.log(v);"
     reports:   [] - nothing
+    branch:    "where the name is USED as a receiver" at auditSource > receiverKind > return unreadableAliases.has(inner.text) - probe "const k = \"a\" + b;\nconst r = sdk[k];\nr.send(req);" - reports outbound-unanalysable
 
-* fetchAliases - a name bound to the global fetch is the global fetch; seeded with the bare spelling and grown from the live set, so it chains in declaration order
+* fetchAliases - a name bound to the global fetch at a declaration or an assignment is the global fetch; seeded with the bare spelling and grown from the live set, so it chains in declaration order
     read off:  auditSource > const fetchAliases = new Set<string>([FETCH_GLOBAL])
     probe:     "const f = fetch;\nf(url);"
     reports:   outbound-fetch
     counter:   "const f = cache.fetch;\nf(url);"
     reports:   [] - nothing
+    branch:    "the bare spelling" at auditSource > const fetchAliases = new Set<string>([FETCH_GLOBAL]); - probe "fetch(url);" - reports outbound-fetch
+    branch:    "a declaration" at auditSource > collect > if (isFetchExpression(init)) fetchAliases.add(node.name.text); - probe "const f = fetch;\nf(url);" - reports outbound-fetch
+    branch:    "an assignment" at auditSource > collect > if (isFetchExpression(node.right)) fetchAliases.add(node.left.text); - probe "let f;\nf = fetch;\nf(url);" - reports outbound-fetch
 
-* navigatorAliases - a name bound to navigator is navigator; RECEIVER-ANCHORED, so an ordinary object defining a method of the same name grows nothing
+* navigatorAliases - a name bound to navigator at a declaration or an assignment is navigator; RECEIVER-ANCHORED, so an ordinary object defining a method of the same name grows nothing
     read off:  auditSource > const navigatorAliases = new Set<string>([NAVIGATOR])
     probe:     "const n = navigator;\nn.sendBeacon(u, d);"
     reports:   outbound-beacon
     counter:   "const o = { sendBeacon(u, d) { return d; } };\no.sendBeacon(u, d);"
     reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text); - probe "const n = navigator;\nn.sendBeacon(url);" - reports outbound-beacon
+    branch:    "an assignment" at auditSource > collect > if (isNavigatorReceiver(node.right)) navigatorAliases.add(node.left.text); - probe "let n;\nn = navigator;\nn.sendBeacon(url);" - reports outbound-beacon
 
-* globalAliases - a name bound to eval, Function or an outbound constructor maps to the global it names, so the violation detail can name the surface the local aliases; RECEIVER-ANCHORED off the four global receivers
+* globalAliases - a name bound to eval, Function or an outbound constructor at a declaration, an assignment or the object binding-pattern spelling maps to the global it names, so the violation detail can name the surface the local aliases; RECEIVER-ANCHORED off the four global receivers
     read off:  auditSource > const globalAliases = new Map<string, string>()
     probe:     "const e = eval;\ne(src);"
     reports:   outbound-dynamic-code
     counter:   "const o = { eval(s) { return s; } };\nconst e = o.eval;\ne(src);"
     reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > if (aliased !== undefined) globalAliases.set(node.name.text, aliased); - probe "const e = eval;\ne(src);" - reports outbound-dynamic-code
+    branch:    "an assignment" at auditSource > collect > globalAliases.set(node.left.text, aliasedRight); - probe "let e;\ne = eval;\ne(src);" - reports outbound-dynamic-code
+    branch:    "the object binding-pattern spelling" at auditSource > collect > globalAliases.set(el.name.text, property); - probe "const { eval: ev } = globalThis;\nev(src);" - reports outbound-dynamic-code
 
-* globalThisAliases - a name WATCHED being bound to one of the four global receivers is a global receiver; seeded EMPTY so the bare-identifier answer is unchanged and the new behaviour is reachable only through what the walk saw bound
+* globalThisAliases - a name WATCHED being bound to one of the four GLOBAL_RECEIVERS at a declaration or an assignment is a global receiver; seeded EMPTY so the bare-identifier answer is unchanged and the new behaviour is reachable only through what the walk saw bound
     read off:  auditSource > const globalThisAliases = new Set<string>()
     probe:     "const g = globalThis;\ng.fetch(url);"
     reports:   outbound-fetch
     counter:   "const g = helper;\ng.fetch(url);"
     reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text); - probe "const g = globalThis;\ng.fetch(url);" - reports outbound-fetch
+    branch:    "an assignment" at auditSource > collect > if (isGlobalReceiver(node.right)) globalThisAliases.add(node.left.text); - probe "let g;\ng = globalThis;\ng.fetch(url);" - reports outbound-fetch
 
 * shadowedGlobals - a NARROWING collector: a TOP-LEVEL function or class declaration of a dynamic-code or outbound-constructor name provably rebinds that name for the module, so the bare call is not the global. Its probe is the shape that stays QUIET and its counter-probe is the shape that REPORTS
     read off:  auditSource > const shadowedGlobals = new Set<string>()
@@ -153,6 +168,7 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     counter:   "Function(\"x\");"
     reports:   outbound-dynamic-code
+    branch:    "a TOP-LEVEL function or class declaration" at auditSource > collect > shadowedGlobals.add(node.name.text); - probe "function eval(s) { return s; }\neval(src);" - reports [] - nothing
 
 * numericNames - a NARROWING collector: a name bound only to provably numeric values is an INDEX rather than a hidden receiver name, and is excluded before any receiver rule runs. Probe stays quiet, counter-probe reports
     read off:  auditSource > const numericNames = new Set<string>()
@@ -160,6 +176,7 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     counter:   "let i = \"requests\";\nsdk[i].send(req);"
     reports:   outbound-send
+    branch:    "a name bound only to provably numeric values" at auditSource > collect > numericNames.add(node.name.text); - probe "const i = 0;\nsdk[i].send(req);" - reports [] - nothing
 
 * poisonedNumericNames - the negative half of the numeric exemption: a name bound to ANYTHING non-numeric anywhere in the file stops being an index, so a numeric accumulator later assigned a receiver name reports
     read off:  auditSource > const poisonedNumericNames = new Set<string>()
@@ -167,6 +184,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-send
     counter:   "let i = 0;\ni = 2;\nsdk[i].send(req);"
     reports:   [] - nothing
+    branch:    "stops being an index" at auditSource > collect > poisonedNumericNames.add(node.left.text); - probe "let i = 0;\ni = \"requests\";\nsdk[i].send(req);" - reports outbound-send
 
 * isGlobalReceiver - one-hop resolution of a GLOBAL receiver closed over the live alias set, so a member of an aliased global receiver that will not reduce is reported rather than dropped
     read off:  auditSource > const isGlobalReceiver = (node: ts.Expression): boolean =>
@@ -174,6 +192,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "const g = helper;\ng[\"fet\" + \"ch\"](url);"
     reports:   [] - nothing
+    branch:    "one-hop resolution of a GLOBAL receiver" at auditSource > const isGlobalReceiver = (node: ts.Expression): boolean => - probe "const g = globalThis;\ng.fetch(url);" - reports outbound-fetch
 
 * keyReceiver - the SINGLE definition of what a readable key is, in the order: watched assembly, then any literal binding, then inline assembly, then not a receiver; it descends operators through operatorReceiver passing ITSELF, so nesting resolves at any depth
     read off:  auditSource > const keyReceiver = (key: ts.Expression): ReceiverKind => {
@@ -181,6 +200,9 @@ RESOLVERS - 31 entries.
     reports:   outbound-send
     counter:   "sdk[b ? \"x\" : \"y\"].send(req);"
     reports:   [] - nothing
+    branch:    "watched assembly" at auditSource > keyReceiver > assembledNames.has(assembledKey.text) - probe "const k = \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "any literal binding" at auditSource > keyReceiver > for (const literal of literalsOf(key)) { - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "inline assembly" at auditSource > keyReceiver > if (isAssembledKey(key, numericNames, poisonedNumericNames)) { - probe "sdk[\"req\" + \"uests\"].send(req);" - reports outbound-unanalysable
 
 * receiverKind - the three-state answer for an expression in RECEIVER position - THAT RECEIVER, UNREADABLE, or NOT A RECEIVER - including a bare operator written directly in call position, which fell through every branch before wave 25
     read off:  auditSource > const receiverKind = (node: ts.Expression): ReceiverKind => {
@@ -188,13 +210,15 @@ RESOLVERS - 31 entries.
     reports:   outbound-send
     counter:   "(b ? cache : client).send(req);"
     reports:   [] - nothing
+    branch:    "a bare operator written directly in call position" at auditSource > receiverKind > const operator = operatorReceiver(inner, receiverKind); - probe "(b ? sdk.requests : sdk.net).send(req);" - reports outbound-send
 
-* literalsOf - the MULTI-valued string reader keyReceiver consults: every literal a name carries, so ANY of them naming a receiver reports
+* literalsOf - the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name, so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer is in no collected set and is not read
     read off:  auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
     probe:     "let k = \"harmless\";\nk = \"requests\";\nsdk[k].send(req);"
     reports:   outbound-send
     counter:   "let k = \"harmless\";\nk = \"other\";\nsdk[k].send(req);"
     reports:   [] - nothing
+    branch:    "the collected set" at auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS; - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
 
 * literalOf - the SINGLE-valued string reader member names and module specifiers need: one binding resolves, two or more answer undefined, and undefined means COULD NOT READ at every call site - which reports
     read off:  auditSource > function literalOf(node: ts.Node | undefined): string | undefined {
@@ -202,6 +226,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-import
     counter:   "const s = \"crypto\";\nawait import(s);"
     reports:   [] - nothing
+    branch:    "two or more answer undefined" at auditSource > literalOf > if (literals.size !== 1) return undefined; - probe "let m = \"send\";\nm = \"get\";\nsdk.requests[m](req);" - reports outbound-unanalysable
 
 * memberName - the member name of a positively identified receiver, read single-valued; a name that will not reduce to exactly one literal is reported as unreadable rather than assumed harmless
     read off:  auditSource > const memberName = (
@@ -209,6 +234,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "const m = \"get\";\nsdk.requests[m](id);"
     reports:   [] - nothing
+    branch:    "read single-valued" at auditSource > memberName > : literalOf(node.argumentExpression); - probe "sdk.requests[\"send\"](req);" - reports outbound-send
 
 * initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone
     read off:  auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind =>
@@ -216,13 +242,16 @@ RESOLVERS - 31 entries.
     reports:   outbound-send
     counter:   "const r = b ? cache : client;\nr.send(req);"
     reports:   [] - nothing
+    branch:    "a NAME for receiverKind" at auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind => - probe "const r = b ? sdk.requests : sdk.net;\nr.send(req);" - reports outbound-send
 
-* isFetchExpression - the global fetch in every reachable spelling - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object
+* isFetchExpression - the global fetch in three spellings - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reaches no branch here
     read off:  auditSource > const isFetchExpression = (node: ts.Expression): boolean => {
     probe:     "globalThis.fetch(url);"
     reports:   outbound-fetch
     counter:   "client.fetch(url);"
     reports:   [] - nothing
+    branch:    "on any of the four global receivers" at auditSource > isFetchExpression > memberName(inner) === FETCH_GLOBAL && isGlobalReceiver(inner.expression) - probe "globalThis.fetch(url);" - reports outbound-fetch
+    branch:    "through an alias" at auditSource > isFetchExpression > if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text); - probe "const f = fetch;\nf(url);" - reports outbound-fetch
 
 * isNavigatorReceiver - navigator reached bare, through a global receiver, or through a one-hop alias; RECEIVER-ANCHORED so a member named sendBeacon on an ordinary object stays quiet
     read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
@@ -230,6 +259,8 @@ RESOLVERS - 31 entries.
     reports:   outbound-beacon
     counter:   "o.navigator.sendBeacon(u, d);"
     reports:   [] - nothing
+    branch:    "through a global receiver" at auditSource > isNavigatorReceiver > memberName(inner) === NAVIGATOR && isGlobalReceiver(inner.expression) - probe "globalThis.navigator.sendBeacon(url);" - reports outbound-beacon
+    branch:    "through a one-hop alias" at auditSource > isNavigatorReceiver > if (ts.isIdentifier(inner)) return navigatorAliases.has(inner.text); - probe "const n = navigator;\nn.sendBeacon(url);" - reports outbound-beacon
 
 * globalNameOf - which global a spelling names - bare identifier, member of a global receiver, or a collected alias - so the violation detail names the aliased surface instead of leaving a reader to find the binding
     read off:  auditSource > const globalNameOf = (node: ts.Expression): string | undefined => {
@@ -237,6 +268,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-dynamic-code
     counter:   "const F = o.Function;\nnew F(src);"
     reports:   [] - nothing
+    branch:    "a collected alias" at auditSource > globalNameOf > return globalAliases.get(name); - probe "const e = eval;\ne(src);" - reports outbound-dynamic-code
 
 * dynamicCodeOf - eval and Function in call position, refused outright rather than analysed, because no AST gate can see inside a string
     read off:  auditSource > const dynamicCodeOf = (node: ts.Expression): string | undefined => {
@@ -244,6 +276,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-dynamic-code
     counter:   "o.eval(src);"
     reports:   [] - nothing
+    branch:    "refused outright rather than analysed" at auditSource > const dynamicCodeOf = (node: ts.Expression): string | undefined => { - probe "eval(src);" - reports outbound-dynamic-code
 
 * outboundCtorOf - XMLHttpRequest, WebSocket and EventSource in construction position, bare or on a global receiver or through an alias
     read off:  auditSource > const outboundCtorOf = (node: ts.Expression): string | undefined => {
@@ -251,6 +284,8 @@ RESOLVERS - 31 entries.
     reports:   outbound-global-ctor
     counter:   "new Foo();"
     reports:   [] - nothing
+    branch:    "in construction position" at auditSource > const outboundCtorOf = (node: ts.Expression): string | undefined => { - probe "new WebSocket(u);" - reports outbound-global-ctor
+    branch:    "through an alias" at auditSource > outboundCtorOf > return global !== undefined && OUTBOUND_CONSTRUCTORS.has(global) - probe "const W = WebSocket;\nnew W(u);" - reports outbound-global-ctor
 
 * aliasedGlobalOf - the three binding shapes an outbound global can be aliased through - a bare identifier, a member of a global receiver, and a destructure off one - anchored so a destructure off an ordinary object grows nothing
     read off:  auditSource > const aliasedGlobalOf = (init: ts.Expression): string | undefined => {
@@ -258,6 +293,9 @@ RESOLVERS - 31 entries.
     reports:   outbound-dynamic-code
     counter:   "const { eval: ev } = o;\nev(src);"
     reports:   [] - nothing
+    branch:    "a bare identifier" at auditSource > aliasedGlobalOf > return (DYNAMIC_CODE.has(name) || OUTBOUND_CONSTRUCTORS.has(name)) && - probe "const e = eval;\ne(src);" - reports outbound-dynamic-code
+    branch:    "a member of a global receiver" at auditSource > aliasedGlobalOf > (DYNAMIC_CODE.has(member) || OUTBOUND_CONSTRUCTORS.has(member)) && - probe "const e = globalThis.eval;\ne(src);" - reports outbound-dynamic-code, outbound-dynamic-code
+    branch:    "a destructure off one" at auditSource > collect > globalAliases.set(el.name.text, property); - probe "const { eval: ev } = globalThis;\nev(src);" - reports outbound-dynamic-code
 
 * unwrap - strips parentheses, `as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver
     read off:  module scope > function unwrap(node: ts.Expression): ts.Expression {
@@ -265,6 +303,9 @@ RESOLVERS - 31 entries.
     reports:   outbound-net
     counter:   "(0, cache).send(req);"
     reports:   [] - nothing
+    branch:    "parentheses" at module scope > unwrap > ts.isParenthesizedExpression(current) || - probe "(sdk.requests).send(req);" - reports outbound-send
+    branch:    "non-null assertions" at module scope > unwrap > ts.isNonNullExpression(current) || - probe "sdk.requests!.send(req);" - reports outbound-send
+    branch:    "a COMMA SEQUENCE" at module scope > unwrap > current.operatorToken.kind === ts.SyntaxKind.CommaToken - probe "(0, sdk.requests).send(req);" - reports outbound-send
 
 * operatorReceiver - ONE descent for the four RECEIVER_OPERATORS (`? :`, `??`, `||`, `&&`) reached from receiverKind and keyReceiver and from NOWHERE ELSE: any operand naming a receiver makes the expression that receiver, else any unreadable operand makes it unreadable, else it is not a receiver
     read off:  module scope > const operatorReceiver = (
@@ -272,6 +313,8 @@ RESOLVERS - 31 entries.
     reports:   outbound-send
     counter:   "(cache ?? client).send(req);"
     reports:   [] - nothing
+    branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
+    branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
 
 * isProvablyNumeric - a NARROWING resolver: a key provably numeric - a numeric literal, a collected numeric name, `+`/`-` over two numeric operands, or a member or call named in NUMERIC_MEMBERS - is an INDEX and is excluded before any receiver rule runs. The NUMERIC_MEMBERS half is a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
     read off:  module scope > function isProvablyNumeric(
@@ -279,6 +322,9 @@ RESOLVERS - 31 entries.
     reports:   [] - nothing
     counter:   "const o = { max: \"requests\" };\nsdk[o.max + \"\"].send(req);"
     reports:   outbound-unanalysable
+    branch:    "a numeric literal" at module scope > isProvablyNumeric > if (ts.isNumericLiteral(inner)) return true; - probe "sdk[0].send(req);" - reports [] - nothing
+    branch:    "a collected numeric name" at module scope > isProvablyNumeric > return numeric.has(inner.text) && !poisoned.has(inner.text); - probe "const i = 0;\nsdk[i].send(req);" - reports [] - nothing
+    branch:    "a member or call named in NUMERIC_MEMBERS" at module scope > isProvablyNumeric > return NUMERIC_MEMBERS.has(inner.name.text); - probe "sdk[xs.length].send(req);" - reports [] - nothing
 
 * isAssembledKey - a key the walk WATCHES being built inline - concatenated, interpolated, or returned by a call that is not provably numeric - is UNREADABLE, a third state distinct from `not a receiver`
     read off:  module scope > function isAssembledKey(
@@ -286,6 +332,9 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "sdk[\"requests\"].send(req);"
     reports:   outbound-send
+    branch:    "concatenated" at module scope > isAssembledKey > inner.operatorToken.kind === ts.SyntaxKind.PlusToken - probe "sdk[\"req\" + \"uests\"].send(req);" - reports outbound-unanalysable
+    branch:    "interpolated" at module scope > isAssembledKey > if (ts.isTemplateExpression(inner)) return true; - probe "sdk[`req${x}`].send(req);" - reports outbound-unanalysable
+    branch:    "returned by a call" at module scope > isAssembledKey > return ts.isCallExpression(inner); - probe "sdk[name()].send(req);" - reports outbound-unanalysable
 
 * isGlobalReceiverIn - whether an expression is one of the four global receivers or a collected one-hop alias of one; the depth question is answered by the alias entries above and NOT restated here (WR-30)
     read off:  module scope > function isGlobalReceiverIn(
@@ -293,6 +342,8 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "o[\"fet\" + \"ch\"](url);"
     reports:   [] - nothing
+    branch:    "one of the four global receivers" at module scope > isGlobalReceiverIn > return GLOBAL_RECEIVERS.has(inner.text) || aliases.has(inner.text); - probe "globalThis.fetch(url);" - reports outbound-fetch
+    branch:    "a collected one-hop alias of one" at module scope > isGlobalReceiverIn > return GLOBAL_RECEIVERS.has(inner.text) || aliases.has(inner.text); - probe "const g = globalThis;\ng.fetch(url);" - reports outbound-fetch
 
 * boundPropertyName - the property a binding element reads, including the RENAMED spelling `{ p: k }`, so a destructured assembly is bound to the local name rather than the source key
     read off:  module scope > function boundPropertyName(el: ts.BindingElement): string | undefined {
@@ -300,6 +351,7 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "const { p: k } = { p: \"harmless\" };\nsdk[k].send(req);"
     reports:   [] - nothing
+    branch:    "the RENAMED spelling" at module scope > boundPropertyName > const property = el.propertyName ?? el.name; - probe "const { p: k } = { p: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
 
 * destructuredInitializer - the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26)
     read off:  module scope > function destructuredInitializer(
@@ -307,6 +359,8 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "const [k] = [1];\nsdk[k].send(req);"
     reports:   [] - nothing
+    branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
 MEASURED SILENCES - 7 entries.
 
@@ -353,7 +407,7 @@ MEASURED SILENCES - 7 entries.
     counter:   "const a = fetch;\nconst b = a;\nb(url);"
     reports:   outbound-fetch
 
-* silence-operator-around-global-receiver - OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in every spelling. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator
+* silence-operator-around-global-receiver - OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in the four RECEIVER_OPERATORS spellings. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator. FALSIFIED 2026-08-24 (CR-11), the phrase this clause used to carry: "silent in every spelling" - measured, the comma-sequence, parenthesis, as-assertion and non-null-assertion spellings all report, because unwrap strips them before the resolver is ever reached
     read off:  module scope > const operatorReceiver = (
     probe:     "(ok && globalThis).fetch(url);"
     reports:   [] - nothing
