@@ -445,9 +445,31 @@ export function redactQueryValues(url: string): string {
  * truncate an oversized path back to its authority and discard far more than one
  * trailing segment's worth of output, which is a different decision from the one
  * this change is: retain strictly LESS, bounded at one segment. So this branch
- * retains exactly what it retained before, and the residual it leaves — a head-side
- * cut can still land inside a `;` parameter's `<redacted>` marker — is DISCLOSED in
- * `schema.spec.ts`'s `observations.url` entry and pinned by an executed case.
+ * retains exactly what it retained before.
+ *
+ * WHAT THIS BRANCH LEAVES OPEN, stated against the CONDITION rather than against
+ * the fixture that found it (WR-28, WR-29). The condition is `q === -1 || amp <= q`:
+ * there is no `&` INSIDE THE CUT. That is a statement about WHERE THE CUT LANDS —
+ * before the query's first `&` — and NOT about how many parameters the query has.
+ * A three-parameter query with one long first parameter is in this class exactly as
+ * a one-parameter query is; the earlier disclosure scoped it to a query of one
+ * segment only, and that scoping was too narrow.
+ *
+ * Inside the class there are two shapes and only one of them is a fixed point:
+ *
+ *   a cut landing inside a `;` parameter's `<redacted>` MARKER is stable — the
+ *   second pass re-expands the marker and re-truncates to the same byte;
+ *
+ *   a cut landing inside a parameter NAME is NOT stable — the second pass sees a
+ *   segment with no `=`, decision P10-D1 redacts it WHOLE, and the stored value can
+ *   SHRINK by a byte.
+ *
+ * Both shapes are DISCLOSED in `schema.spec.ts`'s `observations.url` entry and
+ * pinned by SWEEPS — not by chosen offsets — in `observations.spec.ts`. The sweeps
+ * also assert the half that HOLDS: zero secret survivals at either pass across every
+ * offset they walk, head-side and multi-segment alike. Nothing here is an exposure;
+ * `recordObservation` applies this function ONCE per row, so no production path ever
+ * takes the second pass.
  *
  * `URL_MAX` IS NOW AN UPPER BOUND, NOT AN OUTPUT LENGTH. Every assertion that read
  * `toBe(URL_MAX)` was re-derived one at a time rather than relaxed in bulk; see

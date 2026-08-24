@@ -264,19 +264,36 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               truncation is a FIXED POINT ACROSS THE RANGE
  *                               SWEPT — parameter-name lengths 1..64 at 300 and
  *                               900 parameters, 128 cuts — and NOT for every
- *                               possible input. TWO classes the sweep does not
- *                               reach, both in the NO-SEPARATOR branch, where
- *                               there is no `&` inside the cut to drop back to
- *                               and the byte cut therefore STANDS: (1) a cut
- *                               landing in the HEAD can still sever a `;`
- *                               parameter's marker — severed but STABLE, since a
+ *                               possible input. The class the sweep does not
+ *                               reach is the NO-SEPARATOR branch, whose condition
+ *                               is `q === -1 || amp <= q`: there is no `&` INSIDE
+ *                               THE CUT, so there is no boundary to drop back to
+ *                               and the byte cut STANDS. That condition is about
+ *                               WHERE THE CUT LANDS — before the query's first
+ *                               `&` — and NOT about how many parameters the query
+ *                               has. This entry used to scope the class to a
+ *                               query of one segment only (WR-29); that is
+ *                               corrected here, because a long path with a long
+ *                               FIRST parameter is the more ordinary shape and it
+ *                               is squarely inside the class. Inside the class
+ *                               there are TWO shapes and exactly one of them is a
+ *                               fixed point: (1) a cut landing inside a `;`
+ *                               parameter's `<redacted>` MARKER is stable — a
  *                               second pass re-expands and re-truncates to the
- *                               same byte; and (2) a query of a SINGLE segment
- *                               cut inside its NAME is NOT a fixed point at all —
- *                               the partial name is a bare segment on the second
- *                               pass and is redacted whole. NEITHER discloses
- *                               anything new: no production path applies
- *                               `normaliseObservedUrl` twice, since
+ *                               same byte; (2) a cut landing inside a parameter
+ *                               NAME is NOT stable — the second pass sees a
+ *                               segment with no `=`, P10-D1 redacts it WHOLE, and
+ *                               the value can SHRINK by a byte. Shape (2) used to
+ *                               be asserted STABLE from ONE chosen offset
+ *                               (WR-28); a sweep of the 71 head lengths around
+ *                               that offset finds 11 that are not fixed points,
+ *                               so the claim here is now what a sweep finds
+ *                               rather than what one offset showed. NEITHER shape
+ *                               discloses anything new, and that half is MEASURED
+ *                               rather than argued: the sweeps assert secret
+ *                               absence at BOTH passes at every offset they walk
+ *                               and find zero survivals, and no production path
+ *                               applies `normaliseObservedUrl` twice, since
  *                               `recordObservation` runs it once per row. NOT
  *                               CLOSED because the repair — dropping back to the
  *                               last `/` or to the `?` — would truncate an
@@ -285,9 +302,13 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               a retention question decisions P8-D1 and P10-D1
  *                               settled. PINNED by "THE NO-SEPARATOR BRANCH: with
  *                               no `&` inside the cut the byte cut STANDS, and
- *                               that is where the residual lives (WR-22)", which
- *                               asserts BOTH classes and goes RED the day either
- *                               is closed. UNIT.
+ *                               the residual that lives there is SWEPT, not
+ *                               pinned at one chosen offset (WR-22/WR-28/WR-29)",
+ *                               which sweeps BOTH a head-side `;` input and a
+ *                               THREE-parameter query, asserts each unstable set
+ *                               is non-empty, contiguous and strictly inside its
+ *                               swept range, and goes RED the day either shape is
+ *                               closed or widened. UNIT.
  *   observations.content_type — a response HEADER value, and the only one. Bounded
  *                               to 120 chars. It is the admission decision itself,
  *                               so recording it is what makes a wrong admission

@@ -965,7 +965,7 @@ describe("normaliseObservedUrl", () => {
     expect(worstSegmentsLost).toBe(1);
   });
 
-  it("THE NO-SEPARATOR BRANCH: with no `&` inside the cut the byte cut STANDS, and that is where the residual lives (WR-22)", () => {
+  it("THE NO-SEPARATOR BRANCH: with no `&` inside the cut the byte cut STANDS, and the residual that lives there is SWEPT, not pinned at one chosen offset (WR-22/WR-28/WR-29)", () => {
     // THE DECISION, stated where it is asserted. When the cut lands in the HEAD,
     // or inside a query that has no `&` inside the cut, there is no segment
     // boundary to drop back to. The byte cut is KEPT — identical to what the old
@@ -983,32 +983,151 @@ describe("normaliseObservedUrl", () => {
     const path = normaliseObservedUrl(`https://x.test/${"p".repeat(4000)}`);
     expect(path.length).toBe(URL_MAX);
 
-    // (b) RESIDUAL, PINNED: a head-side cut can still land inside a `;`
-    // parameter's marker. It is SEVERED but STABLE — a second pass re-expands the
-    // marker and re-truncates to the same byte — so it is a disclosure, not a
-    // fixed-point failure. Goes RED the day somebody closes it.
-    const headCut = normaliseObservedUrl(
+    // (b) RESIDUAL, PINNED BY A SWEEP AND NOT BY A CHOSEN OFFSET (WR-28).
+    //
+    // This block used to be one hard-coded path length — `"p".repeat(2010)` —
+    // and the result was described as severed-but-stable. At 2010 that is true.
+    // Nine offsets later it is false, and the single-offset claim was then
+    // restated as a general property in `schema.spec.ts`'s `observations.url`
+    // entry and in `observations.ts`'s own docblock. That is WR-22's lesson —
+    // do not take the reviewer's cut point, sweep for the adversarial one —
+    // applied to the query-side branch and NOT to the head-side branch in the
+    // same commit. So the head-side branch is swept here the way the query-side
+    // branch is swept above, and the residual is stated as what the sweep finds.
+    //
+    // THE MECHANISM, written down so the band stays re-derivable when `URL_MAX`
+    // or the marker text moves. A head-side cut landing INSIDE the `<redacted>`
+    // marker IS a fixed point: the second pass re-expands the marker and
+    // re-truncates to the same byte. A head-side cut landing inside the
+    // parameter NAME is NOT: the second pass sees a `;` segment with no `=` at
+    // all, decision P10-D1 redacts that segment WHOLE, and the stored value can
+    // SHRINK by a byte on the second pass.
+    //
+    // WHAT IS ASSERTED IS THE INSTABILITY'S SHAPE, NOT A LITERAL BAND. Writing
+    // `2019` and `2029` into this file would be the same defect one layer up: a
+    // number with no derivation, going RED for the wrong reason the day a
+    // constant moves. What is pinned instead is that the unstable set is
+    // NON-EMPTY (the residual is real and still open), CONTIGUOUS (one band, one
+    // mechanism) and STRICTLY INSIDE the swept range (the sweep is wide enough to
+    // have found its own edges). Any of those three changing is a real change.
+    const HEAD_LO = 1975;
+    const HEAD_HI = 2045;
+    const headUnstable: number[] = [];
+    let headSwept = 0;
+    for (let n = HEAD_LO; n <= HEAD_HI; n += 1) {
+      const once = normaliseObservedUrl(
+        `https://cdn.test/${"p".repeat(n)};jsessionid=SECRETSESSION`,
+      );
+      const twice = normaliseObservedUrl(once);
+      headSwept += 1;
+      if (twice !== once) headUnstable.push(n);
+
+      // THE OTHER HALF OF THE RESIDUAL, ASSERTED BESIDE IT AND NOT ELSEWHERE.
+      // What failed was the STABILITY claim; what holds is the REDACTION. A
+      // reader who finds only one of the two asserted cannot tell which half the
+      // disclosure is about — so both passes are checked at EVERY swept offset,
+      // with this file's own secret-absence helper, including across the whole
+      // unstable band.
+      expect(once.length).toBeLessThanOrEqual(URL_MAX);
+      expectSecretAbsent(once, "SECRETSESSION", `head length ${n}, pass 1`);
+      expectSecretAbsent(twice, "SECRETSESSION", `head length ${n}, pass 2`);
+    }
+    expect(headSwept).toBe(HEAD_HI - HEAD_LO + 1);
+    expect(
+      headUnstable.length,
+      `the head-side residual is CLOSED across n=${HEAD_LO}..${HEAD_HI}. If that is deliberate, this case and the three disclosures naming it (this comment, schema.spec.ts's observations.url entry, observations.ts's no-separator paragraph) all have to change together.`,
+    ).toBeGreaterThan(0);
+    expect(
+      headUnstable[headUnstable.length - 1] - headUnstable[0] + 1,
+      `the head-side unstable set is no longer ONE contiguous band, so it is no longer one mechanism: ${headUnstable.join(" ")}`,
+    ).toBe(headUnstable.length);
+    expect(
+      headUnstable.every((n) => n > HEAD_LO && n < HEAD_HI),
+      `the unstable band reaches an edge of the swept range (${headUnstable.join(" ")}) — widen HEAD_LO/HEAD_HI before trusting this result`,
+    ).toBe(true);
+
+    // The two shapes named above, with executed bytes rather than prose. The
+    // first is the offset the old fixture chose: the cut lands inside the marker,
+    // and it IS a fixed point — which is exactly why the single-offset pin passed
+    // for a round while the property it was cited for was false.
+    const markerCut = normaliseObservedUrl(
       `https://cdn.test/${"p".repeat(2010)};jsessionid=SECRETSESSION`,
     );
-    expect(headCut.length).toBe(URL_MAX);
-    expect(headCut.slice(-20)).toBe("jsessionid=<redacted");
-    expectSecretAbsent(headCut, "SECRETSESSION", "the `;` parameter value");
-    expect(normaliseObservedUrl(headCut)).toBe(headCut);
+    expect(markerCut.length).toBe(URL_MAX);
+    expect(markerCut.slice(-26)).toBe("ppppp;jsessionid=<redacted");
+    expect(normaliseObservedUrl(markerCut)).toBe(markerCut);
 
-    // (c) RESIDUAL, PINNED — and this is the one the sweep above cannot reach.
-    // A query with a SINGLE segment, cut inside that segment's NAME: there is no
-    // `&` to drop back to, the byte cut stands, and the partial name is a bare
-    // segment on the second pass. So `normaliseObservedUrl` is NOT a fixed point
-    // here, and this file says so with executed bytes rather than claiming a
-    // property the sweep did not prove.
-    const single = normaliseObservedUrl(
-      `https://x.test/${"p".repeat(2029)}?nnn=1`,
+    // The first offset the sweep FOUND unstable — read out of the run, never
+    // hard-coded. The cut lands just past the `=`, so the second pass has a `;`
+    // segment with an empty value half and redacts it whole: one byte shorter.
+    const nameCut = normaliseObservedUrl(
+      `https://cdn.test/${"p".repeat(headUnstable[0])};jsessionid=SECRETSESSION`,
     );
-    expect(single.length).toBe(URL_MAX);
-    expect(single.slice(-10)).toBe("pppppp?nnn");
-    const singleTwice = normaliseObservedUrl(single);
-    expect(singleTwice).not.toBe(single);
-    expect(singleTwice.slice(-14)).toBe("pppppppppp?<re");
+    expect(nameCut.length).toBe(URL_MAX);
+    expect(nameCut.slice(-12)).toBe(";jsessionid=");
+    const nameCutTwice = normaliseObservedUrl(nameCut);
+    expect(nameCutTwice).not.toBe(nameCut);
+    expect(nameCutTwice.length).toBe(nameCut.length - 1);
+    expect(nameCutTwice.slice(-11)).toBe(";<redacted>");
+
+    // (c) RESIDUAL, PINNED — the class the sweep above cannot reach, stated
+    // against the BRANCH CONDITION and not against the fixture that found it
+    // (WR-29).
+    //
+    // The branch is `q === -1 || amp <= q`: what puts a URL in this class is that
+    // there is NO `&` INSIDE THE CUT — i.e. the cut lands before the query's
+    // first `&`. How many parameters the query has PAST the cut is irrelevant.
+    // This case used to be scoped to a query of one segment only, and both
+    // disclosures repeated that scoping, which tells a reader that a URL with
+    // more than one query parameter is outside the residual. It is not: a long
+    // path with a long FIRST parameter is the ordinary shape, and the sweep below
+    // uses a three-parameter query for exactly that reason.
+    const MULTI_LO = 1975;
+    const MULTI_HI = 2045;
+    const multiUnstable: number[] = [];
+    let multiSwept = 0;
+    for (let n = MULTI_LO; n <= MULTI_HI; n += 1) {
+      const once = normaliseObservedUrl(
+        `https://x.test/${"p".repeat(n)}?nnnnnnnnnnnnnnnn=SECRETALPHA&b=2&c=3`,
+      );
+      const twice = normaliseObservedUrl(once);
+      multiSwept += 1;
+      if (twice !== once) multiUnstable.push(n);
+      expect(once.length).toBeLessThanOrEqual(URL_MAX);
+      expectSecretAbsent(once, "SECRETALPHA", `multi head length ${n}, pass 1`);
+      expectSecretAbsent(
+        twice,
+        "SECRETALPHA",
+        `multi head length ${n}, pass 2`,
+      );
+    }
+    expect(multiSwept).toBe(MULTI_HI - MULTI_LO + 1);
+    expect(
+      multiUnstable.length,
+      `a MULTI-segment query is now a fixed point across n=${MULTI_LO}..${MULTI_HI}. The residual's scope changed; restate it in schema.spec.ts and observations.ts before deleting this.`,
+    ).toBeGreaterThan(0);
+    expect(
+      multiUnstable[multiUnstable.length - 1] - multiUnstable[0] + 1,
+      `the multi-segment unstable set is no longer one contiguous band: ${multiUnstable.join(" ")}`,
+    ).toBe(multiUnstable.length);
+    expect(
+      multiUnstable.every((n) => n > MULTI_LO && n < MULTI_HI),
+      `the multi-segment unstable band reaches an edge of the swept range (${multiUnstable.join(" ")}) — widen MULTI_LO/MULTI_HI`,
+    ).toBe(true);
+
+    // The first offset the multi-segment sweep FOUND — again read out of the run.
+    // The cut lands inside the FIRST parameter's name, before that query's first
+    // `&`, so there is no boundary to drop back to and the byte cut stands; the
+    // second pass then redacts the partial segment whole. Two more parameters sit
+    // past the cut and change nothing, which is the whole point of the case.
+    const multi = normaliseObservedUrl(
+      `https://x.test/${"p".repeat(multiUnstable[0])}?nnnnnnnnnnnnnnnn=SECRETALPHA&b=2&c=3`,
+    );
+    expect(multi.length).toBe(URL_MAX);
+    expect(multi.slice(-26)).toBe("pppppppp?nnnnnnnnnnnnnnnn=");
+    const multiTwice = normaliseObservedUrl(multi);
+    expect(multiTwice).not.toBe(multi);
+    expect(multiTwice.slice(-26)).toBe("ppppppppppppppp?<redacted>");
   });
 
   it("still bounds the result at URL_MAX when the PATH alone is oversized", () => {

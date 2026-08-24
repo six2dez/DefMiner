@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 19
 waived_count: 0
-fixed_count: 9
-total_count: 28
-last_updated: 2026-08-24T12:30:23.403Z
+fixed_count: 10
+total_count: 29
+last_updated: 2026-08-24T12:48:34.593Z
 ---
 
 # Broken Windows Ledger
@@ -33,7 +33,7 @@ last_updated: 2026-08-24T12:30:23.403Z
 | 16 | 01 | deviation | packages/backend/src/hooks/passive.ts | 171 | T-01-37 accept: renders String(e).slice(0,160) into sdk.console.log on the hook error path, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-03 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.502Z |  |
 | 17 | 01 | deviation | .planning/REQUIREMENTS.md |  | T-01-76 accept: STORE-03 and STORE-07 are declared by redaction plans for work neither requirement's text mentions. Deferred WITH AN OWNER by plan 01-10 task 3 — the operator, at the next requirements pass | open |  | 2026-08-21T14:33:35.597Z |  |
 | 18 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo redaction cannot be proven at the live tier: curl lifts user:pass@ into an Authorization: Basic header, so userinfo never reaches observations.url. Measured in run 20260821T150022Z-16902 (userinfo-measurement.txt) and enforced instead by the observations.spec.ts real-SQLite round trip. Live-tier coverage for this one grammar is a documented gap, not a passing assertion. | open |  | 2026-08-21T15:10:49.050Z |  |
-| 19 | 1 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary | open |  | 2026-08-22T08:54:33.504Z |  |
+| 19 | 1 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary | fixed |  | 2026-08-22T08:54:33.504Z | 2026-08-24T12:48:34.497Z |
 | 20 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | WR-19 narrowed from every-non-reducing-key to ASSEMBLED-KEY; a merely dynamic key (sdk[k]) is a disclosed residual, not reported | fixed |  | 2026-08-22T09:33:22.689Z | 2026-08-24T08:21:10.428Z |
 | 21 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo cannot be exercised through the live curl tier — lifted into an Authorization: Basic header before the request line exists. MEASURED per run (userinfo-measurement.txt), enforced at the unit tier by observations.spec.ts HEAD_CASES. A live userinfo proof needs a client that does not do this lift. | open |  | 2026-08-22T09:56:52.151Z |  |
 | 22 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | THE RECEIVER-KEY RESIDUAL AS OF WAVE 18 (plan 01-18, CR-08) — SUPERSEDED IN WAVE 19 BY PLAN 01-19, which narrows it further and rewrites this bound in the gate header, REQUIREMENTS.md, STATE.md and this ledger. Supersedes entries 13 and 20, whose descriptions stated a bound the code no longer has. NOW REPORTED in receiver-key position: a literal key; a key bound ONE HOP to a literal (constStrings); a key assembled inline (isAssembledKey); a key bound ONE HOP to an assembly in EVERY spelling — +, a template, .join(""), an opaque call — through either a declaration or an assignment (assembledNames); a CONDITIONAL key resolved on both branches; a COMMA SEQUENCE resolved to its rightmost operand. THE RESIDUAL THAT REMAINS, in the same words as that gate's boundary 2, REQUIREMENTS.md's CORE-11 correction and STATE.md's P9-D3 amendment: more than ONE HOP of indirection, a value crossing a FUNCTION BOUNDARY, and a key the walk NEVER SAW BOUND — a parameter, a loop binding, a name bound out of document order or in another file. That last exemption is preserved BY MEASUREMENT, re-run after the widening: 23 files over both source roots, ZERO violations, with compat.ts's at() cur[key] and ctx[root], observations.ts's segments[i] and MIGRATIONS[MIGRATIONS.length - 1] all asserted quiet by name. CORE-11 stays unchecked: const e = eval; e(s) (WR-23) and const g = globalThis (IN-20) are still silent and plan 01-19 owns both plus the checkbox flip. | fixed |  | 2026-08-24T08:21:34.840Z | 2026-08-24T08:49:12.490Z |
@@ -64,6 +64,7 @@ STILL OPEN AFTER THIS WAVE, EACH NAMED WITH THE WAVE THAT OWNS IT OR WITH THE FA
 Every exemption here is preserved BY MEASUREMENT, re-run after each widening and again in wave 25: 23 files over both `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()` `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. AN OPERATOR DESCENT IN CALL-RECEIVER POSITION IS THE WIDENING MOST LIKELY TO FIRE ON ORDINARY SHIPPED CODE — picking one of two ordinary collaborators with `? :`, `??`, `\|\|` or `&&` is common, and a gate that flags it gets deleted rather than fixed — so every widening in this wave shipped with its must-stay-quiet twin IN THE SAME COMMIT: `(useCache ? cache : client)`, `(cache ?? client)`, `(cache \|\| client)`, `(ready && cache)` and an ordinary object defining a method named `send` all report `[]`.
 
 WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave closes WR-27's INSTANCE and does not close the class that produced it — an authored bound nobody re-derived — which is now SEVEN consecutive rounds. `REQUIREMENTS.md` and `STATE.md` are deliberately NOT amended in this wave, for the reason wave 24 recorded: both carry an authored residual, wave 27 derives the replacement and wave 28 reconciles both requirement-tier ledgers to it in ONE move, and another hand-authored copy would be another place the next drift can start. CORE-11's box stays `[ ]`; wave 28 owns the flip and only against the derived text. NOTHING LEAKED: WR-27 is a PROSPECTIVE BLINDNESS in a test-only gate, no outbound call exists in any non-spec source under either root, the gate runs green over the real tree — 23 files, ZERO violations — inside a 1143-test suite, and `pnpm check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. | open |  | 2026-08-24T12:30:23.403Z |  |
+| 29 | 01 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED BY SWEEPS (supersedes entry 19, whose stated job — truncate on an & boundary — plan 01-20 did). What is left is the NO-SEPARATOR branch, condition q === -1 \|\| amp <= q: no & INSIDE THE CUT. The class is about WHERE THE CUT LANDS (before the query's first &), NOT about how many parameters the query has — a three-parameter query with a long first parameter is inside it. Two shapes: a cut inside a ;-parameter's <redacted> MARKER IS a fixed point; a cut inside a parameter NAME is NOT (second pass sees a segment with no =, P10-D1 redacts it whole, value can SHRINK one byte). MEASURED 2026-08-24 by the sweeps in observations.spec.ts: head-side n=1975..2045, 71 offsets, 11 unstable (2019-2029); three-parameter query, same range, 71 offsets, 17 unstable (2015-2031). ZERO secret survivals at either pass at every one of those 142 offsets. NOT A LEAK: recordObservation applies normaliseObservedUrl ONCE per row, so no production path takes the second pass. NOT CLOSED for the reason observations.ts records — the repair drops back to the last / or to the ?, truncating an oversized path to its authority, which reopens P8-D1/P10-D1. | open |  | 2026-08-24T12:48:34.593Z |  |
 
 ````json
 [
@@ -290,10 +291,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/backend/src/store/observations.ts",
     "line": null,
     "description": "RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-22T08:54:33.504Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-24T12:48:34.497Z"
   },
   {
     "id": 20,
@@ -401,6 +402,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-24T12:30:23.403Z",
+    "resolved_at": null
+  },
+  {
+    "id": 29,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/store/observations.ts",
+    "line": null,
+    "description": "RESIDUAL, PINNED BY SWEEPS (supersedes entry 19, whose stated job — truncate on an & boundary — plan 01-20 did). What is left is the NO-SEPARATOR branch, condition q === -1 || amp <= q: no & INSIDE THE CUT. The class is about WHERE THE CUT LANDS (before the query's first &), NOT about how many parameters the query has — a three-parameter query with a long first parameter is inside it. Two shapes: a cut inside a ;-parameter's <redacted> MARKER IS a fixed point; a cut inside a parameter NAME is NOT (second pass sees a segment with no =, P10-D1 redacts it whole, value can SHRINK one byte). MEASURED 2026-08-24 by the sweeps in observations.spec.ts: head-side n=1975..2045, 71 offsets, 11 unstable (2019-2029); three-parameter query, same range, 71 offsets, 17 unstable (2015-2031). ZERO secret survivals at either pass at every one of those 142 offsets. NOT A LEAK: recordObservation applies normaliseObservedUrl ONCE per row, so no production path takes the second pass. NOT CLOSED for the reason observations.ts records — the repair drops back to the last / or to the ?, truncating an oversized path to its authority, which reopens P8-D1/P10-D1.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T12:48:34.593Z",
     "resolved_at": null
   }
 ]
