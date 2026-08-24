@@ -240,16 +240,45 @@
 //    an INDEX rather than a hidden name, and is EXCLUDED by `isProvablyNumeric`
 //    before any of the above runs. That is a different kind of quiet.
 //    That is the honest bound, and `pnpm check:bundle` plus the mutation runs
-//    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md` and `01-18-SUMMARY.md`
-//    are what stand behind it.
+//    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md`, `01-18-SUMMARY.md` and
+//    `01-19-SUMMARY.md` are what stand behind it.
 //
-//    WHAT IS STILL OPEN, NAMED HERE SO IT IS NOT DISCOVERED BY A PROBE. CORE-11
-//    is NOT marked complete in `REQUIREMENTS.md`, deliberately: the requirement's
-//    own text enumerates "no dynamic code construction", and `const e = eval;
-//    e(s)` — a one-hop binding of `eval` — is still silent (WR-23), as is
-//    `const g = globalThis` (IN-20). Plan 01-19 closes both and owns flipping the
-//    box. Marking it complete here would be the same defect this paragraph was
-//    rewritten to remove: a claim reaching further than an execution.
+//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-19 =================
+//    Derived from the code above and copied WORD FOR WORD into
+//    `.planning/REQUIREMENTS.md`'s CORE-11 correction, `.planning/STATE.md`'s
+//    P9-D3 amendment and `.planning/WINDOWS.md`. If those four ever disagree,
+//    the code wins and the prose is the defect.
+//
+//    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS
+//    IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as
+//    one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, but only in
+//    DOCUMENT ORDER: `const a = globalThis; const b = a; const g = b; g.fetch(u)`
+//    reports and so does the `sdk.requests` twin, while a chain read BEFORE its
+//    root is bound is SILENT, because there is no symbol table and no second
+//    pass. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in
+//    every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is
+//    silent. Outside those, four things are beyond the walk: a value crossing a
+//    FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER
+//    FILE. And one thing is ASSUMED rather than proven: a member or method call
+//    named in `NUMERIC_MEMBERS` is taken to be numeric WHATEVER ITS RECEIVER, a
+//    NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
+//    because narrowing it was MEASURED to change nothing except to re-poison
+//    ordinary `+` indexing. Every exemption here is preserved BY MEASUREMENT,
+//    re-run after each widening in plan 01-19: 23 files over both
+//    `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()` `cur[key]` and
+//    `ctx[root]`, `observations.ts`'s `segments[i]` and
+//    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name.
+//
+//    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
+//    from the `[x]` that commit `e7cc4b6` reverted is the reason it may be:
+//    every surface the requirement's own first sentence enumerates now has a
+//    fixture that has been OBSERVED FAILING. `const e = eval; e(s)` (WR-23) and
+//    `const g = globalThis; g.fetch(u)` (IN-20) — the two shapes that were
+//    silent when plan 01-18 deliberately left the box open — both report. The
+//    discharge table, one row per enumerated surface with its rule identifier,
+//    its fixture and the plan that watched that fixture fail, is in
+//    `01-19-SUMMARY.md`.
+//    ========================================================================
 // 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
 //    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
 //    `store/error-redaction.spec.ts` needs — both DELIBERATELY. Exporting one
