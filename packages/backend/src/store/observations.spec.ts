@@ -42,7 +42,17 @@ import {
 /** `URL_MAX` is module-private on purpose — the column's bound is not a knob. The
  *  literal is repeated here so the ordering case below can assert against it; if
  *  the two ever disagree the ordering case fails loudly rather than silently
- *  measuring nothing. */
+ *  measuring nothing.
+ *
+ *  AMENDED 2026-08-22 (WR-22): `URL_MAX` is now an UPPER BOUND on the output, not
+ *  the output's length. When the cut severs a query segment the truncation drops
+ *  back to the last `&`, so the result is SHORTER than the bound by exactly that
+ *  segment. Every assertion in this file that reads `toBe(URL_MAX)` was re-derived
+ *  one at a time rather than relaxed in bulk, and each now says at its own site
+ *  which of the three things it means: exactly the bound (the no-separator branch,
+ *  where the byte cut still stands), at most the bound, or something about the
+ *  tail's shape. A blanket `toBeLessThanOrEqual` would have said less than each of
+ *  them did. */
 const URL_MAX = 2048;
 
 /** Where the two modules this file's pattern gate reads actually live. Relative
@@ -776,12 +786,17 @@ describe("RESIDUALS this rule deliberately LEAVES — pinned by execution, not n
       `https://cdn.test/a.js?${parts.join("&")}`,
     );
 
-    expect(out.length).toBe(URL_MAX);
-    // The measured tail: a parameter name, its `=`, and a SEVERED marker.
-    expect(out.slice(out.lastIndexOf("&") + 1)).toBe("p133=<re");
-    // And the fragment is stable — a second pass re-expands the marker and
-    // re-truncates to the same byte, which is the property that makes this
-    // pinnable at all.
+    // RE-DERIVED 2026-08-22 (WR-22). This read `toBe(URL_MAX)` and meant
+    // "the byte cut landed here". It now means "at most the bound, and short of
+    // it by exactly the segment the byte cut would have severed" — so it is
+    // written as both halves rather than relaxed to the weaker one.
+    expect(out.length).toBeLessThanOrEqual(URL_MAX);
+    expect(out.length).toBe(2039);
+    // The measured tail: a WHOLE segment. It read `"p133=<re"` — a name, its `=`
+    // and a severed marker — and that shape no longer exists on this input.
+    expect(out.slice(out.lastIndexOf("&") + 1)).toBe("p132=<redacted>");
+    // Still a fixed point, now because the cut fell on a boundary rather than
+    // because a severed marker happened to re-truncate to the same byte.
     expect(normaliseObservedUrl(out)).toBe(out);
 
     // The interaction the repair would break, executed here so the reason above
@@ -829,6 +844,11 @@ describe("normaliseObservedUrl", () => {
     const long = "A".repeat(3000);
     const out = normaliseObservedUrl(`https://x.test/a.js?t=${long}&marker=z`);
 
+    // RE-DERIVED 2026-08-22 (WR-22) and LEFT ALONE: this one always meant "at
+    // most the bound". The redacted form of this input is far shorter than
+    // `URL_MAX`, so no truncation happens at all and the assertion is measuring
+    // that the ordering did not leave a 3000-character value behind — not the
+    // truncation strategy.
     expect(out.length).toBeLessThanOrEqual(URL_MAX);
     expectSecretAbsent(out, long.slice(0, 200), "the oversized value");
     expect(out).toBe(
@@ -836,8 +856,147 @@ describe("normaliseObservedUrl", () => {
     );
   });
 
+  it("IDEMPOTENT AT THE `URL_MAX` CUT: swept across parameter-name length, not hard-coded (WR-22)", () => {
+    // THE POINT OF THIS CASE IS THE SEARCH, and it is the whole lesson of WR-22.
+    //
+    // The property "a second pass returns the first byte-for-byte" was already
+    // asserted three times in this file — over `redactQueryValues` in `CASES` and
+    // in the `BARE_CREDENTIAL_SHAPES` loop, and over `redactUrlHead` in
+    // `HEAD_CASES`. All three assert it over a HELPER on a SHORT url, where the
+    // truncation never runs. The only assertion over the COMPOSED function was one
+    // 140-parameter fixture whose cut happened to land mid-marker, and the defect
+    // lives one cut point away: the fixture is green on either side of it.
+    //
+    // So this case does not choose a cut. It moves the cut across every offset
+    // inside a segment by sweeping the parameter-name length, and reports the
+    // counterexample it finds by length and by both tails — a future regression
+    // names itself instead of leaving the next reader to bisect.
+    //
+    // MEASURED BEFORE THE FIX, over n = 1..40 at 900 parameters: 25 of the 40
+    // lengths were not fixed points, the first at n=4 —
+    //   pass1  "…p111=<redacted>&pppp112="   len 2048
+    //   pass2  "…p111=<redacted>&<redacte"   len 2048
+    // Two mechanisms, both of them the truncation severing a segment: a cut just
+    // after a `=` leaves an EMPTY value half, which CR-07's branch redacts whole,
+    // and a cut inside a NAME leaves a segment with no `=`, which P10-D1 redacts
+    // whole. Either way the retained name is destroyed on the second pass.
+    const failures: string[] = [];
+    let swept = 0;
+    for (const count of [300, 900]) {
+      for (let n = 1; n <= 64; n += 1) {
+        const parts: string[] = [];
+        for (let i = 0; i < count; i += 1) {
+          parts.push(`${"p".repeat(n)}${String(i)}=v`);
+        }
+        const once = normaliseObservedUrl(
+          `https://cdn.test/a.js?${parts.join("&")}`,
+        );
+        const twice = normaliseObservedUrl(once);
+        swept += 1;
+        if (twice !== once) {
+          failures.push(
+            `${count} params, name length ${n}: ` +
+              `pass1 len ${once.length} tail ${JSON.stringify(once.slice(-24))}; ` +
+              `pass2 len ${twice.length} tail ${JSON.stringify(twice.slice(-24))}`,
+          );
+        }
+      }
+    }
+    expect(swept).toBe(128);
+    expect(
+      failures,
+      `normaliseObservedUrl is NOT a fixed point at ${failures.length} of ${swept} swept cuts:\n${failures.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("the truncation drops a WHOLE trailing segment, never half of one, and never more than one (WR-22)", () => {
+    // THE ACCEPTED COST, MEASURED rather than asserted. Past `URL_MAX` the cut
+    // drops back to the last `&`, which costs exactly the segment the byte cut
+    // would have severed — a parameter NAME the operator's UAT decision of
+    // 2026-08-21 chose to keep. Never two segments: more than one would mean the
+    // boundary logic is not doing what it says.
+    let worstSegmentsLost = 0;
+    for (let n = 1; n <= 40; n += 1) {
+      const parts: string[] = [];
+      for (let i = 0; i < 900; i += 1)
+        parts.push(`${"p".repeat(n)}${String(i)}=v`);
+      const out = normaliseObservedUrl(
+        `https://cdn.test/a.js?${parts.join("&")}`,
+      );
+
+      // The result never ends inside a segment or inside a redaction marker.
+      const tail = out.slice(out.lastIndexOf("&") + 1);
+      expect(tail.endsWith(QUERY_VALUE_REDACTION), `n=${n} tail ${tail}`).toBe(
+        true,
+      );
+
+      // What the OLD one-line rule would have produced, for the delta. Built from
+      // the same parts rather than from the function, so it survives the function
+      // changing again.
+      const byteCut = `https://cdn.test/a.js?${parts
+        .map((x) => `${x.split("=")[0]}=${QUERY_VALUE_REDACTION}`)
+        .join("&")}`.slice(0, URL_MAX);
+      const lost =
+        byteCut.slice(byteCut.indexOf("?") + 1).split("&").length -
+        out.slice(out.indexOf("?") + 1).split("&").length;
+      if (lost > worstSegmentsLost) worstSegmentsLost = lost;
+    }
+    expect(worstSegmentsLost).toBe(1);
+  });
+
+  it("THE NO-SEPARATOR BRANCH: with no `&` inside the cut the byte cut STANDS, and that is where the residual lives (WR-22)", () => {
+    // THE DECISION, stated where it is asserted. When the cut lands in the HEAD,
+    // or inside a query that has no `&` inside the cut, there is no segment
+    // boundary to drop back to. The byte cut is KEPT — identical to what the old
+    // one-line rule produced, so this branch retains exactly what it retained
+    // before and discards nothing extra.
+    //
+    // WHY NOT drop back to the last `/` or to the `?`. On an oversized path the
+    // last `/` can be at index 14, so dropping back to it would truncate a 2048
+    // byte result to its authority — discarding roughly two kilobytes that a
+    // segment-boundary cut would have kept. That is a different and much larger
+    // decision than "retain strictly less, bounded at one trailing segment", which
+    // is the bound the rest of this change is held to, so it is not taken here.
+
+    // (a) An oversized path, no query at all: the byte cut stands, exactly.
+    const path = normaliseObservedUrl(`https://x.test/${"p".repeat(4000)}`);
+    expect(path.length).toBe(URL_MAX);
+
+    // (b) RESIDUAL, PINNED: a head-side cut can still land inside a `;`
+    // parameter's marker. It is SEVERED but STABLE — a second pass re-expands the
+    // marker and re-truncates to the same byte — so it is a disclosure, not a
+    // fixed-point failure. Goes RED the day somebody closes it.
+    const headCut = normaliseObservedUrl(
+      `https://cdn.test/${"p".repeat(2010)};jsessionid=SECRETSESSION`,
+    );
+    expect(headCut.length).toBe(URL_MAX);
+    expect(headCut.slice(-20)).toBe("jsessionid=<redacted");
+    expectSecretAbsent(headCut, "SECRETSESSION", "the `;` parameter value");
+    expect(normaliseObservedUrl(headCut)).toBe(headCut);
+
+    // (c) RESIDUAL, PINNED — and this is the one the sweep above cannot reach.
+    // A query with a SINGLE segment, cut inside that segment's NAME: there is no
+    // `&` to drop back to, the byte cut stands, and the partial name is a bare
+    // segment on the second pass. So `normaliseObservedUrl` is NOT a fixed point
+    // here, and this file says so with executed bytes rather than claiming a
+    // property the sweep did not prove.
+    const single = normaliseObservedUrl(
+      `https://x.test/${"p".repeat(2029)}?nnn=1`,
+    );
+    expect(single.length).toBe(URL_MAX);
+    expect(single.slice(-10)).toBe("pppppp?nnn");
+    const singleTwice = normaliseObservedUrl(single);
+    expect(singleTwice).not.toBe(single);
+    expect(singleTwice.slice(-14)).toBe("pppppppppp?<re");
+  });
+
   it("still bounds the result at URL_MAX when the PATH alone is oversized", () => {
     const out = normaliseObservedUrl(`https://x.test/${"p".repeat(4000)}`);
+    // RE-DERIVED 2026-08-22 (WR-22) and KEPT AS EQUALITY, deliberately. This
+    // input carries no `?` at all, so the cut takes the NO-SEPARATOR branch and
+    // the byte cut stands untouched — `URL_MAX` is still the exact output length
+    // HERE. Relaxing this to `toBeLessThanOrEqual` because a sibling assertion
+    // needed it would have stopped measuring the thing this case is about.
     expect(out.length).toBe(URL_MAX);
   });
 });
@@ -1135,6 +1294,10 @@ describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-0
     const long = normaliseObservedUrl(
       `https://user:pw@cdn.test/${"p".repeat(4000)};s=1`,
     );
+    // RE-DERIVED 2026-08-22 (WR-22), KEPT AS EQUALITY for the same reason as the
+    // oversized-path case: the cut lands in the HEAD, there is no `?` inside it,
+    // the no-separator branch returns the byte cut, and the exact length is still
+    // the fact worth asserting.
     expect(long.length).toBe(URL_MAX);
   });
 

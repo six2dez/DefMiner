@@ -389,12 +389,71 @@ export function redactQueryValues(url: string): string {
  * string. Here the ordering also decides whether parameter names past the bound
  * survive at all, and it is what keeps the guarantee intact the moment any future
  * redactor preserves a prefix or a length of a value.
+ *
+ * TRUNCATE ON A SEGMENT BOUNDARY (amended 2026-08-22, WR-22). The truncation used
+ * to be one `slice(0, URL_MAX)` and that cost this function its FIXED POINT. Both
+ * halves of the reason are executed, not argued:
+ *
+ *   a cut landing just after a `=` leaves a segment whose value half is EMPTY,
+ *   and {@link redactDelimitedSegment}'s CR-07 branch redacts such a segment
+ *   WHOLE — so the retained name is destroyed on a second pass and the string
+ *   SHRINKS;
+ *
+ *   a cut landing inside a parameter NAME leaves a segment with no `=` at all,
+ *   which decision P10-D1 redacts whole for the same reason.
+ *
+ * Swept before the change over parameter-name lengths 1..40 at 900 parameters:
+ * 25 of the 40 lengths were not fixed points, the first at n=4 —
+ * `…p111=<redacted>&pppp112=` on the first pass, `…p111=<redacted>&<redacte` on
+ * the second. It is a WARNING and not a leak: nothing new is disclosed, the half
+ * destroyed is a parameter NAME, and `recordObservation` applies this function
+ * ONCE per row. What was wrong was the CLAIM, not the bytes.
+ *
+ * THE RULE. Cut to `URL_MAX`; if that cut severed a query segment, drop back to
+ * the last `&` so the result ends on a WHOLE segment rather than inside one. At
+ * most ONE trailing segment is lost beyond the byte cut, and a cut that already
+ * landed exactly on a segment boundary loses nothing.
+ *
+ * THE NO-SEPARATOR BRANCH, decided rather than left to fall out. When the cut
+ * lands in the HEAD (no `?` inside it) or inside a query with no `&` inside it,
+ * there is no boundary to drop back to. The byte cut STANDS, unchanged from the
+ * old rule. The alternative — dropping back to the last `/` or to the `?` — would
+ * truncate an oversized path back to its authority and discard far more than one
+ * trailing segment's worth of output, which is a different decision from the one
+ * this change is: retain strictly LESS, bounded at one segment. So this branch
+ * retains exactly what it retained before, and the residual it leaves — a head-side
+ * cut can still land inside a `;` parameter's `<redacted>` marker — is DISCLOSED in
+ * `schema.spec.ts`'s `observations.url` entry and pinned by an executed case.
+ *
+ * `URL_MAX` IS NOW AN UPPER BOUND, NOT AN OUTPUT LENGTH. Every assertion that read
+ * `toBe(URL_MAX)` was re-derived one at a time rather than relaxed in bulk; see
+ * `observations.spec.ts`.
+ *
+ * The fixed point is asserted by the SWEEP in `observations.spec.ts` — titled
+ * "IDEMPOTENT AT THE `URL_MAX` CUT: swept across parameter-name length, not
+ * hard-coded (WR-22)" — and NOT by any sentence in this module. A bounded sweep
+ * proves a fixed point across the range it swept; it does not prove one for every
+ * possible input, and the classes it did not reach are disclosed rather than
+ * claimed.
  */
 export function normaliseObservedUrl(url: string): string {
-  return redactQueryValues(redactUrlHead(String(url).split("#")[0])).slice(
-    0,
-    URL_MAX,
-  );
+  const redacted = redactQueryValues(redactUrlHead(String(url).split("#")[0]));
+  if (redacted.length <= URL_MAX) return redacted;
+
+  // The cut fell exactly between two segments: nothing was severed, so nothing
+  // is dropped back. Checked against the FULL string, because that is the only
+  // place the byte after the cut still exists.
+  if (redacted[URL_MAX] === "&") return redacted.slice(0, URL_MAX);
+
+  const cut = redacted.slice(0, URL_MAX);
+  const q = cut.indexOf("?");
+  const amp = cut.lastIndexOf("&");
+  // `amp > q` and not `amp !== -1`: an `&` BEFORE the first `?` is a byte in the
+  // path, not a query separator, and dropping back to it would cut the head.
+  // With `q === -1` the cut never reached the query at all.
+  if (q === -1 || amp <= q) return cut;
+
+  return cut.slice(0, amp);
 }
 
 /**
