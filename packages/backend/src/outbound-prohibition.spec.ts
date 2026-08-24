@@ -272,11 +272,19 @@
 //    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md`, `01-18-SUMMARY.md` and
 //    `01-19-SUMMARY.md` are what stand behind it.
 //
-//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-19 =================
+//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-23 =================
 //    Derived from the code above and copied WORD FOR WORD into
 //    `.planning/REQUIREMENTS.md`'s CORE-11 correction, `.planning/STATE.md`'s
 //    P9-D3 amendment and `.planning/WINDOWS.md`. If those four ever disagree,
 //    the code wins and the prose is the defect.
+//    CORRECTED 2026-08-24 (CR-09), and the correction is why this block now
+//    says 01-23 rather than 01-19. The alias sentence in the version plan 01-19
+//    wrote bounded the walk by WHERE A NAME IS READ. It was false; the seven
+//    shapes it called silent all report. THIS IS THE FIFTH CONSECUTIVE ROUND IN
+//    WHICH A BOUND WAS AUTHORED RATHER THAN DERIVED, and correcting the
+//    sentence closes the INSTANCE, not the class — wave 27 owns the machinery
+//    that makes the class DETECTABLE rather than reviewer-detectable, and this
+//    block does not borrow that claim.
 //
 //    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS
 //    IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as
@@ -301,9 +309,9 @@
 //    NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
 //    because narrowing it was MEASURED to change nothing except to re-poison
 //    ordinary `+` indexing. Every exemption here is preserved BY MEASUREMENT,
-//    re-run after each widening in plan 01-19: 23 files over both
-//    `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()` `cur[key]` and
-//    `ctx[root]`, `observations.ts`'s `segments[i]` and
+//    re-run after each widening in plan 01-19 and again in plan 01-23: 23 files
+//    over both `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()`
+//    `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and
 //    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name.
 //
 //    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
