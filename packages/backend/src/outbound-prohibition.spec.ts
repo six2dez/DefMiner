@@ -365,6 +365,40 @@ const BEACON_METHOD = "sendBeacon";
  * (`globalThis.eval`, `new globalThis.Function(...)`) — including a bare member
  * REFERENCE with no call, the same way the receiver rules already catch
  * `const s = sdk.requests.send`.
+ *
+ * THE PARAGRAPH ABOVE WAS FALSE WHEN IT WAS WRITTEN, AND THE CORRECTION MATTERS
+ * AS MUCH AS THE WIDENING (WR-23, 2026-08-24). It told a reader this rule reached
+ * "the same way the receiver rules already catch `const s = sdk.requests.send`".
+ * It did not. `fetchAliases` was seeded with the global and grown from three
+ * spellings; `navigatorAliases` mirrored it exactly; this rule was written
+ * BETWEEN the two and given neither, so it reached one spelling less far than
+ * either of its neighbours while citing them as its model:
+ *
+ *     eval(s)                                        ["outbound-dynamic-code"]
+ *     const e = eval; e(s)                           []
+ *     const { eval: ev } = globalThis as any; ev(s)  []
+ *     const F = Function; new F("a", s)              []
+ *     const W = WebSocket; new W(url)                []      (the same gap on
+ *                                                             OUTBOUND_CONSTRUCTORS,
+ *                                                             two lines away)
+ *
+ * ALL FIVE NOW REPORT, through `globalAliases` and the single `globalNameOf`
+ * lookup both the call rule and the `new` rule consult. The sentence above is
+ * therefore true as of that date, and it is left standing WITH this correction
+ * beneath it rather than quietly rewritten, because what a reader was told and
+ * when is the record.
+ *
+ * THE NEGATIVE SIDE IS PART OF THE RULE, NOT AN AFTERTHOUGHT. The member and
+ * destructure spellings only grow an alias off one of the four
+ * `GLOBAL_RECEIVERS`, so an ordinary object that defines a method named `eval`
+ * grows nothing and stays quiet — the same receiver anchoring the beacon rule
+ * uses, for the same reason. The bare-identifier test remains a NAME test and is
+ * narrowed by exactly one provable fact: a module that declares
+ * `function Function(...)` or `class WebSocket {}` at TOP LEVEL has bound that
+ * name for the whole module, so the bare call in that file provably is not the
+ * global (`shadowedGlobals`). A nested declaration proves nothing about module
+ * scope in a scope-blind walk and still reports, which is the fail-CLOSED
+ * direction and is deliberate.
  */
 const DYNAMIC_CODE = new Set<string>(["eval", "Function"]);
 
@@ -789,6 +823,27 @@ function isAssembledKey(
   return ts.isCallExpression(inner);
 }
 
+/**
+ * How a violation NAMES a global reached through a local binding.
+ *
+ * Added 2026-08-24 (WR-23). The message says both the spelling at the call site
+ * and the surface it resolves to, because "a call to `e(...)`" alone tells a
+ * reader nothing about why their file failed a gate named `outbound-dynamic-code`.
+ */
+function aliasSuffix(spelling: string, global: string): string {
+  return spelling === global ? "" : `, an alias of \`${global}\``;
+}
+
+function callDetail(callee: ts.Expression, global: string): string {
+  const spelling = ts.isIdentifier(callee) ? callee.text : global;
+  return `a call to \`${spelling}(...)\`${aliasSuffix(spelling, global)}`;
+}
+
+function constructionDetail(target: ts.Expression, global: string): string {
+  const spelling = ts.isIdentifier(target) ? target.text : global;
+  return `a construction of \`${spelling}\`${aliasSuffix(spelling, global)}`;
+}
+
 /** Is this expression one of the four receivers a global lives on? */
 function isGlobalReceiver(node: ts.Expression): boolean {
   const inner = unwrap(node);
@@ -893,6 +948,60 @@ export function auditSource(file: string, source: string): Violation[] {
   const unreadableAliases = new Set<string>();
   /** One-hop aliases of `navigator`, mirroring `fetchAliases` exactly. */
   const navigatorAliases = new Set<string>([NAVIGATOR]);
+  /**
+   * One-hop aliases of `eval`, `Function` and the outbound CONSTRUCTORS —
+   * `localName -> the global it names`.
+   *
+   * Added 2026-08-24 (WR-23). DELIBERATELY SHAPED LIKE `fetchAliases` AND
+   * `navigatorAliases`, AND SAYING SO IS THE POINT: the dynamic-code rule was
+   * written between those two and given neither, while its own docblock told the
+   * reader it reached "the same way the receiver rules already catch
+   * `const s = sdk.requests.send`". It reached one spelling less far than either
+   * of its neighbours. `eval(s)` reported and `const e = eval; e(s)` did not — on
+   * the one surface that reaches every other surface in CORE-11's enumeration,
+   * through a string no AST gate can read into. A rule for that surface which one
+   * `const` defeats enforces nothing.
+   *
+   * Grown from the SAME THREE SHAPES `fetchAliases` is grown from, so a spelling
+   * added to one is added to all by construction rather than by a second edit:
+   *   `const e = eval;`                   -> e  -> "eval"
+   *   `const F = globalThis.Function;`    -> F  -> "Function"
+   *   `const { eval: ev } = globalThis;`  -> ev -> "eval"
+   *   `let W; W = WebSocket;`             -> W  -> "WebSocket"
+   *
+   * A MAP RATHER THAN A SET, so the violation message can name the surface the
+   * local actually aliases (`a call to \`e(...)\`, an alias of \`eval\``) instead
+   * of leaving a reader to find the binding themselves.
+   *
+   * ONE HOP AND NO MORE, exactly like every other set in this pass:
+   * `const a = eval; const b = a; b(s)` is silent, and that is residual (a).
+   *
+   * The RECEIVER anchoring is inherited, not re-derived: the member and
+   * destructure spellings only grow this map off one of the four
+   * `GLOBAL_RECEIVERS`, so `const o = { eval(s) {} }; const e = o.eval; e("x")`
+   * grows nothing and stays quiet. That twin is asserted below.
+   */
+  const globalAliases = new Map<string, string>();
+  /**
+   * Names in `DYNAMIC_CODE` or `OUTBOUND_CONSTRUCTORS` that this MODULE SHADOWS
+   * with a top-level `function`/`class` declaration of the same name.
+   *
+   * Added 2026-08-24 (WR-23's negative side). The bare-identifier test for these
+   * five names is a NAME test, and a module that declares `function Function(a)`
+   * at top level has bound that name for the whole module by ordinary JS scoping
+   * — so the bare call `Function("x")` in that module provably is NOT the global.
+   * That is a proof from the AST, not a heuristic, which is why it is allowed to
+   * narrow a deliberately fail-closed rule.
+   *
+   * TOP LEVEL ONLY, AND ONLY A `function`/`class` DECLARATION. This walk is
+   * scope-blind on purpose (T-01-51), so a declaration nested inside a block or a
+   * function proves nothing about the module scope and is NOT collected — the
+   * bare call still reports, which is the fail-CLOSED direction. A VARIABLE
+   * declaration is not collected either: `const Function = globalThis.Function`
+   * re-binds the name to the global itself, and the cheap way to be right about
+   * that is to leave the variable spelling reporting.
+   */
+  const shadowedGlobals = new Set<string>();
   /** Names bound only to provably numeric values, and names bound to anything else. */
   const numericNames = new Set<string>();
   const poisonedNumericNames = new Set<string>();
@@ -1055,7 +1164,89 @@ export function auditSource(file: string, source: string): Violation[] {
     return false;
   };
 
+  /**
+   * THE GLOBAL AN EXPRESSION NAMES — DEFINED EXACTLY ONCE, CALLED FROM BOTH THE
+   * CALL RULE AND THE `new` RULE.
+   *
+   * Added 2026-08-24 (WR-23). One definition of "this callee is `eval`, or
+   * `Function`, or one of the outbound constructors", so a spelling added later
+   * lands in both rules instead of in whichever one the fixture happened to
+   * exercise. Closing the call half and leaving the `new` half open, two lines
+   * apart, is how this file acquired the asymmetry CR-08 was.
+   *
+   * Returns the GLOBAL's name, never the local's, so both rules report the
+   * surface rather than the spelling.
+   */
+  const globalNameOf = (node: ts.Expression): string | undefined => {
+    const inner = unwrap(node);
+    if (!ts.isIdentifier(inner)) return undefined;
+    const name = inner.text;
+    if (DYNAMIC_CODE.has(name) || OUTBOUND_CONSTRUCTORS.has(name)) {
+      return shadowedGlobals.has(name) ? undefined : name;
+    }
+    return globalAliases.get(name);
+  };
+
+  /** Does this expression name `eval` or `Function`, bare or through one hop? */
+  const dynamicCodeOf = (node: ts.Expression): string | undefined => {
+    const global = globalNameOf(node);
+    return global !== undefined && DYNAMIC_CODE.has(global)
+      ? global
+      : undefined;
+  };
+
+  /** Does this expression name an outbound constructor, bare or through one hop? */
+  const outboundCtorOf = (node: ts.Expression): string | undefined => {
+    const global = globalNameOf(node);
+    return global !== undefined && OUTBOUND_CONSTRUCTORS.has(global)
+      ? global
+      : undefined;
+  };
+
+  /**
+   * The global `eval`/`Function`/constructor an INITIALIZER denotes, in the three
+   * spellings `fetchAliases` is grown from. Feeds `globalAliases` only.
+   */
+  const aliasedGlobalOf = (init: ts.Expression): string | undefined => {
+    const inner = unwrap(init);
+    if (ts.isIdentifier(inner)) {
+      const name = inner.text;
+      return (DYNAMIC_CODE.has(name) || OUTBOUND_CONSTRUCTORS.has(name)) &&
+        !shadowedGlobals.has(name)
+        ? name
+        : globalAliases.get(name);
+    }
+    if (
+      ts.isPropertyAccessExpression(inner) ||
+      ts.isElementAccessExpression(inner)
+    ) {
+      const member = memberName(inner);
+      if (
+        member !== undefined &&
+        (DYNAMIC_CODE.has(member) || OUTBOUND_CONSTRUCTORS.has(member)) &&
+        isGlobalReceiver(inner.expression)
+      ) {
+        return member;
+      }
+    }
+    return undefined;
+  };
+
   const collect = (node: ts.Node): void => {
+    // WR-23's negative side. A top-level `function Function(...)` / `class
+    // WebSocket {}` binds that name for the whole module, so the bare call in
+    // this file provably is not the global. Nested declarations prove nothing
+    // about module scope in a scope-blind walk and are deliberately not read.
+    if (
+      (ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node)) &&
+      node.name !== undefined &&
+      node.parent === sf &&
+      (DYNAMIC_CODE.has(node.name.text) ||
+        OUTBOUND_CONSTRUCTORS.has(node.name.text))
+    ) {
+      shadowedGlobals.add(node.name.text);
+    }
+
     if (ts.isVariableDeclaration(node) && node.initializer !== undefined) {
       const init = unwrap(node.initializer);
 
@@ -1072,6 +1263,11 @@ export function auditSource(file: string, source: string): Violation[] {
         }
         if (isFetchExpression(init)) fetchAliases.add(node.name.text);
         if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text);
+        // WR-23: `const e = eval` / `const F = globalThis.Function` — the same
+        // declaration shape the two lines above already read, for the surface
+        // they were written beside and that was given neither.
+        const aliased = aliasedGlobalOf(init);
+        if (aliased !== undefined) globalAliases.set(node.name.text, aliased);
         const kind = initializerReceiver(init);
         if (typeof kind === "string") {
           receiverAliases.set(node.name.text, kind);
@@ -1094,6 +1290,16 @@ export function auditSource(file: string, source: string): Violation[] {
           if (property === FETCH_GLOBAL && isGlobalReceiver(init)) {
             fetchAliases.add(el.name.text);
           }
+          // WR-23: `const { eval: ev } = globalThis` — the destructure spelling,
+          // anchored on the RECEIVER exactly as the `fetch` line above is, so an
+          // ordinary object with an `eval` property grows nothing.
+          if (
+            (DYNAMIC_CODE.has(property) ||
+              OUTBOUND_CONSTRUCTORS.has(property)) &&
+            isGlobalReceiver(init)
+          ) {
+            globalAliases.set(el.name.text, property);
+          }
         }
       }
     }
@@ -1113,6 +1319,12 @@ export function auditSource(file: string, source: string): Violation[] {
       }
       if (isFetchExpression(node.right)) fetchAliases.add(node.left.text);
       if (isNavigatorReceiver(node.right)) navigatorAliases.add(node.left.text);
+      // WR-23: `let e; e = eval;` — the assignment spelling, grown from the same
+      // shape as the two lines above for the same reason.
+      const aliasedRight = aliasedGlobalOf(node.right);
+      if (aliasedRight !== undefined) {
+        globalAliases.set(node.left.text, aliasedRight);
+      }
       // `let k; k = "req" + "uests";` — the assignment spelling of the same
       // assembly, grown from the same two shapes every other set here is grown
       // from, so it is covered by construction rather than by a second edit.
@@ -1310,11 +1522,18 @@ export function auditSource(file: string, source: string): Violation[] {
     // --- construction of an outbound global -----------------------------------
     if (ts.isNewExpression(node)) {
       const target = unwrap(node.expression);
-      if (ts.isIdentifier(target) && OUTBOUND_CONSTRUCTORS.has(target.text)) {
-        add("outbound-global-ctor", `a construction of \`${target.text}\``);
+      // WR-23, the CONSTRUCTOR half — closed in the same commit as the call half
+      // and through the SAME lookup. `const W = WebSocket; new W(url)` and
+      // `const F = Function; new F("a", s)` were the identical gap two lines
+      // apart; fixing one and not the other is the asymmetry this file keeps
+      // acquiring.
+      const ctor = outboundCtorOf(target);
+      if (ctor !== undefined) {
+        add("outbound-global-ctor", constructionDetail(target, ctor));
       }
-      if (ts.isIdentifier(target) && DYNAMIC_CODE.has(target.text)) {
-        add("outbound-dynamic-code", `a construction of \`${target.text}\``);
+      const dynamicNew = dynamicCodeOf(target);
+      if (dynamicNew !== undefined) {
+        add("outbound-dynamic-code", constructionDetail(target, dynamicNew));
       }
     }
 
@@ -1347,8 +1566,11 @@ export function auditSource(file: string, source: string): Violation[] {
       }
 
       // --- code built from a string ------------------------------------------
-      if (ts.isIdentifier(callee) && DYNAMIC_CODE.has(callee.text)) {
-        add("outbound-dynamic-code", `a call to \`${callee.text}(...)\``);
+      // WR-23: `dynamicCodeOf`, not a bare `DYNAMIC_CODE.has`, so a bound `eval`
+      // is the same kind of fact as a bound `fetch` one branch up.
+      const dynamic = dynamicCodeOf(callee);
+      if (dynamic !== undefined) {
+        add("outbound-dynamic-code", callDetail(callee, dynamic));
       }
     }
 
@@ -2205,6 +2427,94 @@ describe("dynamic code construction — refused rather than analysed", () => {
       rulesOf("const parser = { Function: 1 };\nreturn parser.Function;"),
     ).toEqual([]);
   });
+
+  // --- WR-23: the surface that reaches every other surface survives no binding
+  //
+  // Every title names the MECHANISM that resolves it, per plan 01-18's
+  // convention, so no case here can later stand in as the bound of a rule it
+  // does not exercise. Each of the three grow-spellings gets its OWN case
+  // because each is a separate branch of the collect pass, and a single
+  // combined case cannot show which branch is load-bearing.
+  it.each([
+    [
+      "the DECLARATION spelling — `const e = eval; e(s)`",
+      'const e = eval;\ne("sdk.requests.send(r)");',
+    ],
+    [
+      "the GLOBAL-MEMBER declaration spelling — `const F = globalThis.Function` — WHICH THE PRE-EXISTING MEMBER-REFERENCE RULE ALSO CATCHES, MEASURED, so this row does NOT go red when the alias lookup is reverted and is NOT evidence for it",
+      'const F = globalThis.Function;\nF("r", "return fetch(r)");',
+    ],
+    [
+      "the DESTRUCTURE spelling — `const { eval: ev } = globalThis`",
+      'const { eval: ev } = globalThis as any;\nev("fetch(u)");',
+    ],
+    [
+      "the ASSIGNMENT spelling — `let e; e = eval;`",
+      'let e;\ne = eval;\ne("fetch(u)");',
+    ],
+  ])(
+    "through globalAliases plus globalNameOf, in the CALL rule: dynamic code survives no binding — %s",
+    (_shape, src) => {
+      // WR-23. All four returned `[]` before 2026-08-24 while the inline
+      // `eval(s)` reported, in the rule whose own docblock cited the receiver
+      // rules' alias handling as its model. Removing the `dynamicCodeOf` lookup
+      // from the call rule drives all four red.
+      expect(rulesOf(src)).toContain("outbound-dynamic-code");
+    },
+  );
+
+  it("through globalAliases plus globalNameOf, in the `new` rule: `const F = Function; new F(...)` is a construction of Function", () => {
+    // WR-23's constructor half for DYNAMIC_CODE. Reverting the `dynamicCodeOf`
+    // lookup in the `new` rule drives this red and leaves the call-rule cases
+    // above green, which is what proves the two branches independent.
+    expect(rulesOf('const F = Function;\nnew F("a", body);')).toContain(
+      "outbound-dynamic-code",
+    );
+  });
+
+  it("through globalNameOf: a spelling the walk resolves is NAMED as an alias in the violation detail", () => {
+    const detail = auditSource("fixture.ts", "const e = eval;\ne(src);")[0]
+      ?.detail;
+    expect(detail).toContain("`e(...)`");
+    expect(detail).toContain("an alias of `eval`");
+  });
+
+  // --- WR-23's negative side, in the SAME commit as the widening -------------
+  it("through the RECEIVER anchoring: an alias taken off an ORDINARY object grows nothing and stays quiet", () => {
+    // The member and destructure grow-branches require one of the four
+    // GLOBAL_RECEIVERS, exactly as the beacon rule is receiver-anchored. This
+    // is the must-stay-quiet twin of the `const F = globalThis.Function` case.
+    expect(
+      rulesOf(
+        "const o = { eval(s) { return s; } };\nconst e = o.eval;\ne(src);",
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf("const o = { eval: 1 };\nconst { eval: ev } = o;\nev(src);"),
+    ).toEqual([]);
+  });
+
+  it("through shadowedGlobals: a TOP-LEVEL `function Function(...)` provably is not the global, so the bare call stays quiet", () => {
+    // The one provable narrowing of a deliberately fail-closed NAME test: a
+    // top-level function declaration binds the name for the whole module.
+    // Reverting `shadowedGlobals` drives this red.
+    expect(
+      rulesOf('function Function(a) { return a; }\nFunction("x");'),
+    ).toEqual([]);
+    expect(rulesOf("class WebSocket {}\nconst w = new WebSocket();")).toEqual(
+      [],
+    );
+  });
+
+  it("through shadowedGlobals' TOP-LEVEL bound: a NESTED declaration proves nothing about module scope and still REPORTS", () => {
+    // The fail-CLOSED direction, asserted so the narrowing above can never be
+    // widened into a scope-blind bypass without a fixture going red.
+    expect(
+      rulesOf(
+        'function outer() { function Function(a) { return a; }\nreturn Function("x"); }',
+      ),
+    ).toContain("outbound-dynamic-code");
+  });
 });
 
 describe('the outbound globals CORE-11 "of any kind" covers', () => {
@@ -2217,6 +2527,38 @@ describe('the outbound globals CORE-11 "of any kind" covers', () => {
     ["EventSource", 'const es = new EventSource("https://cdn.test/e");'],
   ])("outbound-global-ctor fires on new %s", (_shape, src) => {
     expect(rulesOf(src)).toContain("outbound-global-ctor");
+  });
+
+  // --- WR-23's constructor half: the identical gap, two lines away -----------
+  it.each([
+    [
+      "the DECLARATION spelling — `const W = WebSocket; new W(url)`",
+      'const W = WebSocket;\nnew W("wss://cdn.test/s");',
+    ],
+    [
+      "the GLOBAL-MEMBER spelling — `const X = globalThis.XMLHttpRequest` — WHICH THE PRE-EXISTING MEMBER-REFERENCE RULE ALSO CATCHES, MEASURED, so this row does NOT go red when the alias lookup is reverted and is NOT evidence for it",
+      "const X = globalThis.XMLHttpRequest;\nconst x = new X();",
+    ],
+    [
+      "the DESTRUCTURE spelling — `const { EventSource: E } = globalThis`",
+      'const { EventSource: E } = globalThis as any;\nnew E("https://cdn.test/e");',
+    ],
+  ])(
+    "through globalAliases plus globalNameOf, in the `new` rule: an outbound CONSTRUCTOR survives no binding — %s",
+    (_shape, src) => {
+      // WR-23, constructor half. All three returned `[]` before 2026-08-24.
+      // Reverting the `outboundCtorOf` lookup drives all three red while the
+      // dynamic-code cases stay green.
+      expect(rulesOf(src)).toContain("outbound-global-ctor");
+    },
+  );
+
+  it("through the RECEIVER anchoring: a constructor alias taken off an ORDINARY object stays quiet", () => {
+    expect(
+      rulesOf(
+        "const lib = { WebSocket: Shim };\nconst W = lib.WebSocket;\nnew W(u);",
+      ),
+    ).toEqual([]);
   });
 });
 
