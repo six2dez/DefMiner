@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-24T10:05:00Z
+reviewed: 2026-08-24T16:30:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -49,6 +49,23 @@ reviews:
       receiver key whose FIRST binding is a harmless literal shadows every later
       rebinding, so `let k = "x"; k = "requests"; sdk[k].send(req)` is silent —
       CR-08 one keyword over.
+  - pass: gap-closure-round-5
+    reviewed: 2026-08-24T16:30:00Z
+    scope: 6 files changed by plans 01-23 … 01-28
+    findings: CR-11, CR-12, CR-13, WR-32...WR-37, IN-27...IN-30
+    verdict: >-
+      CR-09, CR-10, WR-27...WR-31 and IN-23...IN-26 all verified CLOSED by
+      execution. The derived-residual mechanism is real: both shipped spans are
+      byte-identical (295 lines, sha256 91978e31...), the coverage guard fails on
+      an injected resolver in BOTH enumerated shapes, and the URL redaction half
+      holds under a 16,160-input sweep with ZERO secret survivals. THREE NEW
+      BLOCKERS. The machine-owned text itself carries a false universal — the
+      `silence-operator-around-global-receiver` entry says silence "in every
+      spelling" and FOUR spellings report — and two fully readable one-hop shapes
+      are silent under positive claims that cover them: a logical-assignment
+      binding (`r ??= sdk.requests`) is invisible to every collector, and a
+      receiver KEY bound to a conditional is silent while the MEMBER and
+      SPECIFIER twins of the same conditional both report unanalysable.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -112,10 +129,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 10
-  warning: 31
-  info: 26
-  total: 67
+  critical: 13
+  warning: 37
+  info: 30
+  total: 80
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -168,6 +185,17 @@ resolution:
       IN-21,
       IN-22,
       IN-18,
+      CR-09,
+      CR-10,
+      WR-27,
+      WR-28,
+      WR-29,
+      WR-30,
+      WR-31,
+      IN-23,
+      IN-24,
+      IN-25,
+      IN-26,
     ]
   partially_fixed: [IN-09]
   deferred: [WR-07]
@@ -182,17 +210,19 @@ resolution:
       IN-06,
       IN-07,
       IN-09,
-      CR-09,
-      CR-10,
-      WR-27,
-      WR-28,
-      WR-29,
-      WR-30,
-      WR-31,
-      IN-23,
-      IN-24,
-      IN-25,
-      IN-26,
+      CR-11,
+      CR-12,
+      CR-13,
+      WR-32,
+      WR-33,
+      WR-34,
+      WR-35,
+      WR-36,
+      WR-37,
+      IN-27,
+      IN-28,
+      IN-29,
+      IN-30,
     ]
 fix_commits:
   CR-01: 910c382
@@ -242,16 +272,27 @@ fix_commits:
   IN-20: 2709f18
   IN-21: 5f2d0bd
   IN-22: 79961ff
+  CR-09: 181530f
+  CR-10: 482fc26
+  WR-27: 278a0d2
+  WR-28: ec2ecd3
+  WR-29: ec2ecd3
+  WR-30: b0b0f92
+  WR-31: e5b236e
+  IN-23: e5b236e
+  IN-24: e5b236e
+  IN-25: e5b236e
+  IN-26: b0b0f92
 tests_before: 27 files / 616 tests
-tests_after: 31 files / 1105 tests
+tests_after: 31 files / 1200 tests
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files) and 2026-08-24T10:05:00Z (gap closure round 4, 7 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files), 2026-08-24T10:05:00Z (gap closure round 4, 7 files) and 2026-08-24T16:30:00Z (gap closure round 5, 6 files)
 **Depth:** standard
-**Files Reviewed:** 59 (union of all five passes)
-**Status:** issues_found — two new BLOCKERs from round 4 (`CR-09`, `CR-10`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-08` and `WR-22…WR-26` are CLOSED, verified by execution; `IN-18` is CLOSED by `WR-22`'s fix
+**Files Reviewed:** 59 (union of all six passes)
+**Status:** issues_found — three new BLOCKERs from round 5 (`CR-11`, `CR-12`, `CR-13`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-09`, `CR-10`, `WR-27…WR-31` and `IN-23…IN-26` are all CLOSED, verified by execution
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
 > 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
@@ -2808,11 +2849,652 @@ Both are declarations. Unreachable in the real tree today and the same two lines
 close as `CR-10`'s assignment case.
 
 ---
+---
+
+# --- PASS 6 --- Gap-Closure ROUND 5 Review (plans 01-23 … 01-28)
+
+**Reviewed:** 2026-08-24T16:30:00Z
+**Depth:** standard
+**Files Reviewed:** 6 (the files plans 01-23 … 01-28 changed after the pass-5 review)
+**Status:** issues_found — 3 BLOCKER, 6 WARNING, 4 INFO, on top of a clean sweep of round 4's eleven
+
+New findings use a fresh ID series (`CR-11`, `WR-32+`, `IN-27+`) so nothing collides
+with the five ledgers above, all of which are preserved verbatim.
+
+## Resolution of pass 5 (2026-08-24, round 5)
+
+**Every disposition below was decided by EXECUTION.** I imported `auditSource` from
+both AST gates, `normaliseObservedUrl` from the shipped `store/observations.ts`, and
+`deriveResidual` / `enumerateResolverPopulations` / `extractDerivedBlock` from the
+outbound gate into throwaway probe specs; ran ~120 source shapes through the two
+gates; swept 16,160 URL inputs (40 parameter-name lengths × 101 head offsets × 4
+grammars × 2 passes); mutated one branch of the walk and re-ran the derived block; and
+deleted the probes. `pnpm test` is **31 files / 1200 tests, all green**; `tsc --build`,
+`eslint .` and `knip` are clean; `git status` shows no source file touched by this
+review. None of those facts can see any of the below.
+
+| Finding | Status | Commit | The evidence |
+|---|---|---|---|
+| CR-09 | **fixed** | `181530f` / `af8dd5b` / `f3d3a06` | The read-position bound is gone and the collect/visit bound replaces it in all five in-file sites plus the three ledgers. Executed: `function z() { return g.fetch(u); }\nconst g = globalThis;` → `["outbound-fetch"]`; the same for `sdk[r]`/`const r = "requests"`, `sdk[k]`/assembled key, `s.send`/`const s = sdk.requests`, `n.sendBeacon`/`const n = navigator`, `e("x")`/`const e = eval`. The inverted-binding twin `const g = a; const a = globalThis;` is `[]`. The `:2798` fixture is split, and the three-case discrimination at `:5638` varies binding order and read order SEPARATELY — which is the pair the single case could not distinguish. Residual (b)'s "out of document order" item is deleted, not softened. |
+| CR-10 | **fixed** | `482fc26` / `c151ce3` / `e657cc9` | All three silent shapes report: `let k = "harmless"; k = "requests"` → `outbound-send`; `let k = "harmless"; k = "req"+"uests"` → `outbound-unanalysable`; `let k = "req"; k += "uests"` → `outbound-unanalysable`. `constStrings` is now `Map<string, Set<string>>` written at both branches, `assembledNames` takes precedence over a stale literal, and the ANY-BINDING-WINS mirror is pinned. **Both of 01-24's own reported discrepancies check out:** the CONTROL `let k; k = "requests"` reports today (the review's prediction for the pre-fix state was wrong, as recorded), and the widening's live catch `let s = "harmless"; s = "caido:http"; await import(s)` → `outbound-unanalysable`, against `const s = "caido:http"` → `outbound-import`. Boundary 2 now states the error direction PER COLLECTOR FAMILY rather than once for the gate, which is the right repair. |
+| WR-27 | **fixed** | `278a0d2` / `1067f4f` | `(b ? sdk.requests : sdk.net).send(req)`, `(sdk.requests ?? sdk.net)`, `(... \|\| ...)`, `(ok && sdk.requests)` and the nested key `sdk[b ? (c ? "requests" : "x") : "y"]` all report. The must-stay-quiet twins `(b ? cache : client)`, `(cache ?? client)`, `(cache \|\| client)`, `(ready && cache)` are all `[]`. Three copies of the descent collapsed into `operatorReceiver`; the `??` precedence bug is gone. The `(ok && globalThis)` family it opened and disclosed is real — **and its disclosure is wider than the code, which is `CR-11`.** |
+| WR-28 | **fixed** | `ec2ecd3` | The chosen offset is replaced by a 71-offset sweep asserting the instability's SHAPE (non-empty, contiguous, strictly interior) rather than a literal band, and the exemplar is read out of the run. My own sweep, independent of the file's: head-side unstable set is exactly `{2019…2029}`, 11 of 71, stable at 1500–2018 and 2030–2200. **The MECHANISM the three disclosures name is wrong for the offset the fixture exhibits — `WR-35`.** |
+| WR-29 | **fixed** | `ec2ecd3` / `e5b236e` | Both disclosures now state the class against the branch condition (`q === -1 \|\| amp <= q`) rather than against segment count, and a three-parameter sweep is added. Measured: 17 of 71 multi-segment offsets (`2015…2031`) are not fixed points, with an ordinary three-parameter query. |
+| WR-30 | **fixed** | `b0b0f92` | The three stale one-hop sentences are gone; exactly ONE survives, on `assembledNames` (`:2078`), which is the one that is true. Executed: two-hop `globalThis` → `outbound-fetch`, two-hop `eval` → `outbound-dynamic-code`, two-hop `navigator` → `outbound-beacon`; the assembled-key twin `const a = "req"+"uests"; const b = a` is `[]`. The five-set transitivity case at `:5533` covers all five at three hops. |
+| WR-31 | **fixed** | `e5b236e` | The antecedent is named ("THE RENDER-FORM LIST eighty lines above — not the five-item residual immediately above"), and the pinned/unpinned split is restated so it matches the items above it. |
+| IN-23 | **fixed** | `e5b236e` | `export` removed; `versionLiterals` is module-local and its four fixtures still run. `knip` clean. |
+| IN-24 | **fixed** | `e5b236e` | The two-component gap is stated in the header beside the `0.25` justification that creates it, and the case title now says THREE-COMPONENT. |
+| IN-25 | **fixed** | `e5b236e` | Item 1 withdrawn by execution and pinned in the FIRING direction; item 3's two overstated halves corrected and pinned; the surviving halves pinned as measured silences. I re-executed all of them and every stated answer is right. **The correction introduced one new overstatement of its own — `WR-36`.** |
+| IN-26 | **fixed** | `b0b0f92` | `const { k } = { k: "req"+"uests" }`, `const [k] = ["req"+"uests"]` and the renamed `{ p: k }` spelling all report `outbound-unanalysable`; the four must-stay-quiet twins are `[]`. Residual (b2) — the destructured PLAIN literal — is `[]` and is now a registry row with an executed probe and counter-probe. |
+
+**What round 5 did well, recorded so it is not re-litigated, and it is the most
+substantial thing this phase has built.** Three things are genuinely load-bearing and
+I verified each independently rather than reading the summaries:
+
+1. **The two shipped spans are byte-identical.** `extractDerivedBlock`'s semantics
+   reproduced in Python: gate header lines 798–1092, `.planning/REQUIREMENTS.md` lines
+   61–355, **295 lines each, sha256 `91978e313c54…`, equal**. The comparison is real
+   and it runs before the box is examined.
+2. **The coverage guard is not decorative.** Injecting `function sneakyResolver(` at
+   module scope in the resolver region and `const sneakyInner = (` at auditSource's own
+   indentation each show up in `enumerateResolverPopulations`' output, so both the
+   `unaccounted` assertion and the pinned counts (`11` collectors, `38` functions) go
+   red. Non-vacuity is asserted before the rule in both populations, and population 3
+   is DECLARED rather than discovered — the shapes I confirmed it misses
+   (`const f = function () {}`, `async (n) => n`, `<T,>(n: T) => n`) are all inside
+   what the docblock already says it cannot see.
+3. **The URL redaction half holds, measured rather than argued.** 16,160 inputs across
+   40 parameter-name lengths, 101 head offsets and four grammars (`;` parameter, query
+   parameter, multi-`;` segment, userinfo), checked at pass 1 and pass 2: **0 secret
+   survivals, 0 partial-prefix survivals at any prefix length ≥ 6, 0 outputs over
+   `URL_MAX`, and every input a fixed point by pass 3.** The instability the residual
+   discloses destroys parameter NAMES and never exposes a value. That is worth stating
+   plainly: the finding class in this file is disclosure accuracy, not exposure.
+
+Replacing a chosen offset with a shape assertion, and refusing to hard-code the band
+because "a number with no derivation" would go red for the wrong reason, is the right
+general lesson and the second time this phase has drawn it. The findings below are
+what those habits did not yet reach — and two of them are in the derived mechanism
+itself, which is exactly where they matter most.
+
+---
+
+## Critical Issues (pass 6)
+
+### CR-11: The machine-owned derived text carries a FALSE UNIVERSAL — `silence-operator-around-global-receiver` says silence "in every spelling", and FOUR spellings report
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3446-3457` (the registry row), rendered at `:1083-1090` and shipped byte-identically at `.planning/REQUIREMENTS.md:342-349`
+**Severity:** BLOCKER
+
+**Issue:** The registry row's `clause` is the sentence the generated block prints:
+
+> `silence-operator-around-global-receiver` — OPEN AND UNOWNED … so an operator
+> wrapping a GLOBAL receiver is **silent in every spelling**. The same operator around
+> an SDK receiver reports — the boundary is the RESOLVER, not the operator
+
+Executed against `auditSource("p.ts", src)`:
+
+```
+(ok && globalThis).fetch(url)          []                    <- the row's own probe
+(g ?? globalThis)["fetch"](url)        []
+(b ? globalThis : x).fetch(url)        []
+(b ? navigator : x).sendBeacon(u, d)   []
+(b ? eval : x)(src)                    []
+
+(0, globalThis).fetch(url)             ["outbound-fetch"]    <-- REPORTS
+(globalThis).fetch(url)                ["outbound-fetch"]    <-- REPORTS
+(globalThis as any).fetch(url)         ["outbound-fetch"]    <-- REPORTS
+globalThis!.fetch(url)                 ["outbound-fetch"]    <-- REPORTS
+(0, eval)(src)                         ["outbound-dynamic-code"]
+(0, navigator).sendBeacon(u, d)        ["outbound-beacon"]
+(0, fetch)(url)                        ["outbound-fetch"]
+```
+
+Four wrapper spellings — comma sequence, bare parentheses, `as` assertion, non-null
+assertion — resolve through `unwrap` before any receiver resolver is reached, so the
+global receiver is found. The row asserts they do not.
+
+Three things make this a BLOCKER rather than a copy-editing note.
+
+1. **Two registry rows contradict each other and both pass.** Four entries above,
+   the `unwrap` row states exactly the mechanism that falsifies this one — "strips
+   parentheses, `as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE
+   down to its rightmost operand, so a wrapped receiver is still that receiver" — with
+   the probe `(0, sdk.net).connect(x)`. Each row's probe is chosen to match its own
+   clause, so neither can ever see the other. That is the failure mode this whole
+   mechanism was built to remove, reproduced inside it: **an assertion that passes
+   against the defective output it claims to catch.**
+2. **It is in the text the phase has designated as authoritative.** The generated
+   preamble says "If the two disagree the GENERATED text is authoritative and the
+   shipped text is the defect", and `.planning/REQUIREMENTS.md:52` says this is "the
+   text a requirement's COMPLETION is read against". A reader auditing CORE-11's
+   blindness list holding `(0, globalThis).fetch(url)` is told by the authoritative
+   text that it is silent. It is not.
+3. **It is the entry CORE-11's `[ ]` is blocked on.** `.planning/REQUIREMENTS.md:46`
+   names `silence-operator-around-global-receiver` as the one row that did not
+   discharge. The blocking row's own statement of its scope is wrong.
+
+`01-28` found ONE of these four (`(0, globalThis)`) and recorded it in the ledger's
+prose while deliberately not touching the registry — so the ledger now contains a
+paragraph saying the machine-owned span two hundred lines below it is wrong about one
+spelling, while the span is wrong about four. A disclosure of a defect is not a fix,
+and here it also under-reports the defect it discloses.
+
+**Fix:** correct the clause to name the resolver boundary rather than "every spelling",
+and add the shapes that report as the counter-probe, so the row's two directions
+straddle the real boundary instead of sitting on one side of it.
+
+```ts
+clause:
+  "OPEN AND UNOWNED: operatorReceiver is reached from receiverKind and keyReceiver " +
+  "and from nowhere else, so a RECEIVER_OPERATORS expression (`? :`, `??`, `||`, " +
+  "`&&`) wrapping a GLOBAL receiver is silent. It is NOT true of every wrapper: a " +
+  "COMMA SEQUENCE, parentheses, an `as` assertion and a non-null assertion are " +
+  "removed by unwrap before any resolver runs, so those spellings REPORT - that is " +
+  "the counter-probe",
+probe: "(ok && globalThis).fetch(url);",
+expect: [],
+counterProbe: "(0, globalThis).fetch(url);",
+counterExpect: ["outbound-fetch"],
+```
+
+Then regenerate both spans, and correct `.planning/REQUIREMENTS.md:46`'s paragraph so
+it names four spellings rather than one. The SDK-receiver contrast the row currently
+uses as its counter-probe belongs in the clause text, where it already is.
+
+---
+
+### CR-12: A LOGICAL-ASSIGNMENT binding is invisible to every collector — `let r; r ??= sdk.requests; r.send(req)` reports nothing, and the file's own comment names the shape eleven lines below
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:2643-2687` (the assignment collector) vs `:2725-2735` (the numeric-poisoning arm); claims at `:105-110` and in the `receiverAliases` registry row (`:1029-1035`, rendered at `:857-863`)
+**Severity:** BLOCKER
+
+**Issue:** `collect`'s assignment branch is gated on `node.operatorToken.kind === ts.SyntaxKind.EqualsToken`. Every logical assignment therefore grows nothing —
+not `receiverAliases`, not `fetchAliases`, not `navigatorAliases`, not `globalAliases`,
+not `globalThisAliases`, not `constStrings`, not `assembledNames`. Executed:
+
+```
+let r; r ??= sdk.requests;  r.send(req)          []      <-- SILENT
+let r; r ||= sdk.requests;  r.send(req)          []      <-- SILENT
+let r; r &&= sdk.requests;  r.send(req)          []      <-- SILENT
+let g; g ||= globalThis;    g.fetch(u)           []      <-- SILENT
+let f; f ??= fetch;         f(u)                 []      <-- SILENT
+let e; e ||= eval;          e(s)                 []      <-- SILENT
+let n; n ??= navigator;     n.sendBeacon(u, d)   []      <-- SILENT
+let k; k ??= "requests";    sdk[k].send(req)     []      <-- SILENT
+
+let r; r  =  sdk.requests;  r.send(req)          ["outbound-send"]        // the CONTROL
+let g; g  =  globalThis;    g.fetch(u)           ["outbound-fetch"]
+let k; k  =  "requests";    sdk[k].send(req)     ["outbound-send"]
+```
+
+`r ??= sdk.requests` is the ordinary lazy-init spelling of the line directly above it.
+The difference between the reported form and the silent one is two characters.
+
+**The file already knows the shape exists.** Eleven lines below the branch that misses
+it, the numeric-poisoning arm reads:
+
+```ts
+} else if (ASSIGNMENT_OPERATORS.has(op) && !NUMERIC_COMPOUND_ASSIGNMENTS.has(op)) {
+  // `x ||= sdk.requests` and friends can assign anything at all.
+  poisonedNumericNames.add(node.left.text);
+}
+```
+
+So `ASSIGNMENT_OPERATORS` is already a declared set, the exact expression
+`x ||= sdk.requests` is already written down as the motivating example, and the walk
+already reacts to it — by removing a numeric exemption, and by doing nothing else.
+A gate that watches `x ||= sdk.requests` go past, names it in a comment, and grows no
+alias from it is not a gate that "cannot follow" the value; it is one that reads the
+value and discards it. That is the reporting side of this file's own
+reported-versus-followed distinction (`:222-224`), which is the same argument `CR-10`
+was raised on and closed on.
+
+**It is under two positive claims, so the residual's non-exhaustiveness disclaimer does
+not cover it.** Header boundary 2 (`:105-110`) enumerates the binding shapes a receiver
+resolves through and includes "an assignment (`r = sdk.requests`)"; the derived
+`receiverAliases` row says "a name bound to an outbound RECEIVER expression is that
+receiver **everywhere in the file**". `r` is bound to `sdk.requests` in the file and is
+a receiver nowhere in it. No MEASURED SILENCE entry names a logical assignment: it is
+one hop, in this file, not a parameter, not a loop binding, not a destructure, not an
+operator in receiver position, and its binding is in dependency order.
+
+**Fix:** the branch already has the set it needs. Widen the guard and let every
+collector under it run, exactly as `CR-10` widened the string half of the same branch.
+
+```ts
+const ASSIGNING_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
+]);
+
+if (
+  ts.isBinaryExpression(node) &&
+  ASSIGNING_OPERATORS.has(node.operatorToken.kind) &&
+  ts.isIdentifier(node.left)
+) {
+  /* … the existing body, unchanged … */
+}
+```
+
+The direction is the same over-approximation every alias set already takes — a name
+that *may* be bound to `sdk.requests` is treated as one — which is what
+`RECEIVER_OPERATORS` already decided for `&&` by measurement. Then add the eight
+executed lines above as failing-path cases, each titled with the collector it exercises,
+and add a `logical-assignment` row (or widen the `receiverAliases` clause) so the
+registry describes the branch rather than one of its operators.
+
+---
+
+### CR-13: A receiver KEY bound to a CONDITIONAL is silent, while the MEMBER and SPECIFIER twins of the identical conditional both report `outbound-unanalysable`
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:2272-2325` (`keyReceiver`) with `:2553-2566` (`bindString` / `assembledNames` at the declaration branch); claims at `:126-131`, `:519-533` and the `keyReceiver` registry row (`:1050-1057`)
+**Severity:** BLOCKER
+
+**Issue:** `keyReceiver`'s operator descent runs on the expression written **at the key
+site**. A name whose *initializer* is a conditional is never read: `bindString` requires
+a bare string literal after `unwrap`, and `isAssembledKey` answers false for a
+`ConditionalExpression`. So the name lands in neither `constStrings` nor
+`assembledNames`, and step 4 returns "not a receiver". Executed:
+
+```
+sdk[b ? "requests" : "net"].send(req)                     ["outbound-send"]          // key site
+const r = b ? sdk.requests : sdk.net; r.send(req)         ["outbound-send"]          // receiver initializer
+const m = b ? "send" : "get"; sdk.requests[m](req)        ["outbound-unanalysable"]  // MEMBER name
+const s = b ? "caido:http" : "crypto"; await import(s)    ["outbound-unanalysable"]  // SPECIFIER
+
+const k = b ? "requests" : "net"; sdk[k].send(req)        []      <-- SILENT
+let   k; k = b ? "requests" : "net"; sdk[k].send(req)     []      <-- SILENT
+```
+
+Both silent lines contain the literal string `"requests"`, in this file, one hop from
+the call, on both branches of a two-branch operator the gate resolves at three other
+positions.
+
+**This is `WR-19`'s asymmetry at a fifth position, and the file's central promise is the
+thing it violates.** Boundary 2 (`:129-134`): "Anything it CANNOT read on an identified
+receiver, and any module specifier it cannot reduce to a literal, is REPORTED as
+`outbound-unanalysable`. 'Could not read' does not mean 'clean'; that equivalence is
+the specific defect this rewrite removes." Here the walk cannot reduce the key to a
+literal and answers clean — while the member-name and specifier twins of the *same*
+expression, resolved by `literalOf` two functions away, correctly report unanalysable.
+The gate is internally inconsistent about one expression shape depending only on which
+position it is bound for.
+
+The wave-25 paragraph at `:519-533` states "THE OPERATOR CLASS IS CLOSED IN ALL FOUR
+POSITIONS AS OF WAVE 25" and enumerates call-receiver, key, initializer and nested key.
+There is a fifth — the initializer of a name later used as a key — and no residual
+entry names it. `silence-two-hop-key` is the nearest, and it does not apply: this is one
+hop, and the reason it is silent is not chaining but that the collectors read only two
+of the three shapes an initializer can take.
+
+**Fix:** the collectors already have the resolver. Read the initializer through the same
+descent the key site uses, and record the result in whichever map its answer implies.
+
+```ts
+// in collect, on a VariableDeclaration / assignment with an identifier name:
+//   const k = b ? "requests" : "net"   -> every literal on every branch
+for (const literal of operatorLiterals(init)) bindString(node.name.text, literal);
+// where operatorLiterals descends RECEIVER_OPERATORS collecting literalsOf on each
+// operand, and marks the name in `assembledNames` if ANY operand is unreadable.
+```
+
+`ANY-BINDING-WINS` already gives the right answer once both branch literals are in the
+map: `sdk[k]` reports `outbound-send`, matching the key-site spelling exactly. A branch
+the walk cannot read makes the name an assembly, matching the member/specifier twins.
+Then add the two executed lines above as failing-path cases titled for `constStrings`'
+operator reading, add the mixed case `const k = b ? "requests" : someName` asserting
+`outbound-unanalysable`, and add a row to the mechanism table at `:150-170` — this is
+exactly the spelling a reader arrives holding and there is no row for it.
+
+---
+
+## Warnings (pass 6)
+
+### WR-32: The generated preamble's point 1 — "a branch removed from the walk turns its own entry red" — is false, is contradicted by its own point 3 three lines later, and I proved it by mutation
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3520-3540` (`deriveResidual`'s preamble lines), rendered at `:846-856` and shipped at `.planning/REQUIREMENTS.md:68-78`
+
+**Issue:** The machine-owned text opens with four numbered claims. Point 1:
+
+> 1. Each entry below is verified by EXECUTION: its probe and its counter-probe are run
+>    through auditSource and asserted against the rule identifiers recorded here, **so a
+>    branch removed from the walk turns its own entry red.**
+
+Point 3, three lines down:
+
+> 3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and do not
+>    cover that resolver's whole domain.
+
+Both cannot be true. A mechanism whose probes do not cover its domain cannot turn red
+for every branch removed from it. Point 3 is the honest one and point 1 is the
+overreach — and the gap is not hypothetical, because several clauses enumerate more
+branches than their single probe exercises. `assembledNames`' clause names four:
+
+> a name the walk WATCHED being assembled — **at a declaration, an assignment, a
+> compound assignment, or either binding-pattern spelling** — is an UNREADABLE key
+
+and its probe is `const k = "req" + "uests"` — the declaration branch only.
+
+**Executed, not argued.** I deleted the compound-assignment branch outright:
+
+```ts
+    // MUTATION: compound-assignment assembly branch REMOVED
+```
+
+and ran the derived-residual block:
+
+```
+pnpm exec vitest run packages/backend/src/outbound-prohibition.spec.ts -t "the residual is DERIVED"
+  ✓ 52 passed | 210 skipped
+```
+
+**All 52 assertions of the derived mechanism stayed green with a branch its own text
+names deleted from the walk.** (The full file does go red — the hand-written CR-10
+fixture at `:4687` catches it with `expected [] to include 'outbound-unanalysable'` —
+which is why this is a WARNING and not a BLOCKER. The compensating coverage is the
+hand-written fixtures the derivation was built to make secondary.) File restored;
+`git status` clean.
+
+**Fix:** state what the mechanism has. One sentence, and it is the same repair CR-11
+needs:
+
+```
+1. Each entry below is verified by EXECUTION: its probe and its counter-probe are
+   run through auditSource and asserted against the rule identifiers recorded here,
+   so THE BRANCH EACH PROBE EXERCISES turns its own entry red. A clause naming
+   several branches is NOT covered branch by branch - see point 3 - and the
+   hand-written fixtures below are what cover the rest.
+```
+
+Alternatively give `ResolverRecord` a `probes: readonly {src, expect}[]` array and one
+probe per branch a clause names, which would make point 1 true rather than deleted.
+Either is fine; leaving a claim that a one-line mutation falsifies is not.
+
+### WR-33: Two `RESOLVER_EXEMPTIONS` reasons are false, and they excuse exactly the population-3 residue the guard declares it cannot see
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3668-3675`
+
+**Issue:** The exemption list's own docblock says "a reviewer can read this list and
+DISAGREE with an entry. An unnamed blind spot cannot be disagreed with." Taking it up on
+that:
+
+- `collect`: *"the first document-order pass. It invokes the collectors and records
+  bindings; **it decides nothing about what an expression IS**."* It does. The
+  compound-assignment branch at `:2707-2714` decides that `k += x` makes `k` an
+  assembly — a judgement about an expression, written inline, delegated to no registered
+  mechanism (`isProvablyNumeric` is consulted as a guard, not as the decision). The
+  logical-assignment omission in `CR-12` is a second decision made in that same
+  function by the shape of its `if`.
+- `visit`: *"the second document-order pass … **every resolution it performs is
+  delegated to a registered mechanism**."* It does not. `require("caido:http")` is
+  decided entirely inline — `ts.isIdentifier(callee) && callee.text === "require"` — with
+  no registered resolver behind it, and the destructure-off-`navigator` rule at
+  `:2771-2789` reads binding elements inline.
+
+Both false reasons sit on the two functions that *contain* population 3. The docblock
+correctly declares that "an inline branch in `collect` or `visit`" is enumerated by
+neither half — and then the exemption text for those two functions asserts that neither
+contains one. A reader checking whether the residue is real is told twice that it is
+not, by the two entries that hold it.
+
+**Fix:** say what they are, so the declared blind spot and the exemption list agree.
+
+```ts
+collect:
+  "the first document-order pass. It invokes the collectors and records bindings. " +
+  "IT ALSO CARRIES INLINE DECISIONS - the compound-assignment assembly branch, and " +
+  "the operator set its assignment branch matches on - which are POPULATION 3: " +
+  "enumerated by neither half of this guard and covered only by hand-written fixtures.",
+visit:
+  "the second document-order pass. Most resolutions are delegated to a registered " +
+  "mechanism; the `require(...)` specifier rule and the navigator-destructure rule " +
+  "are decided INLINE and are POPULATION 3.",
+```
+
+### WR-34: The case titled "its box is what plan 01-27 left it" does not check the box — the regex accepts `[ ]` and `[x]` alike
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:6069-6079`
+
+**Issue:**
+
+```ts
+it("CORE-11's entry is present and well-formed, and its box is what plan 01-27 left it", () => {
+  const rows = text.split("\n").filter((l) => /^- \[[ x]\] \*\*CORE-11\*\*/.test(l));
+  expect(rows.length, `… should carry exactly one CORE-11 checkbox row; it carries ${rows.length}.`).toBe(1);
+});
+```
+
+The character class `[ x]` matches both states and the only assertion is a row COUNT.
+Flipping `.planning/REQUIREMENTS.md:46` from `- [ ]` to `- [x]` keeps `rows.length === 1`
+and the suite green. The title states an enforcement the body does not perform.
+
+This is not an abstract nit. This phase has flipped CORE-11's box early twice and
+reverted it twice — `e7cc4b6` and `faca607` — and `01-28`'s entire product is the
+decision to leave it `[ ]` with a named blocking row. This case is the only mechanical
+thing standing between that decision and a third premature flip, and it is the one
+check in a 52-assertion block that does not check what its title says.
+
+**Fix:** assert the state, with the reason in the message.
+
+```ts
+const CORE11_BOX_EXPECTED = "- [ ]"; // wave 28: blocked by silence-operator-around-global-receiver
+expect(rows.length, "…").toBe(1);
+expect(
+  rows[0].startsWith(CORE11_BOX_EXPECTED),
+  `CORE-11's box is not \`${CORE11_BOX_EXPECTED}\`. Two earlier flips were reverted (e7cc4b6, faca607) because the box moved ahead of the evidence. If the blocking row in the derived span has genuinely been closed, change this constant IN THE SAME COMMIT as the registry row and the discharge table — not before them.`,
+).toBe(true);
+```
+
+### WR-35: All three head-side disclosures name the WRONG MECHANISM for the offset their own fixture exhibits, and the same docblock states it correctly sixty lines above
+
+**File:** `packages/backend/src/store/observations.ts:466-475`, `packages/backend/src/store/observations.spec.ts:998-1010` and `:1094-1106`, `packages/backend/src/store/schema.spec.ts:283-290`
+
+**Issue:** All three new WR-28 disclosures give one mechanism for the head-side
+instability:
+
+> a cut landing inside a parameter NAME is NOT stable — the second pass sees a segment
+> with **no `=`**, decision P10-D1 redacts it WHOLE, and the stored value can SHRINK by
+> a byte.
+
+Swept, with the tail of every unstable offset printed:
+
+```
+n     pass-1 tail (24)             pass-2 tail (24)             len
+2019  "pppppppppppp;jsessionid="   "ppppppppppppp;<redacted>"   2048 -> 2047   <- HAS an `=`
+2020  "ppppppppppppp;jsessionid"   "ppppppppppppp;<redacted>"   2048 -> 2048
+2021  "pppppppppppppp;jsessioni"   "pppppppppppppp;<redacted"   2048 -> 2048
+…
+2029  "pppppppppppppppppppppp;j"   "pppppppppppppppppppppp;<"   2048 -> 2048
+```
+
+There are **two** mechanisms in the band, not one. At `n = 2019` the cut lands just
+past the `=`, so the segment is `jsessionid=` — it HAS an `=` with an empty value half,
+and `redactDelimitedSegment`'s CR-07 padding branch redacts it whole. At 2020–2029 the
+cut lands inside the name and the segment has no `=`. The disclosure names only the
+second — and `n = 2019` is `headUnstable[0]`, the exact offset the fixture reads out of
+the run and builds its four exemplar assertions on. **The one offset the three
+disclosures exhibit is the one they do not describe.**
+
+The same defect appears in the multi-segment exemplar: at `multiUnstable[0] = 2015` the
+tail is `?nnnnnnnnnnnnnnnn=`, and the comment above it says "The cut lands inside the
+FIRST parameter's name."
+
+And this is a regression against text in its own file. `observations.ts:414-424` — sixty
+lines above the new paragraph, in the same docblock — already lists **both** shapes
+correctly ("a cut landing just after a `=` leaves a segment whose value half is EMPTY …
+a cut landing inside a parameter NAME leaves a segment with no `=` at all"). The
+WR-28/WR-29 paragraph paraphrased that list down to one item and then the paraphrase was
+copied into two other files. That is the phase's signature defect in miniature: a
+correct enumeration re-authored instead of re-derived.
+
+**Fix:** restore both shapes in all three places, and title the exemplar for the branch
+it actually takes.
+
+```
+ *   a cut landing inside a `;` parameter's `<redacted>` MARKER is stable;
+ *   a cut landing JUST PAST the `=` leaves an EMPTY value half, which the CR-07
+ *     padding branch redacts WHOLE — the value SHRINKS by a byte (this is the FIRST
+ *     unstable offset in the band);
+ *   a cut landing INSIDE the parameter NAME leaves a segment with no `=`, which
+ *     P10-D1 redacts whole — the value keeps its length and loses the name.
+```
+
+and rename `nameCut` to `emptyValueCut`, since `expect(nameCut.slice(-12)).toBe(";jsessionid=")` is asserting the empty-value shape.
+
+### WR-36: The IN-25 correction states "a value routed through an OBJECT literal REPORTS"; `{ ...e }` is a value routed through an object literal and reports `[]`
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:131-141`, asserted at `:1424-1445`
+
+**Issue:** Round 5 narrowed residual item 3 by execution and wrote the correction as a
+flat statement:
+
+> (i) a value routed through an OBJECT literal REPORTS — the object-literal value is
+> itself one of the two guarded POSITIONS, so `const o = { m: e.message }; o.m` and the
+> direct `{ error: { m: e.message } }` both fire
+
+Both of those do fire — I re-ran them. But the class the sentence names is wider than
+the two shapes it was measured on. Executed:
+
+```
+catch (e) { return { ok: false, error: { ...e } }; }              []      <-- SILENT
+catch (e) { return { ok: false, error: Object.assign({}, e) }; }  []      <-- SILENT
+catch (e) { return { ok: false, error: structuredClone(e) }; }    []      <-- SILENT
+```
+
+`{ ...e }` puts the caught binding's own enumerable properties — `message` on any
+`Error` subclass that sets it as an own property, and every field of a rejected-value
+object — into the returned object literal. It is a value routed through an object
+literal and it is not seen, because `derivesFrom` reads a `SpreadAssignment` as neither
+a render nor a derivation.
+
+A correction written specifically to remove an overstatement introduced a narrower one
+in the same paragraph, and the paragraph three lines above it says why that matters:
+"A residual overstated is the same failure mode as one understated, in a paragraph that
+says so itself."
+
+**Fix:** scope the correction to what was measured and pin the counterexample beside
+the two firing shapes, in the same case:
+
+```
+ *  (i) a value routed through an object literal as a NAMED PROPERTY VALUE reports —
+ *      `const o = { m: e.message }; o.m` and `{ error: { m: e.message } }` both fire,
+ *      because an object-literal value is itself a guarded POSITION. A SPREAD is
+ *      NOT: `{ ...e }`, `Object.assign({}, e)` and `structuredClone(e)` all report
+ *      `[]` and are open, measured 2026-08-24.
+```
+
+and add the three lines to the "RESIDUAL, STILL OPEN AFTER IN-25" case at `:1447`.
+
+### WR-37: A NESTED destructure of an outbound receiver is silent, while each half of it reports on its own
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:2584-2622` (the object-binding-pattern branch)
+
+**Issue:** The collector reads a binding pattern one level deep: it takes
+`boundPropertyName(el)` and then requires `ts.isIdentifier(el.name)`. When `el.name` is
+itself a binding pattern the element is skipped entirely. Executed:
+
+```
+const { requests } = sdk;          requests.send(req)   ["outbound-send"]
+const { send } = sdk.requests;     send(req)            ["outbound-send"]
+const { requests: { send } } = sdk;  send(req)          []      <-- SILENT
+```
+
+The combined spelling is ordinary TypeScript and it is the natural way to write the two
+lines above as one. Three neighbouring receiver-binding shapes are silent for the same
+reason — the collector reads only the two initializer shapes it was written for:
+
+```
+const o = { r: sdk.requests };  o.r.send(req)                       []
+const a = [sdk.requests];       a[0].send(req)                      []
+class C { r = sdk.requests; m() { this.r.send(req); } }             []
+function f(r = sdk.requests) { r.send(req); }                       []
+for (const r of [sdk.requests]) { r.send(req); }                    []
+```
+
+The derived text's point 4 explicitly disclaims exhaustiveness for MEASURED SILENCES
+("a shape nobody thought of is still silent and still unlisted here"), which is why this
+is a WARNING and not a blocker — the disclaimer is honest and it covers these. But the
+nested destructure is a *composition of two shapes the gate already resolves*, which is
+a different class from "a shape nobody thought of", and residual (b)'s parameter and
+loop-binding items are written about KEYS only, so a reader checking them will not find
+the parameter-default and `for…of` RECEIVER twins there.
+
+**Fix:** recurse the binding-pattern branch, which closes the nested case and costs
+nothing else:
+
+```ts
+const walkPattern = (pattern: ts.ObjectBindingPattern, receiver: ts.Expression): void => {
+  for (const el of pattern.elements) {
+    const property = boundPropertyName(el);
+    if (property === undefined) continue;
+    if (ts.isObjectBindingPattern(el.name) && RECEIVERS.has(property)) {
+      // `const { requests: { send } } = sdk` — the inner names are members of a
+      // POSITIVELY IDENTIFIED receiver, which is the rule the flat case already has.
+      for (const inner of el.name.elements) { /* … the existing member rule … */ }
+      continue;
+    }
+    /* … the existing element body … */
+  }
+};
+```
+
+and add a MEASURED SILENCE row for the receiver-position parameter default and loop
+binding, so residual (b)'s KEY-only scope stops being read as covering receivers too.
+
+---
+
+## Info (pass 6)
+
+### IN-27: `literalsOf`'s docblock describes `literalOf`, and says `undefined` about a function that cannot return it
+
+`packages/backend/src/outbound-prohibition.spec.ts:2370-2375`. The comment reads "The
+string an expression denotes: a literal, or a single-hop `const` bound to one.
+`undefined` means THE WALK COULD NOT READ IT — never 'there was nothing there'." It sits
+on `literalsOf`, which returns a `ReadonlySet<string>`, never `undefined`, and which
+reads `let`/`var`/assignment bindings as well as `const` and holds every literal rather
+than one. `literalOf` — the single-valued reader the paragraph actually describes — sits
+directly below it with no docblock at all. Stale since CR-10 split the two. The registry
+rows for both functions are correct, so the code comment is the only wrong copy.
+
+### IN-28: `schema.spec.ts` hard-codes the band size the test one directory away deliberately refused to hard-code
+
+`packages/backend/src/store/schema.spec.ts:292-295` states "a sweep of the 71 head
+lengths around that offset finds 11 that are not fixed points". Nothing checks either
+number, and `observations.spec.ts:1015-1020` gives the reason not to write them:
+"Writing `2019` and `2029` into this file would be the same defect one layer up: a
+number with no derivation, going RED for the wrong reason the day a constant moves."
+Both counts are correct today (I measured 11 of 71). Prefer "a sweep of the head lengths
+around that offset finds a contiguous band that are not fixed points", which is what the
+assertions enforce.
+
+### IN-29: The `unwrap` registry row omits one of the five wrappers it strips
+
+`packages/backend/src/outbound-prohibition.spec.ts:1188` renders "strips parentheses,
+`as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE". The function also
+strips `ts.isTypeAssertionExpression` — the angle-bracket form `<T>x`. Harmless (the
+direction is more stripping, not less) and unreachable in `.ts` files that use JSX-free
+syntax, but it is one of the four wrapper kinds that falsify `CR-11`'s clause, so the
+row should name it while that clause is being fixed.
+
+### IN-30: Two more contrived spellings, recorded so they are not rediscovered as findings
+
+`String.raw\`requests\`` as a key (`const k = String.raw\`requests\`; sdk[k].send(req)`)
+and a doubled global receiver (`globalThis.globalThis.fetch(url)`) both report `[]`.
+Neither is reachable in this codebase and neither is worth a branch; they are listed
+here so a seventh round does not spend a finding on them. The first is a tagged template
+(`literalsOf` reads only `isStringLiteralLike`); the second is a property access whose
+receiver is a global receiver but whose *name* is not a surface, so no rule matches.
+
+---
 
 _Pass 1 reviewed: 2026-08-21T00:30:00Z_
 _Pass 2 reviewed: 2026-08-21T11:21:31Z_
 _Pass 3 reviewed: 2026-08-21T15:23:01Z_
 _Pass 4 reviewed: 2026-08-22T10:20:00Z_
 _Pass 5 reviewed: 2026-08-24T10:05:00Z_
+_Pass 6 reviewed: 2026-08-24T16:30:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
