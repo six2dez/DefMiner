@@ -192,7 +192,7 @@ Plans:
 
 **Wave 31** *(blocked on 01-30 — the assembled-key shapes run through wave 30's descent)*
 
-- [ ] 01-31-PLAN.md — **CR-12**: nine shapes silent across `??=`, `||=` and `&&=` with all four `=`/`+=` controls firing. The mechanism is one token test — `collect`'s alias-growing branch matches a single operator while the numeric-poisoning arm eleven lines below reads `ASSIGNMENT_OPERATORS` and names `x ||= sdk.requests` in its own comment. The widening half is given a named operator set so both halves of the statement read declared sets, eight falsified clauses are rewritten from their branches with a probe per named operator, the numeric interaction is executed rather than assumed, and the inline decision is named as population-3 residue with WR-33's exemption rewrite left to wave 32 — *wave 31*
+- [x] 01-31-PLAN.md — **CR-12**: nine shapes silent across `??=`, `||=` and `&&=` with all four `=`/`+=` controls firing. The mechanism is one token test — `collect`'s alias-growing branch matches a single operator while the numeric-poisoning arm eleven lines below reads `ASSIGNMENT_OPERATORS` and names `x ||= sdk.requests` in its own comment. The widening half is given a named operator set so both halves of the statement read declared sets, eight falsified clauses are rewritten from their branches with a probe per named operator, the numeric interaction is executed rather than assumed, and the inline decision is named as population-3 residue with WR-33's exemption rewrite left to wave 32 — *wave 31*
 
 **Wave 32** *(blocked on 01-31 — four of the discharge table's eight rows are addressed by waves 30 and 31)*
 

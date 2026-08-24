@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
-stopped_at: Completed 01-30-PLAN.md
-last_updated: "2026-08-24T19:36:19.599Z"
+stopped_at: Completed 01-31-PLAN.md
+last_updated: "2026-08-24T20:14:29.291Z"
 last_activity: 2026-08-24
-last_activity_desc: Phase 01 execution started
-state_head: 0c3c73cdfbf468af40030e49b04449cc24fd7bff
+last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
+state_head: 9d4e0d25858e9aefbb8c0beafaf272a7f10c77bd
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 31
 ---
 
 # Project State
@@ -28,11 +28,29 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 31 of 32
-Status: Gap-closure round 6 in progress — 29 of 32 plans summarised
-Last activity: 2026-08-24 — Completed 01-29 (WR-32: a row's CLAUSE bound to the BRANCHES it names, by execution — 60 probes across 32 rows; the verifier's own `PlusEqualsToken` mutation now turns the `assembledNames` ROW red)
+Plan: 32 of 32
+Status: Gap-closure round 6 in progress — 31 of 32 plans summarised
+Last activity: 2026-08-24 — Completed 01-31 (CR-12: `collect`'s alias-growing branch reads a named frozen `ASSIGNING_OPERATORS` set instead of an inline `EqualsToken` comparison, so `let r; r ??= sdk.requests; r.send(req)` reports `outbound-send` like its two-character-different twin; nine shapes fixtured per collector, four controls pinned, eight clauses rewritten from their branches with 24 per-operator probes, two falsified handoffs observed RED then discharged in the same commit as the code)
 
-Progress: [█████████▒] 91% of phase 01 (29 of 32 plans)
+Progress: [██████████] 97% of phase 01 (31 of 32 plans)
+
+> WAVE 31. `state.advance-plan` MOVED CLEANLY THIS TIME — `{"advanced": true,
+> "previous_plan": 31, "current_plan": 32}` against a frontmatter that already
+> read 31, because wave 29 set the counter from the FILE COUNT on disk rather
+> than leaving it to increment from its own previous value. That correction has
+> now held for two waves.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — which is now TWELVE consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23,
+> 01-24, 01-26, 01-29 and 01-31). Steady handler behaviour on this repo, not a
+> transient. The bar above is the phase-local one, recomputed from the 32 PLAN /
+> 31 SUMMARY files on disk and stated with its basis.
+>
+> THE PROSE COUNTERS WERE TWO WAVES STALE AND ARE CORRECTED FROM THE FILE COUNT,
+> named rather than fixed quietly, by the rule these notes have followed since
+> 01-17: the `Status:` line and the `Last activity:` line both still described
+> wave 29 while waves 30 and 31 had shipped. No handler owns those two lines.
 
 > WAVE 29. THE COUNTERS WERE STALE AND ARE CORRECTED FROM THE FILE COUNT ON DISK,
 > recorded rather than quietly fixed, by the rule these notes have followed since
@@ -149,6 +167,7 @@ Progress: [█████████▒] 91% of phase 01 (29 of 32 plans)
 | Phase 01 P28 | 8 min | 2 tasks | 4 files |
 | Phase 01 P29 | 28 min | 3 tasks | 4 files |
 | Phase 01 P30 | 41 min | 3 tasks | 4 files |
+| Phase 01 P31 | 39 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -275,6 +294,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: Wave 29: branches carries a `names` field rather than the reviewer's cheaper flat `probes` array — a flat array proves N probes RUN, not that they CORRESPOND to the N branches the clause names, which is the whole of WR-32.
 - [Phase 01]: Wave 29: FALSIFIED_HANDOFFS records the owning wave as DATA rather than prose inside a clause, each entry carrying the probe that measured its phrase falsified plus that probe's open-state answer — so a widening that never re-adds the phrase turns the entry RED, the direction the vocabulary guard cannot reach. Its pin is expected to fall to ZERO and it deliberately carries NO non-vacuity assertion.
 - [Phase 01]: Wave 29: UNBOUNDED_QUANTIFIERS' reach is DECLARED-PHRASING OR NOTHING. A universal spelled outside the list is unmatched and unbounded — disclosed as limit (c) of four in the generated block on both surfaces, never claimed away.
+- [Phase 01]: P31-D1: ASSIGNING_OPERATORS' membership settled by MEASUREMENT with both readings implemented and run — the real tree did NOT discriminate (23 files / 0 violations under both) and the SHAPES did, so the docblock says so rather than claiming shipped code chose it
+- [Phase 01]: P31-D2: += and the NUMERIC compound assignments are deliberately OUT of ASSIGNING_OPERATORS — += is the assembly spelling with its own branch and numeric guard and the one operator whose result is a function of the OLD value; the numeric compounds bind a number whatever their right side was
+- [Phase 01]: P31-D3: the three logical-assignment BranchProbes are anchored at the SET MEMBERS rather than at the shared branch opening, so removing ONE operator turns ONE case red BY TITLE — a per-set proof would pass with two of three operators broken
+- [Phase 01]: P31-D4: wave 29's isFetchExpression handoff was RE-HOMED to wave 32 rather than discharged — MEASURED, its probe (ok && fetch)(url) is CR-11's operator-around-a-global shape and it stayed GREEN when the CR-12 widening landed while the other two went red. finding stays CR-12 because that is what the row's own dated FALSIFIED marker carries
+- [Phase 01]: P31-D5: the assembledNames clause correction landed in TASK 1's commit rather than task 2's — wave 29's handoff case goes red the instant the widening lands and task 1 must end green; the plan's stronger same-commit-as-the-code requirement is preserved
+- [Phase 01]: P31-D6: residual (b6) — a logical assignment whose TARGET is a MEMBER (o.r ??= sdk.requests) — is DISCLOSED as a measured-silence row rather than folded in: growing an alias keyed on a member path is a different collector, not a wider operator set, and needs its own real-tree measurement
 
 ### Known Risks Carried Forward
 
@@ -317,8 +342,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T19:36:19.579Z
-**Stopped at:** Completed 01-30-PLAN.md
+**Last session:** 2026-08-24T20:14:29.270Z
+**Stopped at:** Completed 01-31-PLAN.md
 **Resume file:** None
 
 ### Blockers
