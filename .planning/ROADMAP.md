@@ -140,7 +140,7 @@ Plans:
 
 **Wave 18** *(gap closure round 4 — re-verification 2026-08-22T12:40 found UAT gap 2 REOPENED as CR-08: truth 8 moved up and truth 9 moved down, in the file fixed for this shape one round earlier; blocked on Wave 17)*
 
-- [ ] 01-18-PLAN.md — **CR-08, the blocker**: the CORE-11 gate reads a receiver key INLINE only, so one `const` defeats the WR-19 assembled-key rule and `sdk[b ? "requests" : "net"]` — two literals naming outbound receivers, nothing hidden from the walk — is reported by nothing and disclosed by nothing. `assembledNames` collected beside `constStrings`, a conditional key read on both branches, the eight executed shapes as failing fixtures each tied to the mechanism that resolves it, and the five disclosures that disagree with each other reconciled to one bound — *wave 18*
+- [x] 01-18-PLAN.md — **CR-08, the blocker**: the CORE-11 gate reads a receiver key INLINE only, so one `const` defeats the WR-19 assembled-key rule and `sdk[b ? "requests" : "net"]` — two literals naming outbound receivers, nothing hidden from the walk — is reported by nothing and disclosed by nothing. `assembledNames` collected beside `constStrings`, a conditional key read on both branches, the eight executed shapes as failing fixtures each tied to the mechanism that resolves it, and the five disclosures that disagree with each other reconciled to one bound — *wave 18*
 
 **Wave 19** *(blocked on 01-18 — shares `outbound-prohibition.spec.ts`, and CORE-11's checkbox cannot flip until the last enumerated shape is enforced)*
 

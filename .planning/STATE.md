@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-17-PLAN.md
-last_updated: "2026-08-24T08:03:41.700Z"
+stopped_at: Completed 01-18-PLAN.md
+last_updated: "2026-08-24T08:27:39.467Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 3ee8317ba1b8efafdc229d2b85dd4952e425c891
+state_head: 6d0925a2b5d0f6cd3e695f71a6f3965131e7dfa3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 1 of 22
-Status: Executing Phase 01
+Plan: 2 of 22
+Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
 Progress: [██████████] 100% of phase 01 (17 of 17 plans)
@@ -86,6 +86,7 @@ Progress: [██████████] 100% of phase 01 (17 of 17 plans)
 | Phase 01 P15 | 18 min | 3 tasks | 4 files |
 | Phase 01 P16 | 34 min | 3 tasks | 8 files |
 | Phase 01 P17 | 19 min | 2 tasks | 28 files |
+| Phase 01 P18 | 22 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -175,6 +176,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: WR-19 bound is ASSEMBLED-KEY, set by a real-tree measurement: reporting every non-reducing element-access key fired on compat.ts dotted-path walk and on array indexing, so the CORE-11 walk reports what it can see being HIDDEN and discloses what it merely cannot FOLLOW.
 - [Phase 01]: Pattern gate took option (a) — the rule. The one permitted regex literal stays permitted through the SAME count-plus-anchor: rule 4 passes a regex-literal first argument through without a verdict, so the call is covered by its literal being covered. No file-name skip added.
 - [Phase 01]: describeError cannot throw (IN-17): both reads wrapped, one shared UNRENDERABLE_ERROR literal with recordError. Six store call sites invoke it unwrapped, so a handled store failure would have become an unhandled rejection out of recordObservation.
+- [Phase 01]: P9-D3 RESTATED (plan 01-18, CR-08): a receiver key is resolved through a one-hop assembly in every spelling, a conditional on both branches, and a comma sequence to its rightmost operand; the residual is two hops, a function boundary, and a key the walk never saw bound — The gate's stated reach was wider than its executed reach for the fourth review running, inside the file rewritten for that defect one wave earlier. The bound is now derived FROM the code and written identically into the gate header, REQUIREMENTS.md, STATE.md and WINDOWS.md; the exemption is preserved by re-measurement (23 files, 0 violations), not by argument.
+- [Phase 01]: CORE-11 stays unchecked after plan 01-18; plan 01-19 owns the flip — The requirement's own text enumerates 'no dynamic code construction' and WR-23's `const e = eval; e(s)` is still silent, as is IN-20's `const g = globalThis`. CORE-11 was reverted from [x] to [ ] at e7cc4b6 for exactly this reason; re-checking it one blindness early would repeat the act that revert undid.
 
 ### Known Risks Carried Forward
 
@@ -217,8 +220,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-22T09:55:49.438Z
-**Stopped at:** Completed 01-17-PLAN.md
+**Last session:** 2026-08-24T08:27:25.622Z
+**Stopped at:** Completed 01-18-PLAN.md
 **Resume file:** None
 
 ### Blockers
