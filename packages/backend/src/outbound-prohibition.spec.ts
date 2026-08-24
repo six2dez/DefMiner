@@ -1004,7 +1004,7 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
        2 above already states and which is restated here only to keep the
        four limits together.
 
-RESOLVERS - 32 entries.
+RESOLVERS - 34 entries.
 
 * constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment, a logical assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe; the string-literal assignment branch has since 2026-08-24 (CR-12) read ASSIGNING_OPERATORS, so the three logical spellings bind through it too; and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1182,15 +1182,16 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "read single-valued" at auditSource > memberName > : literalOf(node.argumentExpression); - probe "sdk.requests[\"send\"](req);" - reports outbound-send
 
-* initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone
+* initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone. CORRECTED 2026-08-24 (CR-11): that promise was true of THIS resolver and FALSE of the global ones, which is what actively misled a reader about `const g = globalThis ?? self` - an initializer that aliased a global receiver through an operator grew nothing while the SDK twin resolved; the global resolvers now answer the same in both positions through the shared operator descent, and the branch below is its probe
     read off:  auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind =>
     probe:     "const r = b ? sdk.requests : sdk.net;\nr.send(req);"
     reports:   outbound-send
     counter:   "const r = b ? cache : client;\nr.send(req);"
     reports:   [] - nothing
     branch:    "a NAME for receiverKind" at auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind => - probe "const r = b ? sdk.requests : sdk.net;\nr.send(req);" - reports outbound-send
+    branch:    "the shared operator descent" at auditSource > collect > if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text); - probe "const g = globalThis ?? self;\ng.fetch(url);" - reports outbound-fetch
 
-* isFetchExpression - the global fetch in three spellings - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reaches no branch here
+* isFetchExpression - the global fetch in four spellings - bare, on any of the four global receivers, through an alias, or an operator around the bare global - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reached no branch here; that shape is CLOSED 2026-08-24 (CR-11) by operatorOperandMatching and the branch below is its probe, and closing it took a SIXTH site as well - bareFetchCallee - because the bare-call rule asked the same question INLINE and never consulted this function at all; and the phrase STAYS falsified because a receiver crossing a function boundary, a parameter, an array-slot binding and a class field each still reach no branch here
     read off:  auditSource > const isFetchExpression = (node: ts.Expression): boolean => {
     probe:     "globalThis.fetch(url);"
     reports:   outbound-fetch
@@ -1198,6 +1199,16 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "on any of the four global receivers" at auditSource > isFetchExpression > memberName(inner) === FETCH_GLOBAL && isGlobalReceiver(inner.expression) - probe "globalThis.fetch(url);" - reports outbound-fetch
     branch:    "through an alias" at auditSource > isFetchExpression > if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text); - probe "const f = fetch;\nf(url);" - reports outbound-fetch
+    branch:    "an operator around the bare global" at auditSource > isFetchExpression > if (operatorOperandMatching(inner, isFetchExpression) !== undefined) { - probe "const f = fetch ?? x;\nf(url);" - reports outbound-fetch
+
+* bareFetchCallee - the local NAME a call's callee spells when the walk knows that name to be the global fetch: the bare spelling, or an operator around the bare global read through the shared descent. Deliberately NARROWER than isFetchExpression, which also answers for a fetch member of a global receiver - a spelling the member rule already reports from the node it visits in its own right, so routing this rule through that function would report it TWICE
+    read off:  auditSource > const bareFetchCallee = (node: ts.Expression): string | undefined => {
+    probe:     "fetch(url);"
+    reports:   outbound-fetch
+    counter:   "cache.fetch(url);"
+    reports:   [] - nothing
+    branch:    "the bare spelling" at auditSource > bareFetchCallee > return fetchAliases.has(inner.text) ? inner.text : undefined; - probe "fetch(url);" - reports outbound-fetch
+    branch:    "an operator around the bare global" at auditSource > bareFetchCallee > const operand = operatorOperandMatching( - probe "(ok && fetch)(url);" - reports outbound-fetch
 
 * isNavigatorReceiver - navigator reached bare, through a global receiver, or through a one-hop alias; RECEIVER-ANCHORED so a member named sendBeacon on an ordinary object stays quiet
     read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
@@ -1262,6 +1273,15 @@ RESOLVERS - 32 entries.
     branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
     branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
 
+* operatorOperandMatching - the one descent the global resolvers read an operator through: it answers which operand the caller's own resolver recognises, with either-side semantics, so an operator SELECTING a global surface IS that surface in call position and in initializer position alike. A third consumer of the operatorOperands statement rather than a sixth copy of the operand loop, and a nested operator resolves because each caller passes ITSELF
+    read off:  module scope > function operatorOperandMatching(
+    probe:     "(ok && globalThis).fetch(url);"
+    reports:   outbound-fetch
+    counter:   "(ok && cache).fetch(url);"
+    reports:   [] - nothing
+    branch:    "which operand the caller's own resolver recognises" at module scope > operatorOperandMatching > for (const operand of operands) if (matches(operand)) return operand; - probe "(ok && globalThis).fetch(url);" - reports outbound-fetch
+    branch:    "a nested operator" at module scope > isGlobalReceiverIn > operatorOperandMatching(inner, (operand) => - probe "(ok && (b ? globalThis : self)).fetch(url);" - reports outbound-fetch
+
 * operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration or an assignment, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
     read off:  module scope > function operatorLiteralBinding(
     probe:     "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
@@ -1320,7 +1340,7 @@ RESOLVERS - 32 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 10 entries.
+MEASURED SILENCES - 9 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1385,13 +1405,6 @@ MEASURED SILENCES - 10 entries.
     reports:   [] - nothing
     counter:   "const a = fetch;\nconst b = a;\nb(url);"
     reports:   outbound-fetch
-
-* silence-operator-around-global-receiver - OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in the four RECEIVER_OPERATORS spellings. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator. FALSIFIED 2026-08-24 (CR-11), the phrase this clause used to carry: "silent in every spelling" - measured, the comma-sequence, parenthesis, as-assertion and non-null-assertion spellings all report, because unwrap strips them before the resolver is ever reached
-    read off:  module scope > const operatorReceiver = (
-    probe:     "(ok && globalThis).fetch(url);"
-    reports:   [] - nothing
-    counter:   "(ok && sdk.requests).send(req);"
-    reports:   outbound-send
 END DERIVED RESIDUAL
 */
 
@@ -1964,6 +1977,84 @@ const RECEIVER_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 
 /**
+ * THE ONE DEFINITION OF HOW AN OPERATOR EXPRESSION IS READ FOR A GLOBAL SURFACE.
+ * Added 2026-08-24 (CR-11).
+ *
+ * WHY IT EXISTS, AND IT IS THE SAME FINDING WR-27 WAS, ONE RESOLVER FAMILY OVER.
+ * `operatorReceiver` above is reached from `receiverKind` and `keyReceiver` and
+ * from nowhere else, so the operator class existed for the SDK receivers and did
+ * not exist for the GLOBAL ones. Measured before this function was written:
+ *
+ *   (ok && sdk.requests).send(req)             ["outbound-send"]
+ *   (ok && globalThis).fetch(url)              []
+ *   (ok && fetch)(url)                         []
+ *   (ok && eval)(src)                          []
+ *   new (ok && WebSocket)()                    []
+ *   (ok && navigator).sendBeacon(u, d)         []
+ *   const g = globalThis ?? self; g.fetch(url) []
+ *   const f = fetch ?? x; f(url)               []
+ *   const e = eval ?? x; e(src)                []
+ *   const n = navigator ?? x; n.sendBeacon(u, d)  []
+ *
+ * `const g = globalThis ?? self` is a PLAUSIBLE DEFENSIVE IDIOM rather than a
+ * contrivance — it is how portable code reaches the global object — and it
+ * created a fully aliased global receiver this gate could not see, while
+ * `initializerReceiver`'s own clause told a reader that initializer position and
+ * call position give the same answer. That sentence was true of the SDK resolver
+ * and false of these five, which is worse than an undisclosed gap: a reader was
+ * actively told the case was covered.
+ *
+ * THE SHAPE DECISION, STATED WITH ITS REASON, BECAUSE THE ALTERNATIVE WAS FIVE
+ * COPIES. `operatorReceiver` is typed for a `ReceiverKind` — a THREE-state answer
+ * (a named receiver, an unreadable one, neither) — and the five global resolvers
+ * answer TWO states each: a boolean, or a name. They cannot consume
+ * `operatorReceiver` without inventing a third state they have no use for. What
+ * they CAN share, and what this function shares, is the `operatorOperands`
+ * statement of WHAT COUNTS AS AN OPERATOR: this is a second consumer of that one
+ * statement in exactly the sense `operatorLiteralBinding` is, and NOT a fourth
+ * copy of it. Five independent inline operand loops would be WR-27's finding — one
+ * idea written three times and therefore existing twice — reproduced at scale, in
+ * the plan that closes WR-27's last face.
+ *
+ * WHAT IT ANSWERS: THE OPERAND, NOT THE ANSWER. Each caller asks its own question
+ * of the operand it gets back, so this function needs no generic type parameter
+ * and no knowledge of what any of the five resolvers considers a hit. That is also
+ * what keeps it inside the coverage guard's POPULATION 2 convention — a generic
+ * `function f<T>(` matches neither declaration pattern the guard enumerates, so a
+ * generic here would have been a resolver the guard could not see, which is the
+ * artifact this file exists to remove.
+ *
+ * EITHER-SIDE SEMANTICS, THE SAME OVER-APPROXIMATION `RECEIVER_OPERATORS` ALREADY
+ * DECIDED FOR `&&` BY MEASUREMENT. Any operand the caller recognises makes the
+ * whole expression that surface. Its COST is the mirror case, where the surface is
+ * the GUARD rather than the value — `(globalThis && ok).fetch(url)` reports even
+ * though the value is `ok`. That is an over-approximation in the direction every
+ * other set in this file errs in, and it is pinned by its own fixture below rather
+ * than left implicit, exactly as the SDK side pins `(sdk.requests && ok)`.
+ *
+ * RECURSION IS THE CALLER'S, as it is for `operatorReceiver`: each of the five
+ * passes ITSELF, so a nested operator resolves by construction rather than by a
+ * depth this function would have to own.
+ *
+ * ONE ANSWER FOR "NOT AN OPERATOR" AND FOR "AN OPERATOR NAMING NOTHING", WHICH IS
+ * WHY THERE IS NO `NOT_AN_OPERATOR` HERE. `operatorReceiver` needs that symbol
+ * because its callers distinguish "this is not an operator" from "this operator
+ * resolved to nothing" — they have a third state to fall through to. These five do
+ * not: both cases mean the same thing to every one of them, which is `false` or
+ * `undefined`. Inventing the distinction would force five callers to re-test a
+ * node kind they never ask about.
+ */
+function operatorOperandMatching(
+  node: ts.Expression,
+  matches: (operand: ts.Expression) => boolean,
+): ts.Expression | undefined {
+  const operands = operatorOperands(node);
+  if (operands === undefined) return undefined;
+  for (const operand of operands) if (matches(operand)) return operand;
+  return undefined;
+}
+
+/**
  * The binary operators whose RESULT IS ALWAYS A NUMBER, whatever the operands.
  *
  * `+` is deliberately ABSENT and that absence is the point: `"req" + "uests"` is
@@ -2474,6 +2565,17 @@ function isGlobalReceiverIn(
   aliases: ReadonlySet<string>,
 ): boolean {
   const inner = unwrap(node);
+  // CR-11, 2026-08-24: an operator SELECTING a global receiver is a global
+  // receiver, through the one shared descent the other four global resolvers
+  // reach. `(b ? globalThis : self).fetch(url)` and `const g = globalThis ?? self`
+  // were both silent while the SDK twin one resolver over reported.
+  if (
+    operatorOperandMatching(inner, (operand) =>
+      isGlobalReceiverIn(operand, aliases),
+    ) !== undefined
+  ) {
+    return true;
+  }
   if (!ts.isIdentifier(inner)) return false;
   return GLOBAL_RECEIVERS.has(inner.text) || aliases.has(inner.text);
 }
@@ -2958,6 +3060,11 @@ export function auditSource(file: string, source: string): Violation[] {
   /** Is this expression the global fetch, in any spelling the walk resolves? */
   const isFetchExpression = (node: ts.Expression): boolean => {
     const inner = unwrap(node);
+    // CR-11, 2026-08-24 — the shared descent. `(ok && fetch)(url)` and
+    // `const f = fetch ?? x; f(url)` reached no branch below.
+    if (operatorOperandMatching(inner, isFetchExpression) !== undefined) {
+      return true;
+    }
     if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text);
     if (
       ts.isPropertyAccessExpression(inner) ||
@@ -2971,6 +3078,49 @@ export function auditSource(file: string, source: string): Violation[] {
   };
 
   /**
+   * THE LOCAL NAME A CALL'S CALLEE SPELLS WHEN THAT NAME IS THE GLOBAL FETCH —
+   * THE BARE SPELLING ONLY.
+   *
+   * ADDED 2026-08-24 (CR-11), AND ITS EXISTENCE IS A FINDING RATHER THAN A
+   * REFACTORING. Wiring the shared descent into `isFetchExpression` closed every
+   * operator spelling of the global fetch EXCEPT ONE — `(ok && fetch)(url)`, which
+   * is the very probe `isFetchExpression`'s own FALSIFIED_HANDOFFS entry was
+   * carrying. Measured with the descent already wired, that shape still answered
+   * `[]`. The reason is that the bare-call rule in the visit pass never consulted
+   * `isFetchExpression` at all: it asked `ts.isIdentifier(callee) &&
+   * fetchAliases.has(callee.text)` INLINE. That is a SIXTH copy of "is this the
+   * global fetch", written where nobody was looking for one, and it is WR-27's
+   * finding — one idea written N times and therefore existing N-1 times — found a
+   * third time in this file by measurement rather than by reading.
+   *
+   * WHY IT IS NARROWER THAN `isFetchExpression` AND MUST STAY SO. That function
+   * also answers TRUE for `globalThis.fetch`, and the member rule two branches up
+   * already reports that spelling from the PropertyAccessExpression the walk
+   * visits in its own right. Routing this rule through `isFetchExpression` would
+   * therefore report `globalThis.fetch(url)` TWICE — a behaviour change dressed as
+   * a collapse. The two questions are genuinely different; what they now SHARE is
+   * the operator descent, which is the part that was copied.
+   *
+   * It answers the NAME rather than a boolean because the violation detail names
+   * the local spelling (`a call to \`f(...)\``), which is the whole reason the
+   * inline test read `callee.text` in the first place.
+   */
+  const bareFetchCallee = (node: ts.Expression): string | undefined => {
+    const inner = unwrap(node);
+    if (ts.isIdentifier(inner)) {
+      return fetchAliases.has(inner.text) ? inner.text : undefined;
+    }
+    // CR-11, 2026-08-24 — the SAME shared descent the other five global resolvers
+    // reach, so `(ok && fetch)(url)` resolves here exactly as
+    // `(ok && globalThis).fetch(url)` resolves in `isGlobalReceiverIn`.
+    const operand = operatorOperandMatching(
+      inner,
+      (candidate) => bareFetchCallee(candidate) !== undefined,
+    );
+    return operand === undefined ? undefined : bareFetchCallee(operand);
+  };
+
+  /**
    * Is this expression `navigator`, in any spelling the walk resolves?
    *
    * Deliberately shaped like `isFetchExpression`: the bare identifier and its
@@ -2980,6 +3130,11 @@ export function auditSource(file: string, source: string): Violation[] {
    */
   const isNavigatorReceiver = (node: ts.Expression): boolean => {
     const inner = unwrap(node);
+    // CR-11, 2026-08-24 — the shared descent. `(ok && navigator).sendBeacon(u, d)`
+    // and `const n = navigator ?? x; n.sendBeacon(u, d)` reached no branch below.
+    if (operatorOperandMatching(inner, isNavigatorReceiver) !== undefined) {
+      return true;
+    }
     if (ts.isIdentifier(inner)) return navigatorAliases.has(inner.text);
     if (
       ts.isPropertyAccessExpression(inner) ||
@@ -3007,6 +3162,17 @@ export function auditSource(file: string, source: string): Violation[] {
    */
   const globalNameOf = (node: ts.Expression): string | undefined => {
     const inner = unwrap(node);
+    // CR-11, 2026-08-24 — the shared descent, and it serves BOTH rules that read
+    // this one definition: `(ok && eval)(src)` and `new (ok && WebSocket)()` were
+    // each silent, and the verifier found both while re-executing wave 28's
+    // discharge table. The operand is re-asked rather than cached because the
+    // descent answers WHICH OPERAND matched and each caller asks its own question
+    // of it — see `operatorOperandMatching`.
+    const operand = operatorOperandMatching(
+      inner,
+      (candidate) => globalNameOf(candidate) !== undefined,
+    );
+    if (operand !== undefined) return globalNameOf(operand);
     if (!ts.isIdentifier(inner)) return undefined;
     const name = inner.text;
     if (DYNAMIC_CODE.has(name) || OUTBOUND_CONSTRUCTORS.has(name)) {
@@ -3037,6 +3203,14 @@ export function auditSource(file: string, source: string): Violation[] {
    */
   const aliasedGlobalOf = (init: ts.Expression): string | undefined => {
     const inner = unwrap(init);
+    // CR-11, 2026-08-24 — the shared descent, in INITIALIZER position:
+    // `const e = eval ?? x; e(src)` grew no alias, so the initializer half of the
+    // finding lived here as well as at the four call-position resolvers.
+    const operand = operatorOperandMatching(
+      inner,
+      (candidate) => aliasedGlobalOf(candidate) !== undefined,
+    );
+    if (operand !== undefined) return aliasedGlobalOf(operand);
     if (ts.isIdentifier(inner)) {
       const name = inner.text;
       return (DYNAMIC_CODE.has(name) || OUTBOUND_CONSTRUCTORS.has(name)) &&
@@ -3524,8 +3698,14 @@ export function auditSource(file: string, source: string): Violation[] {
       }
 
       // --- the global fetch, by name or by alias ------------------------------
-      if (ts.isIdentifier(callee) && fetchAliases.has(callee.text)) {
-        add("outbound-fetch", `a call to \`${callee.text}(...)\``);
+      // CR-11, 2026-08-24: this test used to be written INLINE as
+      // `ts.isIdentifier(callee) && fetchAliases.has(callee.text)`, which is why
+      // `(ok && fetch)(url)` stayed silent after the shared descent was wired into
+      // `isFetchExpression`. It reads `bareFetchCallee` now — see that function's
+      // docblock for why it is narrower than `isFetchExpression` and must stay so.
+      const bareFetch = bareFetchCallee(callee);
+      if (bareFetch !== undefined) {
+        add("outbound-fetch", `a call to \`${bareFetch}(...)\``);
       }
 
       // --- code built from a string ------------------------------------------
@@ -4353,7 +4533,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "initializerReceiver",
     kind: "resolver",
     clause:
-      "a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone",
+      "a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone. CORRECTED 2026-08-24 (CR-11): that promise was true of THIS resolver and FALSE of the global ones, which is what actively misled a reader about `const g = globalThis ?? self` - an initializer that aliased a global receiver through an operator grew nothing while the SDK twin resolved; the global resolvers now answer the same in both positions through the shared operator descent, and the branch below is its probe",
     site: "auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind =>",
     probe: "const r = b ? sdk.requests : sdk.net;\nr.send(req);",
     expect: Object.freeze(["outbound-send"] as const),
@@ -4367,13 +4547,24 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         probe: "const r = b ? sdk.requests : sdk.net;\nr.send(req);",
         expect: Object.freeze(["outbound-send"] as const),
       }),
+      // CR-11, closed 2026-08-24. The GLOBAL half of the promise this clause has
+      // made since wave 25, wired at the same declaration branch the SDK half
+      // already used. Its probe is the plausible defensive idiom the finding is
+      // about, not a contrivance.
+      Object.freeze({
+        names: "the shared operator descent",
+        anchor:
+          "auditSource > collect > if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text);",
+        probe: "const g = globalThis ?? self;\ng.fetch(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
+      }),
     ] as readonly BranchProbe[]),
   }),
   Object.freeze({
     id: "isFetchExpression",
     kind: "resolver",
     clause:
-      'the global fetch in three spellings - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reaches no branch here',
+      'the global fetch in four spellings - bare, on any of the four global receivers, through an alias, or an operator around the bare global - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reached no branch here; that shape is CLOSED 2026-08-24 (CR-11) by operatorOperandMatching and the branch below is its probe, and closing it took a SIXTH site as well - bareFetchCallee - because the bare-call rule asked the same question INLINE and never consulted this function at all; and the phrase STAYS falsified because a receiver crossing a function boundary, a parameter, an array-slot binding and a class field each still reach no branch here',
     site: "auditSource > const isFetchExpression = (node: ts.Expression): boolean => {",
     probe: "globalThis.fetch(url);",
     expect: Object.freeze(["outbound-fetch"] as const),
@@ -4392,6 +4583,51 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         anchor:
           "auditSource > isFetchExpression > if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text);",
         probe: "const f = fetch;\nf(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
+      }),
+      // CR-11, closed 2026-08-24. The operator spelling, through the shared
+      // descent. Its probe is `const f = fetch ?? x` rather than `(ok && fetch)`
+      // DELIBERATELY: the call-position spelling is answered by `bareFetchCallee`
+      // one row down, and a probe that exercised the neighbouring resolver would
+      // leave this branch bound to nothing.
+      Object.freeze({
+        names: "an operator around the bare global",
+        anchor:
+          "auditSource > isFetchExpression > if (operatorOperandMatching(inner, isFetchExpression) !== undefined) {",
+        probe: "const f = fetch ?? x;\nf(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
+      }),
+    ] as readonly BranchProbe[]),
+  }),
+  // CR-11, 2026-08-24. THE SIXTH SITE, AND ITS EXISTENCE IS THE FINDING.
+  // Wiring the shared descent into `isFetchExpression` closed every operator
+  // spelling of the global fetch EXCEPT `(ok && fetch)(url)` - the very probe
+  // `isFetchExpression`'s own falsified-handoff entry carried - because the
+  // bare-call rule never consulted `isFetchExpression`. It asked
+  // `ts.isIdentifier(callee) && fetchAliases.has(callee.text)` inline.
+  Object.freeze({
+    id: "bareFetchCallee",
+    kind: "resolver",
+    clause:
+      "the local NAME a call's callee spells when the walk knows that name to be the global fetch: the bare spelling, or an operator around the bare global read through the shared descent. Deliberately NARROWER than isFetchExpression, which also answers for a fetch member of a global receiver - a spelling the member rule already reports from the node it visits in its own right, so routing this rule through that function would report it TWICE",
+    site: "auditSource > const bareFetchCallee = (node: ts.Expression): string | undefined => {",
+    probe: "fetch(url);",
+    expect: Object.freeze(["outbound-fetch"] as const),
+    counterProbe: "cache.fetch(url);",
+    counterExpect: Object.freeze([] as const),
+    branches: Object.freeze([
+      Object.freeze({
+        names: "the bare spelling",
+        anchor:
+          "auditSource > bareFetchCallee > return fetchAliases.has(inner.text) ? inner.text : undefined;",
+        probe: "fetch(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
+      }),
+      Object.freeze({
+        names: "an operator around the bare global",
+        anchor:
+          "auditSource > bareFetchCallee > const operand = operatorOperandMatching(",
+        probe: "(ok && fetch)(url);",
         expect: Object.freeze(["outbound-fetch"] as const),
       }),
     ] as readonly BranchProbe[]),
@@ -4583,6 +4819,36 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
           "module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER;",
         probe: 'const k = "a" + b;\n(c ? sdk[k] : x).send(req);',
         expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+    ] as readonly BranchProbe[]),
+  }),
+  // CR-11, 2026-08-24. THE THIRD CONSUMER OF `operatorOperands`, for the GLOBAL
+  // surfaces, added because the alternative was SIX copies of one operand loop —
+  // WR-27's finding at scale, in the plan that closes WR-27's last face.
+  Object.freeze({
+    id: "operatorOperandMatching",
+    kind: "resolver",
+    clause:
+      "the one descent the global resolvers read an operator through: it answers which operand the caller's own resolver recognises, with either-side semantics, so an operator SELECTING a global surface IS that surface in call position and in initializer position alike. A third consumer of the operatorOperands statement rather than a sixth copy of the operand loop, and a nested operator resolves because each caller passes ITSELF",
+    site: "module scope > function operatorOperandMatching(",
+    probe: "(ok && globalThis).fetch(url);",
+    expect: Object.freeze(["outbound-fetch"] as const),
+    counterProbe: "(ok && cache).fetch(url);",
+    counterExpect: Object.freeze([] as const),
+    branches: Object.freeze([
+      Object.freeze({
+        names: "which operand the caller's own resolver recognises",
+        anchor:
+          "module scope > operatorOperandMatching > for (const operand of operands) if (matches(operand)) return operand;",
+        probe: "(ok && globalThis).fetch(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
+      }),
+      Object.freeze({
+        names: "a nested operator",
+        anchor:
+          "module scope > isGlobalReceiverIn > operatorOperandMatching(inner, (operand) =>",
+        probe: "(ok && (b ? globalThis : self)).fetch(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
       }),
     ] as readonly BranchProbe[]),
   }),
@@ -4928,17 +5194,22 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     counterProbe: "const a = fetch;\nconst b = a;\nb(url);",
     counterExpect: Object.freeze(["outbound-fetch"] as const),
   }),
-  Object.freeze({
-    id: "silence-operator-around-global-receiver",
-    kind: "measured-silence",
-    clause:
-      'OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in the four RECEIVER_OPERATORS spellings. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator. FALSIFIED 2026-08-24 (CR-11), the phrase this clause used to carry: "silent in every spelling" - measured, the comma-sequence, parenthesis, as-assertion and non-null-assertion spellings all report, because unwrap strips them before the resolver is ever reached',
-    site: "module scope > const operatorReceiver = (",
-    probe: "(ok && globalThis).fetch(url);",
-    expect: Object.freeze([] as const),
-    counterProbe: "(ok && sdk.requests).send(req);",
-    counterExpect: Object.freeze(["outbound-send"] as const),
-  }),
+  // `silence-operator-around-global-receiver` STOOD HERE AND IS REMOVED, 2026-08-24
+  // (CR-11). It is not reworded and it is not narrowed: the silence it measured
+  // NO LONGER EXISTS. Re-measured after the shared descent landed, every one of
+  // the ten spellings the row and its falsified marker between them named now
+  // reports — `(ok && globalThis).fetch(url)`, the `??`, `||` and `? :` twins,
+  // `(ok && fetch)(url)`, `(ok && eval)(src)`, `new (ok && WebSocket)()`,
+  // `(ok && navigator).sendBeacon(u, d)` and both initializer forms — and the
+  // comma, parenthesis, `as` and non-null spellings its marker recorded already
+  // did. A measured-silence row that no longer measures a silence is a fiction,
+  // and re-wording it into a narrower silence that also does not exist would be
+  // the same defect with a fresher date. The shapes it used to assert are
+  // asserted in the OTHER direction by the four fixtures titled
+  // `through operatorOperandMatching`, and the mechanism now carries its own
+  // resolver row. Its `QUANTIFIED_CLAUSES` entry and its `FALSIFIED_HANDOFFS`
+  // entry are deleted in this same commit, because an entry pointing at a row
+  // that no longer exists is a stale claim inside a machine-owned span.
 ] as readonly ResolverRecord[]);
 
 /**
@@ -4993,6 +5264,14 @@ export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
   "inline assembly",
   // The SPELLINGS the global resolvers name.
   "the bare spelling",
+  // CR-11, 2026-08-24. The operator spelling of a global surface, and the descent
+  // that reads it. Spelled so that NONE of the three contains another as a
+  // substring and none contains "the bare spelling" - a phrase that did would make
+  // one clause claim a branch it does not have, which is the trap wave 31 recorded
+  // when it spelled "a logical assignment" to avoid containing "an assignment".
+  "an operator around the bare global",
+  "the shared operator descent",
+  "which operand the caller's own resolver recognises",
   "on any of the four global receivers",
   "through an alias",
   "through a global receiver",
@@ -5149,43 +5428,22 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
     literalsOf:
       'Bounded by the collected set constStrings recorded — the SAME branches, so this clause inherits constStrings\' bound exactly, widening with it (2026-08-24, CR-13). MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` now reports outbound-send. The universal is STILL false and inherits the same residual: parameter, loop binding, second hop of key and cross-file binding are each MEASURED silent.',
     isFetchExpression:
-      "Bounded by the THREE spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, and a one-hop alias. MEASURED: `(ok && fetch)(url)` reaches none of them and reports NOTHING, because operatorReceiver is not consulted here. CR-12, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.",
-    "silence-operator-around-global-receiver":
-      "Bounded by the FOUR RECEIVER_OPERATORS, and NOT by the wrappings unwrap strips first. MEASURED: `(0, globalThis).fetch(url)`, `(globalThis).fetch(url)`, `(globalThis as any).fetch(url)` and `globalThis!.fetch(url)` ALL report outbound-fetch, because unwrap removes them before any resolver is reached; only `(ok && globalThis).fetch(url)` is silent. CR-11, preserved in the clause and handed on as a FALSIFIED_HANDOFFS entry.",
+      "Bounded by the FOUR spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, a one-hop alias, and - since 2026-08-24 (CR-11) - an operator around any of those, read through operatorOperandMatching. MEASURED after that widening: `const f = fetch ?? x; f(url)` reports outbound-fetch, and so does `(ok && fetch)(url)`, which needed a SIXTH site (bareFetchCallee) because the bare-call rule asked its own inline question. The universal is STILL false and the bound is what remains outside those four branches, each MEASURED silent in this same session: a function boundary (`function h(g) { g.fetch(url); } h(globalThis)`), an array-slot binding (`[globalThis][0].fetch(url)`), a class field and a parameter default - all report NOTHING.",
   });
 
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
-  // DISCHARGED 2026-08-24 (CR-12), in the same commit as ASSIGNING_OPERATORS:
-  // `assembledNames` and `receiverAliases`. Both were observed RED here first -
-  // the widening landed, the entries were still present, and the two cases below
-  // named the row, the phrase and the owning wave before anything was deleted.
-  //
-  // `isFetchExpression` STAYS, WITH ITS OWNER CORRECTED FROM 31 TO 32, AND THAT
-  // CORRECTION WAS MADE BY MEASUREMENT RATHER THAN BY READING. Its probe is
-  // `(ok && fetch)(url)` - an OPERATOR WRAPPING the bare global, which is CR-11's
-  // shape one function over, not CR-12's logical-assignment binding. When the
-  // CR-12 widening landed, exactly TWO of the four handoff cases went red and this
-  // one stayed GREEN, which is the executed evidence that its shape is not this
-  // wave's to close. The `finding` field is left at CR-12 deliberately: it is what
-  // the row's own dated FALSIFIED marker carries, the well-formedness guard reads
-  // the two against each other, and rewriting a shipped falsification marker would
-  // erase the record of what was believed on the day it was written.
-  Object.freeze({
-    row: "isFetchExpression",
-    phrase: "in every reachable spelling",
-    finding: "CR-12",
-    wave: "32",
-    probe: "(ok && fetch)(url);",
-    openAnswer: Object.freeze([] as const),
-  }),
-  Object.freeze({
-    row: "silence-operator-around-global-receiver",
-    phrase: "silent in every spelling",
-    finding: "CR-11",
-    wave: "32",
-    probe: "(ok && globalThis).fetch(url);",
-    openAnswer: Object.freeze([] as const),
-  }),
+  // EMPTY AS OF 2026-08-24, AND THAT IS THE DESIGNED END STATE RATHER THAN AN
+  // ABSENCE. Six entries were recorded by wave 29 when it corrected six clauses
+  // to their measured reach. Waves 30 (CR-13) and 31 (CR-12) discharged two each;
+  // the last two were CR-11's and are discharged HERE, in the same commit as
+  // `operatorOperandMatching` and `bareFetchCallee`. Both were OBSERVED RED
+  // first: with the widening applied and the entries still present, the two
+  // parameterised cases named the row, the phrase and the owning wave before
+  // anything was deleted. One of the two rows — `silence-operator-around-global-receiver`
+  // — was itself REMOVED rather than corrected, because the silence it named
+  // stopped existing; leaving a handoff entry pointing at a row that no longer
+  // exists would be a stale claim inside a machine-owned span, which is this
+  // phase's defect in its purest form.
 ]);
 
 /**
@@ -7206,35 +7464,123 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
-  it("through NOTHING: the operator descent reaches the RECEIVER and KEY resolvers and STOPS THERE — the GLOBAL receivers are untouched by it — A MEASURED SILENCE, and no prior list named this one either", () => {
-    // FOUND BY PROBING WHERE THE DESCENT STOPS RATHER THAN ASSUMING IT IS
-    // UNIVERSAL, which is the method wave 24 recorded after its own plan's
-    // CONTROL turned out wrong when measured.
+  it("through operatorOperandMatching: AN OPERATOR AROUND A GLOBAL RECEIVER RESOLVES, IN CALL POSITION — the silence wave 25 measured and waves 25 through 31 carried forward, CLOSED (CR-11)", () => {
+    // WHAT THIS CASE USED TO ASSERT, AND WHY THE REPLACEMENT IS NOT A SOFTENING.
+    // Until 2026-08-24 this case asserted that all six shapes below reported
+    // NOTHING, under the title "the GLOBAL receivers are untouched by it".
+    // `operatorReceiver` was reached from `receiverKind` and `keyReceiver` and
+    // from nowhere else, so the operator class existed for the SDK receivers and
+    // did not exist for the global ones. That is the same asymmetry WR-27 was,
+    // one resolver family over, and it survived six waves because it was
+    // DISCLOSED — a measured silence with a row and a probe reads as handled.
     //
-    // `operatorReceiver` is reached from `receiverKind` and `keyReceiver`. It is
-    // NOT reached from `isGlobalReceiver`, `isFetchExpression` or
-    // `isNavigatorReceiver`, which resolve their own spellings through the alias
-    // sets. So an operator wrapping a GLOBAL receiver is still silent, in every
-    // spelling, and MEASURED IDENTICAL BEFORE AND AFTER THIS WAVE — this wave
-    // neither closed these nor broke them, and no credit is claimed for them.
-    //
-    // OPEN AND UNOWNED AS OF WAVE 25. No plan in this phase claims it; it is
-    // named in the residual so that wave 27's derivation carries it forward
-    // rather than rediscovering it. Recorded because a residual that narrows in
-    // one place while quietly widening in another is the omission this round
-    // exists to stop.
-    expect(rulesOf("(ok && globalThis).fetch(url);")).toEqual([]);
-    expect(rulesOf('(g ?? globalThis)["fetch"](url);')).toEqual([]);
-    expect(rulesOf("(b ? globalThis : x).fetch(url);")).toEqual([]);
-    expect(rulesOf("(b ? navigator : x).sendBeacon(u, d);")).toEqual([]);
-    expect(rulesOf("(b ? fetch : x)(url);")).toEqual([]);
-    expect(rulesOf("(b ? eval : x)(src);")).toEqual([]);
-    // THE CONTRAST that shows the boundary is the RESOLVER and not the operator:
-    // put the same conditional around a `requests`/`net` member and it reports,
-    // because that path goes through `receiverKind`.
+    // IT IS CLOSED BY ONE SHARED DESCENT, NOT BY SIX COPIES.
+    // `operatorOperandMatching` is a second consumer of the SAME
+    // `operatorOperands` statement `operatorReceiver` and `operatorLiteralBinding`
+    // already read, and all six global resolvers reach it: `isGlobalReceiverIn`,
+    // `isFetchExpression`, `bareFetchCallee`, `isNavigatorReceiver`,
+    // `globalNameOf` and `aliasedGlobalOf`.
+    expect(rulesOf("(ok && globalThis).fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf('(g ?? globalThis)["fetch"](url);')).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("(b ? globalThis : x).fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("(b ? navigator : x).sendBeacon(u, d);")).toEqual([
+      "outbound-beacon",
+    ]);
+    expect(rulesOf("(b ? fetch : x)(url);")).toEqual(["outbound-fetch"]);
+    expect(rulesOf("(b ? eval : x)(src);")).toEqual(["outbound-dynamic-code"]);
+    // THE TWO THE VERIFIER FOUND ITSELF while re-executing wave 28's discharge
+    // table, on rows wave 28 had recorded as discharged. Both were the same
+    // shape as the six above and neither was on any residual list.
+    expect(rulesOf("new (ok && WebSocket)();")).toEqual([
+      "outbound-global-ctor",
+    ]);
+    expect(rulesOf("(ok && eval)(src);")).toEqual(["outbound-dynamic-code"]);
+    // AND THE ONE THE SHARED DESCENT DID NOT CLOSE ON ITS OWN, RECORDED BECAUSE
+    // FINDING IT IS THE POINT. `(ok && fetch)(url)` — the probe
+    // `isFetchExpression`'s own falsified-handoff entry carried — was STILL `[]`
+    // after the descent was wired into `isFetchExpression`, because the bare-call
+    // rule in the visit pass never consulted `isFetchExpression` at all: it asked
+    // `ts.isIdentifier(callee) && fetchAliases.has(callee.text)` INLINE. A SIXTH
+    // copy of one question, found by measuring rather than by reading. See
+    // `bareFetchCallee`.
+    expect(rulesOf("(ok && fetch)(url);")).toEqual(["outbound-fetch"]);
+    // THE CONTRAST that showed the boundary was the RESOLVER and not the
+    // operator. It is retained rather than deleted: it is now the statement that
+    // the two families answer the SAME way, which is what the closure means.
     expect(rulesOf("(b ? sdk.requests : x).send(req);")).toContain(
       "outbound-send",
     );
+  });
+
+  it("through operatorOperandMatching: THE MUST-STAY-QUIET TWIN — an operator over two ORDINARY objects stays silent, in call position AND in initializer position", () => {
+    // A widening is only worth what its negative side is worth. Every shape here
+    // is the exact spelling of the shapes above with an ordinary object in place
+    // of the global, and a gate that flagged `const c = cache ?? client` would be
+    // reverted within the hour — which is the same argument `GLOBAL_RECEIVERS`
+    // makes for anchoring `fetch` on four receiver names rather than on the
+    // member name.
+    expect(rulesOf("(ok && cache).fetch(url);")).toEqual([]);
+    expect(rulesOf("(cache && client).fetch(url);")).toEqual([]);
+    expect(rulesOf("(ok && cache).sendBeacon(u, d);")).toEqual([]);
+    expect(rulesOf("new (ok && Widget)();")).toEqual([]);
+    // INITIALIZER POSITION, which is the half `initializerReceiver`'s clause
+    // promised gave the same answer as call position and which was the half that
+    // made CR-11 a blocker rather than a disclosure.
+    expect(rulesOf("const r = ok && cache;\nr.send(req);")).toEqual([]);
+    expect(rulesOf("const c = cache ?? client;\nc.fetch(url);")).toEqual([]);
+    // The RECEIVER anchoring survives the descent: an ordinary object with a
+    // `fetch` member grows no alias even through an operator initializer.
+    expect(
+      rulesOf("const o = { fetch(u) {} };\nconst f = o.fetch ?? x;\nf(url);"),
+    ).toEqual([]);
+  });
+
+  it("through operatorOperandMatching: AN OPERATOR AROUND A GLOBAL RECEIVER RESOLVES IN INITIALIZER POSITION TOO — `const g = globalThis ?? self` is a PLAUSIBLE DEFENSIVE IDIOM and it was the half nobody named", () => {
+    // THE HALF THAT UPGRADED CR-11 FROM A DISCLOSED OVERREACH TO A BLOCKER.
+    // `const g = globalThis ?? self` is how portable code reaches the global
+    // object. It created a fully aliased global receiver this gate could not see,
+    // no residual clause anywhere named it, and the `initializerReceiver` row
+    // actively told a reader it was covered — its clause said initializer
+    // position and call position give the same answer, which was true of the SDK
+    // resolver and false of all six global ones.
+    expect(rulesOf("const g = globalThis ?? self;\ng.fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("const g = b ? globalThis : self;\ng.fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("const f = fetch ?? x;\nf(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("const e = eval ?? x;\ne(src);")).toEqual([
+      "outbound-dynamic-code",
+    ]);
+    expect(rulesOf("const n = navigator ?? x;\nn.sendBeacon(u, d);")).toEqual([
+      "outbound-beacon",
+    ]);
+  });
+
+  it("through operatorOperandMatching: THE MIRROR CASE AND ITS COST, PINNED — the surface as the GUARD rather than as the value REPORTS, which is the same over-approximation RECEIVER_OPERATORS settled by measurement", () => {
+    // EITHER-SIDE SEMANTICS ARE AN OVER-APPROXIMATION AND THE COST IS NAMED HERE
+    // RATHER THAN LEFT IMPLICIT. `a && b` evaluates to `a` when `a` is falsy, so
+    // its left operand is usually a GUARD rather than a value — and a guard that
+    // happens to be a global receiver makes the whole expression one. This is the
+    // identical trade `RECEIVER_OPERATORS`' docblock records for the SDK side,
+    // where `(sdk.requests && ok).send(req)` reports, and it errs in the
+    // direction every other set in this file errs in.
+    expect(rulesOf("(globalThis && ok).fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("(fetch && ok)(url);")).toEqual(["outbound-fetch"]);
+    expect(rulesOf("const g = globalThis && ok;\ng.fetch(url);")).toEqual([
+      "outbound-fetch",
+    ]);
   });
 
   it('through the COMMA SEQUENCE rule plus constStrings: `sdk[(0, "requests")]` is its rightmost operand', () => {
@@ -8017,7 +8363,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(74);
+    ).toBe(80);
   });
 
   // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
@@ -8051,11 +8397,11 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       branches.length,
       `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(91);
+    ).toBe(97);
     expect(
       new Set(branches.map(([id]) => id)).size,
-      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 32 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
-    ).toBe(33);
+      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 34 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
+    ).toBe(35);
 
     // A PLAIN SUBSTRING SEARCH HERE WOULD BE VACUOUS, AND THIS TASK ADDED A THIRD
     // SURFACE THAT WOULD SATISFY ONE. The anchor text occurs (1) inside the
@@ -8140,8 +8486,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // required to delete is worse than none.
     expect(
       FALSIFIED_HANDOFFS.length,
-      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries. Waves 30, 31 and 32 each DELETE their entries and update this pin IN THE SAME COMMIT AS THEIR CODE. A count that moved without a widening beside it is the failure. WAVE 30 DISCHARGED ITS TWO ON 2026-08-24 (CR-13): 6 became 4, in the same commit as operatorLiteralBinding. WAVE 31 DISCHARGED ITS TWO ON 2026-08-24 (CR-12): 4 became 2, in the same commit as ASSIGNING_OPERATORS - and the third entry naming wave 31, isFetchExpression, was MEASURED to be CR-11's shape rather than CR-12's and had its owner corrected to 32 instead of being discharged. Both remaining entries are wave 32's.`,
-    ).toBe(2);
+      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries and the pin says ZERO. Each discharging wave DELETED its entries and updated this pin IN THE SAME COMMIT AS ITS CODE. A count that moved without a widening beside it is the failure. WAVE 30 DISCHARGED ITS TWO ON 2026-08-24 (CR-13): 6 became 4, in the same commit as operatorLiteralBinding. WAVE 31 DISCHARGED ITS TWO ON 2026-08-24 (CR-12): 4 became 2, in the same commit as ASSIGNING_OPERATORS - and the third entry naming wave 31, isFetchExpression, was MEASURED to be CR-11's shape rather than CR-12's and had its owner corrected instead of being discharged. THE LAST TWO WERE DISCHARGED ON 2026-08-24 (CR-11): 2 became 0, in the same commit as operatorOperandMatching and bareFetchCallee, with one of the two ROWS removed outright because its silence stopped existing. ZERO IS THE DESIGNED END STATE. A NON-ZERO count now means a LATER wave added a handoff — which is legitimate, and then this pin changes in the same commit as that entry and the clause it corrects.`,
+    ).toBe(0);
     for (const h of FALSIFIED_HANDOFFS) {
       expect(
         RESOLVER_REGISTRY.some((r) => r.id === h.row),
@@ -8196,29 +8542,42 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `the quantifier scan matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(11);
+    ).toBe(10);
   });
 
-  // THE LIST IS CHECKED AGAINST THE THREE UNIVERSALS THIS ROUND FALSIFIED, BY
-  // RUNNING THE SCAN. A quantifier list that misses the universals which produced
-  // this round's blockers is a list that will miss round 7's.
-  it("the quantifier scan catches ALL THREE universals this round falsified", () => {
+  // THE LIST IS CHECKED AGAINST THE UNIVERSALS THIS ROUND FALSIFIED, BY RUNNING
+  // THE SCAN. A quantifier list that misses the universals which produced this
+  // round's blockers is a list that will miss round 7's.
+  //
+  // IT WAS THREE ROWS AND IT IS NOW THREE ROWS AND ONE ABSENCE, 2026-08-24
+  // (CR-11). `silence-operator-around-global-receiver` carried the third
+  // universal — `silent in every spelling` — and that ROW WAS REMOVED when its
+  // silence stopped existing. Dropping it from this list silently would leave the
+  // guard weaker by exactly one row with nothing recording why, so its absence is
+  // asserted HERE, with the reason, beside the two that survive. `isFetchExpression`
+  // is added in the same edit: it carries the round's fourth universal, its
+  // widening is what removed the third row's subject, and a list that tracked the
+  // rows this round STARTED with rather than the ones it ENDED with is a list
+  // already going stale.
+  it("the quantifier scan catches the universals this round falsified — and records the ROW that stopped existing", () => {
     const hit = (id: string): boolean => {
       const row = RESOLVER_REGISTRY.find((r) => r.id === id);
       return UNBOUNDED_QUANTIFIERS.some(
         (q) => row?.clause.includes(q) === true,
       );
     };
-    for (const id of [
-      "constStrings",
-      "literalsOf",
-      "silence-operator-around-global-receiver",
-    ]) {
+    for (const id of ["constStrings", "literalsOf", "isFetchExpression"]) {
       expect(
         hit(id),
-        `row \`${id}\` carried one of the three universals round 6 falsified and the quantifier scan does NOT hit it. The list has stopped matching the shapes it was written for.`,
+        `row \`${id}\` carried one of the universals round 6 falsified and the quantifier scan does NOT hit it. The list has stopped matching the shapes it was written for.`,
       ).toBe(true);
     }
+    expect(
+      RESOLVER_REGISTRY.some(
+        (r) => r.id === "silence-operator-around-global-receiver",
+      ),
+      "row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-08-24 (CR-11) because the silence it measured stopped existing — every spelling it named now reports through `operatorOperandMatching`. If an operator around a global receiver has gone silent again, that is a REGRESSION in the descent and not a row to restore; if a NEW and genuinely different silence was found, give it its own id and its own measured probe.",
+    ).toBe(false);
   });
 
   it("every clause carrying a DECLARED quantifier phrasing names a MEASURED bound", () => {
@@ -8306,7 +8665,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // rather than silent. A guard that used to see 47 members and now sees 3 is
     // still "non-empty" and still broken.
     expect(collectors.length).toBe(11);
-    expect(functions.length).toBe(39);
+    expect(functions.length).toBe(41);
   });
 
   it("every member of BOTH populations is a registry row OR a named, reasoned exemption", () => {

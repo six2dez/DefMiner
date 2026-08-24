@@ -134,7 +134,7 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
        2 above already states and which is restated here only to keep the
        four limits together.
 
-RESOLVERS - 32 entries.
+RESOLVERS - 34 entries.
 
 * constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment, a logical assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe; the string-literal assignment branch has since 2026-08-24 (CR-12) read ASSIGNING_OPERATORS, so the three logical spellings bind through it too; and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -312,15 +312,16 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "read single-valued" at auditSource > memberName > : literalOf(node.argumentExpression); - probe "sdk.requests[\"send\"](req);" - reports outbound-send
 
-* initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone
+* initializerReceiver - a NAME for receiverKind since wave 25, so initializer position and call position give the same answer and the `??` precedence bug that let an UNREADABLE left branch shadow a NAMED right branch is gone. CORRECTED 2026-08-24 (CR-11): that promise was true of THIS resolver and FALSE of the global ones, which is what actively misled a reader about `const g = globalThis ?? self` - an initializer that aliased a global receiver through an operator grew nothing while the SDK twin resolved; the global resolvers now answer the same in both positions through the shared operator descent, and the branch below is its probe
     read off:  auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind =>
     probe:     "const r = b ? sdk.requests : sdk.net;\nr.send(req);"
     reports:   outbound-send
     counter:   "const r = b ? cache : client;\nr.send(req);"
     reports:   [] - nothing
     branch:    "a NAME for receiverKind" at auditSource > const initializerReceiver = (node: ts.Expression): ReceiverKind => - probe "const r = b ? sdk.requests : sdk.net;\nr.send(req);" - reports outbound-send
+    branch:    "the shared operator descent" at auditSource > collect > if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text); - probe "const g = globalThis ?? self;\ng.fetch(url);" - reports outbound-fetch
 
-* isFetchExpression - the global fetch in three spellings - bare, on any of the four global receivers, or through an alias - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reaches no branch here
+* isFetchExpression - the global fetch in four spellings - bare, on any of the four global receivers, through an alias, or an operator around the bare global - and NOT a fetch method of an ordinary object. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "in every reachable spelling" - measured, an operator wrapping the bare global, (ok && fetch)(url), reached no branch here; that shape is CLOSED 2026-08-24 (CR-11) by operatorOperandMatching and the branch below is its probe, and closing it took a SIXTH site as well - bareFetchCallee - because the bare-call rule asked the same question INLINE and never consulted this function at all; and the phrase STAYS falsified because a receiver crossing a function boundary, a parameter, an array-slot binding and a class field each still reach no branch here
     read off:  auditSource > const isFetchExpression = (node: ts.Expression): boolean => {
     probe:     "globalThis.fetch(url);"
     reports:   outbound-fetch
@@ -328,6 +329,16 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "on any of the four global receivers" at auditSource > isFetchExpression > memberName(inner) === FETCH_GLOBAL && isGlobalReceiver(inner.expression) - probe "globalThis.fetch(url);" - reports outbound-fetch
     branch:    "through an alias" at auditSource > isFetchExpression > if (ts.isIdentifier(inner)) return fetchAliases.has(inner.text); - probe "const f = fetch;\nf(url);" - reports outbound-fetch
+    branch:    "an operator around the bare global" at auditSource > isFetchExpression > if (operatorOperandMatching(inner, isFetchExpression) !== undefined) { - probe "const f = fetch ?? x;\nf(url);" - reports outbound-fetch
+
+* bareFetchCallee - the local NAME a call's callee spells when the walk knows that name to be the global fetch: the bare spelling, or an operator around the bare global read through the shared descent. Deliberately NARROWER than isFetchExpression, which also answers for a fetch member of a global receiver - a spelling the member rule already reports from the node it visits in its own right, so routing this rule through that function would report it TWICE
+    read off:  auditSource > const bareFetchCallee = (node: ts.Expression): string | undefined => {
+    probe:     "fetch(url);"
+    reports:   outbound-fetch
+    counter:   "cache.fetch(url);"
+    reports:   [] - nothing
+    branch:    "the bare spelling" at auditSource > bareFetchCallee > return fetchAliases.has(inner.text) ? inner.text : undefined; - probe "fetch(url);" - reports outbound-fetch
+    branch:    "an operator around the bare global" at auditSource > bareFetchCallee > const operand = operatorOperandMatching( - probe "(ok && fetch)(url);" - reports outbound-fetch
 
 * isNavigatorReceiver - navigator reached bare, through a global receiver, or through a one-hop alias; RECEIVER-ANCHORED so a member named sendBeacon on an ordinary object stays quiet
     read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
@@ -392,6 +403,15 @@ RESOLVERS - 32 entries.
     branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
     branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
 
+* operatorOperandMatching - the one descent the global resolvers read an operator through: it answers which operand the caller's own resolver recognises, with either-side semantics, so an operator SELECTING a global surface IS that surface in call position and in initializer position alike. A third consumer of the operatorOperands statement rather than a sixth copy of the operand loop, and a nested operator resolves because each caller passes ITSELF
+    read off:  module scope > function operatorOperandMatching(
+    probe:     "(ok && globalThis).fetch(url);"
+    reports:   outbound-fetch
+    counter:   "(ok && cache).fetch(url);"
+    reports:   [] - nothing
+    branch:    "which operand the caller's own resolver recognises" at module scope > operatorOperandMatching > for (const operand of operands) if (matches(operand)) return operand; - probe "(ok && globalThis).fetch(url);" - reports outbound-fetch
+    branch:    "a nested operator" at module scope > isGlobalReceiverIn > operatorOperandMatching(inner, (operand) => - probe "(ok && (b ? globalThis : self)).fetch(url);" - reports outbound-fetch
+
 * operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration or an assignment, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
     read off:  module scope > function operatorLiteralBinding(
     probe:     "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
@@ -450,7 +470,7 @@ RESOLVERS - 32 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 10 entries.
+MEASURED SILENCES - 9 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -515,13 +535,6 @@ MEASURED SILENCES - 10 entries.
     reports:   [] - nothing
     counter:   "const a = fetch;\nconst b = a;\nb(url);"
     reports:   outbound-fetch
-
-* silence-operator-around-global-receiver - OPEN AND UNOWNED, opened by measurement in wave 25 and unchanged since: operatorReceiver is reached from receiverKind and keyReceiver and from nowhere else, so an operator wrapping a GLOBAL receiver is silent in the four RECEIVER_OPERATORS spellings. The same operator around an SDK receiver reports - the boundary is the RESOLVER, not the operator. FALSIFIED 2026-08-24 (CR-11), the phrase this clause used to carry: "silent in every spelling" - measured, the comma-sequence, parenthesis, as-assertion and non-null-assertion spellings all report, because unwrap strips them before the resolver is ever reached
-    read off:  module scope > const operatorReceiver = (
-    probe:     "(ok && globalThis).fetch(url);"
-    reports:   [] - nothing
-    counter:   "(ok && sdk.requests).send(req);"
-    reports:   outbound-send
 <!-- END DERIVED RESIDUAL -->
 
 
