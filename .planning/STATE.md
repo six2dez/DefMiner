@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-24-PLAN.md
-last_updated: "2026-08-24T12:11:57.485Z"
+stopped_at: Completed 01-25-PLAN.md
+last_updated: "2026-08-24T12:36:31.962Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 57b2bfe75f90c8fd81213e55a0ede445c2899df3
+state_head: da2aafd015b62ea96eb8197fe74eb5b53d952a13
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 25 of 28
-Status: Executing Phase 01 — 01-24 complete, 01-25 next
+Plan: 26 of 28
+Status: Ready to execute
 Last activity: 2026-08-24 — Completed 01-24 (CR-10: the stale first literal that shadowed every later rebinding)
 
 Progress: [█████████░] 86% of phase 01 (24 of 28 plans)
@@ -108,6 +108,7 @@ Progress: [█████████░] 86% of phase 01 (24 of 28 plans)
 | Phase 01 P22 | 13 min | 2 tasks | 3 files |
 | Phase 01 P23 | 15 min | 3 tasks | 4 files |
 | Phase 01 P24 | 22 min | 3 tasks | 2 files |
+| Phase 01 P25 | 21 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P24-D3: literalOf is SINGLE-VALUED — the rejected mechanism, used deliberately at the other callers — Member names and specifiers need one string, not a set, and at those call sites undefined already means COULD NOT READ, which reports. One principle covers both: each caller's unknown-direction is the reporting direction. Guarded by the allowlist fixture, which is the one that decides whether this is safe or gate-deleting.
 - [Phase 01]: P24-D4: REQUIREMENTS.md and STATE.md deliberately NOT amended with the narrowed residual in wave 24 — Both carry an authored residual and are one wave stale on purpose. Wave 27 derives the replacement and wave 28 reconciles both ledgers to it in one move; a fourth hand-authored copy would be another place the next drift can start, which is the mechanism behind six consecutive false bounds. The gate header and the tool-owned ledger carry this wave's narrowing.
 - [Phase 01]: P24-D5: keyReceiver's step 3 deleted as unreachable rather than left standing — Once step 0 tested the identical condition and returned first, step 3 was dead. Two identical tests in one function is how a reader learns to stop trusting an order the docblock calls load-bearing.
+- [Phase 01]: P25-D1: the operator descent HOISTED into ONE function parameterised by the caller's leaf resolver, so call, key and initializer position share one definition — The conditional descent was written three times and therefore existed twice: initializer position had a copy, the element-access arm had a copy, and receiverKind itself had none — so an operator in CALL position fell through to return undefined, the state every caller reads as not a receiver. Both other faces were taught in the SAME round (CR-08) because there was no one place to teach the third. initializerReceiver is now a name for receiverKind and the element-access arm calls keyReceiver; a fourth copy would have set up the fourth instance of this.
+- [Phase 01]: P25-D2: && IS IN the receiver-operator set, decided by MEASUREMENT — both readings implemented and run — The symmetry argument genuinely does not carry for &&, whose left operand is usually a guard. THE REAL TREE DID NOT DISCRIMINATE — 23 files, ZERO violations under both readings — and that is stated rather than dressed up. THE SHAPES DID: excluding && left (ok && sdk.requests).send(req), the ordinary guarded outbound call with the receiver written out in full, SILENT — WR-27's own finding one operator over, inside the wave closing it. The cost, (sdk.requests && ok).send(req) reporting, is pinned by its own assertion rather than left implicit. The sibling gate's derivesFrom already covers the same four and cites this file as its reason; that is corroboration, not the reason.
+- [Phase 01]: P25-D3: the three-state precedence COPIED from the element-access arm rather than reinvented, which surfaced a precedence bug no residual list ever named — initializerReceiver was receiverKind(whenTrue) ?? receiverKind(whenFalse), and ?? does not skip UNREADABLE_RECEIVER because a symbol is neither null nor undefined — so an unreadable LEFT branch shadowed a NAMED RIGHT branch in initializer position and in no other. Two spellings of one shape answered differently by operand ORDER. Found by listing the three copies before touching them, the method wave 24 recorded. Both directions reported before and after, so nothing went quiet; the correction changed which rule is named.
+- [Phase 01]: P25-D4: the global-receiver operator silence DISCLOSED and pinned rather than closed — Probing where operatorReceiver is reached FROM, rather than assuming it is universal, found six spellings still silent — (ok && globalThis).fetch(url) and its navigator/fetch/eval twins — measured IDENTICAL before and after this wave against 278a0d2~1. isGlobalReceiver, isFetchExpression and isNavigatorReceiver resolve through the alias sets and never consult the descent. Closing it means widening the alias machinery CR-09 and IN-20 both fought over, outside this plan's scope. It is in the residual, in the mechanism table and pinned by a MEASURED SILENCE fixture, named open and unowned so wave 27's derivation carries it forward.
+- [Phase 01]: P25-D5: REQUIREMENTS.md and STATE.md deliberately NOT amended with the narrowed residual in wave 25 — Same reason wave 24 recorded: both carry an authored residual and are stale on purpose. Wave 27 derives the replacement and wave 28 reconciles both requirement-tier ledgers to it in one move; another hand-authored copy would be another place the next drift can start, which is the mechanism behind seven consecutive false or incomplete bounds. CORE-11's box stays [ ]. The gate header and the tool-owned ledger carry this wave's narrowing, authored once and rendered into both programmatically.
 
 ### Known Risks Carried Forward
 
@@ -262,8 +268,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T12:11:01.745Z
-**Stopped at:** Completed 01-24-PLAN.md
+**Last session:** 2026-08-24T12:35:21.582Z
+**Stopped at:** Completed 01-25-PLAN.md
 **Resume file:** None
 
 ### Blockers

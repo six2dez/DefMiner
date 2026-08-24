@@ -168,7 +168,7 @@ Plans:
 
 **Wave 25** *(blocked on 01-24 — recurses through the key resolver wave 24 rewrote)*
 
-- [ ] 01-25-PLAN.md — **WR-27**: a conditional receiver in CALL position is silent — `(b ? sdk.requests : sdk.net).send(req)` and its `??` / `||` twins — while the conditional KEY and conditional INITIALIZER faces of the same operator were both added in round 4 and both report, and no residual list names it. The descent hoisted into `receiverKind` and `keyReceiver`, the three copies collapsed to one, and `&&` settled by measurement — *wave 25*
+- [x] 01-25-PLAN.md — **WR-27**: a conditional receiver in CALL position is silent — `(b ? sdk.requests : sdk.net).send(req)` and its `??` / `||` twins — while the conditional KEY and conditional INITIALIZER faces of the same operator were both added in round 4 and both report, and no residual list names it. The descent hoisted into `receiverKind` and `keyReceiver`, the three copies collapsed to one, and `&&` settled by measurement — *wave 25*
 
 **Wave 26** *(blocked on 01-25 — the only wave in the round that reaches outside the outbound gate, placed last of the four so a red in a store file is never ambiguous with a red in the gate)*
 

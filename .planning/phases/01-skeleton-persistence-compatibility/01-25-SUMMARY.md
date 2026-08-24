@@ -619,6 +619,10 @@ $ git diff --exit-code .planning/REQUIREMENTS.md .planning/STATE.md
 
 **In one sentence, the reason:** both carry an authored residual, wave 27 replaces the authored text with a derived one and wave 28 reconciles both requirement-tier ledgers to it in a single move, so a further hand-authored copy written here would be another place the next drift can start. CORE-11's box stays `[ ]`; wave 28 owns the flip and only against the derived text.
 
+**AND WHAT THE CRITERION DOES AND DOES NOT COVER, STATED SO THE LATER DIFF IS NOT READ AS A BREACH.** The clean `git diff --exit-code` above was taken at the end of task 3, against the plan's own criterion, and it is about the RESIDUAL TEXT — no hand-authored copy of the bound was written into either ledger. The executor's close-out bookkeeping that follows every plan in this phase — `state.advance-plan`, `state.record-metric`, `state.record-session` and the five `P25-D*` decision entries — does touch `STATE.md`'s position, metrics, session and Accumulated Context sections, exactly as wave 24's close-out did (`8046a80` carried a 41-line `STATE.md` diff for the same reason). `REQUIREMENTS.md` is untouched by both, and `requirements-completed` is `[]`: CORE-11 is NOT marked complete by this plan, because wave 28 owns that flip and only against wave 27's derived text.
+
+**`requirements.mark-complete` was deliberately NOT run**, against the executor's default close-out step, for that reason. This is the one place a plan-level constraint overrode the standard flow, and it is recorded here rather than left as a silent omission.
+
 ## 13. FROZEN ARTEFACTS UNTOUCHED
 
 ```
@@ -707,3 +711,15 @@ REALTREE files=23 violations=0
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-24*
+
+## Self-Check: PASSED
+
+```
+FOUND: .planning/phases/01-skeleton-persistence-compatibility/01-25-SUMMARY.md
+FOUND: packages/backend/src/outbound-prohibition.spec.ts
+FOUND: .planning/WINDOWS.md
+FOUND: 278a0d2  FOUND: 1067f4f  FOUND: 1cc6e27  FOUND: da2aafd
+git diff --diff-filter=D 278a0d2~1..HEAD  -> no deletions
+git status --short | grep '^??'          -> no probe leftovers (all three throwaway
+                                            probe specs deleted before every commit)
+```
