@@ -318,8 +318,9 @@ describe("the workspace conversion did not disturb the build allowlist", () => {
 // assertion, and `scripts/phase1/tracer-e2e.sh` carries a two-component sleep interval
 // and five four-component loopback addresses and NO three-component run at all — so the
 // filter's true branch never executed anywhere in this suite (01-REVIEW.md WR-25). The
-// three fixtures below execute it: on synthetic text, on the two shapes that must
-// survive, and on the real script's own bytes with a literal appended in memory.
+// four fixtures below execute it: on synthetic text carrying a literal, on the two
+// shapes that must survive, on text carrying no dotted-numeric run at all, and on the
+// real script's own bytes with a literal appended in memory.
 
 /**
  * The version literals in raw `text`: maximal dotted-numeric runs of EXACTLY THREE
@@ -357,7 +358,7 @@ describe("WR-21 — the tracer's own no-version-literal rule is ENFORCED, not me
     // CANNOT see an inert predicate: `versionLiterals` could be broken to return the
     // empty array on every input and both assertions below would still pass. That is
     // exactly how this gate stayed green while its true branch had never run
-    // (01-REVIEW.md WR-25); the three predicate fixtures further down are what closed
+    // (01-REVIEW.md WR-25); the four predicate fixtures further down are what closed
     // it, and neither assertion here is a substitute for them.
     //
     // NON-VACUITY, FIRST AND DELIBERATELY BEFORE THE RULE ITSELF. A renamed, moved
