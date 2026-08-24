@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-22T10:20:00Z
+reviewed: 2026-08-24T10:05:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -32,6 +32,23 @@ reviews:
       WR-19 assembled-key widening is defeated by ONE `const`, and the fixture
       that asserts the one-hop bound uses a LITERAL key so it cannot fail against
       the concealment the rule exists to catch.
+  - pass: gap-closure-round-4
+    reviewed: 2026-08-24T10:05:00Z
+    scope: 7 files changed by plans 01-18 … 01-22
+    findings: CR-09, CR-10, WR-27...WR-31, IN-23...IN-26
+    verdict: >-
+      CR-08 and WR-22...WR-26 all verified CLOSED by execution; IN-20, IN-21 and
+      IN-22 closed. WR-25's own statement of consequence is corrected here: only
+      2 of the 5 breaks it enumerated were actually silent. TWO NEW BLOCKERS, and
+      both are the phase's signature defect in its fifth and sixth instance. The
+      alias residual round 4 wrote to REPLACE the last false one is itself false
+      — `collect` completes a full pass before `visit`, so the READ position never
+      bounds anything — and the fixture titled for it is green because its
+      BINDINGS are inverted, not its read. That sentence is copied verbatim into
+      the four artifacts CORE-11's `[x]` was flipped against. Separately, a
+      receiver key whose FIRST binding is a harmless literal shadows every later
+      rebinding, so `let k = "x"; k = "requests"; sdk[k].send(req)` is silent —
+      CR-08 one keyword over.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -95,10 +112,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 8
-  warning: 26
-  info: 22
-  total: 56
+  critical: 10
+  warning: 31
+  info: 26
+  total: 67
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -141,10 +158,20 @@ resolution:
       IN-16,
       IN-17,
       IN-19,
+      CR-08,
+      WR-22,
+      WR-23,
+      WR-24,
+      WR-25,
+      WR-26,
+      IN-20,
+      IN-21,
+      IN-22,
+      IN-18,
     ]
   partially_fixed: [IN-09]
   deferred: [WR-07]
-  pinned: [IN-18]
+  pinned: []
   open:
     [
       IN-01,
@@ -155,16 +182,17 @@ resolution:
       IN-06,
       IN-07,
       IN-09,
-      IN-18,
-      CR-08,
-      WR-22,
-      WR-23,
-      WR-24,
-      WR-25,
-      WR-26,
-      IN-20,
-      IN-21,
-      IN-22,
+      CR-09,
+      CR-10,
+      WR-27,
+      WR-28,
+      WR-29,
+      WR-30,
+      WR-31,
+      IN-23,
+      IN-24,
+      IN-25,
+      IN-26,
     ]
 fix_commits:
   CR-01: 910c382
@@ -205,16 +233,25 @@ fix_commits:
   IN-16: 897598e
   IN-17: 897598e
   IN-19: 9fffb52
+  CR-08: 834b9c5
+  WR-22: 693cfd9
+  WR-23: 9cf9162
+  WR-24: 194287a
+  WR-25: d2e1907
+  WR-26: 2709f18
+  IN-20: 2709f18
+  IN-21: 5f2d0bd
+  IN-22: 79961ff
 tests_before: 27 files / 616 tests
-tests_after: 28 files / 637 tests
+tests_after: 31 files / 1105 tests
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files) and 2026-08-22T10:20:00Z (gap closure round 3, 9 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files) and 2026-08-24T10:05:00Z (gap closure round 4, 7 files)
 **Depth:** standard
-**Files Reviewed:** 59 (union of all four passes)
-**Status:** issues_found — one new BLOCKER from round 3 (`CR-08`), on top of `WR-07` (deferred), `IN-18` (pinned) and `IN-01…IN-07` (open)
+**Files Reviewed:** 59 (union of all five passes)
+**Status:** issues_found — two new BLOCKERs from round 4 (`CR-09`, `CR-10`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-08` and `WR-22…WR-26` are CLOSED, verified by execution; `IN-18` is CLOSED by `WR-22`'s fix
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
 > 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
@@ -2260,10 +2297,522 @@ store tree today. Worth one sentence in the render-form residual alongside the
 operator class `WR-24` adds, since the list now enumerates accumulators explicitly.
 
 ---
+---
+
+# --- PASS 5 --- Gap-Closure ROUND 4 Review (plans 01-18 … 01-22)
+
+**Reviewed:** 2026-08-24T10:05:00Z
+**Depth:** standard
+**Files Reviewed:** 7 (the files plans 01-18/01-19/01-20/01-21/01-22 changed after the pass-4 review)
+**Status:** issues_found — 2 BLOCKER, 5 WARNING, 4 INFO, on top of a clean sweep of round 3's nine
+
+New findings use a fresh ID series (`CR-09`, `WR-27+`, `IN-23+`) so nothing collides
+with the four ledgers above, all of which are preserved verbatim.
+
+## Resolution of pass 4 (2026-08-24, round 4)
+
+**Every disposition below was decided by EXECUTION.** I imported `auditSource` from
+both AST gates and `normaliseObservedUrl` from the shipped `store/observations.ts`
+into throwaway probe specs, ran 90-plus shapes through them, swept the `URL_MAX` cut
+across 71 consecutive head lengths on two grammars, and deleted the probes.
+`pnpm test` is **31 files / 1105 tests, all green**; `tsc --build`, `eslint .` and
+`knip` are all clean. None of those facts can see any of the below.
+
+| Finding | Status | Commit | The evidence |
+|---|---|---|---|
+| CR-08 | **fixed** | `834b9c5` / `90b4309` / `7b1f5f1` | All eight CR-08 shapes now report. Executed: `const k = "req"+"uests"; sdk[k].send(req)` → `outbound-unanalysable`, and the same through `let`, a bare assignment, a template, `.join("")` and an opaque call; `sdk[b ? "requests" : "net"]` → `outbound-send`; `sdk[(0,"requests")]` → `outbound-send`. The four measured-exempt real-tree sites are still quiet — `cur[key]`, `ctx[root]`, `segments[i]`, `MIGRATIONS[MIGRATIONS.length-1]` — and the whole-tree case runs green over 23 files. The `:1740-1744` `constStrings` fixture is gone from under the assembled-key rule and replaced by an explanation of why it was misplaced; every fixture now names its resolver in its own title and the mechanism→shape table at `:150-170` matches what I measured row for row. **This finding is closed, and its defect is not — see `CR-10`, which is the same shape one keyword over.** |
+| WR-22 | **fixed** | `693cfd9` / `ff0f3c1` | The segment-boundary truncation landed and does what it says on the branch it covers. My own sweep, independent of the file's: 0 non-fixed-points over parameter-name lengths 1..40 at 900 parameters crossed with head lengths 10/500/1500/2000, worst-case segments lost **1**, and no output exceeds `URL_MAX` over 287 sampled lengths. The hard-coded 140-parameter fixture was replaced by a 128-cut search, which is the right repair. **The DISCLOSURE of what the fix does not cover is wrong in two directions — `WR-28` and `WR-29`.** |
+| WR-23 | **fixed** | `9cf9162` | Executed: `const e = eval; e(s)`, `const { eval: ev } = globalThis as any; ev(s)`, `const F = Function; new F("a", s)`, `const W = WebSocket; new W(url)` all report. `const o = { eval(s){} }; o.eval(src)` stays quiet, so the receiver anchoring survived the widening. `shadowedGlobals` is a genuine AST proof and is correctly restricted to top-level `function`/`class`. |
+| WR-24 | **fixed** | `194287a` / `79961ff` | Executed: all four review shapes now report, plus `&&`, plus the operator reached through every render form — `String(c?e:"x")`, `` `${c?e:"y"}` ``, `"x"+(c?e:"y")`, `[c?e:"y"].join("")`, `m += c?e.message:"y"`, `a.push(c?e.message:"y")`+`a.join("")`, and the copy hop `const x = c?e:new Error(); String(x)`. Every `describeError` twin stays quiet, so the descent did not reach past the safe form. **The framing check the reviewer was asked to make holds in the direction it was claimed**: this is a widening of a self-declared-open enumeration and the "does not claim to be closed" sentence is byte-identical (it survives in the diff as an unchanged context line). It now sits two lines below a new sentence that contradicts it — `WR-31`. |
+| WR-25 | **fixed, and ITS OWN STATEMENT OF CONSEQUENCE IS CORRECTED HERE** | `d2e1907` | The predicate is lifted out as `versionLiterals`, four fixtures execute both directions, and the load-bearing one plants the literal into the real file's bytes. **The correction WR-25's entry needed, measured rather than argued:** WR-25 wrote "Break the predicate in any of several plausible ways — `=== 4`, `>= 4`, dropping the `?? []`, replacing `match` with `search`, tightening `DOTTED_NUMERIC` to require a leading `v` — and the gate stays green forever." Only **2 of those 5** were actually silent under the old inline gate. `scripts/phase1/tracer-e2e.sh` carries five `127.0.0.1` runs, so `=== 4` and `>= 4` both make the scan return those four-component hits against an `toEqual([])` and go **RED**; `match`→`search` returns a number whose `.filter` throws, also **RED**. The two that were genuinely silent are dropping the `?? []` (the file always carries a dotted-numeric run, so `match` never returned `null`) and the leading-`v` tightening (the file carries no `v`-prefixed run at all — verified: `grep -oE '[0-9]+(\.[0-9]+)+'` yields exactly `0.25` ×1 and `127.0.0.1` ×5, and `grep -nE 'v[0-9]+(\.[0-9]+)+'` yields nothing). **WR-25's core claim stands** — the filter's true branch had never executed anywhere in the suite, and two plausible breaks were undetectable — **and its "any of several plausible ways" was overstated by three.** |
+| WR-26 | **fixed by correcting the docblock** | `2709f18` | Both fail-open branches of `isProvablyNumeric` now carry `ASSUMES BY NAME AND FAILS OPEN (WR-26)` in the code, the "PROVES rather than assumes / fails SAFE" sentence is gone, and the FINAL RESIDUAL names the heuristic. The measurement behind choosing the docblock over the branch is checkable: `sdk[o.length].send(req)` is silent under every variant because residual (b) silences it, and `sdk[o.length + 1]` is the `+`-composition class the branch protects. Verified both. |
+| IN-20 | **fixed** | `2709f18` | `const g = globalThis; g.fetch(u)` reports, and so do the computed-member, dynamic-code, constructor, beacon and assignment spellings. The must-stay-quiet twin (`const g = { fetch(u){} }`) still reports `[]`. |
+| IN-21 | **fixed** | `5f2d0bd` | `any("?" in r for r in raw_rows)` added to the conjunction, exactly as suggested. `padded_segments_reached` can no longer report REACHED off an empty generator. |
+| IN-22 | **fixed** | `79961ff` | Both limits are now items 4 and 5 of the re-derived residual AND pinned by executed `RESIDUAL, PINNED (IN-22)` cases that assert `[]` today. Verified both fixtures resolve through the mechanism their titles name. |
+
+**What round 4 did well, recorded so it is not re-litigated.** The CR-08 fix is the
+first one in this phase that attacks the *recurrence* rather than the instance: every
+fixture titles its resolver, the mechanism→shape table makes substituting one
+mechanism for another visible, and the misplaced `constStrings` assertion was moved
+out and replaced with a paragraph explaining what was wrong with its placement. The
+WR-22 fix replaced a hard-coded fixture with a search, which is the correct general
+lesson. Both are real progress. The findings below are what those two habits did not
+yet reach.
+
+---
+
+## Critical Issues (pass 5)
+
+### CR-09: The gate has no document-order bound on a READ, the fixture that says it does is green for a different reason, and the false sentence is copied into the four artifacts CORE-11's `[x]` was flipped against
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:210-214`, `:216-217`, `:253-258` (the FINAL RESIDUAL), fixture at `:2798-2807`; mechanism at `:1521` and `:1726`
+**Severity:** BLOCKER
+
+**Issue:** Round 4's plan 01-19 correctly discovered that alias sets chain to arbitrary
+depth, split residual (a), and then wrote a *new* bound in place of the old one:
+
+> What actually bounds an alias chain is DOCUMENT ORDER, not a hop count: a chain
+> read before its root is bound is silent, because there is no symbol table and no
+> second pass. (`:211-214`)
+
+and, in the block the file says is copied WORD FOR WORD into `REQUIREMENTS.md`,
+`STATE.md` and `WINDOWS.md`:
+
+> …while a chain read BEFORE its root is bound is SILENT, because there is no symbol
+> table and no second pass. (`:256-258`)
+
+**There is a second pass.** `collect(sf)` at `:1521` walks the entire file to
+completion, and only then does `visit(sf)` at `:1726` begin. Every alias set is fully
+populated before a single violation is considered, so the position of the READ is
+irrelevant to every rule in the file. Executed against `auditSource("probe.ts", src)`:
+
+```
+function z() { return g.fetch(u); }
+const g = globalThis;                          ["outbound-fetch"]      // read first — REPORTS
+
+function f() { return g2.fetch(u); }
+const a2 = globalThis;
+const g2 = a2;                                 ["outbound-fetch"]      // 2-hop chain read first — REPORTS
+
+function z() { return sdk[k].send(req); }
+const k = "requests";                          ["outbound-send"]       // key read first — REPORTS
+```
+
+The real bound is the order of the *bindings within a chain*, not the position of the
+read: `const g = a; const a = globalThis;` is silent because `a` is not yet in the set
+when `g`'s declaration is collected.
+
+**The fixture cannot fail on the claim its title makes.** `:2798`:
+
+```ts
+it("through NOTHING: DOCUMENT ORDER, not a hop count, is what actually bounds an alias chain — a chain READ BEFORE ITS ROOT is silent", () => {
+  expect(
+    rulesOf("function z() { return g.fetch(u); }\nconst g = a;\nconst a = globalThis;"),
+  ).toEqual([]);
+});
+```
+
+That source is green because `const g = a` precedes `const a = globalThis` — the
+BINDINGS are inverted. Delete the function wrapper entirely and it is still `[]`; move
+the read to the bottom and it is still `[]`. The assertion is insensitive to the one
+variable its title names. This is round 3's exact trap — a fixture resolving through a
+different mechanism than the rule it sits under — reproduced inside the paragraph
+round 4 wrote to replace the last false residual, which is the fifth consecutive
+instance of this phase's signature defect and the second in a row inside the artifact
+just rewritten for it.
+
+**Residual (b) carries the same error.** `:216-217` exempts "a name whose binding is
+out of document order or in another file"; the third executed line above shows a key
+bound *after* its use reports normally. Only "in another file" survives.
+
+**Why BLOCKER and not a documentation warning.** The sentence is not local. The file
+states at `:249-252` that this block is copied word for word into three other
+artifacts and that "If a reader finds those four disagreeing, the code wins and the
+prose is the defect." I checked all three, and the sentence is verbatim in each:
+`.planning/REQUIREMENTS.md:46` (inside the CORE-11 correction), `.planning/STATE.md:169`
+(P9-D3's second pointer amendment), `.planning/WINDOWS.md:40` and `:315`, plus four
+places in `01-19-SUMMARY.md`. `REQUIREMENTS.md:46` is the text CORE-11's `[x]` was
+flipped against — the flip is defended by "the box is flipped after the discharge
+table, not before it; the table is the evidence" — so the requirement now records a
+model of its own gate that the gate does not implement, in the one document a Phase 2
+author reads to learn what is already guaranteed.
+
+**Fix:** state the bound the walk actually has, in one place, and make the fixture
+sensitive to it.
+
+```
+//        What bounds an alias chain is the order of the BINDINGS WITHIN IT, not the
+//        position of the read: `collect` completes a full pass before `visit` begins,
+//        so a use site anywhere in the file sees every binding the file makes.
+//        `const g = a; const a = globalThis; g.fetch(u)` is silent because `a` is not
+//        yet in the set when `g` is collected. `const a = globalThis; const g = a;`
+//        reports wherever `g.fetch(u)` is written, INCLUDING above both declarations.
+```
+
+Then split `:2798` into two cases with mechanism-named titles — one asserting the
+inverted-binding silence, one asserting that the *read* position changes nothing
+(`function z(){ return g.fetch(u); } const g = globalThis;` → `toContain("outbound-fetch")`),
+which is the assertion that would have caught this. Propagate the corrected sentence
+to all four artifacts, and correct residual (b) to drop "out of document order".
+
+---
+
+### CR-10: A receiver key whose FIRST binding is a harmless string literal shadows every later rebinding — `let k = "x"; k = "requests"; sdk[k].send(req)` reports nothing
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:1172-1195` (`keyReceiver`), `:1396-1400` (the `constStrings` collector), `:1454-1481` (the assignment collector); claim at `:83-85` and `:150-170`
+**Severity:** BLOCKER
+
+**Issue:** `constStrings` is written once, from a declaration whose initializer is a
+string literal (`:1397-1400`), and the assignment collector at `:1454-1481` never
+updates it. `keyReceiver` consults `literalOf` FIRST — deliberately, and the reason
+given at `:1181-1184` is sound on its own terms — so a name that is in `constStrings`
+resolves to its **first** literal and every branch below it is unreachable for that
+name. Executed:
+
+```
+const k = "requests";              sdk[k].send(req)   ["outbound-send"]          // the documented row
+let   k;  k = "requests";          sdk[k].send(req)   ["outbound-send"]
+let   k;  k = "req" + "uests";     sdk[k].send(req)   ["outbound-unanalysable"]  // CR-08's assignment row
+
+let k = "harmless"; k = "requests";      sdk[k].send(req)   []      <-- SILENT
+let k = "harmless"; k = "req"+"uests";   sdk[k].send(req)   []      <-- SILENT
+let k = "req";      k += "uests";        sdk[k].send(req)   []      <-- SILENT
+```
+
+Three things make this the same finding as `CR-08` rather than a new class of one.
+
+1. **It is one keyword away from the shape CR-08 closed.** The gate resolves
+   `let k; k = "req" + "uests"` and does not resolve `let k = "harmless"; k = "req" + "uests"`.
+   The only difference is whether the declaration carried an initializer, and the
+   initializer is the part that has nothing to do with the concealment.
+2. **The site is completely readable.** In the first silent line both strings are
+   string literals sitting in the AST twelve tokens apart. This is not a value the
+   walk cannot follow; it is a value the walk reads and then discards in favour of a
+   stale one. That distinction is the exact one residual (b) is built on — "the walk
+   reports what it can see being HIDDEN and discloses what it merely cannot FOLLOW"
+   (`:222-224`) — and this falls on the reporting side of it.
+3. **Boundary 2 states the opposite property explicitly.** `:83-85`:
+
+   > …which over-approximates rather than under-approximates: a name bound to an
+   > outbound receiver anywhere in the file is treated as one everywhere in it.
+
+   `k` is bound to `"requests"` in the file and is not treated as one anywhere. The
+   sentence is false in the under-approximating direction, which is the direction a
+   reader is told cannot happen.
+
+Nothing discloses it. The FINAL RESIDUAL's exhaustive list — "A RECEIVER KEY resolves
+exactly ONE HOP — a literal, an assembly in every spelling, a conditional, a comma
+sequence — and TWO HOPS OF KEY is silent. Outside those, four things are beyond the
+walk: a value crossing a FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name
+bound in ANOTHER FILE" — covers none of the three silent lines. All three are one hop,
+in this file, and none is a parameter or a loop binding. The mechanism table at
+`:150-170` lists `const r = "requests"; sdk[r]` → `constStrings` → `outbound-send` and
+says nothing about `let`; the `assembledNames` collector's own comment at `:1476-1478`
+claims the assignment spelling is "covered by construction rather than by a second
+edit", and it is covered only when the declaration had no initializer.
+
+The `+=` line is the sharpest of the three, because the sibling gate one directory
+away learned this specific lesson already: `WR-17` widened `error-redaction.spec.ts`
+to `+=` on the argument that it is "one token away" from a form already covered. Here
+the header claims assembly is read "in EVERY spelling — `+`, a template, `.join("")`,
+an opaque call — and through EITHER a declaration or an assignment" (`:127-131`), and
+`+=` is an assignment producing an assembly.
+
+**Fix:** make the collectors describe the name's *current* binding rather than its
+first, and stop letting a stale literal short-circuit the branches below it.
+
+```ts
+// in collect, on `x = <string literal>` and on `x += …`:
+if (ts.isBinaryExpression(node) && ts.isIdentifier(node.left)) {
+  const op = node.operatorToken.kind;
+  if (op === ts.SyntaxKind.EqualsToken && ts.isStringLiteralLike(unwrap(node.right))) {
+    constStrings.set(node.left.text, unwrap(node.right).text);   // REBIND, do not keep the first
+  }
+  // `k += "uests"` builds a string out of pieces exactly as `k = k + "uests"` does.
+  if (op === ts.SyntaxKind.PlusEqualsToken &&
+      !isProvablyNumeric(node.right, numericNames, poisonedNumericNames)) {
+    assembledNames.add(node.left.text);
+  }
+}
+```
+
+and, because a name can now be BOTH a literal and an assembly, let `assembledNames`
+win over a stale `constStrings` entry rather than the current unconditional
+literal-first order — a name the walk watched being reassigned is a name whose single
+literal answer is no longer trustworthy. Then add all three executed lines above as
+failing-path cases beside the `assembledNames` block at `:2299-2350`, each titled with
+its mechanism, and correct `:83-85` to say what the walk does: it over-approximates
+for RECEIVER ALIASES and under-approximates for STRING KEYS, because one is grown from
+the live set and the other is written once.
+
+---
+
+## Warnings (pass 5)
+
+### WR-27: A conditional RECEIVER in call position reports nothing, while a conditional KEY and a conditional INITIALIZER both report — the third face of the same operator, added in the same round
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:1197-1225` (`receiverKind`), `:1289-1297` (`initializerReceiver`), `:1172-1195` (`keyReceiver`)
+
+**Issue:** Round 4 added conditional handling in KEY position (`:1206-1219`) and argued
+for it on the grounds that `sdk[b ? "requests" : "net"]` "HIDES NOTHING — both keys are
+string literals naming outbound receivers — so it resolves to a NAMED receiver". The
+identical argument applies to the receiver expression itself, and that spelling is
+silent. Executed:
+
+```
+(b ? sdk.requests : sdk.net).send(req)                        []
+const r = b ? sdk.requests : sdk.net; r.send(req)             ["outbound-send"]   // initializer position
+sdk[b ? "requests" : "net"].send(req)                         ["outbound-send"]   // key position
+sdk[b ? (c ? "requests" : "x") : "y"].send(req)               []                  // nested key
+```
+
+`initializerReceiver` unwraps a `ConditionalExpression`; `receiverKind` — the function
+the property-access rule calls on the callee's receiver — does not, so a conditional
+written directly in call position falls through every branch and returns `undefined`,
+which every caller reads as "not a receiver". The nested-key line is the same gap
+inside `keyReceiver`, whose docblock at `:1160-1170` claims it is the single definition
+of "what a readable key is" called from "the direct key and both conditional branches,
+so they cannot disagree about what the walk can read" — `keyReceiver` does not itself
+handle a conditional, so the two *do* disagree the moment a conditional appears inside
+one.
+
+Neither shape is in any residual list: both are one expression, in this file, with
+every operand a literal or a `requests`/`net` member.
+
+**Fix:** hoist the conditional handling into `receiverKind`'s and `keyReceiver`'s own
+descent instead of leaving one copy in `initializerReceiver` and one copy in the
+element-access branch.
+
+```ts
+const receiverKind = (node: ts.Expression): ReceiverKind => {
+  const inner = unwrap(node);
+  if (ts.isConditionalExpression(inner)) {
+    const t = receiverKind(inner.whenTrue);
+    const f = receiverKind(inner.whenFalse);
+    if (typeof t === "string") return t;
+    if (typeof f === "string") return f;
+    return t === UNREADABLE_RECEIVER || f === UNREADABLE_RECEIVER
+      ? UNREADABLE_RECEIVER : undefined;
+  }
+  …
+};
+```
+
+and give `keyReceiver` the same recursion so a nested conditional key resolves. Then
+`initializerReceiver` becomes a call to `receiverKind` and the three copies collapse to
+one, which is what its own docblock says was the goal. Add both executed shapes as
+failing-path cases.
+
+### WR-28: The head-side `;` truncation residual is asserted STABLE in three places; it is a fixed point at the one offset the fixture picked and not at 11 of the 71 adjacent ones
+
+**File:** `packages/backend/src/store/observations.spec.ts:986-996`, `packages/backend/src/store/schema.spec.ts:270-274`, `packages/backend/src/store/observations.ts:447-450`
+
+**Issue:** `observations.spec.ts:986-996` pins the head-side residual and states it as a
+property:
+
+> (b) RESIDUAL, PINNED: a head-side cut can still land inside a `;` parameter's marker.
+> It is SEVERED but STABLE — a second pass re-expands the marker and re-truncates to the
+> same byte — so it is a disclosure, not a fixed-point failure.
+
+```ts
+const headCut = normaliseObservedUrl(`https://cdn.test/${"p".repeat(2010)};jsessionid=SECRETSESSION`);
+expect(normaliseObservedUrl(headCut)).toBe(headCut);
+```
+
+`schema.spec.ts:270-274` repeats it as the committed disclosure ("severed but STABLE,
+since a second pass re-expands and re-truncates to the same byte") and
+`observations.ts:448-450` repeats the same narrow framing ("a head-side cut can still
+land inside a `;` parameter's `<redacted>` marker").
+
+Swept, not argued — the same `;jsessionid=SECRETSESSION` input over path lengths
+1990..2060:
+
+```
+head ';' non-fixed-points: 11 of 71
+2019: "pppppppppp;jsessionid=" -> "ppppppppppp;<redacted>"   (2048 -> 2047)   <-- SHRINKS
+2020: "ppppppppppp;jsessionid" -> "ppppppppppp;<redacted>"   (2048 -> 2048)
+2021: "pppppppppppp;jsessioni" -> "pppppppppppp;<redacted"   (2048 -> 2048)
+…
+2029: "pppppppppppppppppppp;j" -> "pppppppppppppppppppp;<"   (2048 -> 2048)
+```
+
+The mechanism is WR-22's own, unchanged: when the cut lands inside the parameter
+**name** rather than inside the marker, the second pass sees a `;` segment with no `=`
+and P10-D1 redacts it whole. The fixture chose `"p".repeat(2010)`, which lands inside
+`<redacted>` — nine offsets short of the band where the claim is false.
+
+This is WR-22's lesson applied to one branch and not the other in the same commit. The
+query-side idempotence fixture was correctly replaced by a 128-cut **search**; the
+head-side branch got a **new hard-coded fixture** whose single result is then stated as
+a general property in two other files. "The fixture is green on either side of it" is
+the sentence `observations.spec.ts:884-886` writes about the defect it was fixing.
+
+**Fix:** sweep the head-side branch the same way the query-side branch is swept, and
+state the residual as what the sweep finds.
+
+```ts
+const unstable: number[] = [];
+for (let n = 1990; n <= 2060; n += 1) {
+  const once = normaliseObservedUrl(`https://cdn.test/${"p".repeat(n)};jsessionid=SECRETSESSION`);
+  if (normaliseObservedUrl(once) !== once) unstable.push(n);
+}
+// Assert the SHAPE of the instability, not its absence: it is a disclosed residual.
+expect(unstable.length).toBeGreaterThan(0);
+expect(unstable.every((n) => n >= 2019 && n <= 2029)).toBe(true);
+```
+
+and correct all three prose sites: a head-side cut inside the `<redacted>` marker is
+stable; a head-side cut inside the parameter NAME is not, and can shorten the stored
+value by one byte on a second pass.
+
+### WR-29: The no-separator residual is disclosed as "a query of a SINGLE segment"; the code's actual class is "any cut that lands before the query's first `&`"
+
+**File:** `packages/backend/src/store/observations.spec.ts:998-1011`, `packages/backend/src/store/schema.spec.ts:274-278`
+
+**Issue:** Both disclosures scope the non-idempotent class to a single-segment query:
+
+> (2) a query of a SINGLE segment cut inside its NAME is NOT a fixed point at all
+
+The code's condition is `q === -1 || amp <= q` (`observations.ts:478`) — there is no
+`&` *inside the cut*. Segment count past the cut is irrelevant. Executed on a
+**three**-segment query, sweeping the head length so the cut walks across the first
+segment:
+
+```
+input: https://x.test/<p×n>?nnnnnnnnnnnnnnnn=1&b=2&c=3
+
+n=2015  once "…?nnnnnnnnnnnnnnnn=" (2048)  twice "…ppppppp?<redacted>" (2041)   NOT a fixed point
+n=2016  once "…p?nnnnnnnnnnnnnnnn" (2048)  twice "…ppppppp?<redacted>" (2042)   NOT a fixed point
+…
+17 of the 71 swept head lengths are not fixed points, with an otherwise ordinary
+multi-parameter query.
+```
+
+A reader of either disclosure concludes that a URL with more than one query parameter
+is outside the residual. It is not. The class is defined by where the 2048-byte cut
+falls, not by how many parameters the URL has — and a bundle URL with a long path and
+a long first parameter is a more ordinary shape than a single-parameter one.
+
+**Fix:** restate both disclosures against the branch condition rather than against the
+fixture that found it — "a cut that lands before the query's first `&`, whatever the
+query's segment count" — and add one multi-segment case to
+`observations.spec.ts:998-1011` so the pin covers the class it names.
+
+### WR-30: Three docblocks still assert the one-hop alias bound that plan 01-19 measured to be false, and one of them is contradicted by a passing test 1,800 lines below it
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:969-970`, `:1104-1105`, `:237-238`
+
+**Issue:** Plan 01-19's whole second half is the discovery that every alias set chains
+to arbitrary depth. The residual list was corrected. Three statements of the old,
+false bound were left in place:
+
+- `:969-970`, on `isGlobalReceiverIn`:
+  > ONE HOP AND NO MORE: `const a = globalThis; const g = a; g.fetch(u)` is silent, and
+  > that is residual (a).
+
+  `:2782-2785`, in the same file, asserts that **exact source string** reports
+  `outbound-fetch`. Both currently pass; they cannot both be true. Executed: it reports.
+
+- `:1104-1105`, on `globalAliases`:
+  > ONE HOP AND NO MORE, exactly like every other set in this pass:
+  > `const a = eval; const b = a; b(s)` is silent, and that is residual (a).
+
+  Executed: `["outbound-dynamic-code"]` at two hops and at three.
+
+- `:237-238`, residual (c):
+  > `navigator` reached through more than one hop, or returned by a helper, is outside
+  > the beacon rule for the same reason as (a).
+
+  Executed: `const a = navigator; const b = a; b.sendBeacon("/x", d)` →
+  `["outbound-beacon"]`. "The same reason as (a)" now points at a residual whose
+  corrected text says the opposite.
+
+`:1046-1047`'s identical sentence on `assembledNames` is the one that is **correct**
+(keys read the initializer's shape and genuinely do not chain), which is precisely why
+the other three read as true to a skimming reader.
+
+The direction is safe — the gate reaches further than these three sentences say — but a
+residual list is trusted for its completeness in both directions, and that is the
+argument `01-19-SUMMARY.md:444` itself makes when recording the alias discovery.
+
+**Fix:** delete the three stale sentences and replace each with a pointer to the single
+corrected residual (a), rather than restating a bound in four places that can drift
+apart again. Then add the two-hop `navigator` and two-hop `eval` shapes to the
+transitivity case at `:2772` so all five alias sets are asserted chaining, not just
+three.
+
+### WR-31: "everything on it is executed below" now sits two lines under "Items 1-3 are deliberately NOT pinned"
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:144-151`
+
+**Issue:** The closing sentence of boundary 2's residual paragraph is byte-identical to
+what it was before round 4 — the diff carries it as an unchanged context line, and the
+plan's claim to that effect is accurate. What changed is what it now terminates:
+
+```
+//        …Items 1-3 are
+//        deliberately NOT pinned, and that is the other half of the decision:
+//        each names an open CLASS rather than one shape…
+//        A render taking any of those five shapes is not
+//        seen. The list is an ENUMERATION and it does not claim to be closed;
+//        what it claims is that everything on it is executed below.
+```
+
+Under the nearest-antecedent reading, "the list" is the five-item residual, and
+"everything on it is executed below" is false for three of the five by the file's own
+statement two lines earlier. Under the intended reading, "the list" is the render-form
+enumeration eighty lines up. Round 4 did not introduce the ambiguity; it inserted an
+explicit non-execution statement immediately before it, which converts an ambiguity
+into a self-contradiction in a paragraph whose entire subject is that residual lists
+must be trusted for their completeness.
+
+**Fix:** name the antecedent — "The RENDER-FORM list above is an ENUMERATION…" — or move
+the sentence back up to the render-form paragraph it was written about. One word.
+
+---
+
+## Info (pass 5)
+
+### IN-23: `versionLiterals`' `export` buys nothing, and its own docblock names the counterexample
+
+`tests/pins.spec.ts:342`. The docblock says the function is "EXPORTED so its FAILING
+path can be executed against a fixture rather than argued about" — but its only caller
+and all four of its fixtures are in the same module, where a module-local function is
+equally executable. The docblock concedes this two sentences earlier: it records that
+`observations.spec.ts` keeps `auditPatternUse` "module-local, not exported" and runs
+its failing path in its own file. The lift-out is the fix; the `export` keyword is not
+part of it, and stating a testability reason for it makes a reader believe the two are
+connected.
+
+### IN-24: A two-component version literal is unenforceable by construction, and the case title says otherwise
+
+`tests/pins.spec.ts:378` is titled "names no Caido version literal anywhere, COMMENTS
+INCLUDED", and `versionLiterals` requires exactly three components. `# taken on Caido
+0.58` is a version literal in prose and is invisible, and it must stay invisible
+because the fixture at `:388` requires `0.25` to pass. The header states the rule ("a
+dotted-numeric run of EXACTLY THREE components") but never says that a two-component
+spelling of the same claim is therefore permanently outside it. One sentence in the
+header, beside the `0.25` justification that creates the gap.
+
+### IN-25: Two of the five re-derived residual items name shapes that DO report
+
+`packages/backend/src/store/error-redaction.spec.ts:118-130`. Item 1 offers `padEnd`,
+`repeat`, `replace` as unseen renders and item 3 includes "a value routed through an
+object or array LITERAL". Executed in the two positions the gate actually guards:
+
+```
+catch(e){ return { ok:false, error: e.message.padEnd(10) }; }        ["unredacted-object-value"]
+catch(e){ return { ok:false, error: e.message.replace("a","b") }; }  ["unredacted-object-value"]
+catch(e){ const o = { m: e.message }; return { ok:false, error: o.m }; }  ["unredacted-object-value"]
+catch(e){ const a = [e.message]; return { ok:false, error: a[0] }; }      []
+catch(e){ return { ok:false, error: fmt(e) }; }                          []
+```
+
+`derivesFrom` follows a member call, so an unnamed method is transparent rather than
+opaque, and an object literal is itself a guarded position. Only the array-literal half
+of item 3 and the bare-identifier helper of item 2 are genuinely open. The list was
+"read off the BRANCHES of `derivesFrom`", which is the right method, and it enumerated
+the descent's limits without crossing them with the position rules that catch some of
+them anyway. Harmless direction, but a residual overstated is the same failure mode as
+a residual understated in a paragraph that says so itself.
+
+### IN-26: A destructured key binding is not collected into `assembledNames`
+
+`packages/backend/src/outbound-prohibition.spec.ts:1424-1449`. The collector handles a
+`VariableDeclaration` with an identifier name and an object-binding pattern for
+*receiver* names, but the `assembledNames` branch runs only under
+`ts.isIdentifier(node.name)`. Executed: `const { k } = { k: "req" + "uests" }; sdk[k].send(req)`
+and `const [k] = ["req" + "uests"]; sdk[k].send(req)` both report `[]`, while the header
+at `:127-131` says the assembly is read "through EITHER a declaration or an assignment".
+Both are declarations. Unreachable in the real tree today and the same two lines to
+close as `CR-10`'s assignment case.
+
+---
 
 _Pass 1 reviewed: 2026-08-21T00:30:00Z_
 _Pass 2 reviewed: 2026-08-21T11:21:31Z_
 _Pass 3 reviewed: 2026-08-21T15:23:01Z_
 _Pass 4 reviewed: 2026-08-22T10:20:00Z_
+_Pass 5 reviewed: 2026-08-24T10:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
