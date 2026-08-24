@@ -954,7 +954,7 @@ RESOLVERS - 32 entries.
     branch:    "a string-literal assignment" at auditSource > collect > if (ts.isStringLiteralLike(assignedString)) { - probe "let r;\nr = \"requests\";\nsdk[r].send(req);" - reports outbound-send
     branch:    "an operator initializer" at auditSource > collect > for (const literal of operatorBinding.literals) { - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
 
-* assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grow nothing
+* assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, a logical assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grew nothing; those three are CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are their probes, and the phrase STAYS falsified because the NUMERIC compound assignments (-=, *=, >>>= and the rest of NUMERIC_COMPOUND_ASSIGNMENTS) deliberately assemble nothing
     read off:  auditSource > const assembledNames = new Set<string>()
     probe:     "const k = \"req\" + \"uests\";\nsdk[k].send(req);"
     reports:   outbound-unanalysable
@@ -965,8 +965,11 @@ RESOLVERS - 32 entries.
     branch:    "a `+=` compound assignment" at auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken && - probe "let k = \"re\";\nk += \"quests\";\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, 0), - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, index), - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let k;\nk ??= \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let k;\nk ||= \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let k;\nk &&= \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
 
-* receiverAliases - a name bound to an outbound RECEIVER expression at a declaration or an assignment is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a name bound to an outbound RECEIVER expression" without qualification - measured, a logical-assignment binding grows nothing
+* receiverAliases - a name bound to an outbound RECEIVER expression at a declaration, an assignment or a logical assignment is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a name bound to an outbound RECEIVER expression" without qualification - measured, a logical-assignment binding grew nothing; that shape is CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are its probes, and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file, a binding written in inverted order and a MEMBER target (o.r ??= sdk.requests) each still grow nothing
     read off:  auditSource > const receiverAliases = new Map<string, string>()
     probe:     "const r = sdk.requests;\nr.send(req);"
     reports:   outbound-send
@@ -974,6 +977,9 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > receiverAliases.set(node.name.text, kind); - probe "const r = sdk.requests;\nr.send(req);" - reports outbound-send
     branch:    "an assignment" at auditSource > collect > receiverAliases.set(node.left.text, kind); - probe "let r;\nr = sdk.requests;\nr.send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let r;\nr ??= sdk.requests;\nr.send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let r;\nr ||= sdk.requests;\nr.send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let r;\nr &&= sdk.requests;\nr.send(req);" - reports outbound-send
 
 * unreadableAliases - a name bound to a receiver EXPRESSION the walk could not read is reported where the name is USED as a receiver, not where it was bound - so an ordinary dynamic lookup never used as a receiver stays quiet
     read off:  auditSource > const unreadableAliases = new Set<string>()
@@ -1919,6 +1925,78 @@ const ASSIGNMENT_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
   ts.SyntaxKind.AmpersandAmpersandEqualsToken,
   ts.SyntaxKind.BarBarEqualsToken,
   ts.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+
+/**
+ * THE ASSIGNMENT OPERATORS THAT BIND A NAME TO WHATEVER IS ON THEIR RIGHT — the
+ * population `collect`'s ALIAS-GROWING branch reads. Added 2026-08-24 (CR-12).
+ *
+ * WHY THIS SET EXISTS AT ALL, WHICH IS THE WHOLE OF CR-12. Until this set landed,
+ * the alias-growing branch was gated on ONE INLINE TOKEN COMPARISON against
+ * `EqualsToken`, while the numeric-POISONING arm ELEVEN LINES BELOW IT, in the
+ * same function, read `ASSIGNMENT_OPERATORS` and carried a comment naming the
+ * exact expression `x ||= sdk.requests`. So the two halves of one statement
+ * DISAGREED ABOUT WHICH ASSIGNMENTS EXIST: the narrowing half saw `r ??=
+ * sdk.requests` and removed a numeric exemption from `r`; the widening half did
+ * not see it at all and grew nothing. `let r; r = sdk.requests; r.send(req)`
+ * reported `outbound-send` and `let r; r ??= sdk.requests; r.send(req)` reported
+ * NOTHING, two characters apart. Both halves now read a DECLARED SET, which is
+ * what makes that disagreement unrepresentable rather than merely absent.
+ *
+ * WHY IT IS NOT `ASSIGNMENT_OPERATORS` ITSELF. That set is the population the
+ * NUMERIC arm asks about — "did anything at all rebind this name" — so it contains
+ * every compound spelling including `-=`, `*=` and `>>>=`. Those bind a NUMBER by
+ * the language definition whatever their right-hand side was, so growing a
+ * receiver alias, a global alias or a string binding from them would be growing it
+ * from an expression the assignment does not actually store. `+=` is excluded for
+ * the opposite reason and is NOT a gap: it is the ASSEMBLY spelling, it already
+ * has its own branch below with its own numeric guard, and it is the one operator
+ * whose result is a FUNCTION of the old value rather than the right-hand side
+ * alone. This set is the operators that bind the right-hand expression THROUGH,
+ * unchanged, to the name.
+ *
+ * MEMBERSHIP WAS SETTLED BY MEASUREMENT, NOT BY SYMMETRY WITH THE NUMERIC ARM,
+ * and both readings were implemented and run — the shape `RECEIVER_OPERATORS`'
+ * docblock above uses for its `&&` decision, and for the same reason: an operator
+ * set is exactly the kind of question that looks obvious and is not.
+ *
+ *   READING A, THE THREE LOGICAL ASSIGNMENTS IN
+ *              let r; r ??= sdk.requests; r.send(req)   ["outbound-send"]
+ *              let r; r ||= sdk.requests; r.send(req)   ["outbound-send"]
+ *              let r; r &&= sdk.requests; r.send(req)   ["outbound-send"]
+ *              let g; g ||= globalThis;   g.fetch(url)  ["outbound-fetch"]
+ *              let f; f ??= fetch;        f(url)        ["outbound-fetch"]
+ *              let e; e ||= eval;         e(src)        ["outbound-dynamic-code"]
+ *              let n; n ??= navigator;    n.sendBeacon() ["outbound-beacon"]
+ *              let k; k ??= "requests";   sdk[k].send()  ["outbound-send"]
+ *              let k; k ??= "req"+"uests"; sdk[k].send() ["outbound-unanalysable"]
+ *              let i = 0; i ||= 1;        sdk[i].send()  []
+ *              real tree, both roots                     23 files, 0 violations
+ *
+ *   READING B, THE SINGLE `EqualsToken` TOKEN TEST (what shipped before CR-12)
+ *              every one of the nine shapes above           []
+ *              let i = 0; i ||= 1;        sdk[i].send()     []
+ *              real tree, both roots                     23 files, 0 violations
+ *
+ * THE REAL TREE DID NOT DISCRIMINATE — both readings are ZERO on it, so nothing
+ * about shipped code chose this and it would be dishonest to claim it did. THE
+ * SHAPES DISCRIMINATED: `r ??= sdk.requests` is the ORDINARY lazy-init spelling of
+ * a line this gate already reports on, and reading B calls it "not a binding".
+ * The four `=`/`+=` CONTROLS fire under BOTH readings, which is what makes the
+ * nine silences real misses rather than an artefact of the fixture harness.
+ *
+ * WHAT READING A COSTS, STATED RATHER THAN LEFT IMPLICIT. `r &&= sdk.requests`
+ * only assigns when `r` is already TRUTHY, and `r ??= sdk.requests` only when it
+ * is nullish, so in both spellings the name MAY hold something else at the use
+ * site. Reading A treats a name that MAY be bound to `sdk.requests` as one. That
+ * is an OVER-approximation, it is the direction every alias set in this file errs
+ * in, and it is the same call `RECEIVER_OPERATORS` made for `&&` by measurement.
+ */
+const ASSIGNING_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.EqualsToken,
+  ts.SyntaxKind.QuestionQuestionEqualsToken,
+  ts.SyntaxKind.BarBarEqualsToken,
+  ts.SyntaxKind.AmpersandAmpersandEqualsToken,
 ]);
 
 /**
@@ -3023,9 +3101,27 @@ export function auditSource(file: string, source: string): Violation[] {
 
     // `let r; r = sdk.requests;` — the form the round-1 walk missed while
     // catching the `const` one, because it read declarations only.
+    //
+    // AND `let r; r ??= sdk.requests;` — CR-12, 2026-08-24. This test used to be
+    // an INLINE COMPARISON against `EqualsToken` alone, while the numeric arm
+    // eleven lines below read `ASSIGNMENT_OPERATORS` and named `x ||= sdk.requests`
+    // in its own comment. It reads `ASSIGNING_OPERATORS` now, so the widening half
+    // and the narrowing half of the same statement cannot disagree about which
+    // assignments exist. THE BODY IS UNCHANGED: every collector below runs for the
+    // widened population BY CONSTRUCTION, with no per-collector special case.
+    //
+    // THIS OPERATOR TEST IS POPULATION 3 IN THE COVERAGE GUARD'S OWN TERMS — "an
+    // inline branch in `collect` or `visit`" — and it is named here rather than
+    // left to be rediscovered. `enumerateResolverPopulations` reads DECLARED
+    // resolvers and `RESOLVER_EXEMPTIONS`; it enumerates neither `collect` nor any
+    // branch inside it, so this decision is UNREGISTERED. What covers it instead
+    // is the fixtures below and the per-operator `BranchProbe`s on the eight
+    // clauses it feeds. Rewriting `RESOLVER_EXEMPTIONS`' `collect` entry to say
+    // the same thing is WR-33's finding and wave 32 owns it; a plan that silently
+    // absorbed another plan's finding would make both harder to verify.
     if (
       ts.isBinaryExpression(node) &&
-      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ASSIGNING_OPERATORS.has(node.operatorToken.kind) &&
       ts.isIdentifier(node.left)
     ) {
       const kind = initializerReceiver(node.right);
@@ -3528,7 +3624,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "assembledNames",
     kind: "resolver",
     clause:
-      'a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grow nothing',
+      'a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, a logical assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grew nothing; those three are CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are their probes, and the phrase STAYS falsified because the NUMERIC compound assignments (-=, *=, >>>= and the rest of NUMERIC_COMPOUND_ASSIGNMENTS) deliberately assemble nothing',
     site: "auditSource > const assembledNames = new Set<string>()",
     probe: 'const k = "req" + "uests";\nsdk[k].send(req);',
     expect: Object.freeze(["outbound-unanalysable"] as const),
@@ -3578,13 +3674,40 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         probe: 'const [k] = ["req" + "uests"];\nsdk[k].send(req);',
         expect: Object.freeze(["outbound-unanalysable"] as const),
       }),
+      // CR-12, closed 2026-08-24. DISTINCT FROM THE `+=` BRANCH ABOVE AND THAT
+      // DISTINCTION IS THE POINT: `+=` has its OWN opening, its OWN numeric guard
+      // and its own anchor, and it is the branch the verifier deleted to prove
+      // WR-32. These three reach `isAssembledKey(node.right, ...)` through the
+      // WIDENED alias branch instead, so deleting either one leaves the other
+      // green and the clause names both.
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken,",
+        probe: 'let k;\nk ??= "req" + "uests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken,",
+        probe: 'let k;\nk ||= "req" + "uests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken,",
+        probe: 'let k;\nk &&= "req" + "uests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
     ] as readonly BranchProbe[]),
   }),
   Object.freeze({
     id: "receiverAliases",
     kind: "resolver",
     clause:
-      'a name bound to an outbound RECEIVER expression at a declaration or an assignment is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a name bound to an outbound RECEIVER expression" without qualification - measured, a logical-assignment binding grows nothing',
+      'a name bound to an outbound RECEIVER expression at a declaration, an assignment or a logical assignment is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a name bound to an outbound RECEIVER expression" without qualification - measured, a logical-assignment binding grew nothing; that shape is CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are its probes, and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file, a binding written in inverted order and a MEMBER target (o.r ??= sdk.requests) each still grow nothing',
     site: "auditSource > const receiverAliases = new Map<string, string>()",
     probe: "const r = sdk.requests;\nr.send(req);",
     expect: Object.freeze(["outbound-send"] as const),
@@ -3603,6 +3726,35 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         anchor:
           "auditSource > collect > receiverAliases.set(node.left.text, kind);",
         probe: "let r;\nr = sdk.requests;\nr.send(req);",
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      // CR-12, closed 2026-08-24. ONE PHRASE, THREE SPELLINGS, and the anchors
+      // are the SET MEMBERS rather than the shared branch opening ON PURPOSE:
+      // three probes sharing one anchor would render three cases with the SAME
+      // title, and a mutation that removes ONE operator could not then be told
+      // apart from one that removed the branch. Anchored this way, deleting
+      // `BarBarEqualsToken` from ASSIGNING_OPERATORS turns the `||=` case red BY
+      // NAME while the other two stay green — which is what makes the proof
+      // per-OPERATOR rather than per-set.
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken,",
+        probe: "let r;\nr ??= sdk.requests;\nr.send(req);",
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken,",
+        probe: "let r;\nr ||= sdk.requests;\nr.send(req);",
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        names: "a logical assignment",
+        anchor:
+          "auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken,",
+        probe: "let r;\nr &&= sdk.requests;\nr.send(req);",
         expect: Object.freeze(["outbound-send"] as const),
       }),
     ] as readonly BranchProbe[]),
@@ -4553,6 +4705,12 @@ export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
   "a declaration",
   "an assignment",
   "a `+=` compound assignment",
+  // CR-12, 2026-08-24. The binding shape the WIDENED alias branch added. Spelled
+  // so it does NOT contain "an assignment" as a substring - a phrase that did
+  // would make every clause naming the logical spelling also claim the plain one,
+  // and the coverage guard would be satisfied by the wrong probe. A clause that
+  // means both says both, and then owes a probe for each.
+  "a logical assignment",
   "either binding-pattern spelling",
   "the object binding-pattern spelling",
   "a string-literal declaration",
@@ -4720,7 +4878,7 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
     poisonedNumericNames:
       "Bounded by the ARMS of the numeric pass that write it: a non-numeric VariableDeclaration initializer, an EqualsToken assignment, a += whose right side is non-numeric, and any other ASSIGNMENT_OPERATORS spelling. A binding shape outside those arms poisons nothing. MEASURED: `function f(i) { return sdk[i].send(req); }` reports NOTHING — a parameter is never poisoned because it is never bound in the pass.",
     receiverAliases:
-      "Bounded by DECLARATION ORDER inside the single collect pass, and by the two branches that write the map. `everywhere in the file` is true of WHERE the alias is READ, not of where it may be BOUND. MEASURED: `const b = a; const a = sdk.requests; b.send(req)` reports NOTHING, while the dependency-ordered spelling reports — that inversion has its own registry row, silence-inverted-binding-order.",
+      "Bounded by DECLARATION ORDER inside the single collect pass, and by the branches that write the map — the declaration branch and the assignment branch, the second of which since 2026-08-24 (CR-12) reads ASSIGNING_OPERATORS and so covers the three logical-assignment spellings too. `everywhere in the file` is true of WHERE the alias is READ, not of where it may be BOUND. MEASURED: `const b = a; const a = sdk.requests; b.send(req)` reports NOTHING, while the dependency-ordered spelling reports — that inversion has its own registry row, silence-inverted-binding-order. MEASURED after the widening: `let b; b ??= a; let a; a ??= sdk.requests; b.send(req)` reports NOTHING for the same reason, and `o.r ??= sdk.requests; o.r.send(req)` reports NOTHING because the branch requires an IDENTIFIER on the left.",
     keyReceiver:
       'Bounded by operatorReceiver\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the leaf resolver. `any depth` is unbounded only WITHIN those four operators; a fifth operator spelling is not descended at any depth. MEASURED: `sdk[b ? (c ? "requests" : "x") : "y"].send(req)` reports outbound-send.',
     literalsOf:
@@ -4732,27 +4890,26 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
   });
 
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
-  Object.freeze({
-    row: "assembledNames",
-    phrase: "a compound assignment",
-    finding: "CR-12",
-    wave: "31",
-    probe: 'let k;\nk ||= "req" + "uests";\nsdk[k].send(req);',
-    openAnswer: Object.freeze([] as const),
-  }),
-  Object.freeze({
-    row: "receiverAliases",
-    phrase: "a name bound to an outbound RECEIVER expression",
-    finding: "CR-12",
-    wave: "31",
-    probe: "let r;\nr ||= sdk.requests;\nr.send(req);",
-    openAnswer: Object.freeze([] as const),
-  }),
+  // DISCHARGED 2026-08-24 (CR-12), in the same commit as ASSIGNING_OPERATORS:
+  // `assembledNames` and `receiverAliases`. Both were observed RED here first -
+  // the widening landed, the entries were still present, and the two cases below
+  // named the row, the phrase and the owning wave before anything was deleted.
+  //
+  // `isFetchExpression` STAYS, WITH ITS OWNER CORRECTED FROM 31 TO 32, AND THAT
+  // CORRECTION WAS MADE BY MEASUREMENT RATHER THAN BY READING. Its probe is
+  // `(ok && fetch)(url)` - an OPERATOR WRAPPING the bare global, which is CR-11's
+  // shape one function over, not CR-12's logical-assignment binding. When the
+  // CR-12 widening landed, exactly TWO of the four handoff cases went red and this
+  // one stayed GREEN, which is the executed evidence that its shape is not this
+  // wave's to close. The `finding` field is left at CR-12 deliberately: it is what
+  // the row's own dated FALSIFIED marker carries, the well-formedness guard reads
+  // the two against each other, and rewriting a shipped falsification marker would
+  // erase the record of what was believed on the day it was written.
   Object.freeze({
     row: "isFetchExpression",
     phrase: "in every reachable spelling",
     finding: "CR-12",
-    wave: "31",
+    wave: "32",
     probe: "(ok && fetch)(url);",
     openAnswer: Object.freeze([] as const),
   }),
@@ -5657,6 +5814,33 @@ describe("an outbound receiver, however it was bound", () => {
         "r4.send(req);\nconst r1 = sdk.requests;\nconst r2 = r1;\nconst r3 = r2;\nconst r4 = r3;",
       ),
     ).toContain("outbound-send");
+  });
+
+  // -------------------------------------------------------------------------
+  // CR-12 — A LOGICAL ASSIGNMENT BINDS. Nine shapes were silent across `??=`,
+  // `||=` and `&&=` while all four `=`/`+=` controls fired, which is what made
+  // them real misses rather than a fixture artefact.
+  //
+  // EACH SHAPE GETS ITS OWN CASE, TITLED FOR THE COLLECTOR IT EXERCISES, per plan
+  // 01-18's convention and per WR-23's note below: a single combined case cannot
+  // show WHICH collector is load-bearing, so a mutation that broke one of seven
+  // would move one combined case and name none of them.
+  // -------------------------------------------------------------------------
+
+  it("through receiverAliases' LOGICAL-ASSIGNMENT branch: `let r; r ??= sdk.requests; r.send(req)` is the ORDINARY lazy-init spelling of the line above it — CR-12 shape 1 of 9", () => {
+    // MEASURED `[]` BEFORE THIS PLAN and `["outbound-send"]` after. The control
+    // two characters away — `r = sdk.requests` — reported throughout, and is
+    // pinned by its own case below.
+    //
+    // MECHANISM: `collect`'s alias-growing branch used to test
+    // `node.operatorToken.kind === ts.SyntaxKind.EqualsToken` inline while the
+    // numeric-poisoning arm ELEVEN LINES BELOW read `ASSIGNMENT_OPERATORS` and
+    // named `x ||= sdk.requests` in its own comment. The two halves of one
+    // statement disagreed about which assignments exist. Both read declared sets
+    // now.
+    expect(rulesOf("let r;\nr ??= sdk.requests;\nr.send(req);")).toContain(
+      "outbound-send",
+    );
   });
 
   it("through NOTHING: the receiver chain's negation — ONE INVERTED LINK silences four hops, wherever the read sits — A MEASURED SILENCE", () => {
@@ -7470,7 +7654,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(66);
+    ).toBe(68);
   });
 
   // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
@@ -7504,7 +7688,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       branches.length,
       `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(67);
+    ).toBe(73);
     expect(
       new Set(branches.map(([id]) => id)).size,
       "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 32 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
@@ -7593,8 +7777,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // required to delete is worse than none.
     expect(
       FALSIFIED_HANDOFFS.length,
-      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries. Waves 30, 31 and 32 each DELETE their entries and update this pin IN THE SAME COMMIT AS THEIR CODE. A count that moved without a widening beside it is the failure. WAVE 30 DISCHARGED ITS TWO ON 2026-08-24 (CR-13): 6 became 4, in the same commit as operatorLiteralBinding.`,
-    ).toBe(4);
+      `FALSIFIED_HANDOFFS carries ${FALSIFIED_HANDOFFS.length} entries. Waves 30, 31 and 32 each DELETE their entries and update this pin IN THE SAME COMMIT AS THEIR CODE. A count that moved without a widening beside it is the failure. WAVE 30 DISCHARGED ITS TWO ON 2026-08-24 (CR-13): 6 became 4, in the same commit as operatorLiteralBinding. WAVE 31 DISCHARGED ITS TWO ON 2026-08-24 (CR-12): 4 became 2, in the same commit as ASSIGNING_OPERATORS - and the third entry naming wave 31, isFetchExpression, was MEASURED to be CR-11's shape rather than CR-12's and had its owner corrected to 32 instead of being discharged. Both remaining entries are wave 32's.`,
+    ).toBe(2);
     for (const h of FALSIFIED_HANDOFFS) {
       expect(
         RESOLVER_REGISTRY.some((r) => r.id === h.row),
