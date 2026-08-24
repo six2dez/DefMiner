@@ -836,6 +836,11 @@ RESOLVERS - 31 entries.
     reports:   outbound-unanalysable
     counter:   "let i = 0;\ni += 1;\nsdk[i].send(req);"
     reports:   [] - nothing
+    branch:    "a declaration" at auditSource > collect > if (isAssembledKey(init, numericNames, poisonedNumericNames)) { - probe "const k = \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "an assignment" at auditSource > collect > if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) { - probe "let k;\nk = \"req\" + \"uests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "a compound assignment" at auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken && - probe "let k = \"re\";\nk += \"quests\";\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, 0), - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
+    branch:    "either binding-pattern spelling" at auditSource > collect > destructuredInitializer(init, el, index), - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
 * receiverAliases - a name bound to an outbound RECEIVER expression is that receiver everywhere in the file; grown from the LIVE set during the collect pass, so a chain resolves to any depth in DECLARATION order
     read off:  auditSource > const receiverAliases = new Map<string, string>()
@@ -1076,6 +1081,7 @@ MEASURED SILENCES - 7 entries.
     reports:   [] - nothing
     counter:   "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);"
     reports:   outbound-unanalysable
+    branch:    "a declaration" at auditSource > collect > if (ts.isStringLiteralLike(init)) { - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
 
 * silence-inverted-binding-order - what actually bounds an ALIAS chain, corrected in wave 23: not where a name is READ but the DECLARATION ORDER of the bindings relative to each other. collect() finishes before visit() begins, so a use may sit above every declaration; invert one link and the root is not yet in the live set. The dependency-ordered spelling reports
     read off:  auditSource > const collect = (node: ts.Node): void => {
@@ -3005,6 +3011,49 @@ export function auditSource(file: string, source: string): Violation[] {
  * checked. The anchor is asserted to occur in this file's own source, so a row
  * whose provenance stops existing is a failing test rather than a dead reference.
  */
+/**
+ * ONE CLAUSE-NAMED BRANCH, WITH ITS OWN EXECUTED PROBE.
+ *
+ * THE THIRD BINDING, ADDED 2026-08-24 (WR-32). The two bindings that already
+ * existed are real and were mutation-proved by the verifier: the shipped TEXT is
+ * bound to the REGISTRY by bytes, and each row's PROBE is bound to the walk by
+ * execution. The third did not exist. A row's `clause` was hand-written prose
+ * that no assertion read, and the verifier proved it by deleting the
+ * compound-assignment assembly branch — a branch `assembledNames`' clause names
+ * in so many words — and watching the entire derived block stay at 52 passed, 0
+ * failed. Only a hand-written fixture 1,400 lines away went red.
+ *
+ * WHY THIS IS `branches` WITH A `names` FIELD AND NOT A FLAT `probes` ARRAY, AND
+ * A LATER AUTHOR MUST NOT SIMPLIFY IT BACK. The cheaper repair WR-32 offered was
+ * a flat list of extra probes per row. A flat array proves that N probes RUN. It
+ * does not prove they CORRESPOND to the N branches the CLAUSE names, and the
+ * correspondence is the whole finding — each row's single probe already happened
+ * to exercise one branch, and that is exactly what stayed green under the
+ * mutation. `names` carries the clause phrase VERBATIM, which is what lets
+ * `BRANCH_VOCABULARY` turn "this clause names that branch" into a string test
+ * rather than a reading. Collapsing `branches` into an unnamed list would delete
+ * the guard and keep the tests, which is the shape of every finding in this
+ * phase.
+ *
+ * `anchor` follows `site`'s convention exactly, and for the same reason: line
+ * numbers go stale on the first edit above them, so the anchor is greppable text
+ * asserted to occur at the START of a trimmed line in this file.
+ */
+export type BranchProbe = {
+  /**
+   * The clause phrase this branch answers, spelled EXACTLY as `BRANCH_VOCABULARY`
+   * spells it. Equality, not paraphrase — a paraphrase is a reading, and a
+   * reading is what this mechanism exists to replace.
+   */
+  readonly names: string;
+  /** A greppable anchor for THIS branch's own code site, in `site`'s convention. */
+  readonly anchor: string;
+  /** A source string exercising THAT branch and no other. */
+  readonly probe: string;
+  /** What `auditSource` reports for `probe`. MEASURED, never predicted. */
+  readonly expect: readonly RuleId[];
+};
+
 export type ResolverRecord = {
   /** The mechanism's identifier EXACTLY as it is spelled in the code. */
   readonly id: string;
@@ -3022,6 +3071,13 @@ export type ResolverRecord = {
   readonly counterProbe: string;
   /** What `auditSource` reports for `counterProbe`. MEASURED, never predicted. */
   readonly counterExpect: readonly RuleId[];
+  /**
+   * One entry per branch this row's CLAUSE names. OPTIONAL on the type and
+   * REQUIRED on resolvers by the guard below, which states why the two kinds are
+   * treated differently rather than leaving a reader to infer it from which rows
+   * happen to carry one.
+   */
+  readonly branches?: readonly BranchProbe[];
 };
 
 /**
@@ -3055,6 +3111,51 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     expect: Object.freeze(["outbound-unanalysable"] as const),
     counterProbe: "let i = 0;\ni += 1;\nsdk[i].send(req);",
     counterExpect: Object.freeze([] as const),
+    // THE ROW THE VERIFIER FALSIFIED. Its clause enumerates FOUR branch phrases
+    // and its single probe above exercises ONE of them. Every phrase below was
+    // read off its own code site and every probe was RUN before its `expect` was
+    // written down.
+    branches: Object.freeze([
+      Object.freeze({
+        names: "a declaration",
+        anchor:
+          "auditSource > collect > if (isAssembledKey(init, numericNames, poisonedNumericNames)) {",
+        probe: 'const k = "req" + "uests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        names: "an assignment",
+        anchor:
+          "auditSource > collect > if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) {",
+        probe: 'let k;\nk = "req" + "uests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        // THE BRANCH THE VERIFIER DELETED. Guarded by the numeric test, which is
+        // why this probe accumulates a STRING and why the row's counter-probe
+        // (`i += 1`) is the control that keeps that guard honest.
+        names: "a compound assignment",
+        anchor:
+          "auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&",
+        probe: 'let k = "re";\nk += "quests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        // ONE PHRASE, TWO SPELLINGS — the clause says "either", so both the
+        // object and the array branch answer it and both are executed.
+        names: "either binding-pattern spelling",
+        anchor: "auditSource > collect > destructuredInitializer(init, el, 0),",
+        probe: 'const { k } = { k: "req" + "uests" };\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+      Object.freeze({
+        names: "either binding-pattern spelling",
+        anchor:
+          "auditSource > collect > destructuredInitializer(init, el, index),",
+        probe: 'const [k] = ["req" + "uests"];\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-unanalysable"] as const),
+      }),
+    ] as readonly BranchProbe[]),
   }),
   Object.freeze({
     id: "receiverAliases",
@@ -3431,6 +3532,20 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     expect: Object.freeze([] as const),
     counterProbe: 'const { k } = { k: "req" + "uests" };\nsdk[k].send(req);',
     counterExpect: Object.freeze(["outbound-unanalysable"] as const),
+    // A SILENCE ROW'S BRANCH NAMES THE SITE THE SILENCE IS MEASURED AT, not a
+    // branch that fires — see the coverage guard's docblock. This clause names
+    // `the identifier spelling of a declaration`, which IS a branch of
+    // `constStrings`, so the vocabulary guard demands a probe for it and gets
+    // one: the branch whose deletion would make this silence total rather than
+    // local. Found by MEASUREMENT, not prediction — see `01-29-SUMMARY.md`.
+    branches: Object.freeze([
+      Object.freeze({
+        names: "a declaration",
+        anchor: "auditSource > collect > if (ts.isStringLiteralLike(init)) {",
+        probe: 'const k = "requests";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+    ] as readonly BranchProbe[]),
   }),
   Object.freeze({
     id: "silence-inverted-binding-order",
@@ -3457,6 +3572,35 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
 ] as readonly ResolverRecord[]);
 
 /**
+ * THE DECLARED BRANCH-NAMING PHRASES.
+ *
+ * WHAT THIS TURNS INTO A MECHANICAL TEST. "This clause names that branch" was a
+ * READING until this list existed, and a reading is what let CR-11, CR-12 and
+ * CR-13 all land inside a mechanism that was 100% green. With the vocabulary
+ * declared, a phrase present in a clause and absent from that row's `branches`
+ * is a FAILING TEST rather than a reviewer's finding.
+ *
+ * EVERY PHRASE IS SPELLED AS SOME CLAUSE ALREADY SPELLS IT, and the non-vacuity
+ * assertion below proves it — a vocabulary written in words the clauses do not
+ * use would match nothing and pass, which is round 5's coverage blind spot
+ * reintroduced by the guard built to remove it.
+ *
+ * ITS REACH, STATED RATHER THAN IMPLIED. This list does NOT cover every way a
+ * branch can be named in English. A clause phrased outside it is unmatched,
+ * raises no obligation and passes. That limit is emitted into the generated
+ * block so it travels to every surface the block reaches; it is disclosed, not
+ * covered.
+ */
+export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
+  // `assembledNames`: "at a declaration, an assignment, a compound assignment,
+  // or either binding-pattern spelling".
+  "a declaration",
+  "an assignment",
+  "a compound assignment",
+  "either binding-pattern spelling",
+]);
+
+/**
  * THE SENTINELS. They say what they are, in the text, at the point a hand-editor
  * would be standing.
  */
@@ -3480,6 +3624,13 @@ const formatEntry = (row: ResolverRecord): string[] => [
   `    reports:   ${formatRules(row.expect)}`,
   `    counter:   ${JSON.stringify(row.counterProbe)}`,
   `    reports:   ${formatRules(row.counterExpect)}`,
+  // ONE LINE PER CLAUSE-NAMED BRANCH, PREFIXED so it cannot satisfy its own
+  // anchor assertion: that assertion requires a match at the START of a trimmed
+  // line, and `branch:` is what a trimmed line here begins with.
+  ...(row.branches ?? []).map(
+    (b) =>
+      `    branch:    ${JSON.stringify(b.names)} at ${b.anchor} - probe ${JSON.stringify(b.probe)} - reports ${formatRules(b.expect)}`,
+  ),
 ];
 
 /**
@@ -5904,6 +6055,130 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       expect(
         [...row.expect].join(","),
         `registry row \`${row.id}\` has a probe and a counter-probe that answer IDENTICALLY. Such a row is vacuous: it would keep passing with the mechanism deleted. Pick a counter-probe that the mechanism answers differently.`,
+      ).not.toEqual([...row.counterExpect].join(","));
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // THE FOURTH BINDING: A ROW'S CLAUSE TO THE BRANCHES IT NAMES
+  // ---------------------------------------------------------------------------
+  // WR-32, 2026-08-24. The verifier deleted the compound-assignment assembly
+  // branch — the branch `assembledNames`' clause names when it says `a compound
+  // assignment` — and the whole derived block stayed at 52 passed, 0 failed.
+  // Everything below exists so that mutation turns that ROW red.
+
+  // NON-VACUITY BEFORE THE RULE, for the same reason `tests/pins.spec.ts` puts it
+  // first for every reader it has.
+  it("BRANCH_VOCABULARY is NON-EMPTY, every phrase in it occurs in at least one clause, and the hit count is PINNED", () => {
+    expect(
+      BRANCH_VOCABULARY.length,
+      "BRANCH_VOCABULARY is empty. The coverage guard below would scan for nothing and pass having matched nothing — which is the exact failure this mechanism exists to remove, reintroduced by its own guard.",
+    ).toBeGreaterThan(0);
+
+    const unused = BRANCH_VOCABULARY.filter(
+      (phrase) => !RESOLVER_REGISTRY.some((row) => row.clause.includes(phrase)),
+    );
+    expect(
+      unused,
+      `BRANCH_VOCABULARY phrase(s) ${unused.map((p) => JSON.stringify(p)).join(", ")} occur in NO clause. A vocabulary written in words the clauses do not use matches nothing and passes. Spell the phrase as the clause spells it, or drop it.`,
+    ).toEqual([]);
+
+    const hits = RESOLVER_REGISTRY.flatMap((row) =>
+      BRANCH_VOCABULARY.filter((phrase) => row.clause.includes(phrase)).map(
+        (phrase) => `${row.id} :: ${phrase}`,
+      ),
+    );
+    // The count this run found, pinned so a SHRINKING enumeration is visible
+    // rather than silent. DO NOT relax this number to match a new run: a
+    // vocabulary that used to match 5 clause-phrase pairs and now matches 1 is
+    // still "non-empty" and still broken. If a clause was legitimately reworded,
+    // change the number in the SAME commit as the wording and say so.
+    expect(
+      hits.length,
+      `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
+    ).toBe(5);
+  });
+
+  // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
+  it("every BRANCH_VOCABULARY phrase present in a clause has a BRANCH answering it", () => {
+    const missing: string[] = [];
+    for (const row of RESOLVER_REGISTRY) {
+      for (const phrase of BRANCH_VOCABULARY) {
+        if (!row.clause.includes(phrase)) continue;
+        const answered = (row.branches ?? []).some((b) => b.names === phrase);
+        if (!answered) {
+          missing.push(`${row.id} names ${JSON.stringify(phrase)}`);
+        }
+      }
+    }
+    expect(
+      missing,
+      `clause(s) name a branch that NO branch probe answers: ${missing.join(" | ")}. There are exactly two ways out and softening the clause silently is neither. EITHER write the BranchProbe — read it off the branch, run it, record what it measured — OR stop the clause naming the branch, which means correcting it to its MEASURED reach, preserving the falsified phrase with a dated marker and its finding id, and handing the widening on as a FALSIFIED_HANDOFFS entry.`,
+    ).toEqual([]);
+  });
+
+  it("every branch anchor still EXISTS, AT A DECLARATION OR A BRANCH OPENING, in this file", () => {
+    const branches = RESOLVER_REGISTRY.flatMap((row) =>
+      (row.branches ?? []).map((b) => [row.id, b] as const),
+    );
+    expect(
+      branches.length,
+      "NO registry row carries a `branches` list. Every per-branch case below would enumerate nothing and the suite would pass having bound no clause to any branch at all.",
+    ).toBeGreaterThan(0);
+    // Pinned for the same reason the vocabulary hit count is: an enumeration that
+    // shrinks silently is the failure, not the fix.
+    expect(
+      branches.length,
+      `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
+    ).toBe(6);
+    expect(
+      new Set(branches.map(([id]) => id)).size,
+      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one.",
+    ).toBe(2);
+
+    // A PLAIN SUBSTRING SEARCH HERE WOULD BE VACUOUS, AND THIS TASK ADDED A THIRD
+    // SURFACE THAT WOULD SATISFY ONE. The anchor text occurs (1) inside the
+    // BranchProbe literal itself, (2) inside the generated block's `read off:`
+    // line where a row's `site` shares the same convention, and now (3) inside
+    // the generated block's `branch:` line that renders this very anchor. So
+    // `gateText.includes(anchor)` would pass with the branch DELETED — the
+    // provenance would be checking itself, three times over. The anchor must
+    // therefore occur at the START of a trimmed line, which a string nested in an
+    // object literal and an indented `read off:` / `branch:` line all fail to do,
+    // and which only the DECLARATION or the branch's own opening satisfies.
+    const declarations = new Set(gateLines.map((l) => l.trimStart()));
+    for (const [id, b] of branches) {
+      const parts = b.anchor.split(" > ");
+      const anchor = parts[parts.length - 1] ?? b.anchor;
+      const found = [...declarations].some((l) => l.startsWith(anchor));
+      expect(
+        found,
+        `row \`${id}\`'s branch for ${JSON.stringify(b.names)} records its site as \`${b.anchor}\`, and no line in ${GATE_FILE} begins with \`${anchor}\`. Either the branch moved — update the anchor — or the branch is GONE and the clause is now naming something the code does not have. (A match inside the BranchProbe literal, inside the \`read off:\` line or inside the rendered \`branch:\` line does not count: see the comment above.)`,
+      ).toBe(true);
+    }
+  });
+
+  // EVERY NAMED BRANCH IS EXECUTED. This is the case the verifier's mutation
+  // turns red, and it names the ROW when it does.
+  it.each(
+    RESOLVER_REGISTRY.flatMap((row) =>
+      (row.branches ?? []).map(
+        (b) => [`${row.id} / ${b.names} / ${b.anchor}`, row, b] as const,
+      ),
+    ),
+  )(
+    "branch %s — its probe is executed against auditSource",
+    (_label, row, b) => {
+      expect(
+        rulesOf(b.probe),
+        `registry row \`${row.id}\`'s clause names ${JSON.stringify(b.names)} and says the branch at \`${b.anchor}\` reports [${b.expect.join(", ")}]. It does not. Either that branch was DELETED — in which case the clause is now naming a branch the code does not have — or it changed and this probe is stale. The row's own probe can stay green through this: that is precisely why this case exists.`,
+      ).toEqual([...b.expect]);
+      // The row-level vacuity rule, one level down. A branch answering exactly what
+      // the row's COUNTER-probe answers proves nothing about the branch it names —
+      // it would keep passing with that branch deleted.
+      expect(
+        [...b.expect].join(","),
+        `row \`${row.id}\`'s branch for ${JSON.stringify(b.names)} answers IDENTICALLY to the row's counter-probe. Such a branch is vacuous: it would keep passing with the branch deleted. Pick a probe the branch answers differently.`,
       ).not.toEqual([...row.counterExpect].join(","));
     },
   );
