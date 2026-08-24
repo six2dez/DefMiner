@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-verified: 2026-08-24T12:20:00Z
+verified: 2026-08-24T16:40:00Z
 status: gaps_found
 score: 8/9 must-haves verified
 behavior_unverified: 0
@@ -8,76 +8,86 @@ overrides_applied: 0
 re_verification:
   previous_status: gaps_found
   previous_score: 8/9
-  previous_verified: 2026-08-22T12:40:00Z
-  round: 4
-  verification_pass: 5
+  previous_verified: 2026-08-24T12:20:00Z
+  round: 5
+  verification_pass: 6
   gaps_closed:
-    - "CR-08 (the round-3 blocker) — GENUINELY CLOSED, and I verified all eight shapes myself rather than reading the discharge table. Executed against `auditSource`: `const k = \"req\" + \"uests\"; sdk[k].send(req)` -> [\"outbound-unanalysable\"], and the same through `let`, a template, `[\"req\",\"uests\"].join(\"\")` and an opaque call `g()`; `sdk[b ? \"requests\" : \"net\"].send(req)` -> [\"outbound-send\"]; `sdk[(0, \"requests\")].send(req)` -> [\"outbound-send\"]. Every one of those returned `[]` when I probed them in round 3. The `:1740-1744` `constStrings` fixture is gone from under the assembled-key rule, and the mechanism->shape table at `:150-170` matches what I measured row for row for the rows it names. This was the blocker and it is closed."
-    - "WR-23 — `const e = eval; e(\"…\")` -> [\"outbound-dynamic-code\"]. Silent in round 3, reports now. The receiver-anchoring twin survived: `const o = { eval(s){} }; const e = o.eval; e(\"x\")` stays quiet."
-    - "IN-20 — `const g = globalThis; g.fetch(u)` reports, and I found the alias sets chain to arbitrary depth: 2-hop, 3-hop and 4-hop `fetch`/`sdk.requests`/`navigator`/`eval`/`WebSocket` chains all report."
-    - "WR-24 (STORE-07 operator class) — CLOSED, executed by me through the shipped `error-redaction.spec.ts` `auditSource`. `flag ? e.message : \"none\"`, `e.message ?? \"none\"`, `e.message || \"none\"` and `flag && e.message` ALL now report `unredacted-concat`; all were `[]` in round 3. Every `describeError` twin stays quiet, so the descent did not reach past the safe form."
-    - "WR-22 (the `normaliseObservedUrl` idempotence break at the `URL_MAX` cut) — the segment-boundary truncation landed and does what it says on the branch it covers. I swept 200 head lengths (n=1900..2100) through the shipped function against a `;jsessionid=SECRETSESSION` payload: ZERO leaks. The redaction half is intact. The DISCLOSURE half is not — see WR-28."
-    - "Ledger, mechanically: every requirement id declared in any of the 22 plans' frontmatter resolves in `REQUIREMENTS.md`, and every id the phase is tagged with appears in at least one plan. 23 ids, NO ORPHANS."
+    - "CR-09 (the round-4 blocker, the false DOCUMENT-ORDER READ bound) — CLOSED, and closed at the seam rather than the symptom. `REQUIREMENTS.md`'s residual no longer bounds the walk by where a name is READ; the marked clause is preserved byte-for-byte as the record of what was believed and is explicitly labelled FALSIFIED, with the measured bound (declaration order among the bindings) stated beside it. The `:2798` fixture was split into a BINDINGS half and a READ half with a three-case discrimination. I re-executed the diagnosis: `const b = a; const a = fetch; b(u)` -> [] and `const a = fetch; const b = a; b(u)` -> [\"outbound-fetch\"] — the inverted binding silences, the read position does not, and that is now what the text says."
+    - "CR-10 (the stale first literal shadowing every later rebinding) — CLOSED and I verified both directions myself. `let k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` -> [\"outbound-send\"] (was []); `let k = \"req\"; k += \"uests\"; sdk[k].send(req)` -> [\"outbound-unanalysable\"] (was []). `constStrings` is now a multi-valued map and `literalOf` answers `undefined` — which means COULD NOT READ, which reports — for a name carrying more than one binding. The boundary-2 disclosure was rewritten per COLLECTOR FAMILY rather than for the gate, which is the honest shape."
+    - "WR-27 (the conditional receiver in CALL position) — CLOSED. `(b ? sdk.requests : sdk.net).send(req)`, `(sdk.requests ?? sdk.net).send(req)` and `(sdk.requests || sdk.net).send(req)` all report `outbound-send`; all three were [] in round 4. `operatorReceiver` is one descent reached from `receiverKind` and `keyReceiver`, and `initializerReceiver` was collapsed into `receiverKind` so the two positions cannot drift apart again."
+    - "WR-28 (the 'severed but STABLE' single-offset claim) — CLOSED, and closed the way WR-22 taught: by SWEEPING rather than by re-picking an offset. The stability claim is gone from both files; `schema.spec.ts:287-289` now discloses the swept result including the 11 non-fixed-points, and `observations.spec.ts:929` asserts a swept range rather than one cut. I re-ran my own sweep over n=1900..2200 and measured EXACTLY the same 11 offsets, 2019..2029 — the new disclosure is accurate rather than re-approximated."
+    - "WR-30 (the three `ONE HOP AND NO MORE` docblocks contradicted by their own tests) — CLOSED. Two of the three are deleted; the one that survives (`:2078`, on `assembledNames`) is the one where the bound is TRUE, and it now says so explicitly and names the deletion of its three siblings."
+    - "The CORE-11 CHECKBOX REGRESSION I raised as the sharpest finding of round 4 — CLOSED. The box is `[ ]`, reverted at `faca607`, and wave 28 left it `[ ]` DELIBERATELY with the blocking row named in the ledger rather than finding a reading that let it close. That is the third attempt at this checkbox and the first that needed no revert. It is the correct call and I am recording it as credit, not as a gap."
+    - "THE BYTE-COMPARISON HALF OF THE DERIVED-RESIDUAL MECHANISM IS REAL, AND I MUTATION-PROVED IT MYSELF rather than reading the summary. The two spans are byte-identical — 295 lines, both sha256 `91978e31…`, 38 entries each. I edited ONE phrase inside the `.planning/REQUIREMENTS.md` span (`silent in every spelling` -> `silent in most spellings`) and the suite went RED with the named DIVERGED assertion; restored, green. Drift between the gate and the ledger is now mechanically detectable. That is genuine and it is the largest single deliverable of round 5."
+    - "Ledger, mechanically re-run: all 23 requirement ids the phase is tagged with (CORE-01..11, STORE-01..07, COMPAT-01/02, ENC-01, DIST-05/06) appear in at least one of the 28 plans, and every id named in any plan resolves in `REQUIREMENTS.md`. NO ORPHANS. 22 of the 23 boxes are `[x]`; CORE-11 is `[ ]` and correctly so."
   gaps_remaining:
-    - "UAT gap 2 / truth 9 (CORE-11 outbound enforcement) — STILL OPEN, and for THREE DIFFERENT REASONS than last round. CR-08 is closed; CR-09, CR-10 and WR-27 are open, and I confirmed all three by execution. The score is 8/9 for the third consecutive round and the failing truth fails for a new cause each time."
+    - "UAT gap 2 / truth 9 (CORE-11 outbound enforcement) — STILL OPEN, for the FOURTH consecutive round and again for entirely new causes. CR-11, CR-12 and CR-13 all hold; I confirmed each by execution and extended two of them past what the reviewer found. The score is 8/9 for the fourth round running and the failing truth has now failed for four disjoint sets of reasons."
   regressions:
-    - "CORE-11's CHECKBOX. Round 3 left it `[ ]` and `REQUIREMENTS.md` recorded WHY in its own words: 'While any shape this requirement's own text enumerates is unenforced, its stated reach exceeds its executed reach.' Plan 01-19 flipped it to `[x]` against an eight-row discharge table. I executed the discharge text and found at least THREE of its sentences false — the same standard that produced the `e7cc4b6` revert, now applied to a box that is checked. Round 3's ledger was honest and round 4's is not. That is a regression, and it is the sharpest one in this report."
-    - "No behavioural regression. Truths 1-8 all re-verified; `pnpm test` 31 files / 1105 tests exit 0; `pnpm run typecheck` exit 0; prior-phase gate 3 files / 72 tests exit 0; `check:bundle` 1 specifier."
+    - "NO behavioural regression, and no ledger regression. Truths 1-8 all re-verified by execution or by re-reading the committed artefact: `pnpm test` 31 files / 1200 tests exit 0; `tsc --build` exit 0; the Phase 0 baseline gate 3 files / 72 tests exit 0 (the pinned pre-change number, unchanged); `check:bundle` 1 specifier (`crypto`); zero debt markers and zero skipped/`.only` tests across both source roots. The ledger moved in the RIGHT direction this round, which is the opposite of round 4."
+    - "The recurrence was NOT stopped, and that is the honest headline. Round 5 changed the residual from AUTHORED to GENERATED and made drift detectable. It did not make a CLAIM detectable: `ResolverRecord.clause` is hand-written prose that no assertion reads, and each row's binding to the walk is ONE probe. Three of the 38 clauses were falsified by execution this round."
 gaps:
   - truth: "No shipped code can introduce outbound traffic without failing a gate (CORE-11 / UAT gap 2)"
     status: partial
-    reason: "THREE separate executed findings, all confirmed by me against `auditSource` rather than by repeating the reviewer, and the first of them lands on the text CORE-11's `[x]` was flipped against. (1) CR-09 — THE DOCUMENT-ORDER READ BOUND IS FALSE. `auditSource` runs `collect(sf)` at `:1521` to completion and only then `visit(sf)` at `:1726`, so the position of a USE relative to a DECLARATION cannot bound anything. Executed, six ways: `g.fetch(u);\\nconst g = globalThis;` -> [\"outbound-fetch\"]; `function z(){ return g.fetch(u); }\\nconst g = globalThis;` -> [\"outbound-fetch\"]; `sdk[r].send(req);\\nconst r = \"requests\";` -> [\"outbound-send\"]; `sdk[k].send(req);\\nconst k = \"req\"+\"uests\";` -> [\"outbound-unanalysable\"]; `s.send(req);\\nconst s = sdk.requests;` -> [\"outbound-send\"]; `n.sendBeacon(u,d);\\nconst n = navigator;` -> [\"outbound-beacon\"]; `e(\"x\");\\nconst e = eval;` -> [\"outbound-dynamic-code\"]. THE FIXTURE THAT CLAIMS TO PIN THIS IS GREEN FOR A DIFFERENT REASON: `:2798` is titled 'a chain READ BEFORE ITS ROOT is silent' and its body is `function z() { return g.fetch(u); }\\nconst g = a;\\nconst a = globalThis;`. I removed the function wrapper and moved the read to LAST — `const g = a;\\nconst a = globalThis;\\ng.fetch(u);` -> [] — so the read position is doing nothing. What silences it is INVERTED BINDING ORDER (`g` bound from `a` before `a` is bound), which the title does not name. The TRUE bound, measured: `const a = fetch; const b = a; const c = b; const d = c; d(u)` reports at four hops, while `const b = a; const a = fetch; b(u)` is silent. That is binding-declaration order among the bindings, not read order. WHY THIS IS THE BLOCKING HALF: the false sentence is copied VERBATIM into `REQUIREMENTS.md:46` ('while a chain read BEFORE its root is bound is SILENT, because there is no symbol table and no second pass'), into residual (a) at `:212-215`, into THE FINAL RESIDUAL at `:255-257`, into residual (b) at `:216` ('a name whose binding is out of document order ... is NOT reported'), and into `assembledNames`' docblock at `:1049-1053` ('a binding is seen only if its declaration is read before the use site'). `REQUIREMENTS.md:46` is the text CORE-11's `[x]` was flipped against in plan 01-19. (2) CR-10 — A STALE FIRST LITERAL SHADOWS EVERY LATER REBINDING. `keyReceiver` at `:1172` calls `literalOf(key)` FIRST; `literalOf` at `:1243` returns `constStrings.get(name)`; `constStrings` is written ONLY at the VariableDeclaration branch `:1398` and never at the assignment branch. So a name whose declaration bound a harmless literal short-circuits `isAssembledKey` AND `assembledNames` below it. Executed: `let k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` -> []; `let k = \"harmless\"; k = \"req\" + \"uests\"; sdk[k].send(req)` -> []; `let k = \"req\"; k += \"uests\"; sdk[k].send(req)` -> []; `let k; k = \"requests\"; sdk[k].send(req)` -> []; `var k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` -> []. The controls prove these are real misses and not a fixture artefact: `let k; k = \"req\"+\"uests\"; sdk[k].send(req)` -> [\"outbound-unanalysable\"] and `let k = 1; k = \"req\"+\"uests\"; sdk[k]` -> [\"outbound-unanalysable\"] — the SAME assignment fires when no string initializer precedes it. The global path has it too: `let k = \"harmless\"; k = \"fetch\"; globalThis[k](url)` -> [] while `let k; k = \"fetch\"; globalThis[k](url)` -> [\"outbound-unanalysable\"]. WHAT THIS FALSIFIES BY NAME: boundary 2 at `:83-85` says bindings are file-wide 'which OVER-approximates rather than UNDER-approximates: a name bound to an outbound receiver anywhere in the file is treated as one everywhere in it'. Here `k` IS bound to \"requests\" in the file and is treated as one NOWHERE. And `:127-130` says the assembled key resolves 'through EITHER a declaration or an assignment (`assembledNames`)' — executed, the assignment spelling is defeated by any preceding string initializer. (3) WR-27 — A CONDITIONAL RECEIVER IN CALL POSITION IS SILENT, on a fully readable site containing a literal `sdk.requests`. Executed: `(b ? sdk.requests : sdk.net).send(req)` -> []; `(sdk.requests ?? sdk.net).send(req)` -> []; `(sdk.requests || sdk.net).send(req)` -> []. The two controls added in the SAME round both report: the conditional KEY `sdk[b ? \"requests\" : \"net\"].send(req)` -> [\"outbound-send\"] and the conditional INITIALIZER `const r = b ? sdk.requests : sdk.net; r.send(req)` -> [\"outbound-send\"]. Round 4 taught the operator to two of its three faces and left the third, and no residual list names it — the FINAL RESIDUAL enumerates two hops of key, a function boundary, a parameter, a loop binding, another file and the `NUMERIC_MEMBERS` heuristic, and a conditional receiver is none of those. SEVERITY, STATED THE SAME WAY IT WAS LAST ROUND: nothing leaks. The gate runs green over the real tree in the full suite, `check:bundle` reports one specifier (`crypto`), and no outbound call exists in any non-spec source under either root. All three are PROSPECTIVE blindnesses. This is a blocker on the claim-versus-enforcement standard this phase set for itself and has now enforced five times — not on a live secret — AND on the fact that CORE-11's box is now checked against a disclosure I falsified in three sentences."
+    reason: "THREE executed findings, each confirmed by me against `auditSource` rather than by repeating the reviewer, and I extended two of the three past what pass 6 reported. (1) CR-13 IS THE SHARPEST AND I AM PUTTING IT FIRST, because it is the round-3 blocker's own shape standing one level over. `const k = b ? \"requests\" : \"net\"; sdk[k].send(req)` -> []. That is ONE HOP. `sdk[b ? \"requests\" : \"net\"].send(req)` -> [\"outbound-send\"], `const m = b ? \"send\" : \"get\"; sdk.requests[m](req)` -> [\"outbound-unanalysable\"], `const s = b ? \"caido:http\" : \"crypto\"; await import(s)` -> [\"outbound-unanalysable\"] and `const k = b ? \"fetch\" : \"x\"; globalThis[k](url)` -> [\"outbound-unanalysable\"] — every twin of the identical conditional reports. The `??` and `||` spellings are silent too (`const k = s ?? \"requests\"` -> [], `const k = s || \"requests\"` -> []), and so is the assembled variant `const k = b ? \"req\" + \"uests\" : \"net\"` -> []. IT FALSIFIES TWO REGISTRY CLAUSES WORD FOR WORD, both of which ship into `REQUIREMENTS.md`: `constStrings` says a key resolves 'when ANY string literal the name is bound to anywhere in the file names an outbound receiver'; `literalsOf` says it reads 'every literal a name carries, so ANY of them naming a receiver reports'. `k` carries `\"requests\"` and neither reports. And it is named by NONE of the seven measured silences — it is not two hops of key, not a function boundary, not a parameter, not a loop binding, not a destructured plain literal, not an inverted binding, and not an operator around a GLOBAL receiver. (2) CR-12 — A LOGICAL-ASSIGNMENT BINDING IS INVISIBLE TO EVERY WIDENING COLLECTOR, executed across nine shapes with four controls. `let r; r ??= sdk.requests; r.send(req)` -> [], and the same for `||=` and `&&=`; `let g; g ??= globalThis; g.fetch(url)` -> []; `let f; f ??= fetch; f(url)` -> []; `let e; e ??= eval; e(src)` -> []; `let n; n ??= navigator; n.sendBeacon(u,d)` -> []; `let k; k ??= \"requests\"; sdk[k].send(req)` -> []; `let k; k ??= \"req\" + \"uests\"; sdk[k].send(req)` -> []. ALL FOUR CONTROLS FIRE, which proves these are real misses and not a fixture artefact: the same lines with `=` report `outbound-send` / `outbound-fetch` / `outbound-send`, and `+=` reports `outbound-unanalysable`. THE MECHANISM IS ONE TOKEN TEST: `collect`'s alias-growing branch at `:2647` matches `ts.SyntaxKind.EqualsToken` ONLY, while the numeric-POISONING branch at `:2744` — eleven lines below, in the same function — reads `ASSIGNMENT_OPERATORS` and its own comment names the exact shape, `x ||= sdk.requests`. The file knows the spelling exists and handles it only in the NARROWING collector. It falsifies `assembledNames`' clause explicitly ('at a declaration, an assignment, a COMPOUND ASSIGNMENT, or either binding-pattern spelling' — `??=` is a compound assignment and is silent) and the stated reach of `receiverAliases`, `constStrings`, `literalsOf`, `globalThisAliases`, `fetchAliases`, `navigatorAliases` and `globalAliases`, all of which say a name BOUND to the surface is that surface. Named by no residual row. (3) CR-11 — THE FALSE UNIVERSAL IN THE MACHINE-OWNED TEXT, AND I FOUND THE HALF THAT MATTERS. The reviewer's four spellings all report and I confirmed every one: `(0, globalThis).fetch(url)`, `(globalThis).fetch(url)`, `(globalThis as any).fetch(url)` and `globalThis!.fetch(url)` -> [\"outbound-fetch\"]. I found two more it did not name — `(0, globalThis).eval(src)` -> [\"outbound-dynamic-code\"] and `(0, fetch)(url)` -> [\"outbound-fetch\"]. So `silence-operator-around-global-receiver`'s clause 'an operator wrapping a GLOBAL receiver is silent in every spelling' is FALSE, and it ships byte-identically into `REQUIREMENTS.md` as the authoritative residual. ON ITS OWN THAT HALF IS A WARNING, and I am saying so rather than inflating it: the error runs in the SAFE direction (the gate reaches FURTHER than its text), wave 28 disclosed one instance in the surrounding ledger prose, and the MECHANISM it named there — `unwrap` strips the wrapper before the receiver resolvers are reached — is the correct and complete explanation for all six of my reporting spellings. WHAT UPGRADES IT IS THE HALF NOBODY HAS NAMED, WHICH I FOUND BY PROBING INITIALIZER POSITION AND WHICH RUNS IN THE UNSAFE DIRECTION: `const g = globalThis ?? self; g.fetch(url)` -> [], `const g = b ? globalThis : self; g.fetch(url)` -> [], `const f = fetch ?? x; f(url)` -> [], `const e = eval ?? x; e(src)` -> [], `const n = navigator ?? x; n.sendBeacon(u,d)` -> []. `const g = globalThis ?? self` is a PLAUSIBLE DEFENSIVE IDIOM, not a contrivance like `(ok && globalThis)`. And a reader is actively misled into believing it is covered, because the `initializerReceiver` row states it 'is a NAME for receiverKind since wave 25, so initializer position and call position give the same answer' while the `receiverKind` row's probe demonstrates the SDK operator working — the two clauses together say the global case transfers, and it does not. WHAT THE THREE DO TO WAVE 28's DISCHARGE TABLE, which is the arithmetic that matters: wave 28 discharged 7 of 8 enumerated rows and named ONE blocking row. Executed, SIX of the eight now carry a named blocking shape — `no sdk.requests.send in any spelling` (CR-12, CR-13), `no method of an identified requests or net receiver outside a read-only allowlist` (CR-13), `no global fetch by any receiver or alias` (the wave-28 row, plus CR-11's initializer half, plus CR-12), `no XMLHttpRequest/WebSocket/EventSource` (`new (ok && WebSocket)()` -> [], executed by me), `no navigator.sendBeacon` (CR-12, CR-11), and `no dynamic code construction` (`(ok && eval)(src)` -> [], `const e = eval ?? x` -> []). SEVERITY, STATED THE SAME WAY IT HAS BEEN EVERY ROUND: NOTHING LEAKS. No outbound call exists in any non-spec source under either root, the gate runs green over the real tree inside a 1200-test suite, and `check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. All three are PROSPECTIVE blindnesses in a test-only gate. This is a blocker on the claim-versus-enforcement standard this phase set for itself and has now enforced six times — and on nothing else."
     severity: major
     artifacts:
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "`:1521` `collect(sf)` completes before `:1726` `visit(sf)`. Therefore every sentence in this file and in `REQUIREMENTS.md` bounding the walk by where a name is READ is false. Five locations: `:212-215` (residual (a)), `:216` (residual (b)), `:255-257` (THE FINAL RESIDUAL), `:1049-1053` (`assembledNames`' docblock), `REQUIREMENTS.md:46`."
+        issue: "`collect`'s alias-growing branch at `:2647` tests `node.operatorToken.kind === ts.SyntaxKind.EqualsToken` only. `??=`, `||=` and `&&=` therefore grow NO alias set, NO string map and NO assembled name, while the numeric-poisoning branch at `:2744` reads `ASSIGNMENT_OPERATORS` and its own comment names `x ||= sdk.requests`. The widening collectors and the narrowing collector disagree about which assignments exist, eleven lines apart, in the same function."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "`:2798` — the fixture titled 'a chain READ BEFORE ITS ROOT is silent' is green because its BINDINGS are inverted, not because of the read. Removing the function wrapper and moving the read last keeps it `[]`; keeping the wrapper and binding the root directly makes it report. This is precisely the CR-08 substitution defect — a green-for-a-different-mechanism fixture standing as a rule's bound — in the file whose header at `:148-155` states a reader 'cannot make that substitution again, because every fixture below names its mechanism in its own title'."
+        issue: "`RESOLVER_REGISTRY` rows `constStrings` and `literalsOf` state that ANY literal a name is bound to anywhere in the file resolves the key. A conditional, `??` or `||` initializer binds a literal and neither reads it: `const k = b ? \"requests\" : \"net\"; sdk[k].send(req)` -> []. Both rows pass because both probes use a plain literal binding. This is CR-08's defect — a clause whose reach exceeds its probe's — inside the mechanism built to remove it."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "`keyReceiver` at `:1172-1190` consults `literalOf` (and thus `constStrings`) before both unreadable branches, and `constStrings` is populated only from a VariableDeclaration with a string-literal initializer (`:1396-1400`), never from the assignment branch at `:1465-1481`. A stale first literal therefore shadows every later rebinding of the same name, including an assembly. Contradicts `:83-85` ('over-approximates rather than under-approximates') and `:127-130` ('through either a declaration or an assignment')."
+        issue: "`RESOLVER_REGISTRY` row `silence-operator-around-global-receiver` asserts silence `in every spelling`. Six spellings report, including two the review did not name. The row passes because its own probe is a `&&` in call position. The text ships byte-identically into `.planning/REQUIREMENTS.md`."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "`receiverKind` reads a CONDITIONAL in key position and `initializerReceiver` reads one in initializer position, but nothing reads one in CALL-RECEIVER position. `(b ? sdk.requests : sdk.net).send(req)`, `(sdk.requests ?? sdk.net).send(req)` and `(sdk.requests || sdk.net).send(req)` are all `[]` and are named by no residual clause anywhere."
-      - path: ".planning/REQUIREMENTS.md"
-        issue: "`:46` — CORE-11 is `[x]`. The discharge text it was flipped against contains at least three sentences I falsified by execution: 'a chain read BEFORE its root is bound is SILENT'; 'a name bound out of document order ... is NOT reported'; and the assembled key resolving 'through either a declaration or an assignment'. Round 3 left this box `[ ]` for exactly this class of reason and said so."
+        issue: "The operator-around-a-global silence also covers INITIALIZER position and is disclosed nowhere: `const g = globalThis ?? self; g.fetch(url)`, `const f = fetch ?? x; f(url)`, `const e = eval ?? x; e(src)`, `const n = navigator ?? x; n.sendBeacon(u,d)` are all []. The `initializerReceiver` row tells a reader initializer and call position give the same answer, which is true for the SDK resolver and false for the global ones."
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "WR-32, PROVEN BY MY OWN MUTATION. Deleting the `PlusEqualsToken` assembly branch at `:2707-2715` leaves the derived-residual block at `:5812` GREEN — 52 passed, 0 failed — even though `assembledNames`' clause explicitly names `a compound assignment`. Only ONE hand-written fixture 1,400 lines away (`:4693`) goes red. The generated preamble's point 1 — `a branch removed from the walk turns its own entry red` — is false at BRANCH granularity; point 3, three lines below it, states the honest version."
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "WR-33. `RESOLVER_EXEMPTIONS.collect` excuses the function with `it decides nothing about what an expression IS`. `collect`'s own inline `EqualsToken` test decides which right-hand expressions ever reach a resolver at all, and that inline branch is the whole of CR-12. The guard's population-3 disclosure names `an inline branch in collect` as the residue it cannot see, and this exemption hands that residue a reason."
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "WR-34. `:6069` is titled `its box is what plan 01-27 left it` and its regex is `/^- \\[[ x]\\] \\*\\*CORE-11\\*\\*/` — a character class matching a space OR an `x`. It asserts only that exactly one row exists. I grepped both source roots and `scripts/`: NOTHING anywhere pins CORE-11's checkbox state. The one test named for the box would stay green through the exact flip that has been reverted twice."
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "WR-37 and two shapes I found beside it, none named by any residual row: `const { requests: { send } } = sdk; send(req)` -> [] while both halves report on their own; `const [r] = [sdk.requests]; r.send(req)` -> [] while `destructuredInitializer`'s clause claims BOTH binding-pattern spellings and the object spelling of the same receiver reports; `const o = { r: sdk.requests }; o.r.send(req)` -> []."
     missing:
-      - "Delete the READ-position bound from all five locations and replace it with the bound I measured: an alias chain resolves to ANY depth provided each binding's declaration precedes the declaration of the name it is grown from; a chain whose intermediate is declared before its root is silent. The read site's position is irrelevant because `collect` completes before `visit`."
-      - "Re-title `:2798` to name the mechanism that actually silences it (inverted binding order) and add the two shapes that separate it from the read: `function z(){ return g.fetch(u); } const g = globalThis;` (reports) and `const g = a; const a = globalThis; g.fetch(u);` (silent). As written the fixture cannot distinguish the claim from its negation."
-      - "Fix CR-10 at the seam rather than the symptom: either make `constStrings` a poisoned map (any second binding of a name removes it, the way `poisonedNumericNames` already works for numbers) or have the assignment branch overwrite/erase the `constStrings` entry. Then `let k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` reports `outbound-send` and `k += \"uests\"` reports `outbound-unanalysable`. Add all five executed shapes as failing-path fixtures, plus the two `let k;` controls that already pass, so the asymmetry is pinned in both directions."
-      - "Read a conditional/`??`/`||` receiver in CALL position on all branches, the way key position and initializer position already do. Add `(b ? sdk.requests : sdk.net).send(req)` and both operator twins as fixtures."
-      - "Revert CORE-11 to `[ ]` until its disclosure survives execution, or amend the disclosure first and flip after. The `e7cc4b6` precedent is this phase's own and it was applied for a strictly smaller discrepancy than three false sentences."
-      - "Correct the three `ONE HOP AND NO MORE` docblocks (WR-30) — each names a source string as silent that reports; `:969`'s exact string is asserted to REPORT by the passing test at `:2782`, 1,800 lines below it."
-      - "Correct the 'severed but STABLE' claim (WR-28) in `observations.spec.ts:987` and `schema.spec.ts:272`, or widen the fixture beyond the single offset it picked."
+      - "CR-12 at the seam, not the symptom: replace `collect`'s `=== EqualsToken` test at `:2647` with `ASSIGNMENT_OPERATORS.has(...)` minus the numeric compounds, so the widening collectors see the same assignment population the poisoning branch already sees eleven lines below. Add all nine executed shapes as failing-path fixtures plus the four `=`/`+=` controls, so the asymmetry is pinned in both directions."
+      - "CR-13: have the declaration branch descend a conditional/`??`/`||` initializer into `literalsOf`/`constStrings` and `isAssembledKey` — the same descent `keyReceiver` already performs INLINE via `operatorReceiver`. Then `const k = b ? \"requests\" : \"net\"` reports `outbound-send` and `const k = b ? \"req\" + \"uests\" : \"net\"` reports `outbound-unanalysable`. Add the two operator twins and the four reporting counter-probes as fixtures."
+      - "CR-11, the unsafe half FIRST: route `isGlobalReceiver`, `isFetchExpression`, `isNavigatorReceiver` and `aliasedGlobalOf` through `operatorReceiver` the way the SDK resolvers already are, so `const g = globalThis ?? self` and `(ok && globalThis).fetch(url)` both report. If that is deferred, the residual entry must name the INITIALIZER half explicitly — it is the plausible idiom and it is currently disclosed by nothing."
+      - "CR-11, the safe half: correct `silence-operator-around-global-receiver`'s clause. `in every spelling` is false for six spellings I executed. State the measured bound instead: the four RECEIVER_OPERATORS are silent around a global receiver; the `unwrap` family — parentheses, `as`/`satisfies`, `!`, and a comma sequence — is NOT, because `unwrap` runs before the receiver resolvers are reached. Regenerate both spans."
+      - "WR-32: either bind the clause to the walk or stop claiming it is bound. The cheapest honest fix is to delete point 1's `so a branch removed from the walk turns its own entry red` — point 3 already says the true thing three lines later. The stronger fix is a per-row `branches` field naming the code sites the clause covers, with one probe per named branch, so the mutation I ran turns the row red."
+      - "WR-33: rewrite `RESOLVER_EXEMPTIONS.collect` and `.visit` to say what they actually do — `collect` selects which bindings the collectors ever see (an unregistered decision), `visit` selects WHICH resolver applies where (an unregistered dispatch). Both are population-3 residue and the exemption list should say so rather than excuse it."
+      - "WR-34: make `:6069` assert the box STATE, not the row count — `expect(rows[0]).toMatch(/^- \\[ \\]/)` while it is open, with the failure message naming `e7cc4b6` and `faca607`. A test titled for the box that cannot see the box is the same artifact class as a claim nobody executes."
+      - "WR-37 and siblings: read a NESTED binding pattern and an ARRAY slot in RECEIVER position, matching what `destructuredInitializer`'s clause already claims; or narrow the clause to the key-only reach it has."
+      - "Keep CORE-11 `[ ]`. Wave 28's call was correct and nothing found this round changes it — CR-11/12/13 ADD blocking rows, taking the discharge from 7-of-8 to 2-of-8."
 deferred: []
 behavior_unverified_items: []
 coincidental_reliance_items:
   - truth: "URL userinfo does not reach `observations.url`"
     reason: undeclared-precondition
-    harden: "Carried forward from round 3 unchanged and still correct. The `://` precondition is now DECLARED at `schema.spec.ts:115-123` rather than assumed, but the guarantee still rests on `consumer.ts:195` handing over an absolute `rr.request.getUrl()`. Advisory, no score effect."
-  - truth: "The head-side `;` truncation residual is a fixed point"
-    reason: fixture-only
-    harden: "The pinned case at `observations.spec.ts:987` picks head length 2010 and asserts `normaliseObservedUrl(headCut) === headCut`. It holds AT THAT OFFSET. I swept the 71 adjacent offsets (n=1975..2045) and 11 of them are not fixed points — n=2019..2029 inclusive. The fixture's own setup selects the offset that makes the claim true. Advisory here because the claim's failure leaks nothing (0 secret leaks over n=1900..2100) and no production path applies the function twice; recorded as WR-28 in the anti-pattern table."
+    harden: "Carried forward from rounds 3 and 4 unchanged and still correct. The `://` precondition is DECLARED at `schema.spec.ts:115-123` rather than assumed, but the guarantee still rests on `consumer.ts:195` handing over an absolute `rr.request.getUrl()`. Advisory, no score effect."
+  - truth: "The derived residual is bound to the walk"
+    reason: incidental-ordering
+    harden: "The byte comparison binds the shipped TEXT to the REGISTRY and each row's PROBE to the walk. Nothing binds the row's `clause` — hand-written prose — to the branch it describes. I proved the gap by mutation: the `PlusEqualsToken` branch deleted, the whole derived block green at 52/52. The claim holds today only because each clause happens to have been written by someone who had just read the branch. Harden by giving `ResolverRecord` a `branches` field with one probe per named branch."
 prohibitions:
   - requirement_id: CORE-11
     statement: "No code that ships in the plugin issues an outbound network request in this phase — no `caido:http` fetch, no `sdk.requests.send` in any spelling, no method of an identified `requests` or `net` receiver outside a read-only allowlist, no global `fetch` by any receiver or alias, no `XMLHttpRequest`/`WebSocket`/`EventSource`, no `navigator.sendBeacon`, no dynamic code construction, and no speculative retrieval of any kind."
     verification: gate
-    declared_status: resolved
+    declared_status: open
     status: unverified
     flagged: true
-    evidence: "FAIL-CLOSED, for the fourth consecutive round and for a NEW set of reasons. The must-NOT itself HOLDS — no outbound call exists in any non-spec source under either root, the gate runs green over the real tree inside a 1105-test suite, and `check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. The ENFORCEMENT is partial and is declared CLOSED with the box flipped to `[x]`. Genuinely closed since round 3 and confirmed by MY execution: all eight CR-08 shapes report; `const e = eval; e(s)` -> [\"outbound-dynamic-code\"]; `const g = globalThis; g.fetch(u)` -> [\"outbound-fetch\"]; alias chains resolve at 2, 3 and 4 hops across `fetch`, `sdk.requests`, `navigator`, `eval` and `WebSocket`. Still silent, executed by me: `let k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` -> []; `let k = \"req\"; k += \"uests\"; sdk[k].send(req)` -> []; `(b ? sdk.requests : sdk.net).send(req)` -> []; `(sdk.requests ?? sdk.net).send(req)` -> []; `const { k } = o; sdk[k].send(req)` -> []. And the residual list that is supposed to bound this is false in three sentences (CR-09). A `verification: gate` prohibition whose gate cannot go red on shapes its own statement enumerates, and whose disclosure of what it misses is itself falsifiable, is not verified."
+    evidence: "FAIL-CLOSED for the fifth consecutive round, and for the first time WITH THE LEDGER AGREEING. The must-NOT itself HOLDS — no outbound call exists in any non-spec source under either root, the gate runs green over the real tree inside a 1200-test suite, and `check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. The ENFORCEMENT is partial and is now DECLARED partial: CORE-11's box is `[ ]` and the ledger names a blocking row rather than a reading. Genuinely closed since round 4 and confirmed by MY execution: the operator class in CALL position (`(b ? sdk.requests : sdk.net).send(req)` -> [\"outbound-send\"]), the stale-literal shadowing (`let k = \"harmless\"; k = \"requests\"; sdk[k].send(req)` -> [\"outbound-send\"]), the `+=` assembly, and the document-order read bound corrected in five places. Still silent, executed by me this round: `const k = b ? \"requests\" : \"net\"; sdk[k].send(req)` -> []; `let r; r ??= sdk.requests; r.send(req)` -> []; `const g = globalThis ?? self; g.fetch(url)` -> []; `(ok && eval)(src)` -> []; `new (ok && WebSocket)()` -> []; `const { requests: { send } } = sdk; send(req)` -> []; `const [r] = [sdk.requests]; r.send(req)` -> []. Six of the eight clauses this requirement's own first sentence enumerates now carry a named blocking shape. A `verification: gate` prohibition whose gate cannot go red on shapes its own statement enumerates is not verified — and the box correctly says so."
   - requirement_id: STORE-03
     statement: "MUST NOT persist a query-string VALUE from a target-controlled URL into observations.url. Parameter names, path, scheme and host are retained; every value is replaced before the row is written."
     verification: gate
     declared_status: resolved
     status: verified
     flagged: false
-    evidence: "HOLDS, re-executed this round on the shape round 4 changed. I swept 200 consecutive head lengths (n=1900..2100) of `https://cdn.test/{p*n};jsessionid=SECRETSESSION` through the shipped `normaliseObservedUrl`: ZERO occurrences of the secret in any output. The round-3 mutation proofs (22 unit assertions red on an in-place revert; committed live runs `20260822T094959Z-31622` red and `20260822T094728Z-11865` clean, read with `sqlite3 -readonly` from outside Caido) stand unchanged and are still committed. The WR-28 defect I found is in the residual's STABILITY claim, not in the redaction: the output is not a fixed point at 11 of 71 adjacent offsets, and nothing leaks at any of them. Recorded as a warning and as a coincidental-reliance item, not as a failure of this prohibition."
+    evidence: "HOLDS, re-executed this round with a WIDER sweep than round 4's. 301 head lengths (n=1900..2200) of `https://cdn.test/{p*n};jsessionid=SECRETSESSION` plus 400 query-tail lengths of `?tok=SECRETSESSION&p={x*n}` through the shipped `normaliseObservedUrl`: ZERO occurrences of the secret in ANY output, first pass or second, and ZERO outputs over `URL_MAX`. The round-3 mutation proofs (22 unit assertions red on an in-place revert; committed live runs `20260822T094959Z-31622` red and `20260822T094728Z-11865` clean, read with `sqlite3 -readonly` from outside Caido) stand unchanged and are still committed. WR-28 is CLOSED: the false stability claim is gone from both files and the new disclosure at `schema.spec.ts:287-289` names the 11 non-fixed-point offsets — I measured EXACTLY the same 11, n=2019..2029, so the correction is accurate rather than re-approximated."
   - requirement_id: STORE-07
     statement: "MUST NOT render a caught exception into a persisted or logged string without passing it through describeError first."
     verification: gate
     declared_status: resolved
     status: verified
     flagged: false
-    evidence: "PROMOTED — WR-24 is closed and I executed both directions myself through the shipped `error-redaction.spec.ts` `auditSource`. The operator class that was entirely blind in round 3 now reports: `flag ? e.message : \"none\"`, `e.message ?? \"none\"`, `e.message || \"none\"` and `flag && e.message` all -> [\"unredacted-concat\"], alongside the plain `+` control. Every `describeError` twin — including the ternary twin — stays quiet, so the descent bans the leak and not the idiom. Zero residual bare stringification under `packages/backend/src/store`."
+    evidence: "Carried forward from round 4, where I executed both directions myself through the shipped `error-redaction.spec.ts` `auditSource`: `flag ? e.message : \"none\"`, `e.message ?? \"none\"`, `e.message || \"none\"` and `flag && e.message` all report `unredacted-concat`, and every `describeError` twin stays quiet. Regression-checked this round inside the green 1200-test suite. WR-36 (`{ ...e }` routed through an object literal reports []) is a WARNING against that gate's own IN-25 correction text, not a failure of the prohibition."
   - requirement_id: CORE-10
     statement: "MUST NOT present partial passive coverage as complete."
     verification: judgment
@@ -89,178 +99,236 @@ prohibitions:
     verification: judgment
     status: unverified
     flagged: true
-    evidence: "Carried forward from round 3 substantially unchanged. The column-shape half is gated (PRAGMA-read allowlist + forbidden-name check). The 'capable of holding a secret' half is honestly bounded rather than contradicted: `observations.url` can still hold a path-embedded token and a retained parameter NAME, both named in the OPEN list, both pinned, the second kept BY POLICY under the operator's 2026-08-21 UAT decision. Judgment-tier: NON-AUTHORITATIVE, human review recommended."
+    evidence: "Carried forward from rounds 3 and 4 substantially unchanged. The column-shape half is gated (PRAGMA-read allowlist + forbidden-name check). The 'capable of holding a secret' half is honestly bounded rather than contradicted: `observations.url` can still hold a path-embedded token and a retained parameter NAME, both named in the OPEN list, both pinned, the second kept BY POLICY under the operator's 2026-08-21 UAT decision. Judgment-tier: NON-AUTHORITATIVE, human review recommended."
 ---
 
-# Phase 1: Skeleton, Persistence & Compatibility — Verification Report
+# Phase 1: Skeleton, Persistence, Compatibility — Verification Report
 
 **Phase Goal:** A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
-**Verified:** 2026-08-24T12:20:00Z
+**Verified:** 2026-08-24T16:40:00Z
 **Status:** gaps_found
-**Re-verification:** Yes — verification pass 5, after gap-closure ROUND 4 (plans 01-18 … 01-22)
+**Re-verification:** Yes — verification pass 6, after gap-closure ROUND 5 (plans 01-23 … 01-28)
 
 ## The verdict on the question I was asked
 
-**Round 4 closed the blocker. It also flipped CORE-11's box to `[x]` against a disclosure I falsified in three sentences — which is the one thing round 3 explicitly refused to do, for the same reason.**
+**Round 5 built the best mechanism this phase has produced, proved its byte-comparison half works, got CORE-11's checkbox right for the first time in three attempts — and did not stop the recurrence, because the thing it made mechanical is DRIFT and the thing that keeps failing is a CLAIM.**
 
-I was asked to reach my own conclusion on CR-09 and CR-10 by execution rather than by repeating the reviewer. I did. Both hold. A third, WR-27, holds too and is in some ways the plainest of the three.
+I was asked to reach my own conclusion on CR-11, CR-12 and CR-13 by execution, to judge WR-32 fairly in both directions, and to weigh WR-33 and WR-34. I did all of it. All six hold. I extended two of the three blockers past what the reviewer found.
 
-Start with the credit, because it is real and it is large.
+Start with the credit, because it is the largest of any round.
 
-**CR-08 is closed and I proved it myself, not from the discharge table.** Every one of the eight shapes I found silent in round 3 now reports:
+### What round 5 genuinely delivered, executed rather than read
 
-```
-const k = "req" + "uests";  sdk[k].send(req)        ["outbound-unanalysable"]
-let k   = "req" + "uests";  sdk[k].send(req)        ["outbound-unanalysable"]
-const k = `req${"uests"}`;  sdk[k].send(req)        ["outbound-unanalysable"]
-const k = ["req","uests"].join(""); sdk[k].send(req) ["outbound-unanalysable"]
-const k = g();              sdk[k].send(req)        ["outbound-unanalysable"]
-                            sdk[b?"requests":"net"].send(req)  ["outbound-send"]
-                            sdk[(0,"requests")].send(req)      ["outbound-send"]
-const e = eval;             e("sdk.requests.send(r)")          ["outbound-dynamic-code"]
-```
+**The byte-comparison is real and I mutation-proved it.** The two derived spans are byte-identical — 295 lines, both sha256 `91978e31…`, 38 entries each. I edited exactly one phrase inside the `.planning/REQUIREMENTS.md` span (`silent in every spelling` → `silent in most spellings`) and ran the suite: RED, with the named `DIVERGED from deriveResidual(RESOLVER_REGISTRY)` assertion and the full expected block pasted into the failure message. Restored, green. **The ledger a reader trusts most can no longer silently drift from the gate.** That is the defect that produced two reverts, and it is closed.
 
-WR-24 is closed too, and I executed that one end to end as well — the entire operator class that was blind to the STORE-07 gate in round 3 now reports, and every `describeError` twin stays quiet. WR-22's truncation fix works: I swept 200 head lengths against a `;jsessionid=` credential and found zero leaks. And plan 01-19's discovery that alias sets chain to **arbitrary depth** is correct — I confirmed it at two, three and four hops across five different alias sets. That is a finding running in the honest direction, the gate reaching *further* than its disclosure, and round 4 volunteered it rather than being caught at it.
+**All five round-4 findings are closed and I verified each myself.** CR-09's false read bound is gone from all five locations, replaced with the measured binding-declaration-order bound, and the `:2798` fixture is split into a bindings half and a read half with a three-case discrimination — I re-ran the diagnosis and it now says what it tests. CR-10's stale literal is fixed at the seam: `constStrings` is multi-valued and `literalOf` answers `undefined` (which reports) for a name with two bindings, so `let k = "harmless"; k = "requests"; sdk[k].send(req)` reports where it was silent. WR-27's conditional receiver reports in all three operator forms. WR-30 deleted two of the three false `ONE HOP` docblocks and kept the one where the bound is true.
 
-Now the three findings.
+**WR-28 was closed the way WR-22 taught, and this one deserves specific credit.** The single-offset stability pin is gone; the disclosure now names the swept result. I ran my own sweep over n=1900..2200 and measured **exactly the same 11 non-fixed-point offsets, 2019..2029**. The correction is accurate, not re-approximated to a friendlier number. Zero secret leaks across 301 head lengths and 400 query-tail lengths.
 
-### CR-09 — holds. The document-order READ bound is false, and it is false in `REQUIREMENTS.md:46`
+**And CORE-11's box is `[ ]`, deliberately, with the blocking row named.** Round 4's sharpest finding was that the ledger moved the wrong way. Round 5 moved it back and then wave 28 — owning the only plan permitted to touch the checkbox — discharged the requirement's own sentence row by row, found a row it could not discharge, and left the box open rather than finding a reading. **That is the third attempt at this checkbox and the first that needed no revert. It is the correct call.** More than that: wave 28 volunteered the `(0, globalThis).fetch` discrepancy into the ledger itself, unprompted, in the safe direction, rather than absorbing it.
 
-`auditSource` runs `collect(sf)` at `:1521` to completion, then `visit(sf)` at `:1726`. There is no way for the position of a *use* to bound anything. Executed, seven ways, every one of which the residual says should be silent:
+Now the findings.
+
+---
+
+### CR-13 — holds, and I am putting it FIRST because it is the round-3 blocker's own shape one level over
 
 ```
-g.fetch(u);              const g = globalThis;     ["outbound-fetch"]
-function z(){g.fetch(u)} const g = globalThis;     ["outbound-fetch"]
-sdk[r].send(req);        const r = "requests";     ["outbound-send"]
-sdk[k].send(req);        const k = "req"+"uests";  ["outbound-unanalysable"]
-s.send(req);             const s = sdk.requests;   ["outbound-send"]
-n.sendBeacon(u,d);       const n = navigator;      ["outbound-beacon"]
-e("x");                  const e = eval;           ["outbound-dynamic-code"]
+const k = b ? "requests" : "net";  sdk[k].send(req)        []
+const k = s ?? "requests";         sdk[k].send(req)        []
+const k = s || "requests";         sdk[k].send(req)        []
+const k = b ? "req"+"uests":"net"; sdk[k].send(req)        []
 ```
 
-**And the fixture that claims to pin this is green for a different reason.** `:2798` is titled *"a chain READ BEFORE ITS ROOT is silent"*. Its body is `function z() { return g.fetch(u); }` followed by `const g = a; const a = globalThis;`. I removed the function wrapper and moved the read to the end — still `[]`. I kept the wrapper and bound the root directly — it reports. **The read position does nothing; the inverted bindings do everything.** The title names a mechanism the fixture does not test, which is exactly the substitution CR-08 was raised for, in the file whose header at `:148-155` promises a reader "cannot make that substitution again, because every fixture below names its mechanism in its own title."
-
-The true bound, measured rather than reasoned: `const a = fetch; const b = a; const c = b; const d = c; d(u)` reports at four hops, and `const b = a; const a = fetch; b(u)` is silent. It is the order of the **binding declarations relative to each other**, not the read.
-
-**Why this is the blocking half.** That false sentence is not confined to a docblock. It is copied verbatim into residual (a) at `:212-215`, into residual (b) at `:216`, into THE FINAL RESIDUAL at `:255-257`, into `assembledNames`' docblock at `:1049-1053`, and into `REQUIREMENTS.md:46` — **the text CORE-11's `[x]` was flipped against in plan 01-19.** Round 3 left that box `[ ]` and wrote the reason down: *"While any shape this requirement's own text enumerates is unenforced, its stated reach exceeds its executed reach."* Round 4 checked it against a disclosure whose stated reach exceeds its executed reach.
-
-### CR-10 — holds, and the mechanism is one line
-
-`keyReceiver` at `:1172` calls `literalOf(key)` first. `literalOf` at `:1243` returns `constStrings.get(name)`. `constStrings` is written **only** at the VariableDeclaration branch (`:1398`) and **never** at the assignment branch (`:1465-1481`). So a name whose declaration bound a harmless literal short-circuits `isAssembledKey` and `assembledNames` beneath it.
+That is **one hop**. Every twin of the identical conditional reports:
 
 ```
-let k = "harmless"; k = "requests";      sdk[k].send(req)      []
-let k = "harmless"; k = "req"+"uests";   sdk[k].send(req)      []
-let k = "req";      k += "uests";        sdk[k].send(req)      []
-let k;              k = "requests";      sdk[k].send(req)      []
-var k = "harmless"; k = "requests";      sdk[k].send(req)      []
-let k = "harmless"; k = "fetch";         globalThis[k](url)    []
+                                   sdk[b ? "requests" : "net"].send(req)   ["outbound-send"]
+const m = b ? "send" : "get";      sdk.requests[m](req)                    ["outbound-unanalysable"]
+const s = b ? "caido:http":"crypto"; await import(s)                       ["outbound-unanalysable"]
+const k = b ? "fetch" : "x";       globalThis[k](url)                      ["outbound-unanalysable"]
 ```
 
-The controls prove these are genuine misses, not a fixture artefact — **the same assignment fires when no string initializer precedes it**:
+**It falsifies two registry clauses word for word, and both ship into `REQUIREMENTS.md`.** `constStrings`: *"a receiver or global KEY resolves when **ANY** string literal the name is bound to anywhere in the file names an outbound receiver."* `literalsOf`: *"every literal a name carries, so **ANY** of them naming a receiver reports."* `k` carries `"requests"`. Neither reports.
+
+Both rows are **green**, because both probes use a plain literal binding. **This is precisely CR-08 — a clause whose stated reach exceeds its probe's executed reach — reappearing inside the mechanism built to remove it.**
+
+And it is named by none of the seven measured silences. It is not two hops of key. Not a function boundary. Not a parameter. Not a loop binding. Not a destructured plain literal. Not an inverted binding. Not an operator around a *global* receiver — this is an SDK receiver, and the SDK operator is the one wave 25 closed.
+
+### CR-12 — holds, and the file's own comment names the shape eleven lines away
+
+Nine shapes silent, four controls firing:
 
 ```
-let k;      k = "req"+"uests";  sdk[k].send(req)     ["outbound-unanalysable"]
-let k = 1;  k = "req"+"uests";  sdk[k]               ["outbound-unanalysable"]
-let k;      k = "fetch";        globalThis[k](url)   ["outbound-unanalysable"]
+let r;  r ??= sdk.requests;   r.send(req)          []      | let r; r = sdk.requests;  ["outbound-send"]
+let r;  r ||= sdk.requests;   r.send(req)          []      | let g; g = globalThis;    ["outbound-fetch"]
+let r;  r &&= sdk.requests;   r.send(req)          []      | let k; k = "requests";    ["outbound-send"]
+let g;  g ??= globalThis;     g.fetch(url)         []      | let k="req"; k+="uests";  ["outbound-unanalysable"]
+let f;  f ??= fetch;          f(url)               []
+let e;  e ??= eval;           e(src)               []
+let n;  n ??= navigator;      n.sendBeacon(u,d)    []
+let k;  k ??= "requests";     sdk[k].send(req)     []
+let k;  k ??= "req"+"uests";  sdk[k].send(req)     []
 ```
 
-Two sentences written this round are falsified by this. Boundary 2 at `:83-85`: bindings are file-wide, *"which over-approximates rather than under-approximates: a name bound to an outbound receiver anywhere in the file is treated as one everywhere in it."* Here `k` **is** bound to `"requests"` in the file and is treated as one **nowhere**. And `:127-130`: the assembled key resolves *"through EITHER a declaration or an assignment."* The assignment spelling is defeated by any preceding string initializer.
+**The controls are what make this a finding rather than a guess.** Every one of these lines fires with `=` or `+=`. Only the logical-assignment spelling is invisible.
 
-The member path is immune (`let m = "harmless"; m = "send"; sdk.requests[m](req)` reports) because `sdk.requests` is positively identified by name. So this is the receiver-key/global-key asymmetry again — the fifth appearance of the same shape.
+The mechanism is one token test. `collect`'s alias-growing branch at `:2647`:
 
-### WR-27 — holds, and it is the plainest of the three
-
-```
-(b ? sdk.requests : sdk.net).send(req)    []
-(sdk.requests ?? sdk.net).send(req)       []
-(sdk.requests || sdk.net).send(req)       []
+```ts
+node.operatorToken.kind === ts.SyntaxKind.EqualsToken
 ```
 
-Nothing is hidden. `sdk.requests` is written out in full. The two controls added in the **same round** both report — the conditional KEY (`sdk[b ? "requests" : "net"]` → `outbound-send`) and the conditional INITIALIZER (`const r = b ? sdk.requests : sdk.net; r.send(req)` → `outbound-send`). Round 4 taught the operator two of its three faces and left the third, and no residual clause anywhere names it.
+Eleven lines below, at `:2744`, the numeric-**poisoning** branch reads `ASSIGNMENT_OPERATORS` and its own comment says:
 
-### On severity, stated the same way it was last round
-
-**Nothing leaks.** The gate runs green over the real tree inside a 1105-test suite. `check:bundle` reports one specifier, `crypto`. No outbound call exists in any non-spec source under either root. All three findings are *prospective* blindnesses — a gate that would stay green on a call site somebody writes next year. This report does not inflate them into round 2's live credential.
-
-The blocker is not the leak. It is that CORE-11's box is now checked against a disclosure that fails execution in three places, after a round that reverted the same box for a strictly smaller discrepancy.
-
-## On WR-28, which I reproduced with my own sweep
-
-The head-side `;` residual is asserted "severed but STABLE — a second pass re-expands the marker and re-truncates to the same byte" in two files (`observations.spec.ts:987`, `schema.spec.ts:272`). I swept the 71 offsets adjacent to the one the fixture picked:
-
-```
-swept n=1975..2045 : total=71  unstable=11
-unstable offsets: 2019 2020 2021 2022 2023 2024 2025 2026 2027 2028 2029
-
-n=2019  pass1 tail "pppppppppppp;jsessionid="   len 2048
-        pass2 tail "ppppppppppppp;<redacted>"   len 2047
+```ts
+// `x ||= sdk.requests` and friends can assign anything at all.
 ```
 
-The fixture picks n=2010, where the claim is true. Eleven of its seventy-one neighbours are not fixed points. **Secret leaks over n=1900..2100: zero** — the redaction is intact, the stability claim is not. This is a WARNING, not a blocker, and the reasoning is specific: no production path applies `normaliseObservedUrl` twice, and nothing escapes. But it is WR-22's own lesson — *don't take the reviewer's cut point, sweep for the adversarial one* — applied to the tail branch and not the head branch, in the same commit.
+**The file knows the spelling exists and handles it only in the NARROWING collector.** The widening collectors and the narrowing collector disagree about which assignments exist, in the same function, eleven lines apart.
 
-## On WR-30
+`assembledNames`' clause is falsified explicitly — it claims *"a declaration, an assignment, a **compound assignment**, or either binding-pattern spelling"*, and `??=` is a compound assignment that is silent. The stated reach of `receiverAliases`, `constStrings`, `literalsOf`, `globalThisAliases`, `fetchAliases`, `navigatorAliases` and `globalAliases` is falsified too — every one of them says a name **bound** to the surface *is* that surface.
 
-Three docblocks say `ONE HOP AND NO MORE` and each names a specific source string as silent. All three report:
+### CR-11 — holds, and the half that matters is one nobody has named
+
+The reviewer's four spellings all report, and I found two more:
 
 ```
-:969   const a = globalThis; const g = a; g.fetch(u)   ["outbound-fetch"]
-:1104  const a = eval;       const b = a; b(s)         ["outbound-dynamic-code"]
-:1077  const a = navigator;  const n = a; n.sendBeacon(u,d)  ["outbound-beacon"]
+(0, globalThis).fetch(url)        ["outbound-fetch"]
+(globalThis).fetch(url)           ["outbound-fetch"]
+(globalThis as any).fetch(url)    ["outbound-fetch"]
+globalThis!.fetch(url)            ["outbound-fetch"]
+(0, globalThis).eval(src)         ["outbound-dynamic-code"]   ← not named by the review
+(0, fetch)(url)                   ["outbound-fetch"]          ← not named by the review
 ```
 
-`:969`'s exact string is asserted to **report** by the passing test at `:2782`, in the same file, 1,800 lines below it. This is under-claiming — the gate reaches further than the prose — so it opens no hole. It is still a claim contradicted by an executed test in the same file.
+So `silence-operator-around-global-receiver`'s *"silent in every spelling"* is false, and it ships byte-identically into `REQUIREMENTS.md` as the authoritative residual, on the row CORE-11's `[ ]` is blocked on. The `unwrap` row four entries above states the mechanism that falsifies it, and both rows pass because each probe sits on its own side of the boundary.
+
+**On its own, that half is a WARNING and I am saying so rather than inflating it.** The error runs in the **safe** direction — the gate reaches *further* than its text. Wave 28 disclosed one instance in the ledger prose *unprompted*, and the mechanism it named there (`unwrap` strips the wrapper before the receiver resolvers are reached) is the correct and **complete** explanation for all six of my reporting spellings. A residual that understates the gate cannot cause anyone to ship an outbound call believing it would be caught. Wave 28 found one spelling and the correct mechanism; the reviewer found four spellings of that one mechanism.
+
+**What upgrades this to blocker weight is the half I found by probing initializer position, which runs in the UNSAFE direction:**
+
+```
+const g = globalThis ?? self;    g.fetch(url)           []
+const g = b ? globalThis : self; g.fetch(url)           []
+const f = fetch ?? x;            f(url)                 []
+const e = eval ?? x;             e(src)                 []
+const n = navigator ?? x;        n.sendBeacon(u, d)     []
+```
+
+`const g = globalThis ?? self` is a **plausible defensive idiom**, not a contrivance like `(ok && globalThis)`. It creates a fully aliased global receiver the gate cannot see, and **no residual clause anywhere names it.**
+
+Worse, a reader is actively misled into believing it is covered. The `initializerReceiver` row says it *"is a NAME for receiverKind since wave 25, so initializer position and call position give the same answer"*, and the `receiverKind` row demonstrates the SDK operator working in call position. Read together, the two rows say the global case transfers to initializer position. It does not.
+
+---
+
+## On WR-32 — I ran the mutation myself, and it holds. Judged in both directions.
+
+I deleted the `PlusEqualsToken` assembly branch at `:2707-2715` — the branch `assembledNames`' clause explicitly names when it says *"a declaration, an assignment, a **compound assignment**"* — and ran the derived-residual block:
+
+```
+Tests  52 passed | 210 skipped (262)
+```
+
+**All 52 green.** The whole file, run under the same mutation, produced exactly **one** failure: a hand-written fixture at `:4693`, 1,400 lines away from the generated block.
+
+So the generated preamble's point 1 — *"its probe and its counter-probe are run through auditSource … **so a branch removed from the walk turns its own entry red**"* — is **false at branch granularity**. It is true only at the granularity of the one branch each row's single probe happens to exercise. Point 3, three lines below, states the honest version: *"Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and do not cover that resolver's whole domain."*
+
+**Judged fairly in the other direction:** the mechanism is real work and it does reduce the class. The byte comparison is genuine — I proved it red. The row-level execution is genuine. The coverage guard over two enumerated populations, with a named exemption list and non-vacuity asserted before the rule, is genuine. The registry's own vacuity check (a row whose probe and counter-probe agree fails) is a real guard against the laziest bad row.
+
+But the reviewer's characterisation is correct and it is the load-bearing sentence of this report: **the derived block binds the shipped TEXT to the REGISTRY, and each row's PROBE to the walk. Nothing binds a row's `clause` — hand-written prose that no assertion reads — to the branch it describes.** That is why CR-11, CR-12 and CR-13 could all land inside a mechanism that is 100% green: each is a clause whose stated reach exceeds its probe's executed reach, which is the phase's recurring failure mode reproduced one level up, in the artefact built to end it.
+
+## On WR-33 — partially confirmed, and I am splitting it rather than accepting it whole
+
+`RESOLVER_EXEMPTIONS.collect`: *"the first document-order pass. It invokes the collectors and records bindings; **it decides nothing about what an expression IS**."* **Materially false.** `collect`'s own inline `EqualsToken` test decides which right-hand expressions ever reach a resolver at all — and that inline branch is the entirety of CR-12. The guard's own population-3 disclosure names *"an inline branch in `collect`"* as the residue it cannot see; this exemption hands that residue a reason to stay unexamined.
+
+`RESOLVER_EXEMPTIONS.visit`: *"every resolution it performs is delegated to a registered mechanism."* **Misleading rather than flatly false.** Each individual resolution *is* delegated — `unwrap` and `receiverKind` are both registry rows. What is unregistered is the **dispatch**: `visit` chooses `unwrap` for a call callee and never `operatorReceiver`, and that choice is the seam CR-11 lives in. I am recording this at warning weight with the distinction stated, not at the reviewer's weight.
+
+## On WR-34 — confirmed, definitively, and it needs no mutation
+
+`:6069` is titled *"CORE-11's entry is present and well-formed, and **its box is what plan 01-27 left it**"*. Its regex:
+
+```ts
+/^- \[[ x]\] \*\*CORE-11\*\*/
+```
+
+`[ x]` is a character class matching a space **or** an `x`. The test asserts one thing: that exactly one such row exists. I grepped both source roots, `scripts/` and `tests/` — **nothing anywhere pins CORE-11's checkbox state.**
+
+The test named for the box cannot see the box. It would stay green through the exact flip that has been reverted twice, at `e7cc4b6` and `faca607`. It is the smallest finding in this report and it is the one that sits closest to the wound.
+
+## Is CORE-11's `[ ]` correct? Yes — and it is more correct than wave 28 knew.
+
+Wave 28 discharged 7 of 8 enumerated rows and named 1 blocking row. Executed, **6 of 8 carry a named blocking shape**:
+
+| Enumerated clause | Wave 28 | Measured this round |
+|---|---|---|
+| no `caido:http` fetch | discharged | ✓ holds — `const s = b ? "caido:http" : "crypto"; import(s)` reports |
+| no `sdk.requests.send` in any spelling | discharged | ✗ CR-12, CR-13 |
+| no method of an identified `requests`/`net` receiver | discharged | ✗ CR-13, WR-37 |
+| no global `fetch` by any receiver or alias | **BLOCKED** | ✗ still — plus CR-11's initializer half, plus CR-12 |
+| no `XMLHttpRequest`/`WebSocket`/`EventSource` | discharged | ✗ `new (ok && WebSocket)()` → `[]` |
+| no `navigator.sendBeacon` | discharged | ✗ CR-11, CR-12 |
+| no dynamic code construction | discharged | ✗ `(ok && eval)(src)` → `[]`; `const e = eval ?? x` → `[]` |
+| no speculative retrieval of any kind | n/a | n/a |
+
+The box is right. The discharge table behind it is not — **and the difference is entirely the same defect: a row discharged against a probe that sits on the working side of a boundary the clause claims to span.**
+
+## On severity, stated the same way it has been every round
+
+**Nothing leaks.** No outbound call exists in any non-spec source under either root — 23 files, zero violations. The gate runs green over the real tree inside a **1200**-test suite. `check:bundle` reports the shipped bundle's entire import set as one specifier, `crypto`. Zero debt markers, zero skipped tests, zero `.only`. Every finding in this report is a **prospective** blindness in a test-only gate: a call site somebody writes next year that the gate would stay green on. This report does not inflate any of them into round 2's live credential.
+
+**The blocker is not a leak. It is that the requirement's own enumeration cannot be discharged, and the mechanism built to make that assessable is itself assessed by a probe narrower than its claim.**
 
 ## Goal Achievement
 
-**All seven ROADMAP Success Criteria hold, and none regressed under round 4. The phase GOAL is achieved. UAT gap 2 is not closed.** Those stay separate, as they have every round.
+**All seven ROADMAP Success Criteria hold, and none regressed under round 5. The phase GOAL is achieved. UAT gap 2 is not closed.** Those stay separate, as they have every round.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | `onInterceptResponse` is non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `passive.ts:120` is `export function onResponse(`, not async. Regression-checked this round; probed independently in verification 1. |
-| 2 | The work queue is bounded and its overflow count is visible | ✓ VERIFIED | `queue.ts:96` exposes `overflowCount` as a getter a take does not reset (`:81`); `index.ts:130` surfaces `queueOverflowCount` on `getStatus()`. `queue.spec.ts` asserts cap+1 → overflow 1 and 3000 offers → 952. |
-| 3 | Browsing a 200-chunk SPA leaves UI and RPC responsive, max sync slice under the Phase 0 threshold | ✓ VERIFIED | `results/spa-load.json` re-read: `max_slice_ms 0.029` against a 25 ms budget, gated by `tests/phase1-load.spec.ts` in the green suite. |
-| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | `spa-load.json.restart` re-read this round: `identical: true`, `plugin_reattached: true`, `user_version` 2 before and after, 200 artifacts / 200 observations / 200 distinct digests, identical `schema_sha256`. |
+| 1 | `onInterceptResponse` is non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `passive.ts:120` is `export function onResponse(`, not async; registered at `index.ts:322`. Regression-checked this round. |
+| 2 | The work queue is bounded and its overflow count is visible | ✓ VERIFIED | `queue.ts:96` exposes `overflowCount` as a getter a take does not reset (`:81`); `index.ts:130` surfaces `queueOverflowCount` on `getStatus()`. Asserted in the green suite. |
+| 3 | Browsing a 200-chunk SPA leaves UI and RPC responsive, max sync slice under the Phase 0 threshold | ✓ VERIFIED | `results/spa-load.json` re-read this round: `max_slice_ms 0.029` against a 25 ms budget, gated by `tests/phase1-load.spec.ts` in the green suite. |
+| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | `spa-load.json.restart` re-read this round: `identical: true`, `plugin_reattached: true`, `user_version` 2 before and after, 200 artifacts / 200 observations / 200 distinct digests, `schema_changed: false`. |
 | 5 | Offsets and hashes derive from `toRaw()` bytes; a non-UTF-8 fixture round-trips | ✓ VERIFIED | `consumer.ts:189` `const raw = body.toRaw()`; the `toText()` AST gate in `admit.spec.ts` passes and is fixture-proven. |
 | 6 | A CI gate fails the build if the backend bundle imports any specifier outside the measured allowlist | ✓ VERIFIED | **Re-executed:** `node scripts/ci/check-bundle-imports.mjs` → `packages/backend/dist/index.js: 1 import specifier(s): crypto`, exit 0. |
 | 7 | A Caido build below the declared minimum produces a clear message | ✓ VERIFIED | `MIN_CAIDO = "0.57.1"` at `compat.ts:43`; refusal messages at `:332/:352/:363` naming both versions. Proven against the real 0.55.3 binary in `compat-smoke.json` leg C. |
-| 8 | **[UAT gap 1]** `observations.url` does not persist query-string values verbatim | ✓ VERIFIED — holds | My own 200-offset sweep of a `;jsessionid=SECRETSESSION` payload through the shipped `normaliseObservedUrl`: **zero leaks**. Round-3 mutation proofs at both unit and live tiers stand unchanged. WR-28 is a defect in the residual's STABILITY claim, not in the redaction. |
-| 9 | **[UAT gap 2]** No shipped code can introduce outbound traffic without failing a gate | ✗ FAILED (partial) | CR-08 closed. CR-09, CR-10 and WR-27 open, all three executed by me. `let k = "harmless"; k = "requests"; sdk[k].send(req)` → `[]`; `(b ? sdk.requests : sdk.net).send(req)` → `[]`; and the document-order READ bound is false in five artifacts including `REQUIREMENTS.md:46`, the text the `[x]` was flipped against. |
+| 8 | **[UAT gap 1]** `observations.url` does not persist query-string values verbatim | ✓ VERIFIED — holds | My own **301**-offset head sweep plus 400 query-tail lengths of a `SECRETSESSION` payload through the shipped `normaliseObservedUrl`: **zero leaks, zero over-`URL_MAX` outputs**. Round-3 mutation proofs at both unit and live tiers stand. WR-28 CLOSED — the new disclosure names the same 11 offsets I measured. |
+| 9 | **[UAT gap 2]** No shipped code can introduce outbound traffic without failing a gate | ✗ FAILED (partial) | CR-09, CR-10, WR-27, WR-28, WR-30 all closed and re-verified by me. CR-11, CR-12 and CR-13 open, all three executed. `const k = b ? "requests" : "net"; sdk[k].send(req)` → `[]`; `let r; r ??= sdk.requests; r.send(req)` → `[]`; `const g = globalThis ?? self; g.fetch(url)` → `[]`. Six of the eight enumerated clauses now carry a named blocking shape. |
 
 **Score:** 8/9 truths verified (0 present, behavior-unverified)
 
-**8/9 for the third round running, and the 8 is the same 8 as last time while the 9 fails for entirely new causes.** Round 3's failing truth was CR-08 — an assembled key defeated by one `const`, and a conditional key nobody had disclosed. That is closed; I verified all eight shapes. What replaced it is a stale literal shadowing every rebinding, a conditional receiver in call position, and a residual sentence that is false in five places. **The one genuinely new thing this round is that the ledger moved in the wrong direction:** round 3's `REQUIREMENTS.md` said "this box stays `[ ]` deliberately, and this is the reason", and round 4 checked it.
+**8/9 for the fourth round running, and for the fourth time the failing truth fails for entirely new causes.** Round 2's cause was five gate blindnesses; round 3's was CR-08's assembled key; round 4's was the false read bound, the stale literal and the conditional receiver; round 5's is a conditional *initializer*, a logical-assignment binding, and an operator around a *global* receiver. Every one of the previous three sets is genuinely closed. **The one thing that changed direction this round is the ledger: round 4's box was checked against a falsified disclosure, and round 5's box is open with the blocking row named.**
 
-### What round 4 genuinely delivered
-
-Adversarial verification is not one-sided, and this round delivered more than any previous one.
+### What round 5 genuinely delivered
 
 | Deliverable | Status | What I executed or re-derived |
 |---|---|---|
-| CR-08, the round-3 blocker | ✓ CLOSED, all eight shapes, verified by me | One-hop assembled key in five spellings, the conditional key, the comma sequence — every one silent in round 3, every one reporting now. |
-| WR-23, the `eval` alias | ✓ CLOSED | `const e = eval; e("…")` → `outbound-dynamic-code`. The receiver-anchoring twin (`const o = { eval(s){} }`) stays quiet, so the widening did not over-reach. |
-| IN-20, the `globalThis` hop | ✓ CLOSED, and it uncovered more than it fixed | `const g = globalThis; g.fetch(u)` reports. Plan 01-19 then MEASURED that alias sets chain to arbitrary depth and said so — I confirmed at 2, 3 and 4 hops across five sets. A finding volunteered in the honest direction. |
-| WR-24, the STORE-07 operator class | ✓ CLOSED, executed by me end to end | `? :`, `??`, `\|\|` and `&&` all report `unredacted-concat`; all four were `[]` in round 3. Every `describeError` twin stays quiet including the ternary twin. |
-| WR-22, the truncation | ✓ CLOSED on the branch it covers | My own 200-offset sweep: zero secret leaks. The `&`-boundary drop-back works. Its DISCLOSURE is where WR-28 lives. |
-| Residual (a)'s split | ✓ HALF RIGHT, and the right half is the honest one | The ALIAS half is correct and I confirmed it — chains resolve to any depth. The BOUND it substituted ("a chain read before its root is silent") is false, which is CR-09. Round 4 got the widening right and the new limit wrong. |
-| The mechanism→shape table | ✓ ACCURATE for the rows it names | I checked it row for row against execution. Every row it lists is true. The defect is what it omits — a reassigned key, a conditional receiver — and those omissions are not in the NOTHING rows either. |
+| CR-09, the round-4 blocker (false READ bound) | ✓ CLOSED at the seam | The bound is now declaration-order among the bindings, stated in all five locations, with the false clause preserved and labelled FALSIFIED. `const b = a; const a = fetch; b(u)` → `[]`; the dependency-ordered twin reports. |
+| CR-10, the stale first literal | ✓ CLOSED at the seam, not the symptom | `constStrings` is multi-valued; `literalOf` answers `undefined` (which reports) for two bindings. All six round-4 shapes now report. The boundary-2 disclosure was rewritten PER COLLECTOR FAMILY, which is the honest shape. |
+| WR-27, the conditional receiver in call position | ✓ CLOSED | All three operator forms report; `initializerReceiver` collapsed into `receiverKind` so the two positions cannot drift apart again. |
+| WR-28, the single-offset stability pin | ✓ CLOSED, and closed the right way | Swept rather than re-picked. My independent sweep found **exactly** the disclosed 11 offsets, n=2019..2029. |
+| WR-30, the three `ONE HOP` docblocks | ✓ CLOSED | Two deleted, the true one kept and made to say why it is the only place that bound is stated. |
+| The derived residual — byte-comparison half | ✓ REAL, mutation-proved by me | Spans byte-identical (295 lines, sha256 `91978e31…`, 38 entries). One-phrase edit in `REQUIREMENTS.md` → suite RED with the named DIVERGED assertion. Restored → green. |
+| The derived residual — walk-binding half | ⚠️ NARROWER THAN ITS PREAMBLE | `PlusEqualsToken` branch deleted → derived block **52/52 green**. Binds text↔registry and probe↔walk; does NOT bind clause↔branch. |
+| CORE-11's checkbox | ✓ CORRECT, and it is the first attempt that needed no revert | `[ ]`, with the blocking row named in the ledger. Wave 28 also volunteered the `(0, globalThis)` discrepancy unprompted, in the safe direction. |
+| Requirement ledger integrity | ✓ VERIFIED mechanically | All 23 phase ids appear in at least one of 28 plans; every plan id resolves in `REQUIREMENTS.md`. **No orphans.** 22 `[x]`, CORE-11 `[ ]`. |
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `packages/backend/src/store/observations.ts` | Write-path URL redaction, all grammars | ✓ VERIFIED | `redactDelimitedSegment` walks the VALUE half; `normaliseObservedUrl:463-475` now drops back to a segment boundary. Wired into `recordObservation`, data flowing from `consumer.ts:446`. Zero leaks in my 200-offset sweep. |
-| `packages/backend/src/store/observations.spec.ts` | Fixtures that can fail | ⚠️ PARTIAL | The `BARE_CREDENTIAL_SHAPES` table and its structural assertions are strong and mutation-proven. `:987`'s "severed but STABLE" pin holds only at the one offset it picked (WR-28). |
-| `packages/backend/src/store/schema.spec.ts` | Per-grammar claim with a complete OPEN list | ⚠️ PARTIAL | Two grammars named with per-grammar tier attribution — the round-3 fix stands. `:272` repeats the false stability claim. |
-| `packages/backend/src/outbound-prohibition.spec.ts` | CORE-11 gate over both shipped roots | ⚠️ PARTIAL | 2911 lines, both roots, by-name non-vacuity. CR-08's eight shapes all closed. Stale-literal key shadowing, conditional receiver in call position, and destructured key bindings all silent; the document-order READ bound false in four places in this file; three `ONE HOP` docblocks contradicted by their own tests. |
-| `packages/backend/src/store/error-redaction.spec.ts` | STORE-07 gate | ✓ VERIFIED | WR-17 and WR-24 both closed, both executed by me. The full operator class reports; every `describeError` twin quiet. |
-| `tests/pins.spec.ts` | The WR-21 gate the tracer claimed | ✓ VERIFIED | WR-25 closed — `versionLiterals` lifted out, four fixtures execute both directions, the load-bearing one plants the literal into the real file's bytes. |
+| `packages/backend/src/store/observations.ts` | Write-path URL redaction, all grammars | ✓ VERIFIED | Wired into `recordObservation`, data flowing from `consumer.ts:446`. Zero leaks across my 301-offset head sweep and 400-length query sweep; zero over-`URL_MAX`. |
+| `packages/backend/src/store/observations.spec.ts` | Fixtures that can fail | ✓ VERIFIED | WR-28 closed — `:929` asserts a swept range with a named failure list rather than one chosen offset. The `BARE_CREDENTIAL_SHAPES` table and its mutation proofs stand. |
+| `packages/backend/src/store/schema.spec.ts` | Per-grammar claim with a complete OPEN list | ✓ VERIFIED | `:287-289` now discloses the swept result including the 11 non-fixed-points, which I reproduced exactly. The false stability claim is gone. |
+| `packages/backend/src/outbound-prohibition.spec.ts` | CORE-11 gate over both shipped roots | ⚠️ PARTIAL | 6,089 lines, both roots, by-name non-vacuity, 38-row registry, byte-checked ledger. CR-09/CR-10/WR-27/WR-30 all closed. A conditional key initializer, every logical-assignment binding, an operator around a global receiver in both call and initializer position, a nested destructure and an array-slot receiver are all silent; three registry clauses falsified by execution; the derived block cannot go red on a branch its own clause names. |
+| `packages/backend/src/store/error-redaction.spec.ts` | STORE-07 gate | ✓ VERIFIED | WR-17 and WR-24 closed, executed in round 4, regression-checked in the green suite. WR-36 (`{ ...e }` reports `[]` against the IN-25 correction text) is a warning on the disclosure, not the prohibition. |
+| `tests/pins.spec.ts` | The WR-21 gate the tracer claimed | ✓ VERIFIED | WR-25 closed; four fixtures execute both directions, the load-bearing one plants the literal into the real file's bytes. |
 | `scripts/ci/check-bundle-imports.mjs` | DIST-05 bundle allowlist gate | ✓ VERIFIED | Re-executed: 1 specifier, `crypto`, exit 0. |
-| `scripts/phase1/tracer-e2e.sh` | Live end-to-end proof against the DB file | ✓ VERIFIED | Six grammars, two padded dyes under both spellings; IN-21 closed (`padded_segments_reached` can no longer report off an empty generator). |
+| `scripts/phase1/tracer-e2e.sh` | Live end-to-end proof against the DB file | ✓ VERIFIED | Six grammars, two padded dyes under both spellings; IN-21 closed. |
 | `packages/backend/src/compat.ts` | COMPAT-01/02 refusal | ✓ VERIFIED | `MIN_CAIDO` + three distinct messages, proven on a real 0.55.3 binary. |
-| `.planning/REQUIREMENTS.md` | Honest ledger | ✗ FAILED | CORE-11 is `[x]`. Its discharge text contains three sentences I falsified by execution. Round 3 left this box `[ ]` for a strictly smaller discrepancy and recorded the reason. |
+| `.planning/REQUIREMENTS.md` | Honest ledger | ⚠️ PARTIAL — **upgraded from FAILED** | CORE-11 is `[ ]` with the blocking row named, which is the correct state and reverses round 4's regression. It carries a machine-owned span that is byte-bound to the registry and that I proved goes red on edit. **What keeps it PARTIAL:** the span contains the false universal `silent in every spelling` (six spellings report), the false `constStrings` and `literalsOf` universals CR-13 falsifies, and `assembledNames`' compound-assignment clause CR-12 falsifies — and the wave-28 discharge text above it claims 7 of 8 rows discharged where 2 survive execution. |
 
 ### Key Link Verification
 
@@ -270,7 +338,9 @@ Adversarial verification is not one-sided, and this round delivered more than an
 | `ingest/consumer.ts:446` | `store/observations.ts` | `recordObservation(...)` with `got.url` | ✓ WIRED | Real data path; `got.url` from `rr.request.getUrl()` at `:195`. |
 | `store/observations.ts` | SQLite `observations.url` | `normaliseObservedUrl(url)` inside the INSERT parameters | ✓ WIRED | Write-path, settled against the real database file by the committed clean and mutation runs. |
 | `outbound-prohibition.spec.ts` | `packages/engine/src` | `SOURCE_ROOTS[1]` + by-name non-vacuity | ✓ WIRED | 23 files over both roots, zero violations on the real tree. |
-| `tests/pins.spec.ts` | `scripts/phase1/tracer-e2e.sh` | `readFileSync` raw text + `versionLiterals` | ✓ WIRED | Now with four executed fixtures in both directions (WR-25 closed). |
+| `RESOLVER_REGISTRY` | `.planning/REQUIREMENTS.md` span | `deriveResidual` → `extractDerivedBlock` → byte equality | ✓ WIRED, **mutation-proved by me** | One-phrase edit → RED with the named DIVERGED assertion; restored → green. 295 lines, sha256 `91978e31…`, identical to the gate-header span. |
+| `RESOLVER_REGISTRY.clause` | the walk's branches | *(nothing)* | ✗ NOT WIRED | The clause is prose no assertion reads. Proved by mutation: `PlusEqualsToken` branch deleted → derived block 52/52 green, and that branch is named in `assembledNames`' clause. |
+| `:6069` "its box is what plan 01-27 left it" | CORE-11's checkbox STATE | `/^- \[[ x]\] \*\*CORE-11\*\*/` | ✗ NOT WIRED | The character class accepts both states. Nothing in either source root, `scripts/` or `tests/` pins the box. |
 | `index.ts:130` | `engine/queue.ts:96` | `queue.overflowCount` → `getStatus().queueOverflowCount` | ✓ WIRED | RPC-visible. |
 
 ### Data-Flow Trace (Level 4)
@@ -281,99 +351,105 @@ Adversarial verification is not one-sided, and this round delivered more than an
 | `getStatus().queueOverflowCount` | `queue.overflowCount` | live `BoundedQueue` instance | ✓ | ✓ FLOWING |
 | `spa-load.json.max_slice_ms` | measured slice | live 200-chunk run | ✓ 0.029 ms vs 25 ms budget | ✓ FLOWING |
 | `check-bundle-imports` specifier set | parsed `dist/index.js` | real built bundle | ✓ 1 specifier | ✓ FLOWING |
-| `spa-load.json.restart` digests | live SQLite file, before and after | real Caido restart | ✓ 200/200 distinct, identical `schema_sha256` | ✓ FLOWING |
+| `spa-load.json.restart` digests | live SQLite file, before and after | real Caido restart | ✓ 200/200 distinct, `schema_changed: false` | ✓ FLOWING |
+| `REQUIREMENTS.md` derived span | `deriveResidual(RESOLVER_REGISTRY)` | the registry object, in-process | ✓ byte-identical, mutation-proved red | ✓ FLOWING |
+| registry `clause` text | *(none)* | hand-authored prose | ✗ no assertion reads it | ⚠️ STATIC — the text is bound to the registry, the registry's clause is bound to nothing |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Full suite green | `pnpm test` (run ONCE) | 31 files, **1105 tests passed**, exit 0 | ✓ PASS |
-| Typecheck | `pnpm run typecheck` (`tsc --build`) | exit 0 | ✓ PASS |
-| Prior-phase regression gate | `vitest run tests/go-no-go tests/schema tests/spike-results` | 3 files, **72 tests**, exit 0 — Phase 0 baseline unchanged | ✓ PASS |
+| Full suite green | `vitest run` (run ONCE) | 31 files, **1200 tests passed**, exit 0 | ✓ PASS |
+| Typecheck | `tsc --build` | exit 0 | ✓ PASS |
+| Prior-phase regression gate | `vitest run tests/go-no-go tests/schema tests/spike-results` | 3 files, **72 tests**, exit 0 — the pinned Phase 0 baseline, unchanged | ✓ PASS |
 | Bundle import gate | `node scripts/ci/check-bundle-imports.mjs` | `1 import specifier(s): crypto`, exit 0 | ✓ PASS |
-| CR-08 closure, all 8 shapes | throwaway spec importing `auditSource` | every shape that was `[]` in round 3 now reports | ✓ PASS |
-| WR-23 / IN-20 / alias chaining | same probe, 6 shapes | `const e = eval; e(s)` reports; chains report at 2, 3 and 4 hops across 5 sets | ✓ PASS |
-| WR-24 operator class | throwaway spec importing STORE-07 `auditSource`, 7 shapes | `? :`, `??`, `\|\|`, `&&` all report; both `describeError` twins quiet | ✓ PASS |
-| STORE-03 leak sweep | 200 head lengths × `;jsessionid=SECRETSESSION` through `normaliseObservedUrl` | **0 leaks** | ✓ PASS |
-| CR-09 document-order read | throwaway spec, 7 use-before-declaration shapes | **all 7 report** — the READ bound is false | ✗ FAIL (blocker) |
-| CR-09 fixture diagnosis | `:2798`'s body, wrapper removed and read moved last | still `[]`; wrapper kept with root bound directly → reports | ✗ FAIL (blocker) |
-| CR-10 stale literal | throwaway spec, 6 shapes + 3 controls | 6 silent, 3 controls fire — the miss is real | ✗ FAIL (blocker) |
-| WR-27 conditional receiver | throwaway spec, 3 operator forms + 2 controls | `? :`, `??`, `\|\|` in call position all `[]`; both controls report | ✗ FAIL (blocker) |
-| WR-28 stability sweep | 71 adjacent head offsets through `normaliseObservedUrl` twice | **11 of 71 not fixed points** (n=2019..2029); 0 leaks | ✗ FAIL (warning) |
-| WR-30 one-hop docblocks | 3 docblock source strings executed verbatim | all 3 report; `:969`'s string is asserted to report at `:2782` | ✗ FAIL (warning) |
-| IN-26 destructured key | `const { k } = o; sdk[k].send(req)` | `[]`, and not in any residual row | ✗ FAIL (warning) |
-| Tree clean after probes | `git status --short` | no probe artefacts, no source-tree changes | ✓ PASS |
-| Debt markers | `grep -rn "TBD\|FIXME\|XXX\|TODO\|HACK\|PLACEHOLDER"` over source, scripts, tests | **zero** | ✓ PASS |
-
-**Note on the 1105:** every one of them passes with CR-09, CR-10 and WR-27 live. The suite grew 1044 → 1105 across this round and none of the 61 new assertions can see any of the three. That asymmetry — which findings the suite can see and which it cannot — is the measurement, not the count.
+| Debt-marker scan | `grep -rnE "TBD\|FIXME\|XXX"` over both roots + `scripts/` + `tests/` | zero unreferenced markers | ✓ PASS |
+| Disabled-test scan | `grep -rnE "it.skip\|describe.skip\|.only\("` | zero | ✓ PASS |
+| Derived spans byte-identical | in-process span extraction + sha256 | 295 lines, both `91978e31…`, 38 entries, identical | ✓ PASS |
+| Byte-comparison goes RED on edit | `silent in every spelling` → `silent in most spellings` in `REQUIREMENTS.md`, run, restore | RED with the named DIVERGED assertion; restored green | ✓ PASS |
+| CR-09 closure re-verified | throwaway spec importing `auditSource` | inverted binding silent, dependency-ordered reports — the text now matches | ✓ PASS |
+| CR-10 closure re-verified | same probe, 4 shapes + controls | `let k = "harmless"; k = "requests"` reports; `+=` reports | ✓ PASS |
+| STORE-03 leak sweep (wider than round 4) | 301 head lengths + 400 query-tail lengths through `normaliseObservedUrl`, both passes | **0 leaks, 0 over-`URL_MAX`** | ✓ PASS |
+| WR-28 correction accuracy | independent sweep n=1900..2200 | **11 unstable, exactly n=2019..2029** — matches the disclosure | ✓ PASS |
+| **CR-11**, 16 shapes | throwaway spec importing `auditSource` | 4 reviewer spellings + 2 more report; 4 RECEIVER_OPERATORS silent; **5 initializer shapes silent and undisclosed** | ✗ FAIL (blocker) |
+| **CR-12**, 9 shapes + 4 controls | same probe | all 9 silent, all 4 controls fire | ✗ FAIL (blocker) |
+| **CR-13**, 4 shapes + 4 twins | same probe | all 4 silent, all 4 twins report | ✗ FAIL (blocker) |
+| **WR-32** mutation | `PlusEqualsToken` branch deleted → derived block run → restored | **52 passed, 0 failed**; whole file: 1 failure, 1,400 lines away | ✗ FAIL (warning) |
+| **WR-34** regex read | `/^- \[[ x]\] \*\*CORE-11\*\*/` + grep for any other box pin | accepts both states; no other pin exists anywhere | ✗ FAIL (warning) |
+| **WR-37** + 2 shapes I found | same probe | nested destructure, array-slot receiver and object-literal property all `[]`; both halves of the nested one report alone | ✗ FAIL (warning) |
 
 ### Probe Execution
 
 | Probe | Command | Result | Status |
 |---|---|---|---|
-| Live tracer, round 3 clean | recorded run `20260822T094728Z-11865` (`caido_version=0.58.0`) | nine values at 0 in raw column and RPC; `raw rows == rpc rows : 2 == 2` | PASS (recorded — needs a live Caido instance) |
-| Live tracer, round 3 mutation | recorded run `20260822T094959Z-31622` | 18 assertions RED; both padded dyes visible in the durable column | PASS (recorded) |
-| Live tracer, round 2 clean + mutation | runs `20260821T150022Z-16902`, `20260821T150143Z-19295` | unchanged, still committed | PASS (recorded) |
-| Compat smoke | `results/compat-smoke.json` | leg C refuses on the real 0.55.3 binary | PASS (recorded) |
+| `scripts/ci/check-bundle-imports.mjs` | `node scripts/ci/check-bundle-imports.mjs` | exit 0, 1 specifier | PASS |
+| Phase 0 baseline gate | `vitest run tests/{go-no-go,schema,spike-results}.spec.ts` | exit 0, 3 files / 72 tests | PASS |
 
-Live-tier probes were not re-executed: they need a running Caido and a proxied origin, which Step 7b's constraints exclude. Round 4 changed no live-tier behaviour — its edits are confined to the two AST gates and to `normaliseObservedUrl`'s truncation, and I covered the last of those with a host-side 200-offset sweep instead.
+No `scripts/*/tests/probe-*.sh` files exist in this tree; the phase's runnable gates are the vitest suite and the two node/CI scripts above, all executed.
 
 ### Requirements Coverage
 
-Every id declared in any of the 22 plans' frontmatter resolves in `REQUIREMENTS.md`, and every id the phase is tagged with appears in at least one plan's frontmatter. **23 ids, no orphans.**
+| Requirement | Source Plan(s) | Status | Evidence |
+|---|---|---|---|
+| CORE-01 | 01-01 … | ✓ SATISFIED | Truth 1. `passive.ts:120` non-async, registered at `index.ts:322`. |
+| CORE-02 | 01-01, 01-02 | ✓ SATISFIED | Admission gates asserted in `hooks/admit.spec.ts`, green. |
+| CORE-03 | 01-02 | ✓ SATISFIED | Truth 2. Bounded queue + visible `overflowCount`. |
+| CORE-04 | 01-02, 01-03 | ✓ SATISFIED | Single consumer, concurrency 1, asserted in the green suite. |
+| CORE-05 | 01-03 | ✓ SATISFIED | `consumer.ts` reloads via `sdk.requests.get(id)`. |
+| CORE-06 | 01-03 | ✓ SATISFIED | 64 KB / 4 KB chunking with temporal yield, asserted. |
+| CORE-07 | 01-03 | ✓ SATISFIED | Wall-clock deadline between chunks, degrades to partial. |
+| CORE-08 | 01-04 | ✓ SATISFIED | Truth 4 — 200 distinct digests, content hashed once. |
+| CORE-09 | 01-04, 01-05 | ✓ SATISFIED | Project-switch cancellation asserted. |
+| CORE-10 | 01-05, 01-06 | ✓ SATISFIED | Truth 3 — `max_slice_ms 0.029` recorded from a live run. Prohibition flagged judgment-tier. |
+| **CORE-11** | 01-10, 01-12, 01-16, 01-18, 01-19, 01-23, 01-28 | ✗ **BLOCKED** | Truth 9. Box `[ ]`, correctly. 6 of 8 enumerated clauses carry a named blocking shape. |
+| STORE-01 | 01-04 | ✓ SATISFIED | Schema via `sdk.meta.db()`. Prohibition flagged judgment-tier. |
+| STORE-02 | 01-04 | ✓ SATISFIED | Truth 4 — `project_id` in every key. |
+| STORE-03 | 01-04, 01-10, 01-20 | ✓ SATISFIED | Truth 8 — content-addressed by digest; redaction proved over 701 swept inputs. |
+| STORE-04 | 01-04 | ✓ SATISFIED | Corpus version on analysis rows. |
+| STORE-05 | 01-04, 01-05 | ✓ SATISFIED | Truth 4 — `user_version` 2 across a real restart, forward migrations tested populated. |
+| STORE-06 | 01-05 | ✓ SATISFIED | Retention policy asserted. |
+| STORE-07 | 01-05, 01-16, 01-21 | ✓ SATISFIED | Positional `?` gate + `describeError` gate, both mutation-proven. |
+| COMPAT-01 | 01-06, 01-07 | ✓ SATISFIED | Truth 7 — `MIN_CAIDO`, three messages, real 0.55.3 binary. |
+| COMPAT-02 | 01-07 | ✓ SATISFIED | Smoke test against the current release, `compat-smoke.json`. |
+| ENC-01 | 01-03, 01-08 | ✓ SATISFIED | Truth 5 — `toRaw()` at `consumer.ts:189`, `toText()` AST gate green. |
+| DIST-05 | 01-08, 01-09 | ✓ SATISFIED | Truth 6 — re-executed, 1 specifier. |
+| DIST-06 | 01-09 | ✓ SATISFIED | `tests/pins.spec.ts`, the exact-pin traps asserted. |
 
-| Requirement | Source Plan | Description | Status | Evidence |
-|---|---|---|---|---|
-| CORE-01 | 01-01, 01-09 | non-async handler | ✓ SATISFIED | `passive.ts:120` |
-| CORE-02 … CORE-08 | 01-03, 01-04 | admission, dedup, corpus-version skip | ✓ SATISFIED | `admit.ts`, `consumer.ts`; suite green, 1105 tests |
-| CORE-09, CORE-10 | 01-05 | honest counters | ✓ SATISFIED | `proxiedResponsesObserved` naming; CORE-10 judgment-tier, accepted at UAT, flagged |
-| CORE-11 | 01-10, 01-12, 01-16, 01-18, 01-19 | outbound prohibition, gated | ✗ BLOCKED | The must-NOT holds. The enforcement is partial, the residual is false in five places, and the box is `[x]` |
-| STORE-01 | 01-01, 01-04, 01-10, 01-15 | schema scope | ⚠️ TENSION (unchanged from round 3) | Four tables gated; the "capable of holding a secret" half honestly bounded and pinned |
-| STORE-02, STORE-04, STORE-05, STORE-06 | 01-01, 01-04, 01-08 | persistence, retention, migrations | ✓ SATISFIED | `user_version` 2 before/after restart; retention gated |
-| STORE-03 | 01-01, 01-07, 01-10, 01-11, 01-14 … 01-17, 01-20 | (declared for write-path URL redaction) | ✓ SATISFIED | 200-offset leak sweep clean; round-3 mutation proofs at both tiers stand. Ledger collision still deferred with an owner |
-| STORE-07 | 01-01, 01-04, 01-07, 01-11, 01-13, 01-16, 01-21 | (declared for rendered-error redaction) | ✓ SATISFIED | PROMOTED — WR-24 closed, operator class executed by me in both directions |
-| STORE-08 | — | `entities`/`evidence`/`audit` | — DEFERRED | Opened unchecked; Phase 4/5 owners in the ROADMAP traceability table |
-| COMPAT-01, COMPAT-02 | 01-06 | minimum-version refusal | ✓ SATISFIED | Real 0.55.3 binary, three distinct messages |
-| ENC-01 | 01-01, 01-03 | `toRaw()` bytes | ✓ SATISFIED | `consumer.ts:189`; `toText()` AST gate |
-| DIST-05, DIST-06 | 01-02 | bundle import allowlist, exact pins | ✓ SATISFIED | Re-executed, 1 specifier |
-
-**Two ledger collisions remain open and are correctly labelled** (STORE-03's text is about content addressing, STORE-07's about SQL parameter binding, while both are declared for redaction work). Both are recorded in `REQUIREMENTS.md` as DEFERRED WITH AN OWNER, with the reason written out. That handling is right; it is not resolved.
+**Orphan check:** REQUIREMENTS.md and ROADMAP.md both map exactly `CORE-01 … CORE-11, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06` to Phase 1 — 23 ids. All 23 are claimed by at least one of the 28 plans. Every id named in any plan resolves in REQUIREMENTS.md. `STORE-08` and `ENC-02` appear in plan prose but are explicitly split out to later phases and mapped there. **NO ORPHANS.**
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| `packages/backend/src/outbound-prohibition.spec.ts` | 212-215, 216, 255-257, 1049-1053 | The READ-position document-order bound, stated four times, false in all four | 🛑 BLOCKER | `collect(sf)` at `:1521` completes before `visit(sf)` at `:1726`. Seven executed shapes report where the residual says they are silent |
-| `.planning/REQUIREMENTS.md` | 46 | CORE-11 `[x]`, flipped against a discharge text containing three sentences I falsified | 🛑 BLOCKER | The ledger is the last artifact a reader checks. Round 3 left this box `[ ]` for a strictly smaller discrepancy and wrote the reason down |
-| `packages/backend/src/outbound-prohibition.spec.ts` | 2798 | Fixture titled "a chain READ BEFORE ITS ROOT is silent" is green because its bindings are inverted | 🛑 BLOCKER | Green-for-a-different-mechanism, under a title naming the mechanism it does not test — the CR-08 defect, in the file whose header promises it cannot recur |
-| `packages/backend/src/outbound-prohibition.spec.ts` | 1172-1190 / 1398 / 1465-1481 | `constStrings` consulted first, written only from declarations — a stale literal shadows every rebinding | 🛑 BLOCKER | Six executed shapes silent, three controls firing. Falsifies `:83-85` ("over-approximates rather than under-approximates") and `:127-130` ("declaration or an assignment") |
-| `packages/backend/src/outbound-prohibition.spec.ts` | `receiverKind`, call position | `(b ? sdk.requests : sdk.net).send(req)`, `??` and `\|\|` all `[]` | 🛑 BLOCKER | A fully readable site with a literal `sdk.requests` in it, silent, in no residual list — while the key and initializer faces of the same operator were both added this round |
-| `packages/backend/src/store/observations.spec.ts` | 987 | "severed but STABLE" holds at the one offset the fixture picked | ⚠️ WARNING | WR-28. 11 of 71 adjacent offsets are not fixed points. Zero leaks, so it is a false claim rather than an exposure |
-| `packages/backend/src/store/schema.spec.ts` | 272 | The same false stability claim, repeated in the schema ledger | ⚠️ WARNING | WR-28's second location. The schema entry is the disclosure a reader trusts |
-| `packages/backend/src/outbound-prohibition.spec.ts` | 969, 1077, 1104 | Three `ONE HOP AND NO MORE` docblocks naming source strings that report | ⚠️ WARNING | WR-30. `:969`'s exact string is asserted to REPORT by the passing test at `:2782`. Under-claiming, so no hole — but contradicted in-file |
-| `packages/backend/src/outbound-prohibition.spec.ts` | `assembledNames` collect branch | A destructured key binding is not collected | ⚠️ WARNING | IN-26. `const { k } = o; sdk[k].send(req)` → `[]`, and it is in no residual row |
-
-No `TBD` / `FIXME` / `XXX` / `TODO` / `HACK` / `PLACEHOLDER` in any source, script, test or CI file.
+| `outbound-prohibition.spec.ts` | `:3348-3352` | A registry `clause` asserting a universal (`in every spelling`) that six executed shapes falsify, shipped byte-identically into the authoritative ledger | 🛑 Blocker | CR-11 |
+| `outbound-prohibition.spec.ts` | `:2647` | `=== EqualsToken` in the widening collector while the narrowing collector 11 lines below reads `ASSIGNMENT_OPERATORS` and names the shape in a comment | 🛑 Blocker | CR-12 |
+| `outbound-prohibition.spec.ts` | `constStrings` / `literalsOf` rows | Two clauses claiming **ANY** literal a name is bound to, falsified by a one-hop conditional initializer; both rows green because both probes use a plain literal | 🛑 Blocker | CR-13 |
+| `outbound-prohibition.spec.ts` | `:3512-3515` (generated preamble, point 1) | *"a branch removed from the walk turns its own entry red"* — false at branch granularity, contradicted by point 3 three lines below, proved by my mutation (52/52 green) | ⚠️ Warning | WR-32 |
+| `outbound-prohibition.spec.ts` | `RESOLVER_EXEMPTIONS.collect` | *"it decides nothing about what an expression IS"* — `collect`'s inline `EqualsToken` test is the whole of CR-12 | ⚠️ Warning | WR-33 (a) |
+| `outbound-prohibition.spec.ts` | `RESOLVER_EXEMPTIONS.visit` | *"every resolution … delegated to a registered mechanism"* — each resolution is; the **dispatch** is not, and that seam is CR-11 | ⚠️ Warning | WR-33 (b) |
+| `outbound-prohibition.spec.ts` | `:6069` | Test titled for the checkbox whose regex `[ x]` accepts both states; nothing anywhere pins the box | ⚠️ Warning | WR-34 |
+| `outbound-prohibition.spec.ts` | `destructuredInitializer` row | Clause claims BOTH binding-pattern spellings; the array-slot RECEIVER (`const [r] = [sdk.requests]`) is silent, as is a nested destructure | ⚠️ Warning | WR-37 |
+| `.planning/REQUIREMENTS.md` | CORE-11 wave-28 correction | Discharge table claims 7 of 8 rows discharged; 2 survive execution | ⚠️ Warning | consequence of CR-11/12/13 |
+| — | — | Debt markers (`TBD`/`FIXME`/`XXX`), skipped tests, `.only` | ℹ️ Info | **Zero across both source roots, `scripts/` and `tests/`** |
 
 ### Human Verification Required
 
-None as a checkpoint. This is an infrastructure/foundation phase; every truth resolved to VERIFIED or FAILED on evidence I executed, and no truth was left present-but-behavior-unverified. The two judgment-tier prohibitions (CORE-10, STORE-01) carry NON-AUTHORITATIVE verdicts and remain flagged for human review; both were accepted by the operator at UAT test 3 and neither introduces a new checkpoint item.
+None arising from this pass. This is an infrastructure/foundation phase and no truth is behavior-unverified: every one of the nine is settled by execution against committed artefacts, a live run result, or a probe I ran in this session. The two judgment-tier prohibitions (CORE-10, STORE-01) remain flagged as NON-AUTHORITATIVE LLM-judge verdicts with human review recommended, carried forward unchanged and already accepted by the operator at UAT.
 
 ### Gaps Summary
 
-**One gap, third round running, failing for its third distinct cause — and one regression that is new.**
+**One gap, and it is the same one truth for the fourth consecutive round: CORE-11's gate cannot go red on shapes CORE-11's own sentence enumerates.**
 
-Round 4 was the most productive round of the five. It closed the blocker completely: I verified all eight CR-08 shapes myself and every one that was silent in round 3 now reports. It closed WR-23, WR-24, IN-20, WR-25, IN-21 and IN-22. It landed a truncation fix I swept 200 offsets against without finding a leak. And in the middle of it, plan 01-19 measured that the alias sets reach *further* than every residual list had ever said and volunteered that correction rather than being caught at it — the first time in five rounds a claim in this repo was narrower than its code.
+Round 5 closed every finding round 4 raised — all five, verified by me, several fixed at the seam rather than the symptom — and it built something no previous round built: a residual that is **generated** from an executed registry and **byte-bound** to the ledger, with the binding mutation-proved red. It also got the checkbox right for the first time in three attempts, and volunteered a discrepancy against itself in the safe direction. That is the most disciplined round of the six.
 
-What did not change is the relationship between a claim and its enforcement. In closing CR-08, round 4 wrote a new bound — *"a chain read BEFORE its root is bound is SILENT, because there is no symbol table and no second pass"* — into five artifacts, and the function it describes runs `collect` to completion before `visit`, so the read position bounds nothing at all. Seven shapes I executed report where that sentence says they are silent. The fixture pinning it is green because its bindings are inverted, under a title naming the read. Beside it, a stale first literal shadows every later rebinding of a receiver key, silently, in contradiction of a sentence two paragraphs up that says this gate over-approximates rather than under-approximates. And the operator that round 4 taught to key position and initializer position was left untaught in call position, so `(b ? sdk.requests : sdk.net).send(req)` — a literal `sdk.requests`, hiding nothing — reports nothing.
+**And the recurrence survived it, because round 5 made DRIFT mechanical and the recurring defect is a CLAIM.** The generator's output is a function of the registry alone; a registry row's `clause` is hand-written prose that no assertion reads; and a row's only binding to the walk is one probe and one counter-probe. So a clause can say *any literal a name is bound to*, or *a compound assignment*, or *in every spelling*, and be green while a one-line shape falsifies it. I proved the mechanism's blind spot directly: deleting the `PlusEqualsToken` branch — a branch `assembledNames`' clause names in so many words — left the entire derived block at **52 passed, 0 failed**.
 
-**Nothing leaks.** The gate runs green over the real tree, the bundle imports one specifier, no outbound call exists in shipped source, and all three findings are prospective. Weighed against round 2's live credential in a durable column, they are small.
+Three of the 38 clauses were falsified by execution this round. All three are prospective blindnesses in a test-only gate; **nothing leaks**, and the arithmetic that decides this verdict is the one this phase has enforced six times and enforced correctly again in wave 28: a `verification: gate` requirement is not complete while its gate stays green on a shape the prohibition's own statement enumerates.
 
-**The regression is the ledger.** Round 3's `REQUIREMENTS.md` left CORE-11 `[ ]` and stated why in its own words: *"While any shape this requirement's own text enumerates is unenforced, its stated reach exceeds its executed reach, which is precisely the defect this correction closes one level down."* Round 4 checked the box against a disclosure whose stated reach exceeds its executed reach in three sentences. That box was reverted once already, at `e7cc4b6`, for less.
-
-The distance to a clean phase is small and entirely specific: delete the READ-position bound from five places and replace it with the binding-order bound I measured; re-title `:2798` and give it the two shapes that separate the claim from its negation; poison `constStrings` on rebinding so a stale literal stops short-circuiting the branches beneath it; read the operator in call position the way it is already read in the other two; correct the three `ONE HOP` docblocks and the two "severed but STABLE" sentences; and either revert CORE-11 to `[ ]` or amend its disclosure before flipping it.
+The fix that would end the pattern rather than its sixth instance is stated in `missing` and is one field wide: give `ResolverRecord` a `branches` list naming the code sites each clause covers, with one probe per named branch, so that the mutation I ran this afternoon turns the row red instead of nothing at all. Until a clause is bound to its branch, the next round will find a fourth set of causes for the same 8/9.
 
 ---
 
-_Verified: 2026-08-24T12:20:00Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-08-24T16:40:00Z_
+_Verifier: Claude (gsd-verifier), verification pass 6_
+_Working tree restored: all mutations reverted via `git checkout`; `git status` matches the pre-verification snapshot._
