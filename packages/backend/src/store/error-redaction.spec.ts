@@ -92,10 +92,61 @@
 //        names by one — the array becomes the binding — which is what lets the
 //        join rule reach a container rather than only an array literal.
 //
-//        THE RESIDUAL OF THE RENDER-FORM LIST, RE-DERIVED against the widened
-//        rules rather than carried forward: a render that goes through a method
-//        this list does not name (`padEnd`, `repeat`, `replace`, a user helper),
-//        or through an accumulator that is neither a `+=` nor a `.push`, is not
+//        AND SINCE 2026-08-22 (WR-24), THE OPERATOR CLASS: any form on that list
+//        reached THROUGH an operator — a `? :` branch, or a `??`, `||` or `&&`
+//        operand — counts as reaching the binding, because `derivesFrom` now
+//        descends both branches of a conditional and both operands of those
+//        three logical operators. Listed here beside the methods and the
+//        accumulators rather than in `derivesFrom`'s docblock alone, because it
+//        is the same kind of coverage fact they are: `{ error: e.message }`
+//        reported and `{ error: e instanceof Error ? e.message : "x" }` did not,
+//        and the second is what `useUnknownInCatchVariables` pushes an author
+//        toward. The CONDITION of a `? :` is deliberately not descended — it
+//        renders nothing.
+//
+//        THE RESIDUAL OF THE RENDER-FORM LIST, RE-DERIVED A THIRD TIME on
+//        2026-08-22 (WR-24). HOW IT WAS DERIVED, so the next reader can repeat
+//        the derivation rather than trust the list: every item below was read
+//        off the BRANCHES of `derivesFrom` and the receiver test in the `push`
+//        rule, in that order, as of this date. That method is written down
+//        because the previous re-derivation was done from the PREVIOUS
+//        PARAGRAPH — it enumerated two classes and missed a third sitting in
+//        the same function, which is exactly what enumerating from prose rather
+//        than from code produces.
+//          1. A render through a method this list does not name — `padEnd`,
+//             `repeat`, `replace`.
+//          2. A CALL WHOSE CALLEE IS A BARE IDENTIFIER: `fmt(e)`, `helper(e)`.
+//             The descent follows a call only when its callee is a MEMBER, so
+//             the RESULT of a user helper is not the binding. `String(x)` and
+//             `JSON.stringify(x)` have their own render rules and
+//             `describeError(x)` is the safe form; this is the residual for
+//             every helper the gate has never heard of.
+//          3. AN OPERATOR OUTSIDE THE FOUR now descended, or a container that
+//             is not the `push`/`join` pair: a comma expression, an `await`, an
+//             accumulator that is neither a `+=` nor a `.push`, and a value
+//             routed through an object or array LITERAL.
+//          4. IN-22, FIRST LIMIT — the `push` rule grows the tracked names only
+//             when the unwrapped receiver is a BARE IDENTIFIER, so
+//             `o.parts.push(e.message); o.parts.join("")` is unseen.
+//          5. IN-22, SECOND LIMIT — the tracked names GROW DURING THE WALK, so
+//             a `join` appearing BEFORE its `push` in document order,
+//             `const out = a.join(""); a.push(e.message)`, is missed.
+//        Both IN-22 limits sit inside the document-order bound this boundary
+//        already states below, and saying so here is what keeps the residual and
+//        the boundary from becoming two statements that disagree.
+//
+//        PINNED, AND THE DECISION IS RECORDED RATHER THAN LEFT IMPLICIT. Items
+//        4 and 5 are pinned by executed cases titled "RESIDUAL, PINNED (IN-22)"
+//        below, which assert those two shapes report `[]` TODAY and therefore go
+//        RED the day somebody closes one. The reason is `schema.spec.ts`'s OPEN
+//        list one directory away, which pins each of its open grammars for
+//        exactly this reason: a residual naming a limit with nothing asserting
+//        it is a sentence that can rot without anyone noticing. Items 1-3 are
+//        deliberately NOT pinned, and that is the other half of the decision:
+//        each names an open CLASS rather than one shape, so a fixture would pin
+//        one example while READING as though it pinned the class — a narrower
+//        guarantee wearing a wider claim, which is the defect this whole round
+//        is about. A render taking any of those five shapes is not
 //        seen. The list is an ENUMERATION and it does not claim to be closed;
 //        what it claims is that everything on it is executed below.
 //      - POSITIONS: those render forms anywhere in scope, plus the binding (or
