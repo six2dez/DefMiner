@@ -2263,6 +2263,44 @@ describe("an outbound receiver, however it was bound", () => {
       "outbound-send",
     );
   });
+
+  it("through receiverAliases: A USE ABOVE ITS OWN BINDING REPORTS — `s.send(req);` written before `const s = sdk.requests;` — CR-09 shape 5 of 7", () => {
+    // CR-09, shape 5. The verifier executed this and it reported, while four
+    // artifacts said it was silent. The mechanism is not subtle and it is not a
+    // widening: `collect(sf)` completes before `visit(sf)` begins, so
+    // `receiverAliases` already holds `s` by the time any call is considered.
+    // Nothing about the use site's POSITION has ever bounded this rule.
+    expect(rulesOf("s.send(req);\nconst s = sdk.requests;")).toContain(
+      "outbound-send",
+    );
+  });
+
+  it("through receiverAliases' TRANSITIVITY: FOUR HOPS in dependency order, with the use written ABOVE all four declarations, REPORTS", () => {
+    // The `ANY DEPTH` clause of residual (a), made checkable rather than
+    // decorative, on the receiver family rather than the global one. Every
+    // alias set is grown from the LIVE set during the collect pass, so each
+    // link resolves from the previous one; and because that pass finishes
+    // before the violation pass starts, the use may sit above all of them.
+    expect(
+      rulesOf(
+        "r4.send(req);\nconst r1 = sdk.requests;\nconst r2 = r1;\nconst r3 = r2;\nconst r4 = r3;",
+      ),
+    ).toContain("outbound-send");
+  });
+
+  it("through NOTHING: the receiver chain's negation — ONE INVERTED LINK silences four hops, wherever the read sits — A MEASURED SILENCE", () => {
+    // The silent direction for `receiverAliases`, and it is the BINDINGS that
+    // silence it: `r2` is grown from `r1` before `r1` is in the set. Asserted
+    // with the read both last and first, so this case cannot be mistaken for a
+    // statement about read position. A MEASURED SILENCE in plan 01-18's
+    // convention — it may never be cited as evidence that a rule holds.
+    expect(
+      rulesOf("const r2 = r1;\nconst r1 = sdk.requests;\nr2.send(req);"),
+    ).toEqual([]);
+    expect(
+      rulesOf("r2.send(req);\nconst r2 = r1;\nconst r1 = sdk.requests;"),
+    ).toEqual([]);
+  });
 });
 
 describe("any non-allowlisted member of a positively identified receiver", () => {
@@ -2460,6 +2498,55 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).not.toContain("outbound-unanalysable");
   });
 
+  it('through constStrings: A USE ABOVE ITS OWN BINDING REPORTS — `sdk[r].send(req);` written before `const r = "requests";` — CR-09 shape 3 of 7', () => {
+    // CR-09, shape 3. Reported when four artifacts said it was silent.
+    //
+    // WHY KEYS AND ALIASES DIFFER, IN ONE PLACE, BESIDE THE KEY CASES — because
+    // a reader who finds aliases chaining to four hops and keys stopping dead at
+    // one should not have to guess whether one of the two is a bug. Both facts
+    // are properties of the same single collect pass and neither is about where
+    // a name is READ:
+    //   KEYS DO NOT CHAIN because `constStrings` and `assembledNames` read the
+    //   INITIALIZER'S SHAPE — is this a string literal, is this an assembly —
+    //   and never consult the live set. A key therefore cannot be grown from a
+    //   name already in a set, so `const a = "requests"; const b = a; sdk[b]`
+    //   is silent at two hops and always will be.
+    //   ALIASES DO CHAIN because every alias set is grown BY CONSULTING THE
+    //   LIVE SET (`isFetchExpression`, `isNavigatorReceiver`, `aliasedGlobalOf`,
+    //   `isGlobalReceiver`, `initializerReceiver`), so each new binding can
+    //   resolve from the previous one to any depth.
+    // And because `collect(sf)` runs to COMPLETION before `visit(sf)` begins,
+    // NEITHER of them is bounded by the position of a use. That is what this
+    // case asserts and it is the half CR-09 falsified.
+    expect(rulesOf('sdk[r].send(req);\nconst r = "requests";')).toContain(
+      "outbound-send",
+    );
+  });
+
+  it('through assembledNames: A USE ABOVE ITS OWN BINDING REPORTS — `sdk[k].send(req);` written before `const k = "req" + "uests";` — CR-09 shape 4 of 7', () => {
+    // CR-09, shape 4, and it lands on the set whose own docblock carried the
+    // READ-POSITION BOUND until this round. `outbound-unanalysable` rather than
+    // `outbound-send` because an assembled key is a key the walk WATCHED being
+    // hidden — see the assembled-key cases above. The position of the use is
+    // irrelevant here for the same reason it is irrelevant everywhere else.
+    expect(rulesOf('sdk[k].send(req);\nconst k = "req" + "uests";')).toContain(
+      "outbound-unanalysable",
+    );
+  });
+
+  it("through NOTHING: the KEY contrast — TWO HOPS is still silent whichever side of the bindings the use sits on — A MEASURED SILENCE", () => {
+    // The contrast that keeps the corrected residual checkable in both
+    // directions. Two hops of KEY is silent, and moving the read does not
+    // change that either — so the silence cannot be attributed to read
+    // position any more than the reports above can. A MEASURED SILENCE.
+    expect(
+      rulesOf('const a = "requests";\nconst b = a;\nsdk[b].send(req);'),
+    ).toEqual([]);
+    expect(
+      rulesOf('sdk[b].send(req);\nconst a = "requests";\nconst b = a;'),
+    ).toEqual([]);
+  });
+
   it('through the CONDITIONAL resolver: `sdk[b ? "requests" : "net"]` hides nothing, so it reports outbound-send', () => {
     // CR-08's sharper half, and it was undisclosed everywhere: reported by no
     // rule and named by no residual list. Both keys are string literals naming
@@ -2590,6 +2677,29 @@ describe("the beacon surface — receiver-anchored, not member-name-only", () =>
       ),
     ).toEqual([]);
   });
+
+  it("through navigatorAliases: A USE ABOVE ITS OWN BINDING REPORTS — `n.sendBeacon(u, d);` written before `const n = navigator;` — CR-09 shape 6 of 7", () => {
+    // CR-09, shape 6. `navigatorAliases` is one of the two sets that has
+    // chained since the day it was written — see residual (a) — and like every
+    // other set here it is fully populated by the time the beacon rule runs,
+    // because `collect(sf)` completes before `visit(sf)` begins.
+    expect(rulesOf("n.sendBeacon(u, d);\nconst n = navigator;")).toContain(
+      "outbound-beacon",
+    );
+  });
+
+  it("through navigatorAliases' TRANSITIVITY vs its negation: dependency-ordered chain REPORTS, one inverted link is A MEASURED SILENCE", () => {
+    // The pair, on the beacon family. The first varies nothing but the binding
+    // ORDER against the second, and both are read from the same position — so
+    // the difference between report and silence is attributable to the
+    // bindings alone. The silent half is A MEASURED SILENCE.
+    expect(
+      rulesOf("n2.sendBeacon(u, d);\nconst n1 = navigator;\nconst n2 = n1;"),
+    ).toContain("outbound-beacon");
+    expect(
+      rulesOf("n2.sendBeacon(u, d);\nconst n2 = n1;\nconst n1 = navigator;"),
+    ).toEqual([]);
+  });
 });
 
 describe("dynamic code construction — refused rather than analysed", () => {
@@ -2671,6 +2781,25 @@ describe("dynamic code construction — refused rather than analysed", () => {
       ?.detail;
     expect(detail).toContain("`e(...)`");
     expect(detail).toContain("an alias of `eval`");
+  });
+
+  it('through globalAliases: A USE ABOVE ITS OWN BINDING REPORTS — `e("x");` written before `const e = eval;` — CR-09 shape 7 of 7', () => {
+    // CR-09, shape 7, and the last of the seven. `globalAliases` was the set
+    // WR-23 added one round ago, and it inherits the same two-pass structure
+    // every other set here has: `collect(sf)` finishes, THEN `visit(sf)` runs.
+    // A use above its binding was never outside this rule.
+    expect(rulesOf('e("x");\nconst e = eval;')).toContain(
+      "outbound-dynamic-code",
+    );
+  });
+
+  it("through globalAliases' TRANSITIVITY vs its negation: dependency-ordered chain REPORTS, one inverted link is A MEASURED SILENCE", () => {
+    // The pair, on the dynamic-code family. Read position held constant across
+    // both; only the binding order moves.
+    expect(rulesOf('e2("x");\nconst e1 = eval;\nconst e2 = e1;')).toContain(
+      "outbound-dynamic-code",
+    );
+    expect(rulesOf('e2("x");\nconst e2 = e1;\nconst e1 = eval;')).toEqual([]);
   });
 
   // --- WR-23's negative side, in the SAME commit as the widening -------------
