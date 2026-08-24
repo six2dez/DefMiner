@@ -172,7 +172,7 @@ Plans:
 
 **Wave 26** *(blocked on 01-25 — the only wave in the round that reaches outside the outbound gate, placed last of the four so a red in a store file is never ambiguous with a red in the gate)*
 
-- [ ] 01-26-PLAN.md — **WR-28 … WR-31 and IN-23 … IN-26**: the head-side `;` residual asserted STABLE in three files is a fixed point at the one offset the fixture picked and not at 11 of its 71 neighbours; the no-separator class is scoped to a single-segment query when the branch condition is about where the cut lands; three `ONE HOP` docblocks assert a bound plan 01-19 measured false and one is contradicted by a passing test 1,800 lines below it; a residual paragraph now contradicts itself two lines after an insertion; plus the destructured key binding, the two overstated STORE-07 items and the two pins docblocks — *wave 26*
+- [x] 01-26-PLAN.md — **WR-28 … WR-31 and IN-23 … IN-26**: the head-side `;` residual asserted STABLE in three files is a fixed point at the one offset the fixture picked and not at 11 of its 71 neighbours; the no-separator class is scoped to a single-segment query when the branch condition is about where the cut lands; three `ONE HOP` docblocks assert a bound plan 01-19 measured false and one is contradicted by a passing test 1,800 lines below it; a residual paragraph now contradicts itself two lines after an insertion; plus the destructured key binding, the two overstated STORE-07 items and the two pins docblocks — *wave 26*
 
 **Wave 27** *(blocked on 01-26 — a registry written against an older gate would be born stale, which is the failure this plan exists to prevent)*
 

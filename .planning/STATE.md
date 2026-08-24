@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-25-PLAN.md
-last_updated: "2026-08-24T12:36:31.962Z"
+stopped_at: Completed 01-26-PLAN.md
+last_updated: "2026-08-24T13:24:01.058Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: da2aafd015b62ea96eb8197fe74eb5b53d952a13
+state_head: 311a96913282eb6425870c771a41a9a2b498b54b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 28
-  completed_plans: 25
+  completed_plans: 26
 ---
 
 # Project State
@@ -28,12 +28,31 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 26 of 28
+Plan: 27 of 28
 Status: Ready to execute
-Last activity: 2026-08-24 — Completed 01-24 (CR-10: the stale first literal that shadowed every later rebinding)
+Last activity: 2026-08-24 — Completed 01-26 (WR-28/29/30/31 + IN-23..26: six disclosures brought level with their code, the head-side residual swept instead of pinned at one offset)
 
-Progress: [█████████░] 86% of phase 01 (24 of 28 plans)
+Progress: [█████████▒] 92% of phase 01 (26 of 28 plans)
 
+> WAVE 26. `state.update-progress` withheld the project-wide bar again —
+> `progress percent withheld by buildStateFrontmatter` — which is now TEN
+> consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23, 01-24 and 01-26). Steady
+> handler behaviour on this repo, not a transient. The bar above is the phase-local
+> one, recomputed from the 28 PLAN / 26 SUMMARY files on disk and stated with its
+> basis.
+>
+> AND THE `Plan:` COUNTER DRIFTED AGAIN, BY MY OWN HAND, RECORDED RATHER THAN
+> QUIETLY CORRECTED because that is the rule these notes have followed since 01-17.
+> `state.advance-plan` moved 26 -> 27 correctly. I then re-invoked it with `--pick
+> previous_plan` intending to READ the transition, not realising it MUTATES, and it
+> incremented again to 28 — one plan past the truth with two plans still unwritten.
+> That is the same failure mode the 01-17, 01-20 and 01-23 notes record, arriving
+> through a new door: the handler increments whatever number is already there, so
+> anything that calls it twice is indistinguishable from real progress. Corrected
+> here to 27 from the FILE COUNT on disk (26 SUMMARY files, so 27 is next), which is
+> the only number that cannot drift. `state.advance-plan` has no read-only sibling;
+> `state.load` or reading the frontmatter is the safe way to inspect it.
+>
 > The frontmatter's project-wide bar is still not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it has
 > now done so on NINE consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23 and 01-24), so
@@ -109,6 +128,7 @@ Progress: [█████████░] 86% of phase 01 (24 of 28 plans)
 | Phase 01 P23 | 15 min | 3 tasks | 4 files |
 | Phase 01 P24 | 22 min | 3 tasks | 2 files |
 | Phase 01 P25 | 21 min | 3 tasks | 2 files |
+| Phase 01 P26 | 30 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -268,8 +288,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T12:35:21.582Z
-**Stopped at:** Completed 01-25-PLAN.md
+**Last session:** 2026-08-24T13:23:51.239Z
+**Stopped at:** Completed 01-26-PLAN.md
 **Resume file:** None
 
 ### Blockers
