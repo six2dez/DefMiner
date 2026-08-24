@@ -636,6 +636,100 @@
 //    1143-test suite, and `pnpm check:bundle` reports the shipped
 //    bundle's entire import set as one specifier, `crypto`.
 //
+//    ============= THE NARROWING, AFTER PLAN 01-26 =============
+//    AUTHORED ONCE and rendered into this block and into `.planning/WINDOWS.md`
+//    from the same bytes, exactly as the wave-25 block above was, so "the same
+//    words rather than two paraphrases" stays a check rather than a promise.
+//    THE NARROWING AFTER WAVE 26 (plan 01-26, closing IN-26). This block
+//    AMENDS the wave-25 residual above rather than replacing it:
+//    everything in it still holds except the one clause named here, and
+//    wave 27 still owns the derivation that replaces the whole authored
+//    text. WHAT CHANGED, and it is one clause. Wave 25's STILL OPEN
+//    paragraph named "the DESTRUCTURED KEY BINDING, `const { k } = o;
+//    sdk[k].send(req)` — WAVE 26 (IN-26)" as a single open shape.
+//    Measured, it is THREE shapes with three different answers, and only
+//    one of them was ever IN-26. CLOSED HERE, both spellings, by giving
+//    the assembled-name collector the binding-pattern reading its
+//    RECEIVER sibling already had: `const { k } = { k: "req" + "uests" };
+//    sdk[k].send(req)` and `const [k] = ["req" + "uests"];
+//    sdk[k].send(req)` both reported `[]` before this wave and both
+//    report `outbound-unanalysable` after it, as do the renamed-key
+//    spelling `const { p: k } = { p: "req" + "uests" }` and a non-zero
+//    array slot. That is what the header two hundred lines up already
+//    claimed when it said an assembly is read "through EITHER a
+//    declaration or an assignment" — both of these are declarations, and
+//    the claim was true of one spelling out of three. STILL OPEN, AND NOT
+//    IN-26: `const { k } = o; sdk[k].send(req)` — the exact string wave
+//    25's paragraph used — is a value crossing a boundary the walk does
+//    not follow, which is residual (a)'s function/value half, unchanged
+//    and NOT closed by this wave. Wave 25's paragraph named it with
+//    IN-26's identifier and IN-26 is not about it; that conflation is
+//    corrected here rather than left for the derivation to inherit. NEWLY
+//    OPEN AND NAMED BY MEASUREMENT RATHER THAN BY REVIEW, residual (b2):
+//    a destructured PLAIN LITERAL — `const { k } = { k: "requests" };
+//    sdk[k].send(req)` — stays `[]`, because `constStrings` reads only
+//    the identifier spelling of the same declaration that
+//    `assembledNames` now reads three ways. It was found by measuring the
+//    result of closing IN-26, not predicted by IN-26 or by this plan, and
+//    it is DISCLOSED rather than folded in: widening `constStrings`
+//    through binding patterns is a separate decision that needs its own
+//    real-tree measurement, and a wave that closes a shape while quietly
+//    opening its sibling is exactly the omission the wave-25 paragraph
+//    above exists to stop. Pinned as a MEASURED SILENCE so the day it is
+//    closed a test moves. THE OPERATOR AROUND A GLOBAL RECEIVER — `(ok &&
+//    globalThis).fetch(url)` and its five twins — is UNCHANGED, still
+//    OPEN and still UNOWNED; this wave neither closed it nor broke it and
+//    claims nothing about it. THE ALIAS BOUND IS NOW STATED IN ONE PLACE
+//    AND POINTED AT FROM THREE (WR-30). Three docblocks — on
+//    `isGlobalReceiverIn`, on `globalAliases` and residual (c) itself —
+//    each asserted a ONE-HOP bound and each named a source string as
+//    silent. All three were EXECUTED before being edited and all three
+//    REPORT: `const a = globalThis; const g = a; g.fetch(u)` gives
+//    `outbound-fetch`, `const a = eval; const b = a; b(s)` gives
+//    `outbound-dynamic-code`, `const a = navigator; const n = a;
+//    n.sendBeacon(u, d)` gives `outbound-beacon`. The first of those was
+//    contradicted by a PASSING test 1,800 lines below it in the same file
+//    asserting the identical string reports; two passing assertions that
+//    cannot both be true is the sharpest form of the defect this phase
+//    keeps finding. Each is now a POINTER to residual (a) plus the local
+//    fact that is genuinely about that symbol, because a bound restated
+//    in four places is a bound that drifts in three. THE FOURTH IDENTICAL
+//    SENTENCE SURVIVES AND IS CORRECT: on `assembledNames`, keys read the
+//    INITIALIZER'S SHAPE and never the live set, so they cannot chain —
+//    executed, `const a = "req" + "uests"; const b = a; sdk[b].send(req)`
+//    is `[]`. That it is true there is precisely why the other three read
+//    as true to a skimming reader, and it is marked as the one place the
+//    one-hop bound is stated so the next author does not delete the
+//    correct one with the stale ones. THE TRANSITIVITY ASSERTION NOW
+//    COVERS ALL FIVE ALIAS SETS at three hops, where it covered three at
+//    two. RECORDED DISCREPANCY, because the plan's prediction did not
+//    survive measurement: `navigatorAliases` and `globalAliases` were NOT
+//    uncovered — two sibling cases already asserted both chaining at two
+//    hops — so this is a consolidation into the one place residual (a)
+//    sends a reader, plus a depth widening, and not the closure of a
+//    hole. THE DIRECTION OF ALL OF WR-30 IS SAFE: the gate reaches
+//    FURTHER than those three sentences said, so nothing was hidden by
+//    them. They are still overclaims and are named as such, because a
+//    residual list is trusted for its completeness in both directions.
+//    EVERY EXEMPTION RE-MEASURED AFTER THE COLLECTOR WIDENING, not
+//    argued: 23 files over both `SOURCE_ROOTS`, ZERO violations, with
+//    `compat.ts`'s `at()` dotted-path walk (the `for…of` key, written
+//    `(cur as Record<string, unknown>)[key]`) and its `ctx[root]`
+//    parameter, `observations.ts`'s `segments[i]` and
+//    `MIGRATIONS[MIGRATIONS.length - 1]` all quiet. Destructuring is
+//    ordinary in this codebase, so the widening shipped with its
+//    must-stay-quiet twins IN THE SAME COMMIT: an ordinary destructure
+//    used as an ordinary lookup, a numeric slot, a rest element, and a
+//    destructure of a value the walk cannot read all report `[]`. NOTHING
+//    LEAKED: IN-26 was unreachable in the real tree today, WR-30 ran in
+//    the safe direction, and the gate runs green over the real tree — 23
+//    files, ZERO violations — inside a 1148-test suite, with `pnpm
+//    check:bundle` reporting the shipped bundle's entire import set as
+//    one specifier, `crypto`. `REQUIREMENTS.md` and `STATE.md` stay
+//    deliberately untouched and CORE-11's box stays `[ ]`, for the reason
+//    waves 24 and 25 recorded: wave 27 derives the replacement text and
+//    wave 28 reconciles both requirement-tier ledgers to it in ONE move.
+//
 //    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
 //    from the `[x]` that commit `e7cc4b6` reverted is the reason it may be:
 //    every surface the requirement's own first sentence enumerates now has a

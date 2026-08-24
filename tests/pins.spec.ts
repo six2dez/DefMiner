@@ -313,8 +313,17 @@ describe("the workspace conversion did not disturb the build allowlist", () => {
 // the day somebody pastes the CURRENT build in, which is precisely how the rule was
 // broken the first time.
 //
-// THE PREDICATE THAT DECIDES ALL OF THAT IS DIRECTLY BELOW, AND IT IS EXPORTED SO ITS
-// FAILING PATH CAN RUN. Until 2026-08-24 it was written inline inside the scan
+// WHAT THAT RULE THEREFORE CANNOT SEE, AND MUST NOT (IN-24, stated 2026-08-24 beside
+// the justification that creates it). A TWO-COMPONENT spelling of the same claim —
+// `# taken on Caido 0.58` — is a version literal in prose and is PERMANENTLY invisible
+// to this predicate, because the fixture below requires `0.25` to pass and `0.25` is
+// the sleep interval the tracer cannot do without. The gap is not an oversight to be
+// closed later; it is the price of the exemption, and it is paid deliberately. The
+// header stated the three-component rule and left a reader to derive this consequence,
+// which is how a limit becomes the thing everybody assumes away.
+//
+// THE PREDICATE THAT DECIDES ALL OF THAT IS DIRECTLY BELOW, LIFTED OUT OF THE SCAN
+// ASSERTION SO ITS FAILING PATH CAN RUN. Until 2026-08-24 it was written inline inside the scan
 // assertion, and `scripts/phase1/tracer-e2e.sh` carries a two-component sleep interval
 // and five four-component loopback addresses and NO three-component run at all — so the
 // filter's true branch never executed anywhere in this suite (01-REVIEW.md WR-25). The
@@ -326,20 +335,27 @@ describe("the workspace conversion did not disturb the build allowlist", () => {
  * The version literals in raw `text`: maximal dotted-numeric runs of EXACTLY THREE
  * components. `127.0.0.1` is four and `0.25` is two, and neither is one.
  *
- * PURE — takes text, returns hits — and EXPORTED so its FAILING path can be executed
- * against a fixture rather than argued about. That is the convention this repository
- * already holds and which this gate was the exception to:
+ * PURE — takes text, returns hits — and NAMED, which is the whole of what made its
+ * FAILING path executable against a fixture rather than arguable. That is the
+ * convention this repository already holds and which this gate was the exception to:
  * `packages/backend/src/outbound-prohibition.spec.ts` and
- * `packages/backend/src/store/error-redaction.spec.ts` each export a pure
- * `auditSource`, and `packages/backend/src/store/observations.spec.ts` keeps a pure
- * `auditPatternUse` (module-local, not exported — measured 2026-08-24, stated here so
- * a reader is not sent looking for an export that is not there). All three run their
- * failing path on a synthetic fixture in their own file.
+ * `packages/backend/src/store/error-redaction.spec.ts` each hold a pure `auditSource`,
+ * and `packages/backend/src/store/observations.spec.ts` a pure `auditPatternUse`. All
+ * three run their failing path on a synthetic fixture in their own file.
+ *
+ * NOT EXPORTED — CORRECTED 2026-08-24 (IN-23). Until this date the docblock said the
+ * function was "EXPORTED so its FAILING path can be executed", and that was two
+ * unconnected things stated as one. The only caller and all four fixtures are in THIS
+ * module, where a module-local function is equally executable; the paragraph conceded
+ * the counterexample itself two sentences up, by recording that the sibling gate keeps
+ * `auditPatternUse` module-local and runs its failing path in its own file. The
+ * LIFT-OUT is the fix and it is a real one. The `export` keyword was never part of it,
+ * so it is gone rather than merely unjustified.
  *
  * The file scan below is this function's ONLY caller. Lifting it out changed the
  * gate's TESTABILITY and not one thing about its behaviour.
  */
-export function versionLiterals(text: string): string[] {
+function versionLiterals(text: string): string[] {
   return (text.match(/\d+(?:\.\d+)+/g) ?? []).filter(
     (run) => run.split(".").length === 3,
   );
@@ -375,7 +391,7 @@ describe("WR-21 — the tracer's own no-version-literal rule is ENFORCED, not me
     ).toBe(true);
   });
 
-  it("names no Caido version literal anywhere, COMMENTS INCLUDED", () => {
+  it("names no THREE-COMPONENT version literal anywhere, COMMENTS INCLUDED — and a two-component spelling is outside the predicate BY CONSTRUCTION, see the header", () => {
     const hits = versionLiterals(tracerText);
     expect(
       hits,

@@ -113,18 +113,45 @@
 //        PARAGRAPH — it enumerated two classes and missed a third sitting in
 //        the same function, which is exactly what enumerating from prose rather
 //        than from code produces.
-//          1. A render through a method this list does not name — `padEnd`,
-//             `repeat`, `replace`.
+//          1. WITHDRAWN 2026-08-24 (IN-25), BY EXECUTION. This item said a
+//             render through a method the list does not name — `padEnd`,
+//             `repeat`, `replace` — is unseen. Executed through this file's own
+//             `auditSource`, all three REPORT `unredacted-object-value`, and so
+//             does a chain of two of them. The mechanism: `derivesFrom` follows
+//             a call whose callee is a MEMBER, so an unnamed method is
+//             TRANSPARENT rather than opaque, and the render-form list is not
+//             the bound this item took it to be. Nothing is open here. Asserted
+//             in the FIRING direction below rather than deleted, so the day the
+//             member-call descent is narrowed, a test says so.
 //          2. A CALL WHOSE CALLEE IS A BARE IDENTIFIER: `fmt(e)`, `helper(e)`.
 //             The descent follows a call only when its callee is a MEMBER, so
 //             the RESULT of a user helper is not the binding. `String(x)` and
 //             `JSON.stringify(x)` have their own render rules and
 //             `describeError(x)` is the safe form; this is the residual for
 //             every helper the gate has never heard of.
-//          3. AN OPERATOR OUTSIDE THE FOUR now descended, or a container that
-//             is not the `push`/`join` pair: a comma expression, an `await`, an
-//             accumulator that is neither a `+=` nor a `.push`, and a value
-//             routed through an object or array LITERAL.
+//             RE-EXECUTED 2026-08-24 (IN-25) AND STILL OPEN: `fmt(e)` in an
+//             object-literal value position returns `[]`.
+//          3. NARROWED 2026-08-24 (IN-25), BY EXECUTION, and it was narrowed in
+//             two places rather than the one the review named. What remains
+//             open, each measured `[]`: a COMMA EXPRESSION (`(0, e.message)`),
+//             an `await` (`await p(e.message)`), and a value routed through an
+//             ARRAY literal (`const a = [e.message]; a[0]`, and its `.join("")`
+//             twin).
+//             WHAT WAS WRONG, both halves stated because both were overstated:
+//             (i) a value routed through an OBJECT literal REPORTS — the
+//             object-literal value is itself one of the two guarded POSITIONS,
+//             so `const o = { m: e.message }; o.m` and the direct
+//             `{ error: { m: e.message } }` both fire; (ii) "an accumulator
+//             that is neither a `+=` nor a `.push`" REPORTS — `let s = "";
+//             s = s + e.message` fires `unredacted-concat` through the plain
+//             `+`. Both are asserted in the firing direction below.
+//             THE METHOD FINDING, recorded because it is the reusable part: the
+//             enumeration was read off the BRANCHES of `derivesFrom`, which was
+//             the right method and is why items 2, 4 and 5 are right. The step
+//             that was missing is crossing that enumeration with the POSITION
+//             rules and the OPERATOR rules, which catch some of the branches'
+//             blind spots anyway. A residual overstated is the same failure
+//             mode as one understated, in a paragraph that says so itself.
 //          4. IN-22, FIRST LIMIT — the `push` rule grows the tracked names only
 //             when the unwrapped receiver is a BARE IDENTIFIER, so
 //             `o.parts.push(e.message); o.parts.join("")` is unseen.
@@ -135,20 +162,38 @@
 //        already states below, and saying so here is what keeps the residual and
 //        the boundary from becoming two statements that disagree.
 //
-//        PINNED, AND THE DECISION IS RECORDED RATHER THAN LEFT IMPLICIT. Items
-//        4 and 5 are pinned by executed cases titled "RESIDUAL, PINNED (IN-22)"
-//        below, which assert those two shapes report `[]` TODAY and therefore go
-//        RED the day somebody closes one. The reason is `schema.spec.ts`'s OPEN
-//        list one directory away, which pins each of its open grammars for
-//        exactly this reason: a residual naming a limit with nothing asserting
-//        it is a sentence that can rot without anyone noticing. Items 1-3 are
-//        deliberately NOT pinned, and that is the other half of the decision:
-//        each names an open CLASS rather than one shape, so a fixture would pin
-//        one example while READING as though it pinned the class — a narrower
-//        guarantee wearing a wider claim, which is the defect this whole round
-//        is about. A render taking any of those five shapes is not
-//        seen. The list is an ENUMERATION and it does not claim to be closed;
-//        what it claims is that everything on it is executed below.
+//        PINNED, AND THE DECISION IS RECORDED RATHER THAN LEFT IMPLICIT.
+//        RE-DECIDED 2026-08-24 (IN-25, WR-31) so the split described here
+//        matches the items above it.
+//          Items 4 and 5 are pinned by executed cases titled "RESIDUAL, PINNED
+//          (IN-22)" below, which assert those two shapes report `[]` TODAY and
+//          therefore go RED the day somebody closes one. The reason is
+//          `schema.spec.ts`'s OPEN list one directory away, which pins each of
+//          its open grammars for exactly this reason: a residual naming a limit
+//          with nothing asserting it is a sentence that can rot without anyone
+//          noticing.
+//          Item 1 and the two overstated halves of item 3 are pinned in the
+//          FIRING direction by "CORRECTED BY EXECUTION (IN-25)" below. They
+//          became pinnable by being measured: a shape that REPORTS is one
+//          assertion, not an open class, and asserting it is what stops the
+//          correction drifting back.
+//          Item 2 and the three surviving halves of item 3 are still NOT
+//          pinned, and that is the other half of the decision: each names an
+//          open CLASS rather than one shape, so a fixture would pin one example
+//          while READING as though it pinned the class — a narrower guarantee
+//          wearing a wider claim, which is the defect this whole round is
+//          about.
+//        THE RENDER-FORM LIST eighty lines above — not the five-item residual
+//        immediately above, which is three-fifths unpinned by the decision just
+//        stated — is an ENUMERATION and it does not claim to be closed; what it
+//        claims is that every render form ON THAT LIST is executed below.
+//        ANTECEDENT NAMED 2026-08-24 (WR-31). This sentence is byte-identical
+//        to what it was before round 4 and it was written about the render-form
+//        list; what changed is what it terminates. Round 4 inserted the
+//        explicit "deliberately NOT pinned" statement two lines above it, which
+//        turned a nearest-antecedent ambiguity into a self-contradiction — in a
+//        paragraph whose entire subject is that residual lists must be trusted
+//        for their completeness. Naming the antecedent was the whole fix.
 //      - POSITIONS: those render forms anywhere in scope, plus the binding (or
 //        anything derived from it) as a RETURN value or as an OBJECT-LITERAL
 //        property value — the two positions CR-05 names, and the two the
@@ -1351,6 +1396,82 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
     expect(
       rulesOf(
         'function f() { try { g(); } catch (e) { const o = { parts: [] }; o.parts.push(e.message); return { ok: false, error: o.parts.join(" ") }; } }',
+      ),
+    ).toEqual([]);
+  });
+
+  it("CORRECTED BY EXECUTION (IN-25): the three METHOD renders residual item 1 called unseen all REPORT — `derivesFrom` follows a MEMBER call, so an unnamed method is TRANSPARENT", () => {
+    // ITEM 1 WAS WRONG AND THIS IS THE ASSERTION THAT KEEPS IT CORRECTED. The
+    // item said a render through a method the list does not name is unseen. The
+    // descent follows a call whose callee is a MEMBER, without caring what the
+    // member is called, so the render-form list is not the bound the item took
+    // it to be. Executed 2026-08-24: all three report, and so does a chain.
+    for (const render of [
+      "e.message.padEnd(10)",
+      "e.message.repeat(2)",
+      'e.message.replace("a", "b")',
+      "e.message.padEnd(10).trimEnd()",
+    ]) {
+      expect(
+        rulesOf(
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${render} }; } }`,
+        ),
+        `${render} should still report — if it stopped, narrow item 1 back and say so`,
+      ).toEqual(["unredacted-object-value"]);
+    }
+  });
+
+  it("CORRECTED BY EXECUTION (IN-25): the two halves of residual item 3 that REPORT — a value routed through an OBJECT literal, and an accumulator built with a plain `+`", () => {
+    // ITEM 3 NAMED FIVE THINGS AND TWO OF THEM FIRE. The object-literal route
+    // fires because an object-literal value is itself one of the two guarded
+    // POSITIONS — the branch enumeration missed it by not being crossed with the
+    // position rules. The accumulator fires through the plain `+`, which the
+    // concat rule reads exactly as it reads `+=`.
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { const o = { m: e.message }; return { ok: false, error: o.m }; } }",
+      ),
+    ).toEqual(["unredacted-object-value"]);
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, error: { m: e.message } }; } }",
+      ),
+    ).toEqual(["unredacted-object-value"]);
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { let s = ""; s = s + e.message; return { ok: false, error: s }; } }',
+      ),
+    ).toEqual(["unredacted-concat"]);
+  });
+
+  it("RESIDUAL, STILL OPEN AFTER IN-25 — the halves that stay silent: a bare-identifier callee, a comma expression, an `await`, and an ARRAY literal", () => {
+    // MEASURED SILENCES, every one, and none of them may be cited as evidence
+    // that any rule holds. They are here so the corrected items 2 and 3 go RED
+    // the day one of them is closed, which is the same reason the two IN-22
+    // cases above exist.
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, error: fmt(e) }; } }",
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, error: (0, e.message) }; } }",
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        "async function f() { try { g(); } catch (e) { return { ok: false, error: await p(e.message) }; } }",
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { const a = [e.message]; return { ok: false, error: a[0] }; } }",
+      ),
+    ).toEqual([]);
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { const a = [e.message]; return { ok: false, error: a.join("") }; } }',
       ),
     ).toEqual([]);
   });
