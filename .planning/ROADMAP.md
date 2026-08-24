@@ -67,7 +67,7 @@ Plans:
   6. A CI gate fails the build if the backend bundle imports any module specifier outside the allowlist Phase 0 proved loadable inside Caido — *corrected during planning from "imports any Node built-in". The original wording fails a correct plugin: `caido-dev` externalises every Node built-in, Caido's QuickJS resolves ten of them (`crypto`, `fs`, `path`, `os`, `buffer`, `string_decoder`, `url`, `events`, `sqlite`, `caido:http`) and hard-fails on the rest, and the native `crypto` hash is mandatory on performance grounds (0.34 ms/MB against 187 ms/MB in JS). The allowlist form is strictly stronger — the original would not have caught `zlib`, `util`, `stream` or `caido:crypto` at all. Derivation and gate in plan 01-02.*
   7. Running against a Caido build below the declared minimum produces a clear message, not an obscure failure
 
-**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification, plus 3 further gap-closure plans in 3 waves from the 2026-08-21T17:40 re-verification (CR-07), plus 5 further gap-closure plans in 5 waves from the 2026-08-22T12:40 re-verification (CR-08 and WR-22 … WR-26) — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (22 plans total)
+**Plans**: 6/6 executed in 6 waves (sequential — 01-03 consumes every store module 01-04 builds, so they are serialised rather than parallel), plus 3 gap-closure plans in 3 waves from the 2026-08-21 UAT, plus 5 further gap-closure plans in 5 waves from the 2026-08-21T13:45 re-verification, plus 3 further gap-closure plans in 3 waves from the 2026-08-21T17:40 re-verification (CR-07), plus 5 further gap-closure plans in 5 waves from the 2026-08-22T12:40 re-verification (CR-08 and WR-22 … WR-26), plus 6 further gap-closure plans in 6 waves from the 2026-08-24 re-verification (CR-09, CR-10, WR-27 … WR-31 and IN-23 … IN-26), the last two of which change the KIND of artifact a residual is — derived from the gate's own code and CI-checked — rather than correcting another instance of it — every gap-closure plan fully serialised, because each one deliberately mutates the shared working tree to prove its gate can fail while each asserts whole-suite green (28 plans total)
 
 Plans:
 **Wave 1**
@@ -157,6 +157,30 @@ Plans:
 **Wave 22** *(blocked on 01-21 — this plan breaks its own predicate five ways in turn and plants a literal into a committed script, so it needs the tree quiet)*
 
 - [x] 01-22-PLAN.md — **WR-25 + IN-21, the two gates whose failing path has never run**: the WR-21 gate built last round has no executed failing path — the tracer carries no three-component version literal, so the filter's true branch never runs and five plausible breaks leave it green forever. The predicate lifted out as a pure export, executed against the real file's bytes with a literal planted in, and proven detectable one break at a time; plus `padded_segments_reached`, an `all()` over an empty generator that would record REACHED having measured nothing — *wave 22*
+
+**Wave 23** *(gap closure round 5 — re-verification 2026-08-24 kept UAT gap 2 open for its THIRD distinct cause and found the ledger moving the wrong way: CORE-11's box was checked against a disclosure falsified in three sentences; blocked on Wave 22)*
+
+- [ ] 01-23-PLAN.md — **CR-09, the blocker**: `collect(sf)` completes before `visit(sf)`, so the READ-position bound round 4 wrote into five artifacts to replace the last false one is itself false — seven executed shapes report where it says they are silent, and the fixture pinning it is green because its BINDINGS are inverted, not its read. The measured binding-declaration-order bound written in its place, the fixture split so each half is sensitive to the variable its title names, and the falsified clause marked-but-preserved in `REQUIREMENTS.md` — *wave 23*
+
+**Wave 24** *(blocked on 01-23 — shares `outbound-prohibition.spec.ts`, and narrowing a false sentence produces a narrower false sentence)*
+
+- [ ] 01-24-PLAN.md — **CR-10, the blocker**: `keyReceiver` consults `literalOf` first and `constStrings` is written only at the declaration branch, so a stale harmless literal shadows every later rebinding — `let k = "harmless"; k = "requests"; sdk[k].send(req)` is silent while `let k; k = "requests"` reports. The collectors made to describe a name's bindings across the file, the compound assignment read as the assembly it is, the MIRROR direction measured rather than left for next round, and boundary 2's approximation claim restated per mechanism — *wave 24*
+
+**Wave 25** *(blocked on 01-24 — recurses through the key resolver wave 24 rewrote)*
+
+- [ ] 01-25-PLAN.md — **WR-27**: a conditional receiver in CALL position is silent — `(b ? sdk.requests : sdk.net).send(req)` and its `??` / `||` twins — while the conditional KEY and conditional INITIALIZER faces of the same operator were both added in round 4 and both report, and no residual list names it. The descent hoisted into `receiverKind` and `keyReceiver`, the three copies collapsed to one, and `&&` settled by measurement — *wave 25*
+
+**Wave 26** *(blocked on 01-25 — the only wave in the round that reaches outside the outbound gate, placed last of the four so a red in a store file is never ambiguous with a red in the gate)*
+
+- [ ] 01-26-PLAN.md — **WR-28 … WR-31 and IN-23 … IN-26**: the head-side `;` residual asserted STABLE in three files is a fixed point at the one offset the fixture picked and not at 11 of its 71 neighbours; the no-separator class is scoped to a single-segment query when the branch condition is about where the cut lands; three `ONE HOP` docblocks assert a bound plan 01-19 measured false and one is contradicted by a passing test 1,800 lines below it; a residual paragraph now contradicts itself two lines after an insertion; plus the destructured key binding, the two overstated STORE-07 items and the two pins docblocks — *wave 26*
+
+**Wave 27** *(blocked on 01-26 — a registry written against an older gate would be born stale, which is the failure this plan exists to prevent)*
+
+- [ ] 01-27-PLAN.md — **THE STRUCTURAL PLAN**: the residual stops being authored. A resolver registry bound to the walk by executed probes, a pure `deriveResidual` that renders the text from it, sentinel-delimited blocks in the gate header and in `REQUIREMENTS.md` byte-checked by the suite, and a coverage guard that fails when a mechanism has no row — with FIVE separately executed mutation proofs covering prose-without-code, code-without-prose, registry-without-regeneration and an unregistered collector, and the limits of a derived residual stated inside the generated text — *wave 27*
+
+**Wave 28** *(blocked on 01-27 — the residual it flips against does not exist until then)*
+
+- [ ] 01-28-PLAN.md — **CORE-11's flip, and only then**: the box has been reverted twice, at `e7cc4b6` and `faca607`, both times because its Complete status rested on a disclosure that turned out false. Discharged item by item as a table of executed results — one row per surface the requirement's own sentence names plus one per shape this round closed, each with its rule identifier, its fixture title and the summary where that fixture was observed failing — flipped against the DERIVED residual verified current before the box is touched, with a state-agnostic verify so the honest `[ ]` outcome cannot fail its own gate — *wave 28*
 
 ### Phase 2: Error Containment & Observability
 
