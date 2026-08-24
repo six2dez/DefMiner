@@ -987,8 +987,80 @@ const operatorOperands = (
   node: ts.Expression,
 ): readonly ts.Expression[] | undefined => {
   if (ts.isConditionalExpression(node)) return [node.whenTrue, node.whenFalse];
+  if (
+    ts.isBinaryExpression(node) &&
+    RECEIVER_OPERATORS.has(node.operatorToken.kind)
+  ) {
+    return [node.left, node.right];
+  }
   return undefined;
 };
+
+/**
+ * The BINARY operators that SELECT ONE OF THEIR OPERANDS rather than combining
+ * them — the operator class a receiver can hide in. Added 2026-08-24 (WR-27).
+ *
+ * A NAMED SET RATHER THAN THREE INLINE COMPARISONS, which is the convention
+ * `NUMERIC_BINARY_OPERATORS`, `NUMERIC_COMPOUND_ASSIGNMENTS` and
+ * `ASSIGNMENT_OPERATORS` below already follow and the same argument the rule table
+ * makes for itself: a future operator is ONE ENTRY here rather than a fourth
+ * branch inside a resolver. `? :` is absent because it is not a `BinaryExpression`
+ * at all — `operatorOperands` names it directly, one line up.
+ *
+ * `+` IS DELIBERATELY ABSENT AND MUST STAY ABSENT. `"req" + "uests"` is the
+ * ASSEMBLY this gate exists to see and `isAssembledKey` owns it. Every operator
+ * listed here yields ONE OF ITS OPERANDS UNCHANGED, which is exactly what makes
+ * either-side semantics sound for them and nonsense for `+`.
+ *
+ * `&&` IS IN THE SET, AND IT WAS SETTLED BY MEASUREMENT RATHER THAN BY SYMMETRY
+ * WITH THE OTHER THREE. The plan required this because the symmetry argument is
+ * genuinely weaker for `&&`: `a && b` evaluates to `a` when `a` is FALSY, so its
+ * left operand is usually a GUARD rather than a value, and either-side semantics
+ * say a guard that happens to be a receiver makes the whole expression one. BOTH
+ * READINGS WERE IMPLEMENTED AND RUN — see `01-25-SUMMARY.md` section 3 for the
+ * full table. What decided it:
+ *
+ *   READING A, `&&` IN     (sdk.requests && sdk.net).send(req)  ["outbound-send"]
+ *                          (ok && sdk.requests).send(req)       ["outbound-send"]
+ *                          (sdk.requests && ok).send(req)       ["outbound-send"]
+ *                          const r = ok && sdk.requests; r.send(req)
+ *                                                               ["outbound-send"]
+ *                          (ok && cache).send(req)              []
+ *                          real tree, both roots                23 files, 0 violations
+ *
+ *   READING B, `&&` OUT    (sdk.requests && sdk.net).send(req)  []
+ *                          (ok && sdk.requests).send(req)       []
+ *                          (sdk.requests && ok).send(req)       []
+ *                          const r = ok && sdk.requests; r.send(req)
+ *                                                               []
+ *                          (ok && cache).send(req)              []
+ *                          real tree, both roots                23 files, 0 violations
+ *
+ * THE REAL TREE DID NOT DISCRIMINATE — both readings are ZERO on it, so nothing
+ * about shipped code chose this and it would be dishonest to claim it did. THE
+ * SHAPES DISCRIMINATED. `(ok && sdk.requests).send(req)` is the ORDINARY way to
+ * write a guarded outbound call, it has `sdk.requests` written out in full, and
+ * reading B calls it "not a receiver" — which is WR-27's own finding reproduced
+ * one operator over, in the same wave that closes it. Reading A's cost is the
+ * mirror case `(sdk.requests && ok).send(req)`, where the receiver is the guard
+ * and the VALUE is something else: it reports. That is an OVER-approximation, it
+ * is the direction every other set in this file errs in, and it is pinned by its
+ * own fixture below rather than left implicit.
+ *
+ * THE SIBLING GATE ONE DIRECTORY OVER ALREADY COVERS THIS EXACT SET OF FOUR, and
+ * that is corroboration rather than the reason. `store/error-redaction.spec.ts`'s
+ * `derivesFrom` descends `? :`, `??`, `||` and `&&` with either-side semantics
+ * (WR-24, plan 01-21), and its docblock cites `initializerReceiver` in THIS file
+ * as its justification, saying that "stating the symmetry here is what keeps the
+ * two gates from drifting into disagreeing about the same operator". Excluding
+ * `&&` here would have manufactured the disagreement that sentence was written to
+ * prevent.
+ */
+const RECEIVER_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
+  ts.SyntaxKind.QuestionQuestionToken,
+  ts.SyntaxKind.BarBarToken,
+  ts.SyntaxKind.AmpersandAmpersandToken,
+]);
 
 /**
  * The binary operators whose RESULT IS ALWAYS A NUMBER, whatever the operands.
@@ -3333,6 +3405,132 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-send");
   });
 
+  it("through RECEIVER_OPERATORS: `(sdk.requests ?? sdk.net).send(req)` and the `||` form report — the same operator class, the same descent", () => {
+    // The `? :` fixture above and these two are ONE class and are closed
+    // together, because closing two of three is the asymmetry CR-08 was and the
+    // asymmetry WR-27 is. MECHANISM: `RECEIVER_OPERATORS` consulted by
+    // `operatorOperands`, reached from `receiverKind` — one named set, not three
+    // inline kind comparisons.
+    expect(rulesOf("(sdk.requests ?? sdk.net).send(req);")).toContain(
+      "outbound-send",
+    );
+    expect(rulesOf("(sdk.requests || sdk.net).send(req);")).toContain(
+      "outbound-send",
+    );
+    // And in the OTHER TWO POSITIONS, through the same set — a binary operator is
+    // not a call-position special case.
+    expect(
+      rulesOf("const r = sdk.requests ?? sdk.net;\nr.send(req);"),
+    ).toContain("outbound-send");
+    expect(rulesOf('sdk[k ?? "requests"].send(req);')).toContain(
+      "outbound-send",
+    );
+    // The third state survives a binary operator exactly as it survives `? :`.
+    expect(rulesOf("(sdk[k1 + k2] ?? cache).send(req);")).toContain(
+      "outbound-unanalysable",
+    );
+  });
+
+  it("through RECEIVER_OPERATORS: `&&` IS IN THE SET, DECIDED BY MEASUREMENT — and this pins BOTH what that buys and what it costs", () => {
+    // THE DECISION IS NOT SYMMETRY WITH THE OTHER THREE, and the plan required it
+    // not be. `a && b` yields `a` when `a` is FALSY, so its left operand is
+    // usually a GUARD rather than a value — the argument that makes `? :`, `??`
+    // and `||` obvious does not carry.
+    //
+    // BOTH READINGS WERE IMPLEMENTED AND RUN. THE REAL TREE DID NOT DISCRIMINATE:
+    // 23 files, ZERO violations, under `&&` IN and under `&&` OUT alike. Nothing
+    // about shipped code chose this and this fixture does not pretend otherwise.
+    // THE SHAPES DISCRIMINATED, and the deciding one is the first assertion here:
+    // a guarded outbound call is the ORDINARY way to write one, `sdk.requests` is
+    // written out in full, and excluding `&&` calls it "not a receiver" — WR-27's
+    // own finding, reproduced one operator over, inside the wave that closes it.
+    expect(
+      rulesOf("(ok && sdk.requests).send(req);"),
+      "the guarded outbound call — the shape that decided `&&`",
+    ).toContain("outbound-send");
+    expect(rulesOf("(sdk.requests && sdk.net).send(req);")).toContain(
+      "outbound-send",
+    );
+    expect(rulesOf("const r = ok && sdk.requests;\nr.send(req);")).toContain(
+      "outbound-send",
+    );
+
+    // THE COST, PINNED RATHER THAN LEFT IMPLICIT. Where the RECEIVER is the guard
+    // and the VALUE is something else, either-side semantics report anyway. This
+    // OVER-approximates. It is the direction every other set in this file errs in
+    // and the direction boundary 2 claims, but it is a cost and it gets a line.
+    expect(
+      rulesOf("(sdk.requests && ok).send(req);"),
+      "the `&&` MIRROR — this over-approximation is disclosed, not accidental",
+    ).toContain("outbound-send");
+
+    // AND THE TWIN, IN THE SAME FIXTURE: `&&` over ordinary operands stays quiet.
+    // A guard-and-collaborator idiom is common code and a gate that flags it gets
+    // deleted rather than fixed.
+    expect(rulesOf("(ok && cache).send(req);")).toEqual([]);
+  });
+
+  it('through keyReceiver\'s OWN recursion: `sdk[b ? (c ? "requests" : "x") : "y"]` resolves — the docblock\'s single-definition claim made TRUE of the code', () => {
+    // `keyReceiver`'s ordering docblock has claimed since CR-08 that it is the
+    // single definition of what a readable key is, "called from the direct key and
+    // both conditional branches, so they cannot disagree about what the walk can
+    // read". That was a claim about two CALLERS, made by a function that did not
+    // itself handle a conditional — so the moment a conditional appeared INSIDE a
+    // branch, the two DID disagree and this shape was silent. The claim is now a
+    // fact: `keyReceiver` descends through `operatorReceiver`, passing ITSELF as
+    // the resolver, so nesting resolves by construction at any depth.
+    //
+    // WHICH TASK ACTUALLY CLOSED THIS, RECORDED RATHER THAN ABSORBED. The plan
+    // assigned this shape to its second task, alongside the binary operators.
+    // MEASURED: it closed in the FIRST task, at the moment the element-access arm
+    // stopped hand-rolling its own conditional block and started calling
+    // `keyReceiver`. The recursion and the collapse are the same edit seen from
+    // two sides. Emptying `RECEIVER_OPERATORS` therefore does NOT turn this red —
+    // see the summary's mutation table, where it is named as MEASURED
+    // NON-EVIDENCE under that mutation and proven by the descent's removal.
+    expect(
+      rulesOf('sdk[b ? (c ? "requests" : "x") : "y"].send(req);'),
+    ).toContain("outbound-send");
+    // THE TWIN: nested all the way down, and no branch names a receiver.
+    expect(rulesOf('sdk[b ? (c ? "aaa" : "x") : "y"].send(req);')).toEqual([]);
+    // A nested branch the walk WATCHES being assembled is unreadable, not silent
+    // — the third state surviving two levels of operator.
+    expect(
+      rulesOf('sdk[b ? (c ? "req" + "uests" : "x") : "y"].send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("through NOTHING: the operator descent reaches the RECEIVER and KEY resolvers and STOPS THERE — the GLOBAL receivers are untouched by it — A MEASURED SILENCE, and no prior list named this one either", () => {
+    // FOUND BY PROBING WHERE THE DESCENT STOPS RATHER THAN ASSUMING IT IS
+    // UNIVERSAL, which is the method wave 24 recorded after its own plan's
+    // CONTROL turned out wrong when measured.
+    //
+    // `operatorReceiver` is reached from `receiverKind` and `keyReceiver`. It is
+    // NOT reached from `isGlobalReceiver`, `isFetchExpression` or
+    // `isNavigatorReceiver`, which resolve their own spellings through the alias
+    // sets. So an operator wrapping a GLOBAL receiver is still silent, in every
+    // spelling, and MEASURED IDENTICAL BEFORE AND AFTER THIS WAVE — this wave
+    // neither closed these nor broke them, and no credit is claimed for them.
+    //
+    // OPEN AND UNOWNED AS OF WAVE 25. No plan in this phase claims it; it is
+    // named in the residual so that wave 27's derivation carries it forward
+    // rather than rediscovering it. Recorded because a residual that narrows in
+    // one place while quietly widening in another is the omission this round
+    // exists to stop.
+    expect(rulesOf("(ok && globalThis).fetch(url);")).toEqual([]);
+    expect(rulesOf('(g ?? globalThis)["fetch"](url);')).toEqual([]);
+    expect(rulesOf("(b ? globalThis : x).fetch(url);")).toEqual([]);
+    expect(rulesOf("(b ? navigator : x).sendBeacon(u, d);")).toEqual([]);
+    expect(rulesOf("(b ? fetch : x)(url);")).toEqual([]);
+    expect(rulesOf("(b ? eval : x)(src);")).toEqual([]);
+    // THE CONTRAST that shows the boundary is the RESOLVER and not the operator:
+    // put the same conditional around a `requests`/`net` member and it reports,
+    // because that path goes through `receiverKind`.
+    expect(rulesOf("(b ? sdk.requests : x).send(req);")).toContain(
+      "outbound-send",
+    );
+  });
+
   it('through the COMMA SEQUENCE rule plus constStrings: `sdk[(0, "requests")]` is its rightmost operand', () => {
     // A comma expression's value IS its rightmost operand, so this hides nothing
     // either. MECHANISM: the `CommaToken` arm of `unwrap` (see its docblock for
@@ -3919,6 +4117,18 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
     [
       "an operator expression over two ORDINARY objects, in call position",
       "(useCache ? cache : client).send(payload);",
+    ],
+    [
+      "the `??` fallback idiom over two ORDINARY objects",
+      "(cache ?? client).send(payload);",
+    ],
+    [
+      "the `||` fallback idiom over two ORDINARY objects",
+      "(cache || client).send(payload);",
+    ],
+    [
+      "the `&&` GUARD idiom over an ordinary collaborator",
+      "(ready && cache).send(payload);",
     ],
     [
       "an ORDINARY object defining a method named send",
