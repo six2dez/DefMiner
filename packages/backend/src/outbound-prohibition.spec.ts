@@ -406,8 +406,27 @@
 //          RE-MEASURED 2026-08-24 after the CR-08 widening landed: the full gate
 //          over both `SOURCE_ROOTS`, 23 files, ZERO violations. The exemption is
 //          preserved by measurement, not by argument.
-//      (c) `navigator` reached through more than one hop, or returned by a
-//          helper, is outside the beacon rule for the same reason as (a).
+//      (b2) A DESTRUCTURED PLAIN LITERAL used as a key — `const { k } = { k:
+//          "requests" }; sdk[k].send(req)` — is NOT reported. NAMED 2026-08-24
+//          (this wave), by measurement rather than by review: closing IN-26 gave
+//          `assembledNames` the two binding-pattern spellings, and measuring the
+//          result surfaced that `constStrings` reads only the identifier
+//          spelling of the same declaration. IN-26 named the ASSEMBLY spellings
+//          and those are closed; this one is DISCLOSED rather than folded in,
+//          because widening `constStrings` through binding patterns is a
+//          separate decision that needs its own real-tree measurement. Asserted
+//          below as a MEASURED SILENCE, so it goes red the day it is closed.
+//      (c) `navigator` RETURNED BY A HELPER is outside the beacon rule, for the
+//          same reason as (a)'s function-boundary half.
+//          CORRECTED 2026-08-24 (WR-30). This item used to also exempt
+//          `navigator` reached through MORE THAN ONE HOP, and pointed at (a) for
+//          the reason — but (a) was split in two on 2026-08-24 and its ALIAS half
+//          says the opposite: `navigatorAliases` is grown from the live set and
+//          chains to any depth. Executed: `const a = navigator; const b = a;
+//          b.sendBeacon(u, d)` reports `outbound-beacon`, and so does the
+//          three-hop spelling. The hop clause is DELETED, not softened, and the
+//          depth question is answered in (a) and nowhere else. Asserted below in
+//          the five-set transitivity case.
 //    NOT RESIDUAL, AND THE DISTINCTION IS DELIBERATE: a provably numeric key is
 //    an INDEX rather than a hidden name, and is EXCLUDED by `isProvablyNumeric`
 //    before any of the above runs. That is a different kind of quiet.
@@ -1473,8 +1492,17 @@ function constructionDetail(target: ts.Expression, global: string): string {
  * the aliases are still being grown; every caller inside `auditSource` passes
  * the live set, and the bare-identifier answer is unchanged for all of them.
  *
- * ONE HOP AND NO MORE: `const a = globalThis; const g = a; g.fetch(u)` is
- * silent, and that is residual (a).
+ * HOW FAR AN ALIAS CHAIN REACHES IS STATED IN EXACTLY ONE PLACE — residual (a),
+ * under `ALIASES DO NOT`. It is not restated here (WR-30). The sentence that
+ * stood here bounded this function at one hop and named
+ * `const a = globalThis; const g = a; g.fetch(u)` as silent; executed, that
+ * string reports `outbound-fetch`, and a passing case further down this same
+ * file asserts that it does. A bound restated in four docblocks is a bound that
+ * drifts in three of them, which is what happened.
+ *
+ * The local fact, which IS about this function: the set it consults is grown
+ * from the LIVE set during collect, so what this function answers depends on
+ * what has been declared, never on where the answer is read.
  */
 function isGlobalReceiverIn(
   node: ts.Expression,
@@ -1491,6 +1519,51 @@ function boundPropertyName(el: ts.BindingElement): string | undefined {
   return ts.isIdentifier(property) || ts.isStringLiteralLike(property)
     ? property.text
     : undefined;
+}
+
+/**
+ * The expression a destructured binding element actually takes its value FROM,
+ * when the thing being destructured is written out as a literal in the same
+ * declaration.
+ *
+ * IN-26, and it is narrow on purpose. `const { k } = { k: "req" + "uests" }` and
+ * `const [k] = ["req" + "uests"]` are DECLARATIONS of an assembled key, exactly
+ * as `const k = "req" + "uests"` is, and the residual header says an assembly is
+ * read "through EITHER a declaration or an assignment". The collector read only
+ * the identifier spelling, so both of these were silent while their own
+ * one-identifier twin reported.
+ *
+ * It resolves only against an object or array LITERAL written in the initializer
+ * position, because that is the only place the assembly's SHAPE still exists to
+ * be read. `const { k } = someObject` is a value crossing a boundary the walk
+ * does not follow and stays residual (a); nothing here changes that.
+ */
+function destructuredInitializer(
+  init: ts.Expression,
+  el: ts.BindingElement,
+  index: number,
+): ts.Expression | undefined {
+  if (ts.isObjectLiteralExpression(init)) {
+    const property = boundPropertyName(el);
+    if (property === undefined) return undefined;
+    for (const member of init.properties) {
+      if (!ts.isPropertyAssignment(member)) continue;
+      const name = member.name;
+      const text =
+        ts.isIdentifier(name) || ts.isStringLiteralLike(name)
+          ? name.text
+          : undefined;
+      if (text === property) return member.initializer;
+    }
+    return undefined;
+  }
+  if (ts.isArrayLiteralExpression(init)) {
+    // A rest element consumes the tail rather than one slot, so positional
+    // matching stops meaning anything past it and nothing is read.
+    if (el.dotDotDotToken !== undefined) return undefined;
+    return init.elements[index];
+  }
+  return undefined;
 }
 
 /**
@@ -1564,6 +1637,22 @@ export function auditSource(file: string, source: string): Violation[] {
    *
    * ONE HOP AND NO MORE, exactly like `constStrings`: `const a = "req" + "uests";
    * const b = a; sdk[b].send(req)` is still silent, and that is residual (a).
+   * THIS SENTENCE IS THE ONE PLACE THAT ONE-HOP BOUND IS STILL STATED, and it
+   * is stated here because it is TRUE HERE and nowhere else: this collector
+   * reads the INITIALIZER'S SHAPE and never the live set, so it cannot chain.
+   * Three sibling docblocks carried the identical sentence about ALIAS sets,
+   * which are grown from the live set and do chain to any depth; all three were
+   * deleted on 2026-08-24 (WR-30) after being executed and found to report.
+   * That they read as true to a skimmer is precisely because THIS one is.
+   *
+   * WHAT COUNTS AS A DECLARATION HERE, WIDENED 2026-08-24 (IN-26). Three
+   * spellings, not one: `const k = "req" + "uests"`, `const { k } = { k: "req"
+   * + "uests" }` and `const [k] = ["req" + "uests"]`. The two binding-pattern
+   * spellings were silent while the header two hundred lines up said an
+   * assembly is read through EITHER a declaration or an assignment, and the
+   * RECEIVER branch beside this one already read an object binding pattern. A
+   * destructure of anything the walk cannot read as a literal — `const { k } =
+   * someObject` — reads nothing and is residual (a), unchanged.
    *
    * WHAT ACTUALLY BOUNDS A KEY, CORRECTED 2026-08-24 (CR-09). The paragraph
    * that stood here bounded key resolution by where a declaration is read
@@ -1630,8 +1719,15 @@ export function auditSource(file: string, source: string): Violation[] {
    * local actually aliases (`a call to \`e(...)\`, an alias of \`eval\``) instead
    * of leaving a reader to find the binding themselves.
    *
-   * ONE HOP AND NO MORE, exactly like every other set in this pass:
-   * `const a = eval; const b = a; b(s)` is silent, and that is residual (a).
+   * HOW FAR THIS MAP CHAINS IS STATED IN EXACTLY ONE PLACE — residual (a),
+   * under `ALIASES DO NOT`. Not restated here (WR-30): the sentence that stood
+   * here bounded this map at one hop and named `const a = eval; const b = a;
+   * b(s)` as silent. Executed, it reports `outbound-dynamic-code`, at two hops
+   * and at three.
+   *
+   * The local fact: this map is grown by consulting itself during the collect
+   * pass, which is why it chains at all and why the ordering of the
+   * DECLARATIONS — not of the uses — is what bounds it.
    *
    * The RECEIVER anchoring is inherited, not re-derived: the member and
    * destructure spellings only grow this map off one of the four
@@ -2069,7 +2165,39 @@ export function auditSource(file: string, source: string): Violation[] {
           ) {
             globalAliases.set(el.name.text, property);
           }
+          // IN-26: `const { k } = { k: "req" + "uests" }` — the destructure
+          // spelling of the assembly the IDENTIFIER branch above already reads,
+          // through the same `isAssembledKey` against the same numeric sets.
+          // Both spellings are declarations; only one of them was read.
+          if (
+            isAssembledKey(
+              destructuredInitializer(init, el, 0),
+              numericNames,
+              poisonedNumericNames,
+            )
+          ) {
+            assembledNames.add(el.name.text);
+          }
         }
+      } else if (ts.isArrayBindingPattern(node.name)) {
+        // IN-26's array twin. Positional rather than keyed, and read no further:
+        // this branch exists for `const [k] = ["req" + "uests"]` and grows
+        // NOTHING else — no receiver, no alias, no string binding. Widening any
+        // of those is a separate decision with its own real-tree measurement,
+        // and this one is scoped to the shape the residual header already
+        // claimed was covered.
+        node.name.elements.forEach((el, index) => {
+          if (ts.isOmittedExpression(el) || !ts.isIdentifier(el.name)) return;
+          if (
+            isAssembledKey(
+              destructuredInitializer(init, el, index),
+              numericNames,
+              poisonedNumericNames,
+            )
+          ) {
+            assembledNames.add(el.name.text);
+          }
+        });
       }
     }
 
@@ -3309,6 +3437,78 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
+  it('through assembledNames\' BINDING-PATTERN branches: the two DESTRUCTURE spellings of a declared assembly report — `const { k } = { k: "req" + "uests" }` and `const [k] = ["req" + "uests"]` — IN-26', () => {
+    // IN-26, and it is the last spelling of the sentence at the top of this file
+    // that says an assembly is read "through EITHER a declaration or an
+    // assignment". Both of these ARE declarations. Neither was read: the
+    // collector's assembled-name write ran only under `ts.isIdentifier(node.name)`
+    // while the RECEIVER branch sitting directly beside it already read an object
+    // binding pattern. That asymmetry is the whole finding.
+    //
+    // MEASURED BEFORE THE FIX, both `[]`; measured after, both
+    // `outbound-unanalysable`. Same rule as the one-identifier twin
+    // (`const k = "req" + "uests"`), because a key the walk watched being built
+    // is a key it saw being hidden, and how the binding is spelled changes
+    // nothing about that.
+    expect(
+      rulesOf('const { k } = { k: "req" + "uests" };\nawait sdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+    expect(
+      rulesOf('const [k] = ["req" + "uests"];\nawait sdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+    // The RENAMED key and a NON-ZERO array slot, so the branches are shown
+    // resolving by property name and by position rather than by accident of
+    // both being the first thing in the literal.
+    expect(
+      rulesOf(
+        'const { p: k } = { p: "req" + "uests" };\nawait sdk[k].send(req);',
+      ),
+    ).toContain("outbound-unanalysable");
+    expect(
+      rulesOf(
+        'const [x, k] = ["a", "req" + "uests"];\nawait sdk[k].send(req);',
+      ),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("through assembledNames' BINDING-PATTERN branches: the MUST-STAY-QUIET twins — an ordinary destructure used as an ordinary lookup, a numeric slot, a rest element, and a destructure of something the walk cannot read — IN-26", () => {
+    // THE TWIN, IN THE SAME COMMIT AS THE WIDENING, because destructuring is
+    // ordinary in this codebase and a gate that calls every destructured name an
+    // assembled receiver key gets deleted rather than fixed.
+    //
+    // Ordinary strings are not assemblies, so nothing is collected and the
+    // lookup stays quiet even in receiver position.
+    expect(
+      rulesOf('const { a, b } = { a: "x", b: "y" };\nsdk[a][b](req);'),
+    ).toEqual([]);
+    expect(rulesOf('const [a, b] = ["x", "y"];\no[a][b];')).toEqual([]);
+    // `isProvablyNumeric` guards these branches exactly as it guards the
+    // identifier and compound-assignment ones: an index is not a hidden name.
+    expect(rulesOf("const [k] = [1 + 1];\nsegments[k];")).toEqual([]);
+    // A rest element consumes the tail rather than one slot, so positional
+    // matching stops meaning anything and the branch deliberately reads nothing.
+    expect(
+      rulesOf('const [...k] = ["req" + "uests"];\nawait sdk[k].send(req);'),
+    ).toEqual([]);
+    // A MEASURED SILENCE, and it is residual (a)'s function/value-boundary half
+    // unchanged: destructuring something the walk cannot read reads nothing. It
+    // is NOT evidence that any rule holds.
+    expect(
+      rulesOf("const { k } = someObject;\nawait sdk[k].send(req);"),
+    ).toEqual([]);
+    // A MEASURED SILENCE AND A NEWLY NAMED OPEN SHAPE, recorded here rather than
+    // left for the next reviewer to find. A destructured PLAIN LITERAL —
+    // `const { k } = { k: "requests" }` — is `constStrings`' territory, not this
+    // branch's, and `constStrings` reads only the identifier spelling too. IN-26
+    // named the ASSEMBLY spellings and those are what this wave closed; this
+    // sibling is disclosed, not silently folded in, because widening
+    // `constStrings` through binding patterns is a separate decision that needs
+    // its own real-tree measurement.
+    expect(
+      rulesOf('const { k } = { k: "requests" };\nawait sdk[k].send(req);'),
+    ).toEqual([]);
+  });
+
   it("through isProvablyNumeric's guard on the COMPOUND-ASSIGNMENT branch: an INTEGER accumulator built with `+=` is an INDEX and stays quiet", () => {
     // THE MUST-STAY-QUIET TWIN of the case two above, and the reason the new
     // branch carries the same numeric test the poisoning arm beside it already
@@ -4036,7 +4236,7 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     ).toEqual([]);
   });
 
-  it("through globalThisAliases' TRANSITIVITY: an alias CHAIN resolves to ANY depth when each link's DECLARATION follows the declaration it is grown from — MEASURED, and not what residual (a) used to say", () => {
+  it("through ALL FIVE ALIAS SETS' TRANSITIVITY: an alias CHAIN resolves to ANY depth when each link's DECLARATION follows the declaration it is grown from — MEASURED, and not what residual (a) used to say", () => {
     // MEASURED, NOT ASSUMED, AND THE MEASUREMENT CONTRADICTED THE EXPECTATION
     // THIS CASE WAS FIRST WRITTEN WITH. Every alias set here is grown by
     // consulting the LIVE set, so each new binding can be resolved from the
@@ -4060,6 +4260,35 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     expect(
       rulesOf("const r = sdk.requests;\nconst r2 = r;\nr2.send(req);"),
     ).toContain("outbound-send");
+
+    // WIDENED TO ALL FIVE SETS 2026-08-24 (WR-30). This case asserted three of
+    // the five, and the two it left out — `navigatorAliases` and
+    // `globalAliases` — are exactly the two whose docblocks still carried the
+    // measured-false one-hop bound this wave deleted. Leaving the assertion at
+    // three of five is what let a reader check the clause against a majority and
+    // find it true.
+    //
+    // MEASURED DISCREPANCY, RECORDED RATHER THAN GLOSSED: these two sets were
+    // NOT uncovered. `navigatorAliases' TRANSITIVITY vs its negation` and
+    // `globalAliases' TRANSITIVITY vs its negation` already assert both of them
+    // chaining, in their own describes. What is added here is (i) all five in
+    // ONE place, which is where residual (a) sends a reader, and (ii) THREE
+    // hops, where those two siblings stop at two — so this is a consolidation
+    // and a depth widening, not the closure of a hole.
+    expect(
+      rulesOf("const a = navigator;\nconst b = a;\nb.sendBeacon(u, d);"),
+    ).toContain("outbound-beacon");
+    expect(
+      rulesOf(
+        "const a = navigator;\nconst b = a;\nconst c = b;\nc.sendBeacon(u, d);",
+      ),
+    ).toContain("outbound-beacon");
+    expect(rulesOf('const a = eval;\nconst b = a;\nb("x");')).toContain(
+      "outbound-dynamic-code",
+    );
+    expect(
+      rulesOf('const a = eval;\nconst b = a;\nconst c = b;\nc("x");'),
+    ).toContain("outbound-dynamic-code");
   });
 
   it("through NOTHING: INVERTED BINDING ORDER is what silences an alias chain — the intermediate is declared before its root, so the root is not yet in the live set — A MEASURED SILENCE", () => {
