@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-24T16:30:00Z
+reviewed: 2026-08-24T21:10:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -66,6 +66,28 @@ reviews:
       binding (`r ??= sdk.requests`) is invisible to every collector, and a
       receiver KEY bound to a conditional is silent while the MEMBER and
       SPECIFIER twins of the same conditional both report unanalysable.
+  - pass: gap-closure-round-6
+    reviewed: 2026-08-24T21:10:00Z
+    scope: 5 files changed by plans 01-29 … 01-32
+    findings: CR-14, CR-15, CR-16, WR-38...WR-43, IN-31...IN-33
+    verdict: >-
+      CR-11, CR-12, CR-13, WR-32...WR-37 and IN-27...IN-30 all verified CLOSED by
+      execution. The branch mechanism EARNS its central claim: neutering the
+      `PlusEqualsToken` assembly branch while leaving its anchor line intact turns
+      the DERIVED block red at ROW granularity, naming the row, the phrase and the
+      anchor; injecting a resolver turns the coverage guard red; FALSIFIED_HANDOFFS
+      is genuinely at zero. THREE NEW BLOCKERS, and all three are the signature
+      defect surviving in the ONE surface the new mechanism does not reach. The
+      gate file's hand-written HEADER still asserts, present tense, that an
+      operator around a global receiver is silent "in every spelling" and names six
+      exemplars — all six REPORT — while listing the shape as OPEN AND UNOWNED and
+      pointing at a fixture that is now titled CLOSED. A bare global in RECEIVER
+      rather than CALLEE position is silent across the whole family — `fetch.call`,
+      `fetch.bind`, `Reflect.apply(fetch, …)`, `eval.call`, and a POSITIVELY
+      IDENTIFIED alias's `f.call` — while every SDK twin, every `globalThis.`
+      twin and `navigator.sendBeacon.call` report. And an unreadable member on a
+      positively identified `navigator` receiver is silent while the identical
+      shape on `requests`, `net` and `globalThis` reports `outbound-unanalysable`.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -129,10 +151,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 13
-  warning: 37
-  info: 30
-  total: 80
+  critical: 16
+  warning: 43
+  info: 33
+  total: 92
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -196,6 +218,19 @@ resolution:
       IN-24,
       IN-25,
       IN-26,
+      CR-11,
+      CR-12,
+      CR-13,
+      WR-32,
+      WR-33,
+      WR-34,
+      WR-35,
+      WR-36,
+      WR-37,
+      IN-27,
+      IN-28,
+      IN-29,
+      IN-30,
     ]
   partially_fixed: [IN-09]
   deferred: [WR-07]
@@ -210,19 +245,18 @@ resolution:
       IN-06,
       IN-07,
       IN-09,
-      CR-11,
-      CR-12,
-      CR-13,
-      WR-32,
-      WR-33,
-      WR-34,
-      WR-35,
-      WR-36,
-      WR-37,
-      IN-27,
-      IN-28,
-      IN-29,
-      IN-30,
+      CR-14,
+      CR-15,
+      CR-16,
+      WR-38,
+      WR-39,
+      WR-40,
+      WR-41,
+      WR-42,
+      WR-43,
+      IN-31,
+      IN-32,
+      IN-33,
     ]
 fix_commits:
   CR-01: 910c382
@@ -284,15 +318,15 @@ fix_commits:
   IN-25: e5b236e
   IN-26: b0b0f92
 tests_before: 27 files / 616 tests
-tests_after: 31 files / 1200 tests
+tests_after: 31 files / 1345 tests
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files), 2026-08-24T10:05:00Z (gap closure round 4, 7 files) and 2026-08-24T16:30:00Z (gap closure round 5, 6 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files), 2026-08-24T10:05:00Z (gap closure round 4, 7 files), 2026-08-24T16:30:00Z (gap closure round 5, 6 files) and 2026-08-24T21:10:00Z (gap closure round 6, 5 files)
 **Depth:** standard
-**Files Reviewed:** 59 (union of all six passes)
-**Status:** issues_found — three new BLOCKERs from round 5 (`CR-11`, `CR-12`, `CR-13`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-09`, `CR-10`, `WR-27…WR-31` and `IN-23…IN-26` are all CLOSED, verified by execution
+**Files Reviewed:** 59 (union of all seven passes)
+**Status:** issues_found — three new BLOCKERs from round 6 (`CR-14`, `CR-15`, `CR-16`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-11`, `CR-12`, `CR-13`, `WR-32…WR-37` and `IN-27…IN-30` are all CLOSED, verified by execution
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
 > 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
@@ -3489,6 +3523,620 @@ here so a seventh round does not spend a finding on them. The first is a tagged 
 receiver is a global receiver but whose *name* is not a surface, so no rule matches.
 
 ---
+---
+
+# --- PASS 7 --- Gap-Closure ROUND 6 Review (plans 01-29 … 01-32)
+
+**Reviewed:** 2026-08-24T21:10:00Z
+**Depth:** standard
+**Files Reviewed:** 5 — the files plans 01-29 … 01-32 changed, confirmed against
+`git diff --name-only 4d61c73^..HEAD` rather than taken from the summaries
+**Status:** issues_found — 3 BLOCKER, 6 WARNING, 3 INFO
+
+## Summary (pass 7)
+
+Everything round 6 claims to have closed is closed, and I checked the two claims
+that matter by mutation rather than by reading.
+
+**The branch mechanism earns its central claim.** Round 6's acceptance test was
+that deleting the `PlusEqualsToken` assembly branch turns the derived block red at
+ROW granularity. I ran the harder version of that mutation — I left the branch's
+condition and its anchor line intact and neutered only its effect
+(`assembledNames.add(node.left.text)` → `void 0`), so the anchor guard could not
+fire — and the suite went red in three places, one of which is the per-branch case
+naming the row, the phrase and the anchor:
+
+```
+× branch assembledNames / a `+=` compound assignment /
+  auditSource > collect > node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+  — its probe is executed against auditSource
+Tests  3 failed | 404 passed (407)
+```
+
+Injecting a resolver at `auditSource`'s own indentation
+(`const sneakyResolver = (n: ts.Expression): boolean => …`) turns the coverage
+guard red in both of its cases. `FALSIFIED_HANDOFFS` really is at zero, its pin
+really is `toBe(0)`, and `CORE11_BOX_EXPECTED` really does pin `- [ ] **CORE-11**`
+by prefix rather than by the two-state character class WR-34 found. The whole
+suite is green at **31 files / 1345 tests**. None of that is ceremony: three
+separate mutations produced three different red states, each naming what broke.
+
+**And all three new BLOCKERs live in the one surface that mechanism does not
+reach.** `BRANCH_VOCABULARY` and `UNBOUNDED_QUANTIFIERS` are scanned over
+`RESOLVER_REGISTRY[].clause` and over nothing else. The gate file's own 955-line
+hand-written header — the artifact a reader reaches first, and the one every
+earlier round wrote its residual into — is never scanned by either. Measured on
+the header alone, the declared quantifier phrasings occur **16 times**: `anywhere
+in the file` ×5, `any depth` ×5, `ANY-BINDING-WINS` ×4, `every literal` ×2,
+`ANY of them` ×2, `everywhere in the file`, `every reachable spelling`, `ANY
+string literal` and `every spelling` ×1 each. Not one of them raises a
+`QUANTIFIED_CLAUSES` obligation. The mechanism's own disclosure states the
+*phrase-list* limit ("declared-phrasing or nothing") and never states the
+*surface* limit, and the surface limit is where the round's blockers are.
+
+The header's `every spelling` is the round's own falsified universal, still
+standing:
+
+```
+["outbound-fetch"]          (ok && globalThis).fetch(url);
+["outbound-fetch"]          (g ?? globalThis)["fetch"](url);
+["outbound-fetch"]          (b ? globalThis : x).fetch(url);
+["outbound-beacon"]         (b ? navigator : x).sendBeacon(u, d);
+["outbound-fetch"]          (b ? fetch : x)(url);
+["outbound-dynamic-code"]   (b ? eval : x)(src);
+```
+
+Six of six. The registry ROW that carried that universal was removed on
+2026-08-24 with a guard asserting it never returns; the HEADER copy — same
+universal, same six exemplars, plus "Pinned by a fixture titled as a MEASURED
+SILENCE" and a listing under "**STILL OPEN** … OPEN AND UNOWNED, no plan in this
+phase claims it" — was left standing.
+
+Two further shapes report nothing and are on no residual list. A bare global in
+RECEIVER position rather than CALLEE position is silent across the whole family,
+while every structural twin of it reports:
+
+```
+[]                    fetch.call(null, url);
+[]                    fetch.apply(null, [url]);
+[]                    const g = fetch.bind(globalThis); g(url);
+[]                    Reflect.apply(fetch, null, [url]);
+[]                    eval.call(null, src);
+[]                    const f = fetch; f.call(null, url);      // f IS in fetchAliases
+["outbound-send"]     sdk.requests.send.call(sdk.requests, req);
+["outbound-send"]     const g = sdk.requests.send.bind(sdk.requests); g(req);
+["outbound-send"]     Reflect.apply(sdk.requests.send, sdk.requests, [req]);
+["outbound-fetch"]    globalThis.fetch.call(null, url);
+["outbound-fetch"]    const g = globalThis.fetch.bind(globalThis); g(url);
+["outbound-beacon"]   navigator.sendBeacon.call(navigator, u, d);
+```
+
+And an unreadable member on a positively identified `navigator` receiver is
+dropped, while the identical shape on every other identified receiver is
+reported:
+
+```
+["outbound-unanalysable"]   const m = "se" + "nd";      sdk.requests[m](req);
+["outbound-unanalysable"]   const m = "fet" + "ch";     globalThis[m](url);
+["outbound-unanalysable"]   const m = "fet" + "ch";     window[m](url);
+["outbound-unanalysable"]   const k = "send"+"Beacon"; const { [k]: b } = navigator; b(u,d);
+[]                          const m = "send" + "Beacon"; navigator[m](u, d);
+[]                          const n = navigator; const m = "send"+"Beacon"; n[m](u, d);
+```
+
+On the persistence side, `observations.ts` changed by comment only — the diff is
+entirely ` *` lines, so the redaction code is byte-identical and the 16,160-input
+sweep round 5 verified still applies. The WR-35 correction it carries is right
+about the *mechanism* of both unstable shapes and wrong about the *discriminator*
+it appends to them: "shape (2) SHRINKS and shape (3) does not" is an artifact of
+`jsessionid` being exactly ten characters, the same length as `<redacted>`. Re-run
+with a 29-character parameter name, shape (3) shrinks by up to **19 bytes** at
+nineteen consecutive offsets. That is WR-39, and it is the same defect the
+correction was written to fix, one layer down, in the same round.
+
+Three things are right and worth recording so nobody re-litigates them. The
+mutation seam is real and row-granular, proved above. `FALSIFIED_HANDOFFS`
+draining to zero is honest — its pin is an equality at zero rather than a
+`toBeGreaterThan`, and the docblock states why an assertion a later wave must
+delete is worse than none. And the `CORE11_BOX_EXPECTED` prefix pin genuinely
+would catch the flip both reverts undid: I checked it by reading the ledger row,
+which is `- [ ]`.
+
+---
+
+## Critical Issues (pass 7)
+
+### CR-14: The gate header still declares six live-reporting spellings silent, "OPEN AND UNOWNED", pinned by a fixture that no longer exists
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:756-772` and `:774-781`
+**Severity:** BLOCKER
+
+**Issue:** The hand-written header says, in the present tense:
+
+> `isGlobalReceiver`, `isFetchExpression` and `isNavigatorReceiver` resolve their
+> own spellings through the alias sets and do not consult it, so AN OPERATOR
+> WRAPPING A GLOBAL RECEIVER IS STILL SILENT in every spelling: `(ok &&
+> globalThis).fetch(url)`, `(g ?? globalThis)["fetch"](url)`, `(b ? globalThis :
+> x).fetch(url)`, `(b ? navigator : x).sendBeacon(u, d)`, `(b ? fetch : x)(url)`
+> and `(b ? eval : x)(src)` all report `[]`, MEASURED IDENTICAL BEFORE AND AFTER
+> THIS WAVE against commit `278a0d2~1`. … Pinned by a fixture titled as a MEASURED
+> SILENCE.
+
+and eight lines later lists the same shape under **STILL OPEN**:
+
+> the OPERATOR AROUND A GLOBAL RECEIVER, above — OPEN AND UNOWNED, no plan in this
+> phase claims it
+
+Executed through `auditSource`, **all six report** — the block quoted in the
+summary above. Wave 32 closed every one of them with `operatorOperandMatching`
+and `bareFetchCallee`, removed the registry row
+`silence-operator-around-global-receiver`, and installed a guard at `:8853-8861`
+asserting that row never comes back. The header copy of the same universal was not
+touched. Nor was the pointer: there is no fixture titled `A MEASURED SILENCE` for
+this shape any more — the ten remaining ones are for inverted binding order, the
+two-hop key, and the receiver/navigator/global alias negations — and the case this
+sentence points at is now titled `… CLOSED (CR-11)` at `:7748`.
+
+Three things make this a BLOCKER rather than a stale comment. (1) It is the
+round's own falsified universal, surviving in the round that falsified it. (2) It
+tells a reader an unclosed, unowned finding exists on the surface CORE-11's first
+sentence enumerates, which is exactly the arithmetic every box-flip decision in
+this phase has keyed off — plan 01-28 held the box open over precisely this row.
+(3) `every spelling` is a **declared** `UNBOUNDED_QUANTIFIERS` phrasing, so the
+guard built to catch this class has the phrase and cannot see the sentence,
+because the scan reads `RESOLVER_REGISTRY[].clause` and the header is not a
+clause. See WR-43.
+
+**Fix:** correct the header where it is, and say what it used to say, in the shape
+the registry rows use:
+
+```ts
+//    THE OPERATOR AROUND A GLOBAL RECEIVER — CLOSED 2026-08-24 (CR-11), and the
+//    superseded claim is preserved because it was believed for seven waves.
+//    FALSIFIED 2026-08-24 (CR-11): "AN OPERATOR WRAPPING A GLOBAL RECEIVER IS
+//    STILL SILENT in every spelling". Measured after wave 32, all six exemplars
+//    report — `(ok && globalThis).fetch(url)` → ["outbound-fetch"], … ,
+//    `(b ? eval : x)(src)` → ["outbound-dynamic-code"]. `operatorOperandMatching`
+//    is reached from all five global resolvers and `bareFetchCallee` from the
+//    bare-call rule. The residual OF RECORD is the generated span below; this
+//    paragraph restates no bound of its own.
+```
+
+and delete the STILL-OPEN entry at `:779-781` in the same commit. Then extend the
+`no corrected clause names its owning wave in prose` neighbourhood with the guard
+WR-43 asks for, so the next header universal fails a test instead of a review.
+
+---
+
+### CR-15: A bare global surface in RECEIVER position is silent across the whole family, including through an alias the walk positively identified
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3703-3782` (the member rule), with `:3193-3215` (`bareFetchCallee`) and `:5698` (`QUANTIFIED_CLAUSES.isFetchExpression`)
+**Severity:** BLOCKER
+
+**Issue:** `bareFetchCallee` answers only for a CALL's callee. The member rule one
+branch away asks `member === FETCH_GLOBAL && isGlobalReceiver(node.expression)` —
+i.e. it recognises the global fetch only when it is *reached through* a global
+receiver, never when it *is* the receiver. So the bare spelling in receiver
+position matches no rule at all:
+
+```
+[]                  fetch.call(null, url);
+[]                  fetch.apply(null, [url]);
+[]                  const g = fetch.bind(globalThis); g(url);
+[]                  Reflect.apply(fetch, null, [url]);
+[]                  eval.call(null, src);
+[]                  Function.call(null, "a", src);
+[]                  const f = fetch; f.call(null, url);
+```
+
+Every structural twin reports. `sdk.requests.send.call`, `.bind` and
+`Reflect.apply(sdk.requests.send, …)` all give `outbound-send`, because the
+receiver rule was widened for exactly these shapes by CR-03 and the header at
+`:186-188` says so: *"Once a receiver is positively identified, ANY member of it
+outside an explicit read-only allowlist fails — referenced, called, aliased,
+returned, or handed to `.call`/`.apply`/`Reflect.apply`."* `globalThis.fetch.call`
+and `globalThis.fetch.bind` give `outbound-fetch`. `navigator.sendBeacon.call`
+gives `outbound-beacon`. Only the bare global family is dropped.
+
+The last line is the sharpest: `const f = fetch;` puts `f` in `fetchAliases`, so
+`f(url)` reports — the walk has *positively identified* `f` as the global fetch —
+and `f.call(null, url)` on the very next line reports nothing. That is WR-19's
+"could not read does not mean clean" inverted into "positively read, then
+dropped".
+
+`fetch.bind(globalThis)` is not a contrivance: binding `fetch` to the global
+object is the ordinary portable spelling, because a detached `fetch` throws an
+illegal-invocation in several hosts.
+
+And it is not disclosed. It is on none of the 16 MEASURED SILENCE rows, and
+`QUANTIFIED_CLAUSES.isFetchExpression` — the entry that exists to state what
+measurably bounds `in every reachable spelling` — names only *"a function
+boundary … an array-slot binding, a class field and a parameter default"*. A
+bound that omits `.call`/`.apply`/`.bind` on the surface CORE-11 spells "no global
+`fetch` by ANY RECEIVER or alias" is a bound narrower than the residual it claims
+to state.
+
+**Fix:** make the member rule consult the resolver it already has, rather than
+only `isGlobalReceiver`. One branch, beside the two that already anchor on a
+positively identified receiver:
+
+```ts
+} else if (isFetchExpression(node.expression) && member !== undefined) {
+  // `fetch.call`, `fetch.bind`, `f.apply` for any `f` in fetchAliases — the
+  // bare global in RECEIVER position, which `bareFetchCallee` cannot see
+  // because it answers for a CALLEE. `globalThis.fetch.call` already reports
+  // through the branch above; this is its bare twin.
+  add("outbound-fetch", `a reference to \`${member}\` on the global \`fetch\``);
+} else if (globalNameOf(node.expression) !== undefined && member !== undefined) {
+  // the same for `eval.call`, `Function.call`, `WebSocket.prototype`.
+  add("outbound-dynamic-code" /* or -global-ctor, per globalNameOf */, …);
+}
+```
+
+Then add the seven executed shapes above as failing-path cases beside the
+`.call`/`.apply` receiver cases at `:6763+`, extend
+`QUANTIFIED_CLAUSES.isFetchExpression`'s measured bound in the same commit, and
+give `Reflect.apply(fetch, …)` its own row — the SDK side already handles it
+because the member reference is mentioned, and the global side has no member to
+mention.
+
+---
+
+### CR-16: An unreadable member on a positively identified `navigator` receiver is dropped, while every other identified receiver reports it
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3747-3782`
+**Severity:** BLOCKER
+
+**Issue:** The member rule's chain ends with a catch-all for an unreadable member
+— but the catch-all is guarded by `isGlobalReceiver`, and `navigator` is not one
+of the four `GLOBAL_RECEIVERS`:
+
+```ts
+} else if (member === BEACON_METHOD && isNavigatorReceiver(node.expression)) { … }
+…
+} else if (member === undefined && isGlobalReceiver(node.expression)) {
+  add("outbound-unanalysable", `a computed member of \`…\` whose name this walk cannot read`);
+}
+```
+
+So when the member name will not reduce, the beacon branch cannot match (it tests
+`member === BEACON_METHOD`, and `member` is `undefined`) and the catch-all cannot
+match either. Measured:
+
+```
+[]                          const m = "send" + "Beacon"; navigator[m](u, d);
+[]                          const m = `send${"Beacon"}`;  navigator[m](u, d);
+[]                          const n = navigator; const m = "send"+"Beacon"; n[m](u, d);
+[]                          const m = "send"+"Beacon"; window.navigator[m](u, d);
+[]                          function f(m) { navigator[m](u, d); }
+["outbound-unanalysable"]   const m = "se" + "nd";  sdk.requests[m](req);
+["outbound-unanalysable"]   const m = "fet" + "ch"; globalThis[m](url);
+["outbound-unanalysable"]   const k = "send"+"Beacon"; const { [k]: b } = navigator; b(u,d);
+```
+
+The receiver is positively identified in every silent line —
+`isNavigatorReceiver` returns `true` for all four spellings — and the walk
+*watched the key being assembled* in three of them. This is the exact WR-19 class
+the file was rewritten for, surviving on the one surface its own docblock calls
+"the outbound global MOST likely to exist in a host that has none of the three
+above".
+
+It falsifies a header universal directly. `:189-192` reads: *"Anything it CANNOT
+read on an identified receiver, and any module specifier it cannot reduce to a
+literal, is REPORTED as `outbound-unanalysable`. 'Could not read' does not mean
+'clean'; that equivalence is the specific defect this rewrite removes."* The
+navigator DESTRUCTURE arm at `:3661-3675` gets this right — it has a
+`property === undefined` branch that reports — so the two spellings of one shape,
+twenty lines apart in the same rule, disagree.
+
+Undisclosed: no MEASURED SILENCE row, no residual entry, and the beacon docblock
+at `:1596-1616` says the rule covers "a `sendBeacon` member of `navigator`, of
+`navigator` reached through any of the four global receivers, or of a one-hop
+alias of either — asserted both ways below", which is stated of the *readable*
+member and reads as covering the class.
+
+**Fix:** anchor the unreadable-member catch-all on every positively identified
+receiver, not on `isGlobalReceiver` alone:
+
+```ts
+} else if (
+  member === undefined &&
+  (isGlobalReceiver(node.expression) || isNavigatorReceiver(node.expression))
+) {
+  add(
+    "outbound-unanalysable",
+    `a computed member of \`${unwrap(node.expression).getText()}\` whose name this walk cannot read`,
+  );
+}
+```
+
+and add the five executed shapes as failing-path cases in the beacon describe at
+`:7928+`. While there, note that `const { ["sendBeacon"]: b } = navigator` reports
+`outbound-unanalysable` rather than `outbound-beacon` — see IN-32.
+
+---
+
+## Warnings (pass 7)
+
+### WR-38: The gate header states CORE-11 is marked complete; the ledger row and this file's own pin both say it is not
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:908-916` (against `:9020`)
+
+**Issue:** The header reads *"CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`,
+and the difference from the `[x]` that commit `e7cc4b6` reverted is the reason it
+may be…"*. `.planning/REQUIREMENTS.md:46` is `- [ ] **CORE-11**`, and 8,100 lines
+below the header this same file pins that state as a constant:
+
+```ts
+const CORE11_BOX_EXPECTED = "- [ ] **CORE-11**";
+```
+
+The box was set `[x]` by wave 19, reverted at `faca607`, and held `[ ]` by waves
+23, 28 and every wave since. The paragraph is wave 19's and survived four rounds.
+For a checkbox that has been flipped early and reverted **twice**, a header
+asserting completion is the more dangerous of the two stale directions: it is the
+first thing a reader or a later planner sees, and the assertion that contradicts
+it is 8,000 lines away in a test body.
+
+**Fix:** replace the paragraph with the current state and its owner, or delete it
+and let `CORE11_BOX_EXPECTED` and the ledger entry be the only statements of the
+box's state — which is the "pointer, not a bound" rule this file already applies
+to `STATE.md` and `WINDOWS.md`, applied to itself.
+
+### WR-39: "Shape (2) SHRINKS and shape (3) does not" is an artifact of `jsessionid` being ten characters; measured, shape (3) shrinks by 19
+
+**File:** `packages/backend/src/store/observations.spec.ts:1104-1119`, with `packages/backend/src/store/schema.spec.ts:294-299` and `packages/backend/src/store/observations.ts:465-476`
+
+**Issue:** All three disclosures now carry, as a mechanism-level property, that a
+head-side cut landing inside the parameter NAME "does NOT shrink", and
+`observations.spec.ts:1116-1118` states it as *"THE DISCRIMINATOR, STATED AS AN
+ASSERTION: shape (2) SHRINKS and shape (3) does not. If these two ever agree, one
+of the two branches stopped being reachable from this band."*
+
+It is a property of the fixture's parameter name, not of the branch. `jsessionid`
+is ten characters and `<redacted>` is ten characters, so `;jsessionid` →
+`;<redacted>` is length-preserving by coincidence; at the shorter cuts the
+replacement is *longer* than the remaining tail and re-truncation clips it back to
+`URL_MAX`. Re-run with a 29-character name (`averylongsessionparametername`), the
+band is n=2000..2029 and shape (3) shrinks at nineteen consecutive offsets:
+
+```
+2000 SHAPE2(empty-value)  ";averylongsessionparametername="   delta -20
+2001 SHAPE3(name)         ";averylongsessionparametername"    delta -19
+2002 SHAPE3(name)         ";averylongsessionparameternam"     delta -18
+…
+2019 SHAPE3(name)         ";averylongse"                      delta  -1
+2020 SHAPE3(name)         ";averylongs"                       delta   0
+```
+
+Two smaller problems in the same block. The line the "DISCRIMINATOR" comment sits
+on is `expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1);` — **byte
+identical** to the assertion fourteen lines above it, so it re-asserts an existing
+fact and cannot detect "these two ever agree". The thing that would detect that is
+`expect(nameCutTwice.length).toBe(nameCut.length)` on the line before, and it is
+the line whose *claim* is the fixture artifact. And shape (2)'s "one byte shorter"
+is fixture-specific too — measured at −20 with the longer name — though that one
+is stated about the exemplar rather than about the branch.
+
+**Fix:** state what the branch does and let the delta fall out of it:
+
+```
+(3) a cut landing inside the parameter NAME is not stable either: the second pass
+    sees a `;` segment with no `=` at all, P10-D1 redacts it WHOLE, and the stored
+    value changes by `len(";<redacted>") - len(retained tail)` — which is NEGATIVE,
+    ZERO or clipped to URL_MAX depending on how much of the NAME survived the cut.
+    With `jsessionid` (ten characters, the same length as `<redacted>`) the band's
+    deltas are 0; with a 29-character name they run to -19. THE DELTA IS NOT THE
+    DISCRIMINATOR — the presence of an `=` in the final segment is, and that is
+    what the assertion below tests.
+```
+
+and replace the duplicated line with a relative assertion that actually
+discriminates, e.g. that `nameCut`'s final segment has no `=` while
+`emptyValueCut`'s does — which the block already checks — plus one assertion that
+the two second-pass outputs take *different* branches rather than that they have
+particular lengths.
+
+### WR-40: WR-36's "three SPREAD shapes" are silent through three different mechanisms, and the one mechanism it names is true of one of them
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:141-158` (with the pinned lists at `:1474-1478` and `:1523-1527`)
+
+**Issue:** The correction reads: *"A SPREAD IS NOT [one of the two guarded
+positions] … `{ ...e }`, `Object.assign({}, e)` and `structuredClone(e)` each
+report `[]` and are OPEN … `derivesFrom` reads a `SpreadAssignment` as neither a
+render nor a derivation."* All three are silent — I ran them — but only the first
+involves a `SpreadAssignment` at all.
+
+Traced through `derivesFrom` (`:407-461`):
+
+- `{ ...e }` — silent because the object-literal position rule iterates property
+  assignments and a `SpreadAssignment` is not one. This is the stated mechanism.
+- `Object.assign({}, e)` — reaches the call branch, whose callee `Object.assign`
+  *is* a member access, so the descent follows `callee.expression` and lands on
+  the identifier `Object`. It is silent because **the descent follows the callee's
+  RECEIVER and never the ARGUMENTS**. No spread is involved; the shape has no
+  spread in it.
+- `structuredClone(e)` — a call whose callee is a bare identifier, so the descent
+  breaks immediately. That is residual **item 2** of this same list ("A CALL WHOSE
+  CALLEE IS A BARE IDENTIFIER"), already open and already named twenty lines
+  above. No spread here either.
+
+So a correction written to remove an over-wide class statement files two shapes
+under a mechanism they do not exhibit — the same title-versus-mechanism
+substitution the paragraph three lines below it names as this phase's recurring
+defect.
+
+**Fix:** split the item by mechanism, since the fixtures are already written:
+
+```
+(i)  a NAMED PROPERTY VALUE of an object literal reports; a SPREAD ELEMENT does
+     not — `{ ...e }` is silent because the position rule iterates property
+     assignments and `SpreadAssignment` is not one.
+(ii) the ARGUMENTS of a call are never descended — `Object.assign({}, e)` is
+     silent because `derivesFrom` follows the callee's RECEIVER (`Object`) and
+     never its arguments. This is a mechanism this list did not name before.
+(iii) `structuredClone(e)` is item 2 above (bare-identifier callee) and is listed
+     there, not here.
+```
+
+and re-title the two pinned cases, which currently both say "the three SPREAD
+shapes".
+
+### WR-41: The `require(...)` rule tests a bare identifier inline — the exact shape CR-11 closed for `fetch` — and its alias is silent and undisclosed
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:3808-3830` (with the `visit` exemption at `:5975`)
+
+**Issue:** The specifier rule matches its callee with an inline identity test:
+
+```ts
+callee.kind === ts.SyntaxKind.ImportKeyword ||
+(ts.isIdentifier(callee) && callee.text === "require")
+```
+
+That is the construction CR-11 spent a whole wave removing one branch away —
+`bareFetchCallee`'s own docblock calls the equivalent line *"a SIXTH copy of 'is
+this the global fetch', written where nobody was looking for one"*. Measured:
+
+```
+["outbound-import"]         require("caido:http");
+[]                          const rq = require; rq("caido:http");
+[]                          const { require: rq } = globalThis; rq("caido:http");
+["outbound-unanalysable"]   function f(s) { require(s); }
+[]                          const rq = require; function f(s) { rq(s); }
+```
+
+The last line is the one that costs something: the unanalysable-specifier arm —
+the whole "could not read does not mean clean" half of this rule — is unreachable
+through an alias, so an unreadable specifier through `rq` is clean rather than
+reported.
+
+`RESOLVER_EXEMPTIONS.visit` does name this rule as POPULATION 3 residue ("TWO
+FURTHER RULES ARE DECIDED INLINE HERE … the `require(...)` specifier rule, and the
+navigator-destructure rule"), which is honest about *where* it lives. It records
+no silence for it, and the silence is on no MEASURED SILENCE row.
+
+**Fix:** grow `require` the way `eval` was grown by WR-23 — through
+`aliasedGlobalOf` and `globalAliases`, which already read the three declaration
+shapes — or, if `require` is judged out of scope for a bundled plugin, add a
+MEASURED SILENCE row with the two probes above so a reader can see the boundary
+rather than infer it from an exemption reason.
+
+### WR-42: The spread residual lists three shapes; four more in the same class are open and unlisted, including the plainest spelling
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:1488-1534`
+
+**Issue:** The residual case is titled "…and (2026-08-24) the three SPREAD shapes"
+and pins exactly three. Measured through the same `auditSource`, four more are
+silent and appear on neither the residual list nor the pinned case:
+
+```
+[]   return { ok: false, ...e };                       // spread at the TOP level of the returned literal
+[]   return { ok: false, error: [...e] };              // ARRAY spread
+[]   return { ok: false, error: Object.entries(e) };
+[]   return { ok: false, error: Object.values(e).join("") };
+```
+
+The first is the ordinary spelling — spreading the caught binding straight into
+the returned object, with no `error:` wrapper — and it is what an author writing
+`return { ok: false, ...e }` in a `finishAnalysis` catch would actually type. The
+last is notable because its twin *is* listed: the residual names "a value routed
+through an ARRAY literal (`const a = [e.message]; a[0]`, and its `.join("")`
+twin)", and `Object.values(e).join("")` is the same render reached through a call
+whose arguments are not descended (see WR-40).
+
+The file's own decision note at `:196-200` says items naming an open CLASS are
+deliberately not pinned, "because a fixture would pin one example while READING as
+though it pinned the class". That reasoning applies here and argues for the fix
+below rather than for four more pins.
+
+**Fix:** state item 3's spread half as a class with its mechanism, per WR-40, and
+either pin nothing extra or pin the top-level spread specifically — it is the one
+shape most likely to be written, and it is the one a reader will look for and not
+find.
+
+### WR-43: `BRANCH_VOCABULARY` and `UNBOUNDED_QUANTIFIERS` are scanned over registry clauses only; the 955-line header they were written for is never scanned
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:8620-8648` and `:8809-8842` (declarations at `:5494` and `:5664`)
+
+**Issue:** Both guards range over `RESOLVER_REGISTRY` and read `row.clause`:
+
+```ts
+const hits = RESOLVER_REGISTRY.flatMap((row) =>
+  UNBOUNDED_QUANTIFIERS.filter((q) => row.clause.includes(q)).map(…));
+```
+
+Nothing scans the file's own hand-written header, which is where every residual
+this phase has falsified was written and where CR-14 and the falsified universal
+in it still live. Measured over `head -1493` of the gate file — the span above the
+derived block — the **declared** phrasings occur 16 times: `anywhere in the file`
+×5, `any depth` ×5, `ANY-BINDING-WINS` ×4, `every literal` ×2, `ANY of them` ×2,
+and `everywhere in the file`, `every reachable spelling`, `ANY string literal` and
+`every spelling` once each. None raises a `QUANTIFIED_CLAUSES` obligation, and one
+of them is the round's own falsified universal.
+
+`UNBOUNDED_QUANTIFIERS`' docblock is careful about the *phrase-list* limit — "ITS
+REACH IS THE DECLARED PHRASINGS AND NO FURTHER … NO SENTENCE IN THIS FILE MAY
+CLAIM THIS GUARD CATCHES EVERY UNIVERSAL" — and says nothing about the *surface*
+limit, which is the one that produced this round's blocker. A reader who takes the
+docblock at its word concludes that a declared phrasing anywhere in this file
+raises an obligation. It does not.
+
+**Fix:** cheapest version, one case, using the sentinels already exported:
+
+```ts
+it("no DECLARED quantifier phrasing appears in the hand-written header", () => {
+  const header = gateLines.slice(0, gateLines.findIndex((l) => l.includes(DERIVED_BEGIN)));
+  const hits = header.flatMap((line, i) =>
+    UNBOUNDED_QUANTIFIERS.filter((q) => line.includes(q)).map((q) => `${i + 1}: ${q}`));
+  expect(hits, `the header asserts ${hits.length} universal(s) that NOTHING bounds: ${hits.join(" | ")}. The residual OF RECORD is the derived span; a universal in the header is an authored bound standing beside a derived one, which is how five consecutive rounds went wrong.`).toEqual([]);
+});
+```
+
+That will fail today on 16 lines, which is the correct first result. Either rewrite
+those sentences to point at the derived span instead of restating a bound, or add a
+`HEADER_QUANTIFIER_EXEMPTIONS` map in `RESOLVER_EXEMPTIONS`' shape — named, reasoned,
+one entry per surviving sentence. And amend the `UNBOUNDED_QUANTIFIERS` docblock to
+state the surface limit beside the phrase limit.
+
+---
+
+## Info (pass 7)
+
+### IN-31: `fetch` as a tagged template is not a `CallExpression` and is silent
+
+`packages/backend/src/outbound-prohibition.spec.ts:3819`. ``fetch`x` `` parses as a
+`TaggedTemplateExpression`, so neither the bare-call rule nor `bareFetchCallee` is
+reached and it reports `[]`. Nonsensical as real code (`fetch` would receive a
+`TemplateStringsArray`), but it is a *call* of the global fetch that the rule's own
+words cover, and it costs one `ts.isTaggedTemplateExpression` branch if CR-15 is
+being fixed anyway.
+
+### IN-32: A computed-but-readable destructure key off `navigator` reports `outbound-unanalysable` rather than `outbound-beacon`
+
+`packages/backend/src/outbound-prohibition.spec.ts:2643-2650`. `boundPropertyName`
+returns `undefined` whenever `el.propertyName` is a `ComputedPropertyName`, even when
+the key inside it is a plain string literal — so `const { ["sendBeacon"]: b } =
+navigator` takes the "property name this walk cannot read" arm. It errs in the safe
+direction, so nothing is hidden; but the beacon docblock's "asserted both ways below"
+is not true of this spelling, and a reader debugging a real violation gets the wrong
+rule id. `ts.isStringLiteralLike(property.expression)` inside the computed branch is
+two lines.
+
+### IN-33: WR-37 closed one level of nesting and the docblock does not say it is one level
+
+`packages/backend/src/outbound-prohibition.spec.ts:3322-3343` and `:3686-3700`.
+`const { requests: { send } } = sdk` reports `outbound-send` and the renamed twin
+`const { requests: { send: s } } = sdk` reports too — both correct. Two neighbours do
+not: `const { a: { requests: { send } } } = sdk` and `const { requests: [x] } = sdk`
+both report `[]`, because the composition arm looks exactly one element deep and only
+at an `ObjectBindingPattern`. The docblock explains at length why the five *sibling*
+shapes stay open and says nothing about the depth or the pattern-kind bound of the
+composition it did close, so a reader learns "nested destructures resolve" from a
+paragraph that means "one level of object nesting resolves". Recording it here rather
+than as a warning: three-deep is `sdk.a.requests`, a genuinely different shape, and
+the array-nested form is contrived.
+
+---
 
 _Pass 1 reviewed: 2026-08-21T00:30:00Z_
 _Pass 2 reviewed: 2026-08-21T11:21:31Z_
@@ -3496,5 +4144,6 @@ _Pass 3 reviewed: 2026-08-21T15:23:01Z_
 _Pass 4 reviewed: 2026-08-22T10:20:00Z_
 _Pass 5 reviewed: 2026-08-24T10:05:00Z_
 _Pass 6 reviewed: 2026-08-24T16:30:00Z_
+_Pass 7 reviewed: 2026-08-24T21:10:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
