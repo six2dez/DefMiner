@@ -152,7 +152,7 @@ Plans:
 
 **Wave 21** *(blocked on 01-20 — sequencing, not code: each plan mutates the shared tree to prove its gate can fail while asserting whole-suite green)*
 
-- [ ] 01-21-PLAN.md — **WR-24 + IN-22**: the STORE-07 redaction gate is blind to the OPERATOR class of render — `? :`, `??` and `||` — which is the standard way to narrow a caught `unknown` under the setting this repo enables; `derivesFrom` widened, every shape fixture-proven with its `describeError` twin quiet, and the render-form residual re-derived a third time from the code's branches rather than from the previous paragraph — *wave 21*
+- [x] 01-21-PLAN.md — **WR-24 + IN-22**: the STORE-07 redaction gate is blind to the OPERATOR class of render — `? :`, `??` and `||` — which is the standard way to narrow a caught `unknown` under the setting this repo enables; `derivesFrom` widened, every shape fixture-proven with its `describeError` twin quiet, and the render-form residual re-derived a third time from the code's branches rather than from the previous paragraph — *wave 21*
 
 **Wave 22** *(blocked on 01-21 — this plan breaks its own predicate five ways in turn and plants a literal into a committed script, so it needs the tree quiet)*
 

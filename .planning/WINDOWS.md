@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 18
+open_count: 19
 waived_count: 0
 fixed_count: 5
-total_count: 23
-last_updated: 2026-08-24T08:49:36.488Z
+total_count: 24
+last_updated: 2026-08-24T09:33:40.130Z
 ---
 
 # Broken Windows Ledger
@@ -38,6 +38,7 @@ last_updated: 2026-08-24T08:49:36.488Z
 | 21 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo cannot be exercised through the live curl tier — lifted into an Authorization: Basic header before the request line exists. MEASURED per run (userinfo-measurement.txt), enforced at the unit tier by observations.spec.ts HEAD_CASES. A live userinfo proof needs a client that does not do this lift. | open |  | 2026-08-22T09:56:52.151Z |  |
 | 22 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | THE RECEIVER-KEY RESIDUAL AS OF WAVE 18 (plan 01-18, CR-08) — SUPERSEDED IN WAVE 19 BY PLAN 01-19, which narrows it further and rewrites this bound in the gate header, REQUIREMENTS.md, STATE.md and this ledger. Supersedes entries 13 and 20, whose descriptions stated a bound the code no longer has. NOW REPORTED in receiver-key position: a literal key; a key bound ONE HOP to a literal (constStrings); a key assembled inline (isAssembledKey); a key bound ONE HOP to an assembly in EVERY spelling — +, a template, .join(""), an opaque call — through either a declaration or an assignment (assembledNames); a CONDITIONAL key resolved on both branches; a COMMA SEQUENCE resolved to its rightmost operand. THE RESIDUAL THAT REMAINS, in the same words as that gate's boundary 2, REQUIREMENTS.md's CORE-11 correction and STATE.md's P9-D3 amendment: more than ONE HOP of indirection, a value crossing a FUNCTION BOUNDARY, and a key the walk NEVER SAW BOUND — a parameter, a loop binding, a name bound out of document order or in another file. That last exemption is preserved BY MEASUREMENT, re-run after the widening: 23 files over both source roots, ZERO violations, with compat.ts's at() cur[key] and ctx[root], observations.ts's segments[i] and MIGRATIONS[MIGRATIONS.length - 1] all asserted quiet by name. CORE-11 stays unchecked: const e = eval; e(s) (WR-23) and const g = globalThis (IN-20) are still silent and plan 01-19 owns both plus the checkbox flip. | fixed |  | 2026-08-24T08:21:34.840Z | 2026-08-24T08:49:12.490Z |
 | 23 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | THE FINAL RESIDUAL AFTER WAVE 19 (plan 01-19, closing WR-23, WR-26 and IN-20). Supersedes entry 22, whose description scoped itself to the wave-18 receiver-key residual and named this plan as its superseder; a one-hop eval/Function alias, the outbound constructors and the globalThis hop all stop being residual here. NEWLY REPORTED since wave 18: a one-hop alias of eval or Function in every spelling fetchAliases resolves (declaration, global-member, destructure, assignment), the same for XMLHttpRequest/WebSocket/EventSource through one shared globalNameOf lookup used by both the call rule and the new rule, and a one-hop alias of globalThis itself, which closes fetch, the unreadable computed member, dynamic code, the outbound constructors and the beacon receiver together. THE RESIDUAL THAT REMAINS, in the same words as that gate's THE FINAL RESIDUAL, AFTER PLAN 01-19 block, REQUIREMENTS.md's CORE-11 correction and STATE.md's P9-D3 amendment: CORE-11's clause 'no sdk.requests.send IN ANY SPELLING' IS BOUND, AND THIS IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, but only in DOCUMENT ORDER: const a = globalThis; const b = a; const g = b; g.fetch(u) reports and so does the sdk.requests twin, while a chain read BEFORE its root is bound is SILENT, because there is no symbol table and no second pass. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is silent. Outside those, four things are beyond the walk: a value crossing a FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER FILE. And one thing is ASSUMED rather than proven: a member or method call named in NUMERIC_MEMBERS is taken to be numeric WHATEVER ITS RECEIVER, a NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed because narrowing it was MEASURED to change nothing except to re-poison ordinary + indexing. Every exemption here is preserved BY MEASUREMENT, re-run after each widening in plan 01-19: 23 files over both SOURCE_ROOTS, ZERO violations, with compat.ts's at() cur[key] and ctx[root], observations.ts's segments[i] and MIGRATIONS[MIGRATIONS.length - 1] all asserted quiet by name. NOTE THAT THIS ENTRY AMENDS THE BOUND IN BOTH DIRECTIONS: every residual list before this one bounded the walk at 'more than ONE HOP of indirection', which is exactly right for a receiver KEY and UNDERSTATED the walk for ALIASES, measured while writing a fixture for it. CORE-11 is now [x] in REQUIREMENTS.md, flipped against an eight-row discharge table in 01-19-SUMMARY.md and not before it. | open |  | 2026-08-24T08:49:36.488Z |  |
+| 24 | 01 | deviation | packages/backend/src/store/error-redaction.spec.ts |  | Residual items 1-3 (unnamed methods, bare-identifier callee, operator outside the four) are disclosed and deliberately UNPINNED — no assertion goes red if one is closed | open |  | 2026-08-24T09:33:40.130Z |  |
 
 ````json
 [
@@ -315,6 +316,18 @@ last_updated: 2026-08-24T08:49:36.488Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-24T08:49:36.488Z",
+    "resolved_at": null
+  },
+  {
+    "id": 24,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/store/error-redaction.spec.ts",
+    "line": null,
+    "description": "Residual items 1-3 (unnamed methods, bare-identifier callee, operator outside the four) are disclosed and deliberately UNPINNED — no assertion goes red if one is closed",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T09:33:40.130Z",
     "resolved_at": null
   }
 ]

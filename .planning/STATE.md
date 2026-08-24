@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-20-PLAN.md
-last_updated: "2026-08-24T09:16:47.146Z"
+stopped_at: Completed 01-21-PLAN.md
+last_updated: "2026-08-24T09:33:29.186Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 6423c85afc4225cd6200062f04ad65985f68faba
+state_head: 1977b00467817118c2c679add584413986dd021b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 21 of 22
+Plan: 22 of 22
 Status: Ready to execute
 Last activity: 2026-08-24 — Completed 01-20 (URL_MAX segment-boundary truncation, WR-22 / IN-18)
 
@@ -93,6 +93,7 @@ Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
 | Phase 01 P18 | 22 min | 3 tasks | 4 files |
 | Phase 01 P19 | 18 min | 3 tasks | 4 files |
 | Phase 01 P20 | 25 min | 2 tasks | 3 files |
+| Phase 01 P21 | 12 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -190,6 +191,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P20-D1: normaliseObservedUrl truncates on a query-segment boundary — past URL_MAX it drops back to the last `&`, so the stored value never ends inside a segment or inside a `<redacted>` marker. Measured cost: exactly one trailing segment, never two. — Reproduced independently by sweep (n=4 first differing length, 25 of 40 lengths not fixed points) before any production change; the old byte cut severed a segment, and CR-07 / P10-D1 then redact the remnant whole on a second pass.
 - [Phase 01]: P20-D2 (the no-separator branch): with no `?` inside the cut, or a query with no `&` inside it, the URL_MAX byte cut STANDS unchanged — the branch retains exactly what it retained before. — Dropping back to the last `/` or to the `?` would truncate an oversized path back to its authority, discarding ~2 KB a segment-boundary cut would have kept — a materially larger retention decision belonging to the operator. Measured: 0 bytes discarded beyond the byte cut on all four measured inputs, so the plan bound held and no checkpoint was opened.
 - [Phase 01]: P20-D3/D4: the redactDelimitedSegment idempotence sentence is SCOPED to the helper (not deleted), and IN-18 is CLOSED by execution with its deferral rationale deleted rather than replaced. — The sentence reasoned correctly about the helper and only its scope was wrong. IN-18 deferred the repair to protect an idempotence invariant the branch it named had already broken at 25 of 40 swept cut points, so the reason could not survive under either outcome; on its own fixture the amended truncation gives len 2039 with a whole trailing segment, so it is closed.
+- [Phase 01]: WR-24: derivesFrom descends the OPERATOR class — a conditional's two branches and a `??`/`||`/`&&` binary's two operands — with either-side semantics; the condition of a `? :` is deliberately not descended. — The standard useUnknownInCatchVariables narrowing idiom `e instanceof Error ? e.message : String(e)` reported [] while the bare `e.message` beside it reported. Either-side matches initializerReceiver one package away.
+- [Phase 01]: IN-22: pin the two named limits with executed "RESIDUAL, PINNED" cases; deliberately do NOT pin the three open residual CLASSES — both halves recorded in the residual paragraph itself. — A fixture for one shape of an open class would pin an example while reading as though it pinned the class — a narrower guarantee wearing a wider claim, which is this round's subject.
 
 ### Known Risks Carried Forward
 
@@ -232,8 +235,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T09:16:05.479Z
-**Stopped at:** Completed 01-20-PLAN.md
+**Last session:** 2026-08-24T09:33:15.213Z
+**Stopped at:** Completed 01-21-PLAN.md
 **Resume file:** None
 
 ### Blockers
