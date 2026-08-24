@@ -124,7 +124,7 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
 
 RESOLVERS - 32 entries.
 
-* constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
+* constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment, a logical assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe; the string-literal assignment branch has since 2026-08-24 (CR-12) read ASSIGNING_OPERATORS, so the three logical spellings bind through it too; and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
     probe:     "const r = \"requests\";\nsdk[r].send(req);"
     reports:   outbound-send
@@ -133,6 +133,9 @@ RESOLVERS - 32 entries.
     branch:    "a string-literal declaration" at auditSource > collect > if (ts.isStringLiteralLike(init)) { - probe "const r = \"requests\";\nsdk[r].send(req);" - reports outbound-send
     branch:    "a string-literal assignment" at auditSource > collect > if (ts.isStringLiteralLike(assignedString)) { - probe "let r;\nr = \"requests\";\nsdk[r].send(req);" - reports outbound-send
     branch:    "an operator initializer" at auditSource > collect > for (const literal of operatorBinding.literals) { - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let k;\nk ??= \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let k;\nk ||= \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let k;\nk &&= \"requests\";\nsdk[k].send(req);" - reports outbound-send
 
 * assembledNames - a name the walk WATCHED being assembled - at a declaration, an assignment, a `+=` compound assignment, a logical assignment, or either binding-pattern spelling - is an UNREADABLE key, and takes precedence over a literal binding of the same name. FALSIFIED 2026-08-24 (CR-12), the phrase this clause used to carry: "a compound assignment" - measured, the logical-assignment spellings ||=, &&= and ??= grew nothing; those three are CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are their probes, and the phrase STAYS falsified because the NUMERIC compound assignments (-=, *=, >>>= and the rest of NUMERIC_COMPOUND_ASSIGNMENTS) deliberately assemble nothing
     read off:  auditSource > const assembledNames = new Set<string>()
@@ -169,7 +172,7 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "where the name is USED as a receiver" at auditSource > receiverKind > return unreadableAliases.has(inner.text) - probe "const k = \"a\" + b;\nconst r = sdk[k];\nr.send(req);" - reports outbound-unanalysable
 
-* fetchAliases - a name bound to the global fetch at a declaration or an assignment is the global fetch; seeded with the bare spelling and grown from the live set, so it chains in declaration order
+* fetchAliases - a name bound to the global fetch at a declaration, an assignment or a logical assignment is the global fetch; seeded with the bare spelling and grown from the live set, so it chains in declaration order
     read off:  auditSource > const fetchAliases = new Set<string>([FETCH_GLOBAL])
     probe:     "const f = fetch;\nf(url);"
     reports:   outbound-fetch
@@ -178,8 +181,11 @@ RESOLVERS - 32 entries.
     branch:    "the bare spelling" at auditSource > const fetchAliases = new Set<string>([FETCH_GLOBAL]); - probe "fetch(url);" - reports outbound-fetch
     branch:    "a declaration" at auditSource > collect > if (isFetchExpression(init)) fetchAliases.add(node.name.text); - probe "const f = fetch;\nf(url);" - reports outbound-fetch
     branch:    "an assignment" at auditSource > collect > if (isFetchExpression(node.right)) fetchAliases.add(node.left.text); - probe "let f;\nf = fetch;\nf(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let f;\nf ??= fetch;\nf(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let f;\nf ||= fetch;\nf(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let f;\nf &&= fetch;\nf(url);" - reports outbound-fetch
 
-* navigatorAliases - a name bound to navigator at a declaration or an assignment is navigator; RECEIVER-ANCHORED, so an ordinary object defining a method of the same name grows nothing
+* navigatorAliases - a name bound to navigator at a declaration, an assignment or a logical assignment is navigator; RECEIVER-ANCHORED, so an ordinary object defining a method of the same name grows nothing
     read off:  auditSource > const navigatorAliases = new Set<string>([NAVIGATOR])
     probe:     "const n = navigator;\nn.sendBeacon(u, d);"
     reports:   outbound-beacon
@@ -187,8 +193,11 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text); - probe "const n = navigator;\nn.sendBeacon(url);" - reports outbound-beacon
     branch:    "an assignment" at auditSource > collect > if (isNavigatorReceiver(node.right)) navigatorAliases.add(node.left.text); - probe "let n;\nn = navigator;\nn.sendBeacon(url);" - reports outbound-beacon
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let n;\nn ??= navigator;\nn.sendBeacon(url);" - reports outbound-beacon
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let n;\nn ||= navigator;\nn.sendBeacon(url);" - reports outbound-beacon
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let n;\nn &&= navigator;\nn.sendBeacon(url);" - reports outbound-beacon
 
-* globalAliases - a name bound to eval, Function or an outbound constructor at a declaration, an assignment or the object binding-pattern spelling maps to the global it names, so the violation detail can name the surface the local aliases; RECEIVER-ANCHORED off the four global receivers
+* globalAliases - a name bound to eval, Function or an outbound constructor at a declaration, an assignment, a logical assignment or the object binding-pattern spelling maps to the global it names, so the violation detail can name the surface the local aliases; RECEIVER-ANCHORED off the four global receivers
     read off:  auditSource > const globalAliases = new Map<string, string>()
     probe:     "const e = eval;\ne(src);"
     reports:   outbound-dynamic-code
@@ -197,8 +206,11 @@ RESOLVERS - 32 entries.
     branch:    "a declaration" at auditSource > collect > if (aliased !== undefined) globalAliases.set(node.name.text, aliased); - probe "const e = eval;\ne(src);" - reports outbound-dynamic-code
     branch:    "an assignment" at auditSource > collect > globalAliases.set(node.left.text, aliasedRight); - probe "let e;\ne = eval;\ne(src);" - reports outbound-dynamic-code
     branch:    "the object binding-pattern spelling" at auditSource > collect > globalAliases.set(el.name.text, property); - probe "const { eval: ev } = globalThis;\nev(src);" - reports outbound-dynamic-code
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let e;\ne ??= eval;\ne(src);" - reports outbound-dynamic-code
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let e;\ne ||= eval;\ne(src);" - reports outbound-dynamic-code
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let e;\ne &&= eval;\ne(src);" - reports outbound-dynamic-code
 
-* globalThisAliases - a name WATCHED being bound to one of the four GLOBAL_RECEIVERS at a declaration or an assignment is a global receiver; seeded EMPTY so the bare-identifier answer is unchanged and the new behaviour is reachable only through what the walk saw bound
+* globalThisAliases - a name WATCHED being bound to one of the four GLOBAL_RECEIVERS at a declaration, an assignment or a logical assignment is a global receiver; seeded EMPTY so the bare-identifier answer is unchanged and the new behaviour is reachable only through what the walk saw bound
     read off:  auditSource > const globalThisAliases = new Set<string>()
     probe:     "const g = globalThis;\ng.fetch(url);"
     reports:   outbound-fetch
@@ -206,6 +218,9 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > if (isGlobalReceiver(init)) globalThisAliases.add(node.name.text); - probe "const g = globalThis;\ng.fetch(url);" - reports outbound-fetch
     branch:    "an assignment" at auditSource > collect > if (isGlobalReceiver(node.right)) globalThisAliases.add(node.left.text); - probe "let g;\ng = globalThis;\ng.fetch(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let g;\ng ??= globalThis;\ng.fetch(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let g;\ng ||= globalThis;\ng.fetch(url);" - reports outbound-fetch
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let g;\ng &&= globalThis;\ng.fetch(url);" - reports outbound-fetch
 
 * shadowedGlobals - a NARROWING collector: a TOP-LEVEL function or class declaration of a dynamic-code or outbound-constructor name provably rebinds that name for the module, so the bare call is not the global. Its probe is the shape that stays QUIET and its counter-probe is the shape that REPORTS
     read off:  auditSource > const shadowedGlobals = new Set<string>()
@@ -257,7 +272,7 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "a bare operator written directly in call position" at auditSource > receiverKind > const operator = operatorReceiver(inner, receiverKind); - probe "(b ? sdk.requests : sdk.net).send(req);" - reports outbound-send
 
-* literalsOf - the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name - which since 2026-08-24 includes every literal an operator initializer bound - so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer was in no collected set and was not read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, and the phrase STAYS falsified because a literal reached only through a parameter, a loop binding, a name bound in another file or a second hop of key is still in no collected set
+* literalsOf - the MULTI-valued string reader keyReceiver consults: the collected set of literals constStrings recorded for a name - which since 2026-08-24 includes every literal an operator initializer bound and every literal a logical assignment bound - so ANY of them naming a receiver reports. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "every literal a name carries" - measured, a literal reached only through a conditional, ?? or || initializer was in no collected set and was not read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe, the logical-assignment spellings are CLOSED 2026-08-24 by ASSIGNING_OPERATORS and the three branches below are their probes, and the phrase STAYS falsified because a literal reached only through a parameter, a loop binding, a name bound in another file or a second hop of key is still in no collected set
     read off:  auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
     probe:     "let k = \"harmless\";\nk = \"requests\";\nsdk[k].send(req);"
     reports:   outbound-send
@@ -265,6 +280,9 @@ RESOLVERS - 32 entries.
     reports:   [] - nothing
     branch:    "the collected set" at auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS; - probe "const k = \"requests\";\nsdk[k].send(req);" - reports outbound-send
     branch:    "an operator initializer" at auditSource > literalsOf > return constStrings.get(node.text) ?? NO_LITERALS; - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.QuestionQuestionEqualsToken, - probe "let k = \"harmless\";\nk ??= \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.BarBarEqualsToken, - probe "let k = \"harmless\";\nk ||= \"requests\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "a logical assignment" at auditSource > collect > ASSIGNING_OPERATORS.has(node.operatorToken.kind) && > ts.SyntaxKind.AmpersandAmpersandEqualsToken, - probe "let k = \"harmless\";\nk &&= \"requests\";\nsdk[k].send(req);" - reports outbound-send
 
 * literalOf - the SINGLE-valued string reader member names and module specifiers need: one binding resolves, two or more answer undefined, and undefined means COULD NOT READ at every call site - which reports
     read off:  auditSource > function literalOf(node: ts.Node | undefined): string | undefined {
