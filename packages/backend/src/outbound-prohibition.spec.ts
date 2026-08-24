@@ -80,15 +80,53 @@
 //    misled in the direction that gets trusted. What the walk actually does:
 //
 //      - It collects in ONE document-order pass and builds NO symbol table.
-//        Bindings are file-wide, not scope-aware, which over-approximates rather
-//        than under-approximates: a name bound to an outbound receiver anywhere
-//        in the file is treated as one everywhere in it.
+//        Bindings are file-wide, not scope-aware.
+//        WHICH DIRECTION THAT ERRS IN IS A FACT ABOUT EACH COLLECTOR FAMILY AND
+//        NOT ABOUT THE GATE, CORRECTED 2026-08-24 (CR-10). The sentence that
+//        stood here stated ONE error direction for the whole pass — call it THE
+//        SINGLE-DIRECTION CLAIM; its exact superseded words are preserved in
+//        `01-VERIFICATION.md`'s CR-10 entry and in `01-REVIEW.md`, and are
+//        deliberately not requoted, because a file that states a direction and
+//        also quotes its own false version of it gives a skimmer two sentences
+//        and no way to tell which is live. It was HALF TRUE, which is why it
+//        survived five rounds: true of the ALIAS families, false of the STRING
+//        maps, and a reader could not tell because one sentence covered both.
+//        The two families, each with the direction it errs in:
+//          ALIAS FAMILIES — `receiverAliases`, `fetchAliases`, `navigatorAliases`,
+//          `globalAliases`, `globalThisAliases`, `unreadableAliases`. Grown from
+//          the LIVE set at both the declaration and the assignment branch, never
+//          removed from. They OVER-approximate: a name bound to an outbound
+//          receiver anywhere in the file is treated as one everywhere in it,
+//          inner scopes and later rebindings included.
+//          STRING MAPS — `constStrings` and `assembledNames`. These UNDER-
+//          approximated until 2026-08-24. `constStrings` held ONE literal per
+//          name, written only at the declaration branch, and `keyReceiver` read
+//          it FIRST — so `let k = "harmless"; k = "requests"; sdk[k].send(req)`
+//          resolved `k` to "harmless" forever and was SILENT, which is exactly
+//          the direction the old sentence told a reader could not happen. As of
+//          CR-10 `constStrings` holds EVERY literal a name is bound to anywhere
+//          in the file and reports if ANY of them names a receiver, so this
+//          family now errs in the SAME direction as the alias families and the
+//          old sentence has become true of it — but it is stated per family
+//          rather than for the gate, because the next collector added here can
+//          err either way and one sentence covering both is what let this one sit
+//          under a disclosure claiming it could not happen.
+//          `literalOf`, THE SINGLE-VALUED READER, IS THE ONE DELIBERATE EXCEPTION
+//          AND IT ALSO ERRS TOWARD REPORTING. Member names and module specifiers
+//          need ONE string, not a set, so `literalOf` answers `undefined` for a
+//          name carrying more than one binding — and `undefined` means COULD NOT
+//          READ at every one of its call sites, which reports. Both families and
+//          the reader now err toward reporting; they simply do it by different
+//          mechanisms.
 //      - Receivers resolve through a declaration (`const r = sdk.requests`), an
 //        object destructure (`const { requests, net } = sdk`), an assignment
 //        (`r = sdk.requests`), a conditional initializer, and a computed key
-//        whose value is a single-hop `const` string (`const r = "requests"`).
-//      - Member names and module specifiers resolve through that same single-hop
-//        `const` string map.
+//        whose value is a `const` string, a `let`/`var` string, or a name
+//        REBOUND to one anywhere in the file (`const r = "requests"`,
+//        `let k = "harmless"; k = "requests"`).
+//      - Member names and module specifiers resolve through that same string map
+//        via `literalOf`, which reads it single-valued: one binding resolves, two
+//        or more report as unreadable.
 //      - Once a receiver is positively identified, ANY member of it outside an
 //        explicit read-only allowlist fails — referenced, called, aliased,
 //        returned, or handed to `.call`/`.apply`/`Reflect.apply`.
@@ -125,8 +163,25 @@
 //        RECEIVER-KEY position, as the code now behaves and as the table below
 //        enumerates mechanism by mechanism:
 //          - a key bound ONE HOP to an assembly, in EVERY spelling — `+`, a
-//            template, `.join("")`, an opaque call — and through EITHER a
-//            declaration or an assignment (`assembledNames`);
+//            template, `.join("")`, an opaque call — and through a declaration,
+//            an assignment, or a COMPOUND ASSIGNMENT (`assembledNames`).
+//            CORRECTED AND WIDENED 2026-08-24 (CR-10), READ OFF THE BRANCHES
+//            RATHER THAN OFF THIS PARAGRAPH. The clause here said "either a
+//            declaration or an assignment" and the collector's own comment said
+//            the assignment spelling was covered by construction. BOTH WERE
+//            FALSE IN THE SAME WAY: the assignment branch's `assembledNames`
+//            write did exist, but `keyReceiver` consulted the stale declaration
+//            literal FIRST and returned before reaching it — so the assignment
+//            spelling was defeated by ANY preceding string initializer. It is
+//            reachable now because that lookup no longer early-returns and
+//            because a WATCHED ASSEMBLY takes precedence over a literal binding
+//            of the same name.
+//            AND `+=` WAS NEVER READ AT ALL, in a paragraph claiming every
+//            spelling. `let k = "req"; k += "uests"` builds a receiver name out
+//            of pieces and was silent. The branch now marks it, guarded by the
+//            same numeric test the numeric poisoning arm beside it uses, so
+//            `i += 1` stays an index. The sibling gate one directory away closed
+//            exactly this gap for exactly this reason at WR-17.
 //          - a CONDITIONAL key, resolved on BOTH branches with
 //            `initializerReceiver`'s semantics, so `sdk[b ? "requests" : "net"]`
 //            reports `outbound-send` and NOT `outbound-unanalysable` — it hides
@@ -161,6 +216,44 @@
 //      const k = "req"+"uests"; sdk[k]          assembledNames       outbound-unanalysable
 //        (and the let/assignment, template, .join("") and opaque-call spellings
 //         of that same one-hop binding — all `assembledNames`)
+//
+//      ROWS ADDED 2026-08-24 (CR-10). The table enumerated the `const`
+//      spellings and said NOTHING about `let`, nothing about a rebinding and
+//      nothing about a compound assignment — so a reader had no row to check the
+//      shapes below against, which is precisely the substitution this table
+//      exists to prevent, running one spelling out. One row per spelling this
+//      round closed, plus the mirror:
+//
+//      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
+//      -------------------------------------    -----------------    ---------------------
+//      let k = "requests"; sdk[k]               constStrings         outbound-send
+//      let k = "harmless";                      constStrings,        outbound-send
+//        k = "requests"; sdk[k]                   ANY-BINDING-WINS
+//      var k = "harmless";                      constStrings,        outbound-send
+//        k = "requests"; sdk[k]                   ANY-BINDING-WINS
+//      let k; k = "requests"; sdk[k]            constStrings'        outbound-send
+//                                                 ASSIGNMENT WRITE
+//      let k = "requests";                      constStrings,        outbound-send
+//        k = "harmless"; sdk[k]                   ANY-BINDING-WINS   — THE MIRROR, and it
+//                                                                      errs by OVER-approximating
+//      let k = "harmless";                      assembledNames'      outbound-unanalysable
+//        k = "req"+"uests"; sdk[k]                ASSIGNMENT branch,
+//                                                 reachable at last
+//      let k = "req"; k += "uests"; sdk[k]      assembledNames'      outbound-unanalysable
+//                                                 COMPOUND-ASSIGNMENT
+//                                                 branch
+//      let k = "requests"; k = a + b; sdk[k]    assembledNames       outbound-unanalysable
+//                                                 OVER constStrings  — THE PRECEDENCE
+//      let i = 0; i += 1; sdk[i]                isProvablyNumeric    [] — an index, not a name
+//      let k = "harmless"; k = "fetch";         constStrings via     outbound-unanalysable
+//        globalThis[k](url)                       literalOf, which     (two bindings — the walk
+//                                                 is SINGLE-VALUED     will not pick one)
+//      let k; k = "fetch"; globalThis[k](url)   constStrings via     outbound-fetch
+//                                                 literalOf            (one binding — resolves)
+//      let m = "harmless"; m = "send";          literalOf returns    outbound-unanalysable
+//        sdk.requests[m](req)                     undefined
+//      let s = "harmless"; s = "caido:http";    literalOf returns    outbound-unanalysable
+//        await import(s)                          undefined
 //      sdk[b ? "requests" : "net"]              conditional branch   outbound-send
 //                                               of receiverKind
 //      sdk[(0, "requests")]                     unwrap's CommaToken  outbound-send
@@ -1256,6 +1349,25 @@ export function auditSource(file: string, source: string): Violation[] {
    * `01-24-SUMMARY.md` section 2.
    */
   const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    // CR-10 step 0, THE PRECEDENCE, and it exists only because step 1 widened.
+    // A name can now carry BOTH a literal binding and a watched assembly —
+    // `let k = "requests"; k = a + b; sdk[k].send(req)`. The ASSEMBLY WINS: a
+    // name the walk WATCHED being reassembled is a name whose literal answer
+    // stopped being trustworthy, and an assembly it SAW is stronger evidence
+    // than a literal it saw earlier. It reports `outbound-unanalysable` rather
+    // than `outbound-send` — both report; the difference is that the walk says
+    // it can no longer read the site rather than naming a surface off a string
+    // the file has since rebuilt.
+    // STEP 1's CASE IS UNTOUCHED BY THIS: `const r = "requests"` is never in
+    // `assembledNames`, so a single-hop literal binding still reports
+    // `outbound-send` and is still never downgraded.
+    const assembledKey = unwrap(key);
+    if (
+      ts.isIdentifier(assembledKey) &&
+      assembledNames.has(assembledKey.text)
+    ) {
+      return UNREADABLE_RECEIVER;
+    }
     // CR-10 step 1: ANY binding of this name that names an outbound receiver
     // makes the key one. A single-binding name behaves exactly as before, so
     // `const r = "requests"; sdk[r].send(req)` still reports `outbound-send`
@@ -1577,8 +1689,18 @@ export function auditSource(file: string, source: string): Violation[] {
       // IN-20, the assignment spelling of `const g = globalThis`.
       if (isGlobalReceiver(node.right)) globalThisAliases.add(node.left.text);
       // `let k; k = "req" + "uests";` — the assignment spelling of the same
-      // assembly, grown from the same two shapes every other set here is grown
-      // from, so it is covered by construction rather than by a second edit.
+      // assembly.
+      // THE CLAIM THAT STOOD HERE WAS FALSE AND IS CORRECTED 2026-08-24 (CR-10).
+      // It said this spelling was "covered by construction rather than by a
+      // second edit". The WRITE was covered by construction; the READ was not.
+      // `keyReceiver` consulted the declaration's stale literal first and
+      // returned, so this line was UNREACHABLE for any name whose declaration
+      // carried a string initializer — `let k = "harmless"; k = "req"+"uests";
+      // sdk[k].send(req)` was silent while `let k; k = "req"+"uests"` reported.
+      // Covered by construction is a claim about the whole path, and this branch
+      // only ever owned half of it. It is reachable now because the literal
+      // lookup no longer early-returns and because a watched assembly takes
+      // precedence over a literal binding of the same name.
       if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) {
         assembledNames.add(node.left.text);
       }
@@ -1590,6 +1712,29 @@ export function auditSource(file: string, source: string): Violation[] {
       if (ts.isStringLiteralLike(assignedString)) {
         bindString(node.left.text, assignedString.text);
       }
+    }
+
+    // `let k = "req"; k += "uests";` — A COMPOUND ASSIGNMENT IS AN ASSEMBLY.
+    //
+    // CR-10, and the sibling gate one directory away learned this exact lesson
+    // first: `store/error-redaction.spec.ts` matched `PlusToken` only until
+    // WR-17 widened it to `PlusEqualsToken`, on the argument that the ACCUMULATE
+    // idiom is one token from a form already covered and produces the same
+    // value. It is the same argument here. `k += "uests"` builds a string out of
+    // pieces exactly as `k = k + "uests"` does, and this file's own header
+    // claimed the assignment spelling was covered by construction.
+    //
+    // GUARDED BY THE SAME NUMERIC TEST THE POISONING ARM BELOW ALREADY USES, so
+    // an ordinary integer accumulator stays exempt: `i += 1` is an index, not a
+    // name. `isProvablyNumeric` reads the numeric sets AS THEY STAND HERE, which
+    // is the identical posture the declaration-side `isAssembledKey` call takes.
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken &&
+      ts.isIdentifier(node.left) &&
+      !isProvablyNumeric(node.right, numericNames, poisonedNumericNames)
+    ) {
+      assembledNames.add(node.left.text);
     }
 
     // --- what the walk knows about a name being a NUMBER ---------------------
@@ -2717,6 +2862,87 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     expect(
       rulesOf('let k = 1;\nk = "req" + "uests";\nawait sdk[k].send(req);'),
     ).toContain("outbound-unanalysable");
+  });
+
+  it('through assembledNames\' COMPOUND-ASSIGNMENT branch: a `+=` that builds a string is an ASSEMBLY — `let k = "req"; k += "uests"; sdk[k].send(req)` — CR-10 shape 4 of 5', () => {
+    // CR-10, shape 4, and the sharpest of the five because the lesson was
+    // already on record ONE DIRECTORY AWAY. `store/error-redaction.spec.ts`
+    // matched `PlusToken` only until WR-17 widened it to `PlusEqualsToken`, on
+    // the argument that `+=` is one token from a form already covered and
+    // produces the same value. This file's own header meanwhile claimed assembly
+    // was read "in every spelling" and through "either a declaration or an
+    // assignment" — and `+=` was neither read nor excluded, just absent.
+    //
+    // MECHANISM IS `assembledNames`, NOT `constStrings`: `k` carries the literal
+    // "req" from its declaration, and the ASSEMBLY WINS over it by the precedence
+    // rule asserted below. `outbound-unanalysable`, because a key the walk
+    // watched being built is a key it saw being hidden.
+    expect(
+      rulesOf('let k = "req";\nk += "uests";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it('through assembledNames\' ASSIGNMENT branch, reachable at last: `let k = "harmless"; k = "req" + "uests"; sdk[k].send(req)` — CR-10 shape 5 of 5', () => {
+    // CR-10, shape 5. THE BRANCH THAT RESOLVES THIS ALREADY EXISTED — the
+    // assignment-side `assembledNames.add` has been there since CR-08, with a
+    // comment claiming it was "covered by construction". It was UNREACHABLE for
+    // any name whose declaration carried a string initializer, because
+    // `keyReceiver` consulted the stale literal FIRST and returned.
+    //
+    // MEASURED ATTRIBUTION, RECORDED RATHER THAN IMPLIED: this shape flipped from
+    // `[]` to `outbound-unanalysable` at TASK 1, when the literal lookup stopped
+    // early-returning — not at the compound-assignment branch it sits beside.
+    // Its mutation proof is task 1's MA2, not task 2's MB1. Stating that is the
+    // difference between a fixture and a fixture that proves something.
+    expect(
+      rulesOf(
+        'let k = "harmless";\nk = "req" + "uests";\nawait sdk[k].send(req);',
+      ),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("through isProvablyNumeric's guard on the COMPOUND-ASSIGNMENT branch: an INTEGER accumulator built with `+=` is an INDEX and stays quiet", () => {
+    // THE MUST-STAY-QUIET TWIN of the case two above, and the reason the new
+    // branch carries the same numeric test the poisoning arm beside it already
+    // used. `i += 1` is the single most common statement in this codebase — 34
+    // `+=` sites over both roots — and a gate that calls an integer accumulator
+    // an assembled receiver name gets deleted rather than fixed.
+    expect(
+      rulesOf("let i = 0;\ni += 1;\nconst v = MIGRATIONS[i];\nuse(v);"),
+    ).toEqual([]);
+    expect(rulesOf("let i = 0;\ni += 1;\nconst v = sdk[i];\nuse(v);")).toEqual(
+      [],
+    );
+  });
+
+  it('through assembledNames OVER constStrings — THE PRECEDENCE, settled: a WATCHED ASSEMBLY beats a LITERAL BINDING of the same name — `let k = "requests"; k = a + b; sdk[k].send(req)` is UNANALYSABLE, not send', () => {
+    // THE QUESTION TASK 1 CREATED AND THIS CASE ANSWERS. Before CR-10 a name
+    // could not be both: `constStrings` held one literal, was read first, and
+    // returned. Now a name can carry a literal binding AND a watched assembly,
+    // and `keyReceiver` has to choose.
+    //
+    // THE ASSEMBLY WINS, and the reasoning is in the ordering docblock beside
+    // the four steps: a name the walk WATCHED being reassembled is a name whose
+    // literal answer stopped being trustworthy, so an assembly it SAW is stronger
+    // evidence than a literal it saw earlier. BOTH DIRECTIONS REPORT — the
+    // choice is between naming a surface off a string the file has since rebuilt
+    // (`outbound-send`) and admitting the walk can no longer read the site
+    // (`outbound-unanalysable`). The second is the true one.
+    //
+    // STEP 1's CASE IS NOT TOUCHED BY THIS and the assertion below says so:
+    // `const r = "requests"` is never in `assembledNames`, so it still reports
+    // `outbound-send` and is still never downgraded.
+    const rules = rulesOf(
+      'let k = "requests";\nk = a + b;\nawait sdk[k].send(req);',
+    );
+    expect(rules).toContain("outbound-unanalysable");
+    expect(rules).not.toContain("outbound-send");
+    const stepOne = rulesOf('const r = "requests";\nawait sdk[r].send(req);');
+    expect(
+      stepOne,
+      "the precedence rule downgraded the single-hop literal case it was required to preserve",
+    ).toContain("outbound-send");
+    expect(stepOne).not.toContain("outbound-unanalysable");
   });
 
   it("through NOTHING: the KEY contrast — TWO HOPS is still silent whichever side of the bindings the use sits on — A MEASURED SILENCE", () => {
