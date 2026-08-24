@@ -208,13 +208,42 @@
 //            true of the first two sets from the day they were written and no
 //            residual list had ever said so — the same defect this file keeps
 //            finding, running for once in the direction of the gate reaching
-//            FURTHER than its own disclosure. What actually bounds an alias
-//            chain is DOCUMENT ORDER, not a hop count: a chain read before its
-//            root is bound is silent, because there is no symbol table and no
-//            second pass. All four shapes are asserted below.
+//            FURTHER than its own disclosure.
+//            CORRECTED 2026-08-24 (CR-09), AND THE CORRECTION IS THE SAME
+//            DEFECT ONE LEVEL DEEPER. The sentence that stood here bounded the
+//            walk by WHERE A NAME IS READ — call it THE READ-POSITION BOUND;
+//            its exact superseded words are preserved in
+//            `01-VERIFICATION.md`'s CR-09 entry and are deliberately NOT
+//            requoted here, because a file that states a bound and also quotes
+//            its own false version of it gives a skimmer two sentences and no
+//            way to tell which is live. It was FALSE, and the mechanism says so
+//            in two lines of code: `auditSource` runs `collect(sf)` to
+//            COMPLETION and only THEN runs `visit(sf)`. Every alias set, every
+//            string map and every poisoned name is fully populated before the
+//            first violation is considered, so the position of a USE bounds
+//            NOTHING AT ALL — it may sit above every declaration in the file.
+//            WHAT ACTUALLY BOUNDS AN ALIAS CHAIN, measured: the DECLARATION
+//            ORDER OF THE BINDINGS RELATIVE TO EACH OTHER. Because each set is
+//            grown by consulting the LIVE set during that one document-order
+//            collect pass, a chain resolves to ANY DEPTH provided each link's
+//            DECLARATION appears after the declaration of the name it is grown
+//            from. `const a = fetch; const b = a; const c = b; const d = c;`
+//            reports at four hops with `d(u)` written ABOVE all four. Invert
+//            one link — `const b = a; const a = fetch;` — and it is silent
+//            whether `b(u)` is read first or last, because `a` is not yet in
+//            the set when `b`'s declaration is read. Asserted below as a
+//            three-case discrimination that varies the bindings and the read
+//            SEPARATELY, which is the pair the single case here before could
+//            not distinguish.
 //      (b) A KEY THE WALK NEVER SAW BOUND — a parameter, a `for…of` or `for(;;)`
-//          loop binding, a name whose binding is out of document order or in
-//          another file — is NOT reported. That bound was set by MEASUREMENT and
+//          loop binding, or a name bound in another file — is NOT reported.
+//          NARROWED BY DELETION 2026-08-24 (CR-09): this list used to carry a
+//          third item between the loop binding and the other file, exempting a
+//          name by WHERE IN THE FILE its binding sits. That item was THE
+//          READ-POSITION BOUND wearing an exemption's clothes and it was false
+//          for the reason (a) now states — the collect pass finishes first, so
+//          a binding anywhere in the file is seen. It is deleted, not softened.
+//          The two items that remain are unchanged. That bound was set by MEASUREMENT and
 //          the measurement is kept here because it is the evidence: reporting
 //          every key that would not reduce fired twice on the real tree, on
 //          `compat.ts`'s documented `at()` dotted-path walk (`cur[key]`, `key` a
@@ -251,11 +280,19 @@
 //
 //    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS
 //    IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as
-//    one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, but only in
-//    DOCUMENT ORDER: `const a = globalThis; const b = a; const g = b; g.fetch(u)`
-//    reports and so does the `sdk.requests` twin, while a chain read BEFORE its
-//    root is bound is SILENT, because there is no symbol table and no second
-//    pass. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in
+//    one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, provided each
+//    link's DECLARATION appears after the declaration of the name it is grown
+//    from. The MECHANISM is why, and it is stated here rather than only its
+//    consequence, because a consequence on its own is what the last four rounds
+//    each paraphrased wrongly: `auditSource` runs `collect(sf)` to COMPLETION
+//    and only then runs `visit(sf)`, and every alias set is grown by consulting
+//    the LIVE set during that one collect pass. So `const a = globalThis;
+//    const b = a; const g = b; g.fetch(u)` reports, the `sdk.requests` twin
+//    reports, and a four-hop chain reports with the USE written ABOVE all four
+//    declarations — the use site's POSITION IS IRRELEVANT. What is silent is an
+//    INVERTED BINDING: `const b = a; const a = fetch; b(u)` reports nothing,
+//    because `a` is not yet in the set when `b`'s declaration is read, and it
+//    stays silent wherever the read is placed. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in
 //    every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is
 //    silent. Outside those, four things are beyond the walk: a value crossing a
 //    FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER
@@ -1046,11 +1083,21 @@ export function auditSource(file: string, source: string): Violation[] {
    * ONE HOP AND NO MORE, exactly like `constStrings`: `const a = "req" + "uests";
    * const b = a; sdk[b].send(req)` is still silent, and that is residual (a).
    *
-   * IT INHERITS THE COLLECT PASS'S DOCUMENT-ORDER LIMIT. There is no symbol table
-   * and no second pass, so a binding is seen only if its declaration is read
-   * before the use site. That over-approximates file-wide (a name bound anywhere
-   * counts everywhere) and under-approximates in document order, which is the
-   * posture every other set in this pass already takes.
+   * WHAT ACTUALLY BOUNDS A KEY, CORRECTED 2026-08-24 (CR-09). The paragraph
+   * that stood here bounded key resolution by where a declaration is read
+   * RELATIVE TO A USE — THE READ-POSITION BOUND, whose superseded words are
+   * preserved in `01-VERIFICATION.md`'s CR-09 entry and are not requoted here.
+   * It was false: `collect(sf)` completes before `visit(sf)` begins, so a
+   * binding anywhere in the file is seen from anywhere in the file, use sites
+   * included above it. `sdk[k].send(req);\nconst k = "req"+"uests";` reports.
+   * What DOES bound a key is the ONE HOP above, and the mechanism behind it is
+   * the mechanism that makes keys different from aliases: this collector and
+   * `constStrings` read the INITIALIZER'S SHAPE and never the live set, so a
+   * key cannot be grown from a name already in the set and therefore cannot
+   * chain — while every ALIAS set is grown FROM the live set and therefore
+   * chains to any depth. Bindings remain file-wide, which over-approximates
+   * (a name bound anywhere counts everywhere), which is the posture every other
+   * set in this pass already takes.
    *
    * THE NUMERIC SETS ARE READ AS THEY STAND AT THE DECLARATION, DELIBERATELY.
    * `isAssembledKey` runs `isProvablyNumeric` first, and the numeric sets are
@@ -2769,7 +2816,7 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     ).toEqual([]);
   });
 
-  it("through globalThisAliases' TRANSITIVITY: an alias CHAIN resolves to ANY depth in document order — MEASURED, and not what residual (a) used to say", () => {
+  it("through globalThisAliases' TRANSITIVITY: an alias CHAIN resolves to ANY depth when each link's DECLARATION follows the declaration it is grown from — MEASURED, and not what residual (a) used to say", () => {
     // MEASURED, NOT ASSUMED, AND THE MEASUREMENT CONTRADICTED THE EXPECTATION
     // THIS CASE WAS FIRST WRITTEN WITH. Every alias set here is grown by
     // consulting the LIVE set, so each new binding can be resolved from the
@@ -2795,15 +2842,68 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     ).toContain("outbound-send");
   });
 
-  it("through NOTHING: DOCUMENT ORDER, not a hop count, is what actually bounds an alias chain — a chain READ BEFORE ITS ROOT is silent", () => {
-    // A MEASURED SILENCE, labelled as one per plan 01-18's convention. This is
-    // the REAL bound on the alias sets, and it is what residual (a) now states
-    // for them in place of "more than one hop".
+  it("through NOTHING: INVERTED BINDING ORDER is what silences an alias chain — the intermediate is declared before its root, so the root is not yet in the live set — A MEASURED SILENCE", () => {
+    // A MEASURED SILENCE, labelled as one per plan 01-18's convention.
+    //
+    // SPLIT IN TWO 2026-08-24 (CR-09), AND THIS HALF WAS RETITLED BECAUSE ITS
+    // OLD TITLE NAMED A VARIABLE ITS BODY IS INSENSITIVE TO. The title used to
+    // name the READ POSITION. The verifier measured the body BOTH WAYS and the
+    // read position does nothing: remove the function wrapper and move the read
+    // LAST (`const g = a;\nconst a = globalThis;\ng.fetch(u);`) and it is still
+    // `[]`; keep the wrapper and bind the root DIRECTLY
+    // (`function z() { return g.fetch(u); }\nconst g = globalThis;`) and it
+    // REPORTS. What this case varies, and the ONLY thing it varies, is the
+    // BINDING ORDER: `g` is grown from `a` before `a` is in the live set, so
+    // `g` never enters `globalThisAliases`. The half below varies the READ and
+    // holds the bindings in dependency order; between them they can tell the
+    // claim from its negation, which this case alone never could.
     expect(
       rulesOf(
         "function z() { return g.fetch(u); }\nconst g = a;\nconst a = globalThis;",
       ),
     ).toEqual([]);
+    // The same inverted bindings with the read moved LAST — still silent. The
+    // read is not what is doing the work here.
+    expect(
+      rulesOf("const g = a;\nconst a = globalThis;\ng.fetch(u);"),
+    ).toEqual([]);
+  });
+
+  it("through globalThisAliases: MOVING THE READ CHANGES NOTHING — a use written ABOVE its own binding REPORTS, because `collect(sf)` completes before `visit(sf)` begins", () => {
+    // THE POSITIVE HALF, added 2026-08-24 (CR-09). This is the assertion that
+    // would have caught the READ-POSITION BOUND the moment it was written, and
+    // its absence is why four artifacts carried that bound for a round. The
+    // bindings here are in DEPENDENCY ORDER and only the READ moves — the
+    // mirror image of the half above, which holds the read fixed and inverts
+    // the bindings.
+    expect(
+      rulesOf("function z() { return g.fetch(u); }\nconst g = globalThis;"),
+    ).toContain("outbound-fetch");
+    expect(rulesOf("g.fetch(u);\nconst g = globalThis;")).toContain(
+      "outbound-fetch",
+    );
+    // And at depth: four hops in dependency order with the use written ABOVE
+    // all four declarations. The `ANY DEPTH` clause in residual (a) is checkable
+    // rather than decorative because of this line.
+    expect(
+      rulesOf(
+        "d(u);\nconst a = fetch;\nconst b = a;\nconst c = b;\nconst d = c;",
+      ),
+    ).toContain("outbound-fetch");
+  });
+
+  it("through NOTHING then globalThisAliases: THE THREE-CASE DISCRIMINATION that separates binding order from read order — inverted+last `[]`, inverted+first `[]`, dependency-ordered+first REPORTS", () => {
+    // The smallest set that distinguishes the two variables. Cases 1 and 2 hold
+    // the BINDINGS inverted and move the READ: both silent, so the read is not
+    // the mechanism. Cases 2 and 3 hold the READ first and change the BINDINGS:
+    // the silence flips to a report, so the bindings are the mechanism. Cases 1
+    // and 2 are MEASURED SILENCES and neither may ever be cited as evidence
+    // that a rule holds.
+    expect(rulesOf("const b = a;\nconst a = fetch;\nb(u);")).toEqual([]);
+    expect(rulesOf("b(u);\nconst b = a;\nconst a = fetch;")).toEqual([]);
+    expect(rulesOf("b(u);\nconst a = fetch;\nconst b = a;")).toContain(
+      "outbound-fetch",
+    );
   });
 
   it("through NOTHING: a receiver KEY still stops at exactly ONE hop, which is where residual (a)'s original wording IS right", () => {
