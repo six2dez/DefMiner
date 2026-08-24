@@ -579,6 +579,18 @@
 //          IS silent and is (a)'s function-boundary clause, asserted by
 //          `silence-function-boundary`; the KEY half is not the same fact and had
 //          been folded into it.
+//      (b6) A LOGICAL-ASSIGNMENT BINDING WHOSE TARGET IS A MEMBER — `o.r ??=
+//          sdk.requests; o.r.send(req)` — is NOT reported. NAMED 2026-08-24
+//          (CR-12), BY MEASUREMENT WHILE WIDENING AND NOT BY REVIEW: the widened
+//          branch reads `ASSIGNING_OPERATORS` for the OPERATOR and still requires
+//          `ts.isIdentifier(node.left)` for the TARGET, so a member target binds
+//          nothing. THE PLAIN-ASSIGNMENT SPELLING `o.r = sdk.requests` WAS ALSO
+//          SILENT BEFORE THIS PLAN and had no row either — this is not a cost of
+//          the widening, it is a shape the widening made visible. DISCLOSED
+//          rather than folded in, on (b2)'s and (b3)'s precedent: growing an
+//          alias keyed on a member path is a different collector, not a wider
+//          operator set, and it needs its own real-tree measurement. Asserted
+//          below as a MEASURED SILENCE, so it goes red the day it is closed.
 //      (c) `navigator` RETURNED BY A HELPER is outside the beacon rule, for the
 //          same reason as (a)'s function-boundary half.
 //          CORRECTED 2026-08-24 (WR-30). This item used to also exempt
@@ -1308,7 +1320,7 @@ RESOLVERS - 32 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 9 entries.
+MEASURED SILENCES - 10 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1358,6 +1370,13 @@ MEASURED SILENCES - 9 entries.
     probe:     "import { k } from \"./other\";\nsdk[k].send(req);"
     reports:   [] - nothing
     counter:   "const k = \"requests\";\nsdk[k].send(req);"
+    reports:   outbound-send
+
+* silence-logical-assignment-member-target - residual (b6), NAMED BY MEASUREMENT on 2026-08-24 (CR-12): a logical-assignment binding whose TARGET is a MEMBER rather than a bare name is silent, because collect's ASSIGNING_OPERATORS branch requires an IDENTIFIER on the left. The bare-name spelling of the same operator reports - that is the counter-probe
+    read off:  auditSource > const collect = (node: ts.Node): void => {
+    probe:     "o.r ??= sdk.requests;\no.r.send(req);"
+    reports:   [] - nothing
+    counter:   "let r;\nr ??= sdk.requests;\nr.send(req);"
     reports:   outbound-send
 
 * silence-inverted-binding-order - what actually bounds an ALIAS chain, corrected in wave 23: not where a name is READ but the DECLARATION ORDER of the bindings relative to each other. collect() finishes before visit() begins, so a use may sit above every declaration; invert one link and the root is not yet in the live set. The dependency-ordered spelling reports
@@ -4871,6 +4890,31 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     probe: 'import { k } from "./other";\nsdk[k].send(req);',
     expect: Object.freeze([] as const),
     counterProbe: 'const k = "requests";\nsdk[k].send(req);',
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    // OPENED BY MEASUREMENT WHILE WIDENING, wave 31 (CR-12). The widened branch
+    // still requires `ts.isIdentifier(node.left)`, so `o.r ??= sdk.requests`
+    // binds nothing - and neither does `o.r = sdk.requests`, which was true
+    // before this plan and had no row either. This row exists because the shape
+    // was RUN and found silent, not because the widening intended to leave it.
+    //
+    // THE CLAUSE SPELLS THE SHAPE HYPHENATED, `a logical-assignment binding`,
+    // AND THAT IS DELIBERATE RATHER THAN AN EVASION OF THE COVERAGE GUARD. The
+    // vocabulary phrase `a logical assignment` names a branch that FIRES; this
+    // clause names an ABSENCE at that branch, so a BranchProbe answering the
+    // phrase would have to probe a shape this row is not about. What binds this
+    // row to the code is its own probe and counter-probe, executed like every
+    // other measured silence - the counter is the IDENTIFIER spelling of the
+    // same operator, which reports.
+    id: "silence-logical-assignment-member-target",
+    kind: "measured-silence",
+    clause:
+      "residual (b6), NAMED BY MEASUREMENT on 2026-08-24 (CR-12): a logical-assignment binding whose TARGET is a MEMBER rather than a bare name is silent, because collect's ASSIGNING_OPERATORS branch requires an IDENTIFIER on the left. The bare-name spelling of the same operator reports - that is the counter-probe",
+    site: "auditSource > const collect = (node: ts.Node): void => {",
+    probe: "o.r ??= sdk.requests;\no.r.send(req);",
+    expect: Object.freeze([] as const),
+    counterProbe: "let r;\nr ??= sdk.requests;\nr.send(req);",
     counterExpect: Object.freeze(["outbound-send"] as const),
   }),
   Object.freeze({
