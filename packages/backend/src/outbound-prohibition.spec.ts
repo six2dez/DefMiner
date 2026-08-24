@@ -720,6 +720,40 @@ export function auditSource(file: string, source: string): Violation[] {
   const fetchAliases = new Set<string>([FETCH_GLOBAL]);
   const constStrings = new Map<string, string>();
   /**
+   * Names whose binding the walk WATCHED BEING ASSEMBLED — `const k = "req" +
+   * "uests"`, a template, or a call whose result is not provably numeric.
+   *
+   * Added 2026-08-24 (CR-08). `constStrings` remembers a name bound to a string
+   * the walk could READ; this remembers a name bound to a string the walk could
+   * see being BUILT. The distinction is the whole of WR-19 standing one hop back:
+   * a key the walk watched being assembled is a key the walk saw being hidden,
+   * and binding it to a name first hides nothing more. Before this set existed
+   * `sdk["req" + "uests"].send(req)` reported and `const k = "req" + "uests";
+   * sdk[k].send(req)` did not, while the MEMBER-level twin (`const m = "se" +
+   * "nd"; sdk.requests[m](req)`) and the GLOBAL-level twin (`const k = "fet" +
+   * "ch"; globalThis[k](url)`) both reported — the asymmetry WR-19 was raised to
+   * remove, surviving one level up.
+   *
+   * ONE HOP AND NO MORE, exactly like `constStrings`: `const a = "req" + "uests";
+   * const b = a; sdk[b].send(req)` is still silent, and that is residual (a).
+   *
+   * IT INHERITS THE COLLECT PASS'S DOCUMENT-ORDER LIMIT. There is no symbol table
+   * and no second pass, so a binding is seen only if its declaration is read
+   * before the use site. That over-approximates file-wide (a name bound anywhere
+   * counts everywhere) and under-approximates in document order, which is the
+   * posture every other set in this pass already takes.
+   *
+   * THE NUMERIC SETS ARE READ AS THEY STAND AT THE DECLARATION, DELIBERATELY.
+   * `isAssembledKey` runs `isProvablyNumeric` first, and the numeric sets are
+   * populated further down this SAME document-order pass — so a declaration is
+   * judged against what the walk knew about numbers at that point in the file,
+   * not against the finished sets. That is the identical posture the existing
+   * numeric-collection call takes and it is a choice, not an oversight: turning
+   * this into a two-pass walk would change what `x[i + 1]` means depending on
+   * where `i` is declared relative to its use, for no measured gain.
+   */
+  const assembledNames = new Set<string>();
+  /**
    * Names bound to a receiver the walk COULD NOT READ — `const r = sdk[k]`.
    *
    * Remembering the unreadable binding is how the third state is handled at the
@@ -755,13 +789,26 @@ export function auditSource(file: string, source: string): Violation[] {
       // The key will not reduce. If the walk can SEE it being assembled, it says
       // so rather than treating the result as an ordinary object; a key it merely
       // cannot follow is the disclosed one-more-hop residual, not concealment.
-      return isAssembledKey(
-        inner.argumentExpression,
-        numericNames,
-        poisonedNumericNames,
-      )
-        ? UNREADABLE_RECEIVER
-        : undefined;
+      if (
+        isAssembledKey(
+          inner.argumentExpression,
+          numericNames,
+          poisonedNumericNames,
+        )
+      ) {
+        return UNREADABLE_RECEIVER;
+      }
+      // CR-08: the SAME assembly, one hop back. A name the walk watched being
+      // assembled is a key it saw being hidden — binding it first hides nothing
+      // more, and the member-level and global-level paths have always said so.
+      // A key that reduced to a literal was already resolved above, so the
+      // positive control (`const r = "requests"`) is still a NAMED receiver and
+      // is never downgraded to unreadable by this branch.
+      const identifier = unwrap(inner.argumentExpression);
+      if (ts.isIdentifier(identifier) && assembledNames.has(identifier.text)) {
+        return UNREADABLE_RECEIVER;
+      }
+      return undefined;
     }
     if (ts.isIdentifier(inner)) {
       const alias = receiverAliases.get(inner.text);
@@ -857,6 +904,11 @@ export function auditSource(file: string, source: string): Violation[] {
         if (literal !== undefined && ts.isStringLiteralLike(init)) {
           constStrings.set(node.name.text, literal);
         }
+        // `const k = "req" + "uests"` — the assembly the walk WATCHED. Read
+        // against the numeric sets as they stand here; see `assembledNames`.
+        if (isAssembledKey(init, numericNames, poisonedNumericNames)) {
+          assembledNames.add(node.name.text);
+        }
         if (isFetchExpression(init)) fetchAliases.add(node.name.text);
         if (isNavigatorReceiver(init)) navigatorAliases.add(node.name.text);
         const kind = initializerReceiver(init);
@@ -900,6 +952,12 @@ export function auditSource(file: string, source: string): Violation[] {
       }
       if (isFetchExpression(node.right)) fetchAliases.add(node.left.text);
       if (isNavigatorReceiver(node.right)) navigatorAliases.add(node.left.text);
+      // `let k; k = "req" + "uests";` — the assignment spelling of the same
+      // assembly, grown from the same two shapes every other set here is grown
+      // from, so it is covered by construction rather than by a second edit.
+      if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) {
+        assembledNames.add(node.left.text);
+      }
     }
 
     // --- what the walk knows about a name being a NUMBER ---------------------
@@ -1708,6 +1766,37 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
+  it('through assembledNames: an assembled KEY survives no const — `const k = "req" + "uests"; sdk[k].send(req)`', () => {
+    // CR-08. THE MECHANISM IS `assembledNames`, NOT `constStrings`: the key never
+    // reduces to a literal, so `literalOf` returns undefined and the resolution
+    // comes entirely from the name having been WATCHED being assembled one hop
+    // back. Reverting the `assembledNames` consultation in `receiverKind` drives
+    // this red; reverting `constStrings` does not touch it.
+    //
+    // Before 2026-08-24 this reported `[]` while the MEMBER-level twin
+    // (`const m = "se" + "nd"; sdk.requests[m](req)`) and the GLOBAL-level twin
+    // (`const k = "fet" + "ch"; globalThis[k](url)`) both reported — the WR-19
+    // asymmetry standing one level up. Both twins are asserted below so the three
+    // paths can never drift apart again silently.
+    expect(
+      rulesOf('const k = "req" + "uests";\nawait sdk[k].send(req);'),
+      'const k = "req" + "uests"; sdk[k].send(req) still reports clean',
+    ).toContain("outbound-unanalysable");
+    // The ASSIGNMENT spelling, proving the collector grew from both shapes rather
+    // than from declarations only — the defect the round-1 walk shipped.
+    expect(
+      rulesOf('let k;\nk = "req" + "uests";\nawait sdk[k].send(req);'),
+      'let k; k = "req" + "uests"; sdk[k].send(req) still reports clean',
+    ).toContain("outbound-unanalysable");
+    // The two twins, asserted HERE beside the shape they were asymmetric with.
+    expect(
+      rulesOf('const m = "se" + "nd";\nawait sdk.requests[m](req);'),
+    ).toContain("outbound-unanalysable");
+    expect(
+      rulesOf('const k = "fet" + "ch";\nawait globalThis[k](url);'),
+    ).toContain("outbound-unanalysable");
+  });
+
   it("outbound-unanalysable fires on an assembled MEMBER of an identified global receiver", () => {
     // The sharper of the two shapes: the receiver is POSITIVELY identified —
     // `isGlobalReceiver` says so — and it is the member name that will not
@@ -1750,6 +1839,16 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     expect(
       rulesOf(
         'let cur = root;\nfor (const key of path.split(".")) { cur = (cur as Record<string, unknown>)[key]; }',
+      ),
+    ).toEqual([]);
+    // `compat.ts:141`'s `ctx[root]`, where `root` is a PARAMETER — the fourth of
+    // the four real sites that bound residual (b), and the one that was measured
+    // in 01-16 but never asserted here. A parameter is never a VariableDeclaration
+    // so `assembledNames` cannot reach it, which is what keeps this quiet after
+    // CR-08 as well as before it.
+    expect(
+      rulesOf(
+        "export function pick(ctx: Record<string, unknown>, root: string) {\n  return ctx[root];\n}",
       ),
     ).toEqual([]);
     expect(rulesOf('const seg = segments[i].split(";");')).toEqual([]);
