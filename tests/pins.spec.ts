@@ -312,16 +312,54 @@ describe("the workspace conversion did not disturb the build allowlist", () => {
 // interval. Pinning the scan to one superseded literal would be a gate that goes quiet
 // the day somebody pastes the CURRENT build in, which is precisely how the rule was
 // broken the first time.
+//
+// THE PREDICATE THAT DECIDES ALL OF THAT IS DIRECTLY BELOW, AND IT IS EXPORTED SO ITS
+// FAILING PATH CAN RUN. Until 2026-08-24 it was written inline inside the scan
+// assertion, and `scripts/phase1/tracer-e2e.sh` carries a two-component sleep interval
+// and five four-component loopback addresses and NO three-component run at all — so the
+// filter's true branch never executed anywhere in this suite (01-REVIEW.md WR-25). The
+// three fixtures below execute it: on synthetic text, on the two shapes that must
+// survive, and on the real script's own bytes with a literal appended in memory.
+
+/**
+ * The version literals in raw `text`: maximal dotted-numeric runs of EXACTLY THREE
+ * components. `127.0.0.1` is four and `0.25` is two, and neither is one.
+ *
+ * PURE — takes text, returns hits — and EXPORTED so its FAILING path can be executed
+ * against a fixture rather than argued about. That is the convention this repository
+ * already holds and which this gate was the exception to:
+ * `packages/backend/src/outbound-prohibition.spec.ts` and
+ * `packages/backend/src/store/error-redaction.spec.ts` each export a pure
+ * `auditSource`, and `packages/backend/src/store/observations.spec.ts` keeps a pure
+ * `auditPatternUse` (module-local, not exported — measured 2026-08-24, stated here so
+ * a reader is not sent looking for an export that is not there). All three run their
+ * failing path on a synthetic fixture in their own file.
+ *
+ * The file scan below is this function's ONLY caller. Lifting it out changed the
+ * gate's TESTABILITY and not one thing about its behaviour.
+ */
+export function versionLiterals(text: string): string[] {
+  return (text.match(/\d+(?:\.\d+)+/g) ?? []).filter(
+    (run) => run.split(".").length === 3,
+  );
+}
+
 describe("WR-21 — the tracer's own no-version-literal rule is ENFORCED, not merely claimed", () => {
   const TRACER = "scripts/phase1/tracer-e2e.sh";
   const tracerText = readFileSync(TRACER, "utf8");
 
-  /** Maximal dotted-numeric runs, e.g. "0.57.1", "127.0.0.1", "0.25". */
-  const DOTTED_NUMERIC = /\d+(?:\.\d+)+/g;
   /** The marker that makes the scan non-vacuous: the variable the prose must cite. */
   const VERSION_VARIABLE = "P1_EXPECT_VERSION";
 
   it("is scanning the real script, and the script still cites the variable", () => {
+    // WHAT THIS PAIR DOES NOT COVER, STATED BECAUSE AN UNSTATED LIMIT IS THE ONE A
+    // READER ASSUMES AWAY. They prove the right file was read and is not empty. They
+    // CANNOT see an inert predicate: `versionLiterals` could be broken to return the
+    // empty array on every input and both assertions below would still pass. That is
+    // exactly how this gate stayed green while its true branch had never run
+    // (01-REVIEW.md WR-25); the three predicate fixtures further down are what closed
+    // it, and neither assertion here is a substitute for them.
+    //
     // NON-VACUITY, FIRST AND DELIBERATELY BEFORE THE RULE ITSELF. A renamed, moved
     // or emptied script would otherwise scan nothing and report clean — the failure
     // mode that makes a gate worse than no gate. Two independent facts, so neither a
@@ -337,13 +375,66 @@ describe("WR-21 — the tracer's own no-version-literal rule is ENFORCED, not me
   });
 
   it("names no Caido version literal anywhere, COMMENTS INCLUDED", () => {
-    const hits = (tracerText.match(DOTTED_NUMERIC) ?? []).filter(
-      (run) => run.split(".").length === 3,
-    );
+    const hits = versionLiterals(tracerText);
     expect(
       hits,
       `${TRACER} names version literal(s) ${hits.join(", ")}. Its header states that a literal in that file is a bug: decision P7-D5 moved \`${VERSION_VARIABLE}\` once and the prose did not follow, so a reader found one build in the comment and another in the environment and every number in the artifact became unciteable. Cite \`${VERSION_VARIABLE}\` instead — the RESOLVED value is written into every run directory as \`caido-version.txt\`, so the evidence carries the build rather than a comment claiming it.`,
     ).toEqual([]);
+  });
+
+  // The literals below are FIXTURES, not pins. Nothing resolves them, nothing is
+  // measured on them, and the file they defend is the one that must carry none.
+  const PLANTED = "0.58.0";
+
+  it("the predicate DETECTS a version literal in synthetic text — the true branch that had never run", () => {
+    expect(
+      versionLiterals(`# the build this run was taken on: Caido ${PLANTED}`),
+      `versionLiterals did not return ${PLANTED} from a line that plainly names it. The scan above is therefore inert and reports clean on any input — repair the predicate, do not relax this assertion.`,
+    ).toEqual([PLANTED]);
+  });
+
+  it("the predicate IGNORES the two shapes this script cannot do without: a four-component loopback address and a two-component interval", () => {
+    expect(
+      versionLiterals(
+        "sleep 0.25; curl -sS http://127.0.0.1:8972/defminer-tracer-fixture.js",
+      ),
+      "versionLiterals flagged a loopback address or a sleep interval as a version literal. Tightening the pattern to catch more must not swallow either: the tracer cannot do without 127.0.0.1, and 0.25 is a duration. A gate that fails on those is a gate somebody will delete.",
+    ).toEqual([]);
+  });
+
+  it("the predicate returns EMPTY rather than throwing on text carrying no dotted-numeric run at all", () => {
+    // Not redundant with the assertion above: that one feeds it text whose runs must
+    // be REJECTED, this one feeds it text with no runs to reject. `String.match` with
+    // a /g pattern returns null, not [], so a predicate that drops the `?? []`
+    // fallback passes every other fixture here and throws the day the tracer stops
+    // carrying a loopback address.
+    expect(
+      versionLiterals("# a header sentence carrying no numbers whatsoever"),
+      "versionLiterals did not survive text with no dotted-numeric run — the `?? []` fallback is gone. Restore it: the scan must report clean on an input with nothing to find, not crash on it.",
+    ).toEqual([]);
+  });
+
+  it("the predicate DETECTS a literal planted into the REAL script's text — the load-bearing one", () => {
+    // THIS IS THE ONE THAT PROVES THE GATE RATHER THAN THE PREDICATE, and it is why
+    // the three fixtures above are not enough on their own. They prove the rule
+    // against a hand-written string — the author's idea of the input. This one plants
+    // the literal into the bytes the scan ACTUALLY reads, in memory, so a change to
+    // the script's shape that defeats the scan is a visible failure rather than a
+    // theoretical one. A later reader seeing four similar assertions should delete
+    // none of them.
+    //
+    // ONE COUPLING, STATED: this fixture assumes the file on disk is CLEAN, because
+    // it appends its own literal to that file's text and expects exactly one hit. A
+    // literal genuinely planted on disk makes it red too, with a two-element array —
+    // measured 2026-08-24 while proving the scan direction. That is a second alarm on
+    // a real defect, not a false one; the assertion above is the one whose remedy
+    // message names what to do about it.
+    expect(
+      versionLiterals(
+        `${tracerText}\n# the build this run was taken on: Caido ${PLANTED}\n`,
+      ),
+      `A ${PLANTED} appended to the real text of ${TRACER} was NOT returned by versionLiterals. The scan above cannot go red on the actual file, whatever it does on a fixture — repair the predicate.`,
+    ).toEqual([PLANTED]);
   });
 });
 

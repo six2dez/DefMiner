@@ -27,8 +27,17 @@
 # `.planning/` returned seven hits and every one was prose. A claim that a check
 # EXISTS is the claim a reader will not re-verify, and it sat in the file whose entire
 # purpose is producing citeable evidence. Plan 01-17 wrote the gate rather than
-# deleting the sentence, and the gate has been OBSERVED failing: a planted literal
-# drives it red, and so does removing the marker that makes its scan non-vacuous.
+# deleting the sentence — and plan 01-22 moved the PROOF that the gate can fail out
+# of a summary and into the repository, because an observation somebody made once is
+# not something a reader can re-run (01-REVIEW.md WR-25). `tests/pins.spec.ts` now
+# exports the scan's predicate as `versionLiterals` and executes its FAILING path on
+# every run of the suite. The load-bearing case is the assertion titled "the
+# predicate DETECTS a literal planted into the REAL script's text — the load-bearing
+# one": it appends a version literal to THIS FILE'S OWN TEXT in memory and requires
+# the predicate to hand it back. Before that, the predicate's true branch had never
+# executed anywhere in the suite — this file carries a two-component sleep interval
+# and several four-component loopback addresses and no three-component run at all —
+# so the rule could have stopped being enforced without anything going red.
 #
 # The three deliberate pins elsewhere in the tree — tests/phase1-load.spec.ts,
 # tests/phase1-runtime.spec.ts and packages/backend/src/compat.ts — are NOT drift and
