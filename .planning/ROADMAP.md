@@ -176,7 +176,7 @@ Plans:
 
 **Wave 27** *(blocked on 01-26 — a registry written against an older gate would be born stale, which is the failure this plan exists to prevent)*
 
-- [ ] 01-27-PLAN.md — **THE STRUCTURAL PLAN**: the residual stops being authored. A resolver registry bound to the walk by executed probes, a pure `deriveResidual` that renders the text from it, sentinel-delimited blocks in the gate header and in `REQUIREMENTS.md` byte-checked by the suite, and a coverage guard that fails when a mechanism has no row — with FIVE separately executed mutation proofs covering prose-without-code, code-without-prose, registry-without-regeneration and an unregistered collector, and the limits of a derived residual stated inside the generated text — *wave 27*
+- [ ] 01-27-PLAN.md — **THE STRUCTURAL PLAN**: the residual stops being authored. A resolver registry bound to the walk by executed probes, a pure `deriveResidual` that renders the text from it, sentinel-delimited blocks in the gate header and in `REQUIREMENTS.md` byte-checked by the suite, and a coverage guard over BOTH resolver populations — matching collectors and functions declared inside the audit function, each required to be a registry row or a named exemption, since `receiverKind` is where WR-27 lived — with SIX separately executed mutation proofs covering prose-without-code in both surfaces, code-without-prose, registry-without-regeneration, an unregistered collector and an unregistered unlisted resolver function, a named `planning ledger absent` error for the suite's first dependency on `.planning/`, and the limits of a derived residual stated inside the generated text — *wave 27*
 
 **Wave 28** *(blocked on 01-27 — the residual it flips against does not exist until then)*
 
