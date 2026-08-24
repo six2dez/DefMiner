@@ -104,13 +104,31 @@
 //          it FIRST — so `let k = "harmless"; k = "requests"; sdk[k].send(req)`
 //          resolved `k` to "harmless" forever and was SILENT, which is exactly
 //          the direction the old sentence told a reader could not happen. As of
-//          CR-10 `constStrings` holds EVERY literal a name is bound to anywhere
-//          in the file and reports if ANY of them names a receiver, so this
-//          family now errs in the SAME direction as the alias families and the
-//          old sentence has become true of it — but it is stated per family
-//          rather than for the gate, because the next collector added here can
-//          err either way and one sentence covering both is what let this one sit
-//          under a disclosure claiming it could not happen.
+//          CR-10 `constStrings` holds every literal a name is bound to at ANY OF
+//          ITS COLLECTING BRANCHES and reports if ANY of them names a receiver,
+//          so this family now errs in the SAME direction as the alias families
+//          and the old sentence has become true of it — but it is stated per
+//          family rather than for the gate, because the next collector added here
+//          can err either way and one sentence covering both is what let this one
+//          sit under a disclosure claiming it could not happen.
+//          CORRECTED 2026-08-24 (CR-13, wave 30), AND WHAT WAS WRONG WITH IT.
+//          This paragraph said `EVERY literal a name is bound to ANYWHERE IN THE
+//          FILE`, in the hand-written half of this header, and that sentence was
+//          FALSE for the same reason and on the same day the `constStrings`
+//          REGISTRY ROW's universal was: `const k = b ? "requests" : "net";
+//          sdk[k].send(req)` bound nothing and reported nothing, on a site whose
+//          literal is written out in full. THE BRANCHES ARE NAMED RATHER THAN
+//          QUANTIFIED OVER, and there are now THREE — a string-literal
+//          declaration, a string-literal assignment, and an operator initializer
+//          (`? :`, `??`, `||`, at either a declaration or an assignment, read by
+//          `operatorLiteralBinding`). MEASURED STILL OUTSIDE ALL THREE, in this
+//          same session: a parameter, a loop binding, a value crossing a function
+//          boundary, a name bound in another file, and a SECOND hop of key.
+//          NOTHING MECHANICAL CHECKS THIS PARAGRAPH. The byte comparison reaches
+//          the generated span and `REQUIREMENTS.md` and no further, so this
+//          sentence was corrected BY HAND in the same commit as the registry, and
+//          where the two ever disagree the derived block is authoritative and
+//          this paragraph is the defect.
 //          `literalOf`, THE SINGLE-VALUED READER, IS THE ONE DELIBERATE EXCEPTION
 //          AND IT ALSO ERRS TOWARD REPORTING. Member names and module specifiers
 //          need ONE string, not a set, so `literalOf` answers `undefined` for a
@@ -121,9 +139,17 @@
 //      - Receivers resolve through a declaration (`const r = sdk.requests`), an
 //        object destructure (`const { requests, net } = sdk`), an assignment
 //        (`r = sdk.requests`), a conditional initializer, and a computed key
-//        whose value is a `const` string, a `let`/`var` string, or a name
-//        REBOUND to one anywhere in the file (`const r = "requests"`,
-//        `let k = "harmless"; k = "requests"`).
+//        whose value is a `const` string, a `let`/`var` string, a name REBOUND
+//        to one at any of the three collecting branches (`const r = "requests"`,
+//        `let k = "harmless"; k = "requests"`), or a name bound through an
+//        OPERATOR INITIALIZER at a declaration or an assignment
+//        (`const k = b ? "requests" : "net"`, `let k; k = b ?? "requests"`).
+//        THE LAST CLAUSE WAS ADDED 2026-08-24 (CR-13, wave 30) and the phrase
+//        `anywhere in the file` was REMOVED from the one before it, for the same
+//        reason and in the same commit: this list is hand-written, nothing
+//        mechanical checks it, and it had been claiming a reach the walk did not
+//        have. What it does NOT reach is stated in the residual below, from
+//        measurement rather than from intent.
 //      - Member names and module specifiers resolve through that same string map
 //        via `literalOf`, which reads it single-valued: one binding resolves, two
 //        or more report as unreadable.
@@ -282,6 +308,47 @@
 //                                                                      descends through the ONE
 //                                                                      shared operator resolver.
 //                                                                      Behaviour unchanged.
+//      const k = b ? "requests" : "net";        operatorLiteral-     outbound-send
+//        sdk[k]                                   Binding, then        — ROW ADDED 2026-08-24
+//      let k; k = b ?? "requests"; sdk[k]         constStrings           (CR-13). The spelling a
+//        (and the `||` and `&&` spellings,        via keyReceiver's      reader arrives holding,
+//         and the assignment spelling of          literal lookup         and the table had NO row
+//         each, all one binding shape)                                   for a key bound to an
+//                                                                        OPERATOR. The INLINE
+//                                                                        twin one row down was
+//                                                                        the only operator-key
+//                                                                        row and it resolves by
+//                                                                        a DIFFERENT mechanism,
+//                                                                        which is exactly the
+//                                                                        substitution this table
+//                                                                        exists to prevent.
+//      const k = b ? "req" + "uests" : "net";   operatorLiteral-     outbound-unanalysable
+//        sdk[k]                                   Binding's assembly   — an operand the walk
+//                                                 arm, then            WATCHES BEING ASSEMBLED
+//                                                 assembledNames        makes the NAME an
+//                                                                       assembly. NOTE the
+//                                                                       INLINE twin of this
+//                                                                       exact source reports
+//                                                                       outbound-NET instead,
+//                                                                       because operatorReceiver
+//                                                                       prefers a NAMED operand
+//                                                                       over an unreadable one
+//                                                                       while keyReceiver gives
+//                                                                       a WATCHED ASSEMBLY
+//                                                                       precedence over a
+//                                                                       literal binding. Both
+//                                                                       REPORT; they name
+//                                                                       different rules, and
+//                                                                       that is MEASURED, not
+//                                                                       predicted.
+//      const k = b ? someName : otherName;      NOTHING              [] — and the INLINE twin
+//        sdk[k]                                                          is silent too. The
+//                                                                        descent marks a name
+//                                                                        an assembly ONLY for an
+//                                                                        operand the walk
+//                                                                        WATCHES being built,
+//                                                                        never for one it merely
+//                                                                        cannot follow.
 //      sdk[(0, "requests")]                     unwrap's CommaToken  outbound-send
 //                                               arm, then literalOf
 //      const a="requests"; const b=a; sdk[b]    NOTHING              [] — residual (a)
@@ -1079,13 +1146,14 @@ RESOLVERS - 32 entries.
     branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
     branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
 
-* operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
+* operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration or an assignment, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
     read off:  module scope > function operatorLiteralBinding(
     probe:     "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
     reports:   outbound-send
     counter:   "const k = b ? \"harmless\" : \"other\";\nsdk[k].send(req);"
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > const operatorBinding = operatorLiteralBinding( - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "an assignment" at auditSource > collect > const assignedOperator = operatorLiteralBinding( - probe "let k;\nk = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
     branch:    "a literal operand" at module scope > operatorLiteralBinding > for (const literal of read(inner)) literals.add(literal); - probe "const k = b ?? \"requests\";\nsdk[k].send(req);" - reports outbound-send
     branch:    "an operand the walk WATCHES BEING ASSEMBLED" at module scope > operatorLiteralBinding > isAssembledKey(inner, numeric, poisoned) || - probe "const k = b ? \"req\" + \"uests\" : \"net\";\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "a nested operator" at module scope > operatorLiteralBinding > const nested = operatorLiteralBinding( - probe "const k = b ? (c ? \"requests\" : \"x\") : \"y\";\nsdk[k].send(req);" - reports outbound-send
@@ -2813,10 +2881,11 @@ export function auditSource(file: string, source: string): Violation[] {
         }
         // CR-13: `const k = b ? "requests" : "net"` — the operator initializer,
         // read through the descent the KEY site has always performed inline.
-        // TASK-1 INTERIM NOTE: the assignment spelling `let k; k = b ? ... : ...`
-        // is wired in TASK 2 OF THIS SAME PLAN. It is named here rather than left
-        // implicit because the CR-10 correction eleven lines below records what
-        // growing one spelling and not its sibling costs.
+        // THE ASSIGNMENT SPELLING IS WIRED IN THE SAME PLAN, beside the CR-10
+        // string binding below. Task 1 of plan 01-30 carried an interim note here
+        // saying it was coming; task 2 wired it and deleted the note, because the
+        // CR-10 correction eleven lines down is the record of what growing one
+        // spelling and leaving its sibling costs.
         const operatorBinding = operatorLiteralBinding(
           init,
           literalsOf,
@@ -2954,6 +3023,26 @@ export function auditSource(file: string, source: string): Violation[] {
       const assignedString = unwrap(node.right);
       if (ts.isStringLiteralLike(assignedString)) {
         bindString(node.left.text, assignedString.text);
+      }
+      // CR-13's assignment spelling: `let k; k = b ? "requests" : "net"`. It
+      // lands HERE, beside the CR-10 correction directly above, and in the SAME
+      // PLAN as the declaration spelling. That paragraph is this file's own
+      // record of what closing one spelling and leaving its sibling open costs —
+      // a declaration's harmless first literal outliving every rebinding — and
+      // repeating it a few lines further down would be the same defect with a
+      // fresher date on it.
+      const assignedOperator = operatorLiteralBinding(
+        node.right,
+        literalsOf,
+        assembledNames,
+        numericNames,
+        poisonedNumericNames,
+      );
+      if (assignedOperator !== undefined) {
+        for (const literal of assignedOperator.literals) {
+          bindString(node.left.text, literal);
+        }
+        if (assignedOperator.assembled) assembledNames.add(node.left.text);
       }
     }
 
@@ -3378,7 +3467,11 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
       Object.freeze({
         // CR-13, closed 2026-08-24. The third binding shape that reaches
         // `bindString`, and the one whose absence made this clause's universal
-        // false: the literals an operator initializer carries.
+        // false: the literals an operator initializer carries. BOTH SPELLINGS,
+        // declaration and assignment, are wired in one plan — the row's
+        // `an operator initializer` phrase covers the shape and the
+        // operatorLiteralBinding row's own `a declaration` / `an assignment`
+        // branches cover the two wiring sites.
         names: "an operator initializer",
         anchor:
           "auditSource > collect > for (const literal of operatorBinding.literals) {",
@@ -4065,7 +4158,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "operatorLiteralBinding",
     kind: "resolver",
     clause:
-      "an operator-shaped INITIALIZER is read on every operand: at a declaration, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it",
+      "an operator-shaped INITIALIZER is read on every operand: at a declaration or an assignment, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it",
     site: "module scope > function operatorLiteralBinding(",
     probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
     expect: Object.freeze(["outbound-send"] as const),
@@ -4080,6 +4173,14 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
         anchor:
           "auditSource > collect > const operatorBinding = operatorLiteralBinding(",
         probe: 'const k = b ? "requests" : "net";\nsdk[k].send(req);',
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        // CLOSED IN THE SAME PLAN AS `a declaration`, not a later one.
+        names: "an assignment",
+        anchor:
+          "auditSource > collect > const assignedOperator = operatorLiteralBinding(",
+        probe: 'let k;\nk = b ? "requests" : "net";\nsdk[k].send(req);',
         expect: Object.freeze(["outbound-send"] as const),
       }),
       Object.freeze({
@@ -6150,6 +6251,144 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toEqual([]);
   });
 
+  it("through operatorLiteralBinding, THE WHOLE OPERATOR CLASS AT THE BINDING SITE: the `??`, `||` and `&&` initializers answer as the conditional does — CR-13", () => {
+    // ONE CLASS, CLOSED TOGETHER. Closing `? :` and leaving `??` open is the
+    // asymmetry CR-08 was and the asymmetry WR-27 was; the descent reads
+    // `operatorOperands`, which reads `RECEIVER_OPERATORS`, so all four spellings
+    // are one fact rather than four. Each was MEASURED before it was asserted.
+    expect(rulesOf('const k = b ?? "requests";\nsdk[k].send(req);')).toContain(
+      "outbound-send",
+    );
+    expect(rulesOf('const k = b || "requests";\nsdk[k].send(req);')).toContain(
+      "outbound-send",
+    );
+    expect(rulesOf('const k = b && "requests";\nsdk[k].send(req);')).toContain(
+      "outbound-send",
+    );
+    // NESTED, through the descent's own recursion — the property `keyReceiver`
+    // has at the key site, now held at the binding site too.
+    expect(
+      rulesOf('const k = b ? (c ? "requests" : "x") : "y";\nsdk[k].send(req);'),
+    ).toContain("outbound-send");
+  });
+
+  it('through operatorLiteralBinding\'s ASSEMBLY ARM: an operand the walk WATCHES BEING ASSEMBLED makes the NAME an assembly — `const k = b ? "req" + "uests" : "net"; sdk[k].send(req)` reports outbound-unanalysable — CR-13', () => {
+    // THE THIRD STATE SURVIVING THE BINDING, which is what makes this descent
+    // match the MEMBER-name and SPECIFIER twins rather than merely the key twin.
+    // `keyReceiver` produces UNREADABLE from exactly two branches — a name in
+    // `assembledNames`, and `isAssembledKey` — and the descent's assembly arm is
+    // read off those two and no others. See `operatorLiteralBinding`'s docblock
+    // for the reading this REPLACED and the three measurements that rejected it.
+    expect(
+      rulesOf('const k = b ? "req" + "uests" : "net";\nsdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+    // MEASURED, NOT PREDICTED, AND RECORDED BECAUSE IT SURPRISED THIS PLAN: the
+    // INLINE twin of that same source reports `outbound-net`, NOT
+    // `outbound-unanalysable`. `operatorReceiver` prefers a NAMED operand over an
+    // unreadable one — `"net"` is a receiver — while `keyReceiver` gives a
+    // WATCHED ASSEMBLY precedence over a literal binding of the same name. Both
+    // spellings REPORT; they name different rules. Pinned here so a later wave
+    // reading "the twins agree" out of the SUMMARY finds the exact sense in which
+    // they do not.
+    expect(
+      rulesOf('sdk[b ? "req" + "uests" : "net"].send(req);'),
+      "the INLINE twin's precedence changed — see 01-30-SUMMARY.md discrepancy 1",
+    ).toContain("outbound-net");
+  });
+
+  it('through operatorLiteralBinding, THE MIXED OPERAND: `const k = b ? "requests" : someName; sdk[k].send(req)` reports outbound-send off the READABLE branch — CR-13', () => {
+    // THE EITHER-SIDE SEMANTICS `RECEIVER_OPERATORS` already chose, one consumer
+    // over: a receiver named on one path is named, and an operand the walk merely
+    // CANNOT FOLLOW contributes neither a literal nor unreadability. The INLINE
+    // twin answers identically, which is the whole point — this is the shape that
+    // rejected the review's "ANY operand with no literal" sketch, because that
+    // sketch answered `outbound-unanalysable` here while the inline twin said
+    // `outbound-send`.
+    const rules = rulesOf(
+      'const k = b ? "requests" : someName;\nsdk[k].send(req);',
+    );
+    expect(rules).toContain("outbound-send");
+    expect(
+      rules,
+      "a site the walk read COMPLETELY on one branch was downgraded to unreadable",
+    ).not.toContain("outbound-unanalysable");
+    expect(rulesOf('sdk[b ? "requests" : someName].send(req);')).toContain(
+      "outbound-send",
+    );
+    // AND THE PAIR WITH NEITHER OPERAND READABLE STAYS SILENT AT BOTH SITES.
+    // Reporting here would be a NEW asymmetry between binding and use, in the
+    // opposite direction from CR-13's, created by the commit that closes CR-13.
+    expect(
+      rulesOf("const k = b ? someName : otherName;\nsdk[k].send(req);"),
+    ).toEqual([]);
+    expect(rulesOf("sdk[b ? someName : otherName].send(req);")).toEqual([]);
+    // AND AN ORDINARY NUMERIC CONDITIONAL INDEX IS STILL AN INDEX. The rejected
+    // sketch called this an assembled name — the first WR-19 implementation's own
+    // rejected behaviour, which fired on `compat.ts`'s documented path walk.
+    expect(rulesOf("const i = b ? 0 : 1;\nsdk[i].send(req);")).toEqual([]);
+  });
+
+  it('through operatorLiteralBinding at the ASSIGNMENT branch: `let k; k = b ? "requests" : "net"; sdk[k].send(req)` reports — closed in the SAME PLAN as the declaration spelling — CR-13', () => {
+    // CR-10's correction, eleven lines above this branch in `collect`, is this
+    // file's own record of what closing one spelling and leaving its sibling open
+    // costs. Both spellings of the operator initializer are wired in plan 01-30,
+    // and this case is the reason task 1's interim note could be deleted.
+    expect(
+      rulesOf('let k;\nk = b ? "requests" : "net";\nsdk[k].send(req);'),
+    ).toContain("outbound-send");
+    expect(
+      rulesOf('let k;\nk = b ?? "requests";\nsdk[k].send(req);'),
+    ).toContain("outbound-send");
+    // The assembly arm at the assignment branch too — one descent, both wirings.
+    expect(
+      rulesOf('let k;\nk = b ? "req" + "uests" : "net";\nsdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+    // And the counter-direction at the assignment branch.
+    expect(
+      rulesOf('let k;\nk = b ? "harmless" : "other";\nsdk[k].send(req);'),
+    ).toEqual([]);
+  });
+
+  it("through the FOUR ALREADY-REPORTING TWINS, PINNED AS CONTROLS: the inline key, the member name, the module specifier and the global key all still answer — CR-13's asymmetry, pinned from the other side", () => {
+    // THESE FOUR ARE WHY CR-13 IS A FINDING RATHER THAN A PREFERENCE. Every twin
+    // of the identical conditional already reported while the SDK receiver key
+    // bound through an initializer was silent. They are pinned in the same commit
+    // as the widening because a later narrowing that silently took one of them
+    // would recreate exactly the asymmetry this plan closes — and each is titled
+    // for the mechanism that resolves it so none can later stand in as the bound
+    // of a rule it does not exercise.
+    //
+    // (1) THE INLINE KEY — `operatorReceiver` via `keyReceiver`.
+    expect(
+      rulesOf('sdk[b ? "requests" : "net"].send(req);'),
+      "control 1 of 4: the INLINE key twin, resolved by operatorReceiver via keyReceiver",
+    ).toContain("outbound-send");
+    // (2) THE MEMBER NAME — `literalOf`, which is SINGLE-VALUED: two bindings
+    // answer `undefined`, and `undefined` means COULD NOT READ, which reports.
+    expect(
+      rulesOf('const m = b ? "send" : "get";\nsdk.requests[m](req);'),
+      "control 2 of 4: the MEMBER-name twin, resolved by literalOf reading single-valued",
+    ).toContain("outbound-unanalysable");
+    // (3) THE MODULE SPECIFIER — the same `literalOf`, one rule over.
+    expect(
+      rulesOf('const s = b ? "caido:http" : "crypto";\nimport(s);'),
+      "control 3 of 4: the SPECIFIER twin, resolved by literalOf reading single-valued",
+    ).toContain("outbound-unanalysable");
+    // (4) THE GLOBAL KEY — `literalOf` again, at the global-receiver rule.
+    expect(
+      rulesOf('const k = b ? "fetch" : "x";\nglobalThis[k](url);'),
+      "control 4 of 4: the GLOBAL-key twin, resolved by literalOf reading single-valued",
+    ).toContain("outbound-unanalysable");
+    // MEASURED AND RECORDED: controls 2, 3 and 4 answer `outbound-unanalysable`
+    // through `literalOf`'s SIZE test and NOT through the descent this plan adds.
+    // The descent now puts BOTH literals into `constStrings` for those names,
+    // which is what `literalOf` was already counting — so the widening moved
+    // these three from "no bindings, size 0" to "two bindings, size 2" and both
+    // answer `undefined`. Same rule, different arithmetic, and it is written down
+    // because "unchanged" and "unchanged for the same reason" are not the same
+    // claim.
+  });
+
   it("through operatorReceiver in CALL position: `(b ? sdk.requests : sdk.net).send(req)` reports outbound-send — WR-27, the third face of the operator", () => {
     // THE FINDING, AND WHAT MAKES IT ONE. The two OTHER faces of this same
     // operator were both taught in round 4 and both report: the conditional KEY
@@ -7150,7 +7389,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(65);
+    ).toBe(66);
   });
 
   // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
@@ -7184,7 +7423,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       branches.length,
       `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(66);
+    ).toBe(67);
     expect(
       new Set(branches.map(([id]) => id)).size,
       "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 32 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",

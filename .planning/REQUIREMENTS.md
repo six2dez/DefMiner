@@ -344,13 +344,14 @@ RESOLVERS - 32 entries.
     branch:    "any operand naming a receiver" at module scope > operatorReceiver > for (const kind of kinds) if (typeof kind === "string") return kind; - probe "(b ? sdk.requests : x).send(req);" - reports outbound-send
     branch:    "any unreadable operand" at module scope > operatorReceiver > if (kind === UNREADABLE_RECEIVER) return UNREADABLE_RECEIVER; - probe "const k = \"a\" + b;\n(c ? sdk[k] : x).send(req);" - reports outbound-unanalysable
 
-* operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
+* operatorLiteralBinding - an operator-shaped INITIALIZER is read on every operand: at a declaration or an assignment, a conditional, ?? or || initializer binds a literal operand into constStrings, while an operand the walk WATCHES BEING ASSEMBLED makes the bound name an UNREADABLE key instead; a nested operator descends through operatorOperands - the SAME set operatorReceiver reads - so this is a second CONSUMER of that set and not a fourth copy of it
     read off:  module scope > function operatorLiteralBinding(
     probe:     "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);"
     reports:   outbound-send
     counter:   "const k = b ? \"harmless\" : \"other\";\nsdk[k].send(req);"
     reports:   [] - nothing
     branch:    "a declaration" at auditSource > collect > const operatorBinding = operatorLiteralBinding( - probe "const k = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
+    branch:    "an assignment" at auditSource > collect > const assignedOperator = operatorLiteralBinding( - probe "let k;\nk = b ? \"requests\" : \"net\";\nsdk[k].send(req);" - reports outbound-send
     branch:    "a literal operand" at module scope > operatorLiteralBinding > for (const literal of read(inner)) literals.add(literal); - probe "const k = b ?? \"requests\";\nsdk[k].send(req);" - reports outbound-send
     branch:    "an operand the walk WATCHES BEING ASSEMBLED" at module scope > operatorLiteralBinding > isAssembledKey(inner, numeric, poisoned) || - probe "const k = b ? \"req\" + \"uests\" : \"net\";\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "a nested operator" at module scope > operatorLiteralBinding > const nested = operatorLiteralBinding( - probe "const k = b ? (c ? \"requests\" : \"x\") : \"y\";\nsdk[k].send(req);" - reports outbound-send
