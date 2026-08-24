@@ -365,47 +365,117 @@
 //    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md`, `01-18-SUMMARY.md` and
 //    `01-19-SUMMARY.md` are what stand behind it.
 //
-//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-23 =================
-//    Derived from the code above and copied WORD FOR WORD into
-//    `.planning/REQUIREMENTS.md`'s CORE-11 correction, `.planning/STATE.md`'s
-//    P9-D3 amendment and `.planning/WINDOWS.md`. If those four ever disagree,
-//    the code wins and the prose is the defect.
-//    CORRECTED 2026-08-24 (CR-09), and the correction is why this block now
-//    says 01-23 rather than 01-19. The alias sentence in the version plan 01-19
-//    wrote bounded the walk by WHERE A NAME IS READ. It was false; the seven
-//    shapes it called silent all report. THIS IS THE FIFTH CONSECUTIVE ROUND IN
-//    WHICH A BOUND WAS AUTHORED RATHER THAN DERIVED, and correcting the
-//    sentence closes the INSTANCE, not the class — wave 27 owns the machinery
-//    that makes the class DETECTABLE rather than reviewer-detectable, and this
-//    block does not borrow that claim.
+//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-24 =================
+//    RE-DERIVED from the branches above and copied WORD FOR WORD into
+//    `.planning/WINDOWS.md`. If the two disagree, the code wins and the prose
+//    is the defect. `REQUIREMENTS.md` and `STATE.md` still carry the WAVE-23
+//    text and are deliberately untouched here — see the last paragraph.
+//    NARROWED 2026-08-24 (CR-10), and the narrowing is why this block now says
+//    01-24 rather than 01-23. THREE CLAUSES ARE SUPERSEDED AND THEY ARE NAMED
+//    RATHER THAN REQUOTED, because a block that states a bound and also carries
+//    its own false version gives a skimmer two sentences and no way to tell
+//    which is live: THE SINGLE-DIRECTION CLAIM in boundary 2, THE EVERY-SPELLING
+//    CLAIM in the receiver-key list, and THE COVERED-BY-CONSTRUCTION CLAIM on
+//    the assignment collector. Their exact superseded words are preserved in
+//    `01-REVIEW.md`'s CR-10 entry, in `01-VERIFICATION.md`, and in the
+//    correction paragraphs at each of the three sites. All three were false in
+//    the same place: a stale first literal shadowed every later rebinding of the
+//    same name, so `let k = "harmless"; k = "requests"; sdk[k].send(req)` was
+//    SILENT — the direction a reader was told could not happen — and `+=` was
+//    not read at all. THAT IS THE SIXTH CONSECUTIVE ROUND IN WHICH A BOUND WAS
+//    AUTHORED RATHER THAN DERIVED, and narrowing it closes the INSTANCE, not
+//    the class.
 //
-//    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND, AND THIS
-//    IS WHAT BOUNDS IT — the phrase is not an absolute and must not be read as
-//    one. A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, provided each
-//    link's DECLARATION appears after the declaration of the name it is grown
-//    from. The MECHANISM is why, and it is stated here rather than only its
-//    consequence, because a consequence on its own is what the last four rounds
-//    each paraphrased wrongly: `auditSource` runs `collect(sf)` to COMPLETION
-//    and only then runs `visit(sf)`, and every alias set is grown by consulting
-//    the LIVE set during that one collect pass. So `const a = globalThis;
-//    const b = a; const g = b; g.fetch(u)` reports, the `sdk.requests` twin
-//    reports, and a four-hop chain reports with the USE written ABOVE all four
-//    declarations — the use site's POSITION IS IRRELEVANT. What is silent is an
-//    INVERTED BINDING: `const b = a; const a = fetch; b(u)` reports nothing,
-//    because `a` is not yet in the set when `b`'s declaration is read, and it
-//    stays silent wherever the read is placed. A RECEIVER KEY resolves exactly ONE HOP — a literal, an assembly in
-//    every spelling, a conditional, a comma sequence — and TWO HOPS OF KEY is
-//    silent. Outside those, four things are beyond the walk: a value crossing a
-//    FUNCTION BOUNDARY, a PARAMETER, a LOOP BINDING, and a name bound in ANOTHER
-//    FILE. And one thing is ASSUMED rather than proven: a member or method call
-//    named in `NUMERIC_MEMBERS` is taken to be numeric WHATEVER ITS RECEIVER, a
-//    NAME heuristic that fails OPEN (WR-26), disclosed rather than narrowed
-//    because narrowing it was MEASURED to change nothing except to re-poison
-//    ordinary `+` indexing. Every exemption here is preserved BY MEASUREMENT,
-//    re-run after each widening in plan 01-19 and again in plan 01-23: 23 files
-//    over both `SOURCE_ROOTS`, ZERO violations, with `compat.ts`'s `at()`
-//    `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and
-//    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name.
+//    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND,
+//    AND THIS IS WHAT BOUNDS IT — the phrase is not an absolute and must
+//    not be read as one. RE-DERIVED FOR WAVE 24 BY READING THE BRANCHES:
+//    `keyReceiver`'s four steps, the two `constStrings` write sites, the
+//    three `assembledNames` write sites and `literalOf` itself — not by
+//    narrowing the previous paragraph, which is the method plan 01-21
+//    recorded as having enumerated two classes while missing a third
+//    sitting in the same function.
+//
+//    A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, provided
+//    each link's DECLARATION appears after the declaration of the name it
+//    is grown from. UNCHANGED BY THIS WAVE. The mechanism is that
+//    `auditSource` runs `collect(sf)` to COMPLETION before `visit(sf)`
+//    begins, while every alias set is grown by consulting the LIVE set
+//    during that one collect pass — so a four-hop chain reports with the
+//    USE written ABOVE all four declarations and the use site's POSITION
+//    IS IRRELEVANT. What is silent is an INVERTED BINDING: `const b = a;
+//    const a = fetch; b(u)` reports nothing, wherever the read sits.
+//
+//    A RECEIVER KEY RESOLVES ONE HOP, AND WHAT ONE HOP MEANS WIDENED IN
+//    WAVE 24. It resolves: a literal; a literal bound at a DECLARATION OR
+//    AN ASSIGNMENT, in the `const`, `let` and `var` spellings; a name
+//    REBOUND, because ANY binding of a name that names an outbound
+//    receiver now makes the key one, so `let k = "harmless"; k =
+//    "requests"; sdk[k].send(req)` reports where it was silent; an
+//    assembly inline; an assembly bound or assigned; AN ASSEMBLY
+//    ACCUMULATED WITH `+=`; a conditional; and a comma sequence. Where a
+//    name carries BOTH a literal binding and a watched assembly, THE
+//    ASSEMBLY WINS and the site reports `outbound-unanalysable` rather
+//    than naming a surface off a string the file has since rebuilt.
+//
+//    `literalOf`, which resolves MEMBER NAMES and MODULE SPECIFIERS
+//    through that same map, IS SINGLE-VALUED: a name carrying more than
+//    one distinct binding answers "could not read", and "could not read"
+//    REPORTS at every one of its call sites. Measured in all four
+//    positions where a name can now resolve differently, THE WAVE-24
+//    WIDENING CREATED NO NEW SILENCE — a named surface becomes
+//    `outbound-unanalysable` where the walk read two strings, and nothing
+//    went quiet. THE MIRROR of the widening, `let k = "requests"; k =
+//    "harmless"`, REPORTS: any-binding-wins OVER-approximates, which is
+//    the direction every other set in this pass already errs in. The
+//    rejected alternative — a POISONED map in the shape of
+//    `poisonedNumericNames` — was MEASURED and would have left CR-10's
+//    own shapes silent and created a new silence at the mirror.
+//
+//    WHAT REMAINS SILENT, READ OFF THE BRANCHES: TWO HOPS OF KEY — `const
+//    a = "requests"; const b = a; sdk[b]` — because `constStrings` and
+//    `assembledNames` read the INITIALIZER'S SHAPE and never the live
+//    set, so a key cannot be grown from a name already in a set; a value
+//    crossing a FUNCTION BOUNDARY; a PARAMETER; a LOOP BINDING; and a
+//    name bound in ANOTHER FILE. And one thing is ASSUMED rather than
+//    proven: a member or method call named in `NUMERIC_MEMBERS` is taken
+//    to be numeric WHATEVER ITS RECEIVER, a NAME heuristic that fails
+//    OPEN (WR-26), disclosed rather than narrowed because narrowing it
+//    was measured to change nothing except to re-poison ordinary `+`
+//    indexing.
+//
+//    STILL OPEN AFTER THIS WAVE, EACH NAMED WITH THE WAVE THAT OWNS IT,
+//    because a residual that narrows without saying what is still open is
+//    the omission this round exists to stop: the CONDITIONAL RECEIVER IN
+//    CALL POSITION with its `??` and `||` twins — WAVE 25 (WR-27); the
+//    NESTED CONDITIONAL KEY — WAVE 25; the DESTRUCTURED KEY BINDING,
+//    `const { k } = o; sdk[k].send(req)` — WAVE 26 (IN-26). Wave 26 also
+//    owns `packages/backend/src/store/*`, `tests/pins.spec.ts` and
+//    `scripts/phase1/tracer-e2e.sh`.
+//
+//    Every exemption here is preserved BY MEASUREMENT, re-run after each
+//    widening and again in wave 24: 23 files over both `SOURCE_ROOTS`,
+//    ZERO violations, with `compat.ts`'s `at()` `cur[key]` and
+//    `ctx[root]`, `observations.ts`'s `segments[i]` and
+//    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. The
+//    `+=` branch DOES fire on shipped code — it marks `examined` and
+//    `deleted` in `store/retention.ts`, `out` in `telemetry.ts` and
+//    `start` in `engine/src/chunker.ts` as assembled — and all four files
+//    still report ZERO, because none of those names is ever used as a
+//    receiver key. That is measured, not argued.
+//
+//    WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE.
+//    This wave closes CR-10's INSTANCE and does not close the class that
+//    produced it — an authored bound nobody re-derived — which is now SIX
+//    consecutive rounds. `REQUIREMENTS.md` and `STATE.md` are
+//    deliberately NOT amended in this wave: both carry an authored
+//    residual, wave 27 derives the replacement and wave 28 reconciles
+//    both ledgers to it in one move, and a fourth hand-authored copy
+//    would be another place the next drift can start. CORE-11's box stays
+//    `[ ]`; wave 28 owns the flip and only against the derived text.
+//    NOTHING LEAKED: CR-10 is a PROSPECTIVE BLINDNESS in a test-only
+//    gate, no outbound call exists in any non-spec source under either
+//    root, the gate runs green over the real tree inside a 1132-test
+//    suite, and `pnpm check:bundle` reports one specifier, `crypto`.
 //
 //    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
 //    from the `[x]` that commit `e7cc4b6` reverted is the reason it may be:
@@ -1321,6 +1391,23 @@ export function auditSource(file: string, source: string): Violation[] {
    * disagree about what the walk can read.
    *
    * The ORDER is load-bearing and is the order below:
+   *   0. a key the walk WATCHED BEING ASSEMBLED — at a declaration, an
+   *      assignment, or a COMPOUND ASSIGNMENT — is UNREADABLE
+   *      (`assembledNames`). THE PRECEDENCE, added 2026-08-24 (CR-10), and it
+   *      exists only because step 1 widened: a name can now carry BOTH a
+   *      literal binding and a watched assembly, and something has to win. THE
+   *      ASSEMBLY DOES. A name the walk watched being reassembled is a name
+   *      whose literal answer stopped being trustworthy, so an assembly it SAW
+   *      is stronger evidence than a literal it saw earlier — the site reports
+   *      `outbound-unanalysable` rather than naming a surface off a string the
+   *      file has since rebuilt. Both directions REPORT; this one is the true
+   *      one. It is numbered 0 rather than renumbering the four below, because
+   *      "step 1" names the literal lookup in three other docblocks and in the
+   *      fixtures, and silently renumbering a load-bearing order is its own
+   *      small version of this file's recurring defect.
+   *      STEP 1's CASE IS UNTOUCHED BY IT: `const r = "requests"` is never in
+   *      `assembledNames`, so a single-hop literal binding still reports
+   *      `outbound-send` and is still never downgraded.
    *   1. a key ANY OF WHOSE BINDINGS names an outbound receiver IS one
    *      (`constStrings`) — first, so `const r = "requests"; sdk[r].send(req)`
    *      keeps reporting `outbound-send` and is never downgraded to
@@ -1328,7 +1415,9 @@ export function auditSource(file: string, source: string): Violation[] {
    *   2. a key the walk WATCHES being assembled inline is UNREADABLE
    *      (`isAssembledKey`);
    *   3. a key bound ONE HOP back to such an assembly is UNREADABLE
-   *      (`assembledNames`);
+   *      (`assembledNames`) — FOLDED INTO STEP 0 on 2026-08-24 (CR-10). It
+   *      tested the identical condition and, once step 0 ran first, was
+   *      unreachable; the duplicate was deleted rather than left standing;
    *   4. anything else — a parameter, a loop binding, a name the walk never saw
    *      bound, more than one hop — is NOT a receiver. That is residual (b), set
    *      by real-tree measurement rather than by preference.
@@ -1381,13 +1470,13 @@ export function auditSource(file: string, source: string): Violation[] {
     if (isAssembledKey(key, numericNames, poisonedNumericNames)) {
       return UNREADABLE_RECEIVER;
     }
-    // CR-08: the SAME assembly, one hop back. A name the walk watched being
-    // assembled is a key it saw being hidden — binding it first hides nothing
-    // more, and the member-level and global-level paths have always said so.
-    const identifier = unwrap(key);
-    if (ts.isIdentifier(identifier) && assembledNames.has(identifier.text)) {
-      return UNREADABLE_RECEIVER;
-    }
+    // CR-08's step 3 — "the SAME assembly, one hop back" — USED TO STAND HERE
+    // and is now UNREACHABLE, because step 0 above tests the identical
+    // condition and returns first. It was deleted rather than left in place:
+    // two identical tests in one function is how a reader learns to stop
+    // trusting the order the docblock claims is load-bearing. The behaviour it
+    // encoded is unchanged and is asserted by the same fixtures it always was —
+    // step 0 is that test, moved above the literal lookup and given a reason.
     return undefined;
   };
 
@@ -2943,6 +3032,55 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
       "the precedence rule downgraded the single-hop literal case it was required to preserve",
     ).toContain("outbound-send");
     expect(stepOne).not.toContain("outbound-unanalysable");
+  });
+
+  it("through literalOf's SINGLE-VALUED contract: THE ALLOWLIST STILL HOLDS — a name bound TWICE TO THE SAME STRING resolves, so `sdk.requests.get` stays quiet", () => {
+    // THE MUST-STAY-QUIET TWIN of the single-valued reader, and the one that
+    // decides whether this change is safe or a gate-deleting over-report. Two
+    // bindings of the SAME string are ONE entry in the set, so the name resolves
+    // and the read-only allowlist answers normally. `sdk.requests.get` is the
+    // reload the consumer depends on; a widening that reported it would be
+    // reverted rather than argued about.
+    expect(
+      rulesOf('let m = "get";\nm = "get";\nawait sdk.requests[m](id);'),
+    ).toEqual([]);
+    // Two DIFFERENT allowlisted members is the honest opposite: the walk read
+    // two strings and will not pick one, so it says so rather than guessing.
+    expect(
+      rulesOf('let m = "get";\nm = "getRaw";\nawait sdk.requests[m](id);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it("through ANY-BINDING-WINS and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror position REPORTS, measured in all four", () => {
+    // THE CHECK TASK 3 REQUIRED BE STATED RATHER THAN OMITTED. A widening that
+    // closes three shapes and opens a fourth without saying so is the pattern
+    // this round was convened over, so every position where a name can now
+    // resolve differently was probed for a NEW silence. THERE IS NONE: the rule
+    // NAME changes — a named surface becomes `outbound-unanalysable` where the
+    // walk read two strings — but nothing went quiet.
+    //  receiver-key position
+    expect(
+      rulesOf('let k = "requests";\nk = "harmless";\nawait sdk[k].send(req);'),
+    ).not.toEqual([]);
+    //  member position
+    expect(
+      rulesOf('let m = "send";\nm = "harmless";\nawait sdk.requests[m](req);'),
+    ).not.toEqual([]);
+    //  module-specifier position
+    expect(
+      rulesOf('let s = "caido:http";\ns = "harmless";\nawait import(s);'),
+    ).not.toEqual([]);
+    //  global-key position, and the alias GROWN off one — `const f =
+    //  globalThis[k]` no longer joins `fetchAliases` when `k` carries two
+    //  bindings, and the unreadable-member rule reports at the binding instead.
+    expect(
+      rulesOf('let k = "fetch";\nk = "harmless";\nglobalThis[k](url);'),
+    ).not.toEqual([]);
+    expect(
+      rulesOf(
+        'let k = "fetch";\nk = "harmless";\nconst f = globalThis[k];\nf(u);',
+      ),
+    ).toContain("outbound-unanalysable");
   });
 
   it("through NOTHING: the KEY contrast — TWO HOPS is still silent whichever side of the bindings the use sits on — A MEASURED SILENCE", () => {
