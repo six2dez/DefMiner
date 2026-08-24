@@ -108,6 +108,33 @@
 //            through a one-hop binding and through a destructure;
 //          - a member of a POSITIVELY IDENTIFIED global receiver whose name will
 //            not reduce is reported, which is the `globalThis["fet"+"ch"]` half.
+//      - CORRECTED AND WIDENED 2026-08-24 (CR-08), AND THE CORRECTION MATTERS AS
+//        MUCH AS THE WIDENING. The clause immediately above — "reported wherever
+//        that value is used as one, including through a one-hop binding" — was
+//        FALSE WHEN IT WAS WRITTEN. It described the assembled RECEIVER
+//        EXPRESSION (`const r = sdk["re"+"quests"]; r.send(req)`), which was
+//        indeed caught, and a reader took it for the assembled KEY
+//        (`const k = "req"+"uests"; sdk[k].send(req)`), which was not: one `const`
+//        disproved it, while the MEMBER-level twin (`const m = "se"+"nd";
+//        sdk.requests[m](req)`) and the GLOBAL-level twin (`const k = "fet"+"ch";
+//        globalThis[k](url)`) both reported. That is the WR-19 asymmetry standing
+//        one level up, inside the paragraph WR-19 rewrote. The paragraph also
+//        described ONLY inline assembly and said nothing whatever about a
+//        conditional key or a comma sequence, both of which the walk could read
+//        completely and reported nothing on. What the walk resolves in
+//        RECEIVER-KEY position, as the code now behaves and as the table below
+//        enumerates mechanism by mechanism:
+//          - a key bound ONE HOP to an assembly, in EVERY spelling — `+`, a
+//            template, `.join("")`, an opaque call — and through EITHER a
+//            declaration or an assignment (`assembledNames`);
+//          - a CONDITIONAL key, resolved on BOTH branches with
+//            `initializerReceiver`'s semantics, so `sdk[b ? "requests" : "net"]`
+//            reports `outbound-send` and NOT `outbound-unanalysable` — it hides
+//            nothing, and calling a completely readable site unreadable would be
+//            the same overclaim running the other way;
+//          - a COMMA SEQUENCE, resolved to its rightmost operand in `unwrap`, so
+//            `sdk[(0, "requests")]` and `(0, sdk.requests).send(req)` both report.
+//        ONE HOP REMAINS THE LIMIT IN EVERY DIRECTION. Two hops is residual (a).
 //      - `navigator.sendBeacon` is covered, RECEIVER-ANCHORED (the bare receiver,
 //        any of the four global receivers, or a one-hop alias) so that an
 //        ordinary object defining a method of that name stays quiet; and `eval`
@@ -148,24 +175,60 @@
 //    silences and labelled as such, so none of them can ever again be cited as
 //    evidence that some rule holds.
 //
-//    THE RESIDUAL, precisely, and it has THREE parts after the 2026-08-22
-//    widening:
-//      (a) a value that flows through a FUNCTION BOUNDARY, or through MORE THAN
-//          ONE HOP of indirection, is beyond the walk. `const a = "requests";
-//          const b = a; sdk[b].send(req)` reports nothing, and that is asserted
-//          below as a measured fact rather than left to be discovered.
-//      (b) a merely DYNAMIC key — a bare identifier or a parameter, `sdk[k]` —
-//          is NOT reported. That bound was set by measurement: reporting every
-//          key that would not reduce fired twice on the real tree, on
-//          `compat.ts`'s documented dotted-path walk and on array indexing, and
-//          a gate that calls those an outbound network surface gets deleted
-//          rather than fixed. The walk reports what it can see being HIDDEN and
-//          discloses what it merely cannot FOLLOW.
+//    THE RESIDUAL, precisely. THREE parts, RESTATED 2026-08-24 (CR-08) against
+//    what the code does rather than against what it was intended to do. This is
+//    THE ONE BOUND, and the same statement appears in `REQUIREMENTS.md`'s CORE-11
+//    correction, in `.planning/STATE.md`'s P9-D3 amendment, and in the
+//    `WINDOWS.md` entry appended by plan 01-18. If a reader finds those four
+//    disagreeing, the code wins and the prose is the defect — that disagreement
+//    IS what CR-08 was:
+//      (a) MORE THAN ONE HOP of indirection, or a value crossing a FUNCTION
+//          BOUNDARY, is beyond the walk. `const a = "requests"; const b = a;
+//          sdk[b].send(req)` reports nothing, and that is asserted below as a
+//          MEASURED SILENCE rather than left to be discovered.
+//          RESTATED, because the old wording bounded the walk at "more than one
+//          hop" and thereby affirmatively implied one hop was inside — which was
+//          FALSE for an assembled key until 2026-08-24 and is TRUE now. One hop
+//          is inside for a literal binding, for an assembled binding in every
+//          spelling, for a conditional and for a comma sequence. Two hops is out.
+//      (b) A KEY THE WALK NEVER SAW BOUND — a parameter, a `for…of` or `for(;;)`
+//          loop binding, a name whose binding is out of document order or in
+//          another file — is NOT reported. That bound was set by MEASUREMENT and
+//          the measurement is kept here because it is the evidence: reporting
+//          every key that would not reduce fired twice on the real tree, on
+//          `compat.ts`'s documented `at()` dotted-path walk (`cur[key]`, `key` a
+//          `for…of` binding) and on `compat.ts:141`'s `ctx[root]` (`root` a
+//          parameter); `store/observations.ts`'s `segments[i]` and
+//          `MIGRATIONS[MIGRATIONS.length - 1]` are held quiet by
+//          `isProvablyNumeric` instead. A gate that calls those four an outbound
+//          network surface gets deleted rather than fixed. All four are asserted
+//          quiet below, BY NAME.
+//          RESTATED, because the old wording said "a merely DYNAMIC key — a bare
+//          identifier or a parameter" and that JUSTIFICATION was doing double
+//          duty: the measurement exempted a key the walk never watched being
+//          bound, and it was being read as ALSO exempting one it had watched
+//          being assembled. It does not. The walk reports what it can see being
+//          HIDDEN and discloses what it merely cannot FOLLOW, and a name it
+//          watched being assembled is the first, not the second.
+//          RE-MEASURED 2026-08-24 after the CR-08 widening landed: the full gate
+//          over both `SOURCE_ROOTS`, 23 files, ZERO violations. The exemption is
+//          preserved by measurement, not by argument.
 //      (c) `navigator` reached through more than one hop, or returned by a
 //          helper, is outside the beacon rule for the same reason as (a).
+//    NOT RESIDUAL, AND THE DISTINCTION IS DELIBERATE: a provably numeric key is
+//    an INDEX rather than a hidden name, and is EXCLUDED by `isProvablyNumeric`
+//    before any of the above runs. That is a different kind of quiet.
 //    That is the honest bound, and `pnpm check:bundle` plus the mutation runs
-//    recorded in `01-12-SUMMARY.md` and `01-16-SUMMARY.md` are what stand behind
-//    it.
+//    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md` and `01-18-SUMMARY.md`
+//    are what stand behind it.
+//
+//    WHAT IS STILL OPEN, NAMED HERE SO IT IS NOT DISCOVERED BY A PROBE. CORE-11
+//    is NOT marked complete in `REQUIREMENTS.md`, deliberately: the requirement's
+//    own text enumerates "no dynamic code construction", and `const e = eval;
+//    e(s)` — a one-hop binding of `eval` — is still silent (WR-23), as is
+//    `const g = globalThis` (IN-20). Plan 01-19 closes both and owns flipping the
+//    box. Marking it complete here would be the same defect this paragraph was
+//    rewritten to remove: a claim reaching further than an execution.
 // 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
 //    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
 //    `store/error-redaction.spec.ts` needs — both DELIBERATELY. Exporting one

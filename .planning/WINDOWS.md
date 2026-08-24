@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 19
+open_count: 18
 waived_count: 0
-fixed_count: 2
-total_count: 21
-last_updated: 2026-08-22T09:56:52.151Z
+fixed_count: 4
+total_count: 22
+last_updated: 2026-08-24T08:21:34.840Z
 ---
 
 # Broken Windows Ledger
@@ -27,15 +27,16 @@ last_updated: 2026-08-22T09:56:52.151Z
 | 10 | 01 | deviation | packages/backend/src/compat.ts |  | COMPAT-01's operator-visible message is delivered as a host-log line plus a getStatus()/getCompat() RPC only, with no visible UI: the backend QuickJS surface has NO toast or notification API (exhaustive grep for showToast, Toast and notification across @caido/quickjs-types finds nothing), and sdk.api.send has no subscriber because Phase 1 ships no frontend. Decision P6-D2. Phase 5 owes the visible surface. | open |  | 2026-08-21T00:02:00.191Z |  |
 | 11 | 01 | stub | packages/backend/src/store/observations.ts |  | Path-embedded token in a URL path SEGMENT is NOT redacted — named residual, pinned by observations.spec.ts's RESIDUAL case | open |  | 2026-08-21T13:56:33.328Z |  |
 | 12 | 01 | stub | packages/backend/src/telemetry.ts |  | Windows C:\\\\ paths are not redacted by redactPaths, and a path containing a space loses only the portion before the space — both named residuals | open |  | 2026-08-21T13:56:33.426Z |  |
-| 13 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | Accepted residual T-01-51: a value crossing a function boundary or more than one hop of indirection is beyond the walk; reported as outbound-unanalysable only where the walk can tell indirection is happening | open |  | 2026-08-21T14:18:53.110Z |  |
+| 13 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | Accepted residual T-01-51: a value crossing a function boundary or more than one hop of indirection is beyond the walk; reported as outbound-unanalysable only where the walk can tell indirection is happening | fixed |  | 2026-08-21T14:18:53.110Z | 2026-08-24T08:20:46.154Z |
 | 14 | 01 | deviation | packages/backend/src/store/error-redaction.spec.ts |  | Accepted residual (boundary 2): the STORE-07 walk builds no symbol table and is scope-blind — the caught binding is resolved by NAME, copy tracking is ONE hop, and a value crossing a function boundary is beyond it | open |  | 2026-08-21T14:33:35.305Z |  |
 | 15 | 01 | deviation | packages/backend/src/compat.ts | 317 | T-01-37 accept: renders String(e).slice(0,160) into the per-surface error field, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-04 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.405Z |  |
 | 16 | 01 | deviation | packages/backend/src/hooks/passive.ts | 171 | T-01-37 accept: renders String(e).slice(0,160) into sdk.console.log on the hook error path, outside the STORE-07 gate's store/ scope. OWNER: Phase 2, ERR-03 (ROADMAP.md:396) | open |  | 2026-08-21T14:33:35.502Z |  |
 | 17 | 01 | deviation | .planning/REQUIREMENTS.md |  | T-01-76 accept: STORE-03 and STORE-07 are declared by redaction plans for work neither requirement's text mentions. Deferred WITH AN OWNER by plan 01-10 task 3 — the operator, at the next requirements pass | open |  | 2026-08-21T14:33:35.597Z |  |
 | 18 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo redaction cannot be proven at the live tier: curl lifts user:pass@ into an Authorization: Basic header, so userinfo never reaches observations.url. Measured in run 20260821T150022Z-16902 (userinfo-measurement.txt) and enforced instead by the observations.spec.ts real-SQLite round trip. Live-tier coverage for this one grammar is a documented gap, not a passing assertion. | open |  | 2026-08-21T15:10:49.050Z |  |
 | 19 | 1 | deviation | packages/backend/src/store/observations.ts |  | RESIDUAL, PINNED: URL_MAX truncation lands inside a <redacted> marker (tail 'p133=<re'); repair interacts with the new padding branch and would break file-wide idempotence — owner: a later phase, job: truncate on a & boundary | open |  | 2026-08-22T08:54:33.504Z |  |
-| 20 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | WR-19 narrowed from every-non-reducing-key to ASSEMBLED-KEY; a merely dynamic key (sdk[k]) is a disclosed residual, not reported | open |  | 2026-08-22T09:33:22.689Z |  |
+| 20 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | WR-19 narrowed from every-non-reducing-key to ASSEMBLED-KEY; a merely dynamic key (sdk[k]) is a disclosed residual, not reported | fixed |  | 2026-08-22T09:33:22.689Z | 2026-08-24T08:21:10.428Z |
 | 21 | 01 | deviation | scripts/phase1/tracer-e2e.sh |  | URL userinfo cannot be exercised through the live curl tier — lifted into an Authorization: Basic header before the request line exists. MEASURED per run (userinfo-measurement.txt), enforced at the unit tier by observations.spec.ts HEAD_CASES. A live userinfo proof needs a client that does not do this lift. | open |  | 2026-08-22T09:56:52.151Z |  |
+| 22 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | THE RECEIVER-KEY RESIDUAL AS OF WAVE 18 (plan 01-18, CR-08) — SUPERSEDED IN WAVE 19 BY PLAN 01-19, which narrows it further and rewrites this bound in the gate header, REQUIREMENTS.md, STATE.md and this ledger. Supersedes entries 13 and 20, whose descriptions stated a bound the code no longer has. NOW REPORTED in receiver-key position: a literal key; a key bound ONE HOP to a literal (constStrings); a key assembled inline (isAssembledKey); a key bound ONE HOP to an assembly in EVERY spelling — +, a template, .join(""), an opaque call — through either a declaration or an assignment (assembledNames); a CONDITIONAL key resolved on both branches; a COMMA SEQUENCE resolved to its rightmost operand. THE RESIDUAL THAT REMAINS, in the same words as that gate's boundary 2, REQUIREMENTS.md's CORE-11 correction and STATE.md's P9-D3 amendment: more than ONE HOP of indirection, a value crossing a FUNCTION BOUNDARY, and a key the walk NEVER SAW BOUND — a parameter, a loop binding, a name bound out of document order or in another file. That last exemption is preserved BY MEASUREMENT, re-run after the widening: 23 files over both source roots, ZERO violations, with compat.ts's at() cur[key] and ctx[root], observations.ts's segments[i] and MIGRATIONS[MIGRATIONS.length - 1] all asserted quiet by name. CORE-11 stays unchecked: const e = eval; e(s) (WR-23) and const g = globalThis (IN-20) are still silent and plan 01-19 owns both plus the checkbox flip. | open |  | 2026-08-24T08:21:34.840Z |  |
 
 ````json
 [
@@ -190,10 +191,10 @@ last_updated: 2026-08-22T09:56:52.151Z
     "file": "packages/backend/src/outbound-prohibition.spec.ts",
     "line": null,
     "description": "Accepted residual T-01-51: a value crossing a function boundary or more than one hop of indirection is beyond the walk; reported as outbound-unanalysable only where the walk can tell indirection is happening",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-21T14:18:53.110Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-24T08:20:46.154Z"
   },
   {
     "id": 14,
@@ -274,10 +275,10 @@ last_updated: 2026-08-22T09:56:52.151Z
     "file": "packages/backend/src/outbound-prohibition.spec.ts",
     "line": null,
     "description": "WR-19 narrowed from every-non-reducing-key to ASSEMBLED-KEY; a merely dynamic key (sdk[k]) is a disclosed residual, not reported",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-22T09:33:22.689Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-24T08:21:10.428Z"
   },
   {
     "id": 21,
@@ -289,6 +290,18 @@ last_updated: 2026-08-22T09:56:52.151Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-22T09:56:52.151Z",
+    "resolved_at": null
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/outbound-prohibition.spec.ts",
+    "line": null,
+    "description": "THE RECEIVER-KEY RESIDUAL AS OF WAVE 18 (plan 01-18, CR-08) — SUPERSEDED IN WAVE 19 BY PLAN 01-19, which narrows it further and rewrites this bound in the gate header, REQUIREMENTS.md, STATE.md and this ledger. Supersedes entries 13 and 20, whose descriptions stated a bound the code no longer has. NOW REPORTED in receiver-key position: a literal key; a key bound ONE HOP to a literal (constStrings); a key assembled inline (isAssembledKey); a key bound ONE HOP to an assembly in EVERY spelling — +, a template, .join(\"\"), an opaque call — through either a declaration or an assignment (assembledNames); a CONDITIONAL key resolved on both branches; a COMMA SEQUENCE resolved to its rightmost operand. THE RESIDUAL THAT REMAINS, in the same words as that gate's boundary 2, REQUIREMENTS.md's CORE-11 correction and STATE.md's P9-D3 amendment: more than ONE HOP of indirection, a value crossing a FUNCTION BOUNDARY, and a key the walk NEVER SAW BOUND — a parameter, a loop binding, a name bound out of document order or in another file. That last exemption is preserved BY MEASUREMENT, re-run after the widening: 23 files over both source roots, ZERO violations, with compat.ts's at() cur[key] and ctx[root], observations.ts's segments[i] and MIGRATIONS[MIGRATIONS.length - 1] all asserted quiet by name. CORE-11 stays unchecked: const e = eval; e(s) (WR-23) and const g = globalThis (IN-20) are still silent and plan 01-19 owns both plus the checkbox flip.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T08:21:34.840Z",
     "resolved_at": null
   }
 ]
