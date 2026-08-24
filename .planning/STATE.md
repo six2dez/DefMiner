@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-18-PLAN.md
-last_updated: "2026-08-24T08:27:39.467Z"
+stopped_at: Completed 01-19-PLAN.md
+last_updated: "2026-08-24T08:55:07.171Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 6d0925a2b5d0f6cd3e695f71a6f3965131e7dfa3
+state_head: 52c5b582e69b76a254e972bedd5e595f0285f256
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 2 of 22
+Plan: 3 of 22
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 01 execution started
 
@@ -87,6 +87,7 @@ Progress: [██████████] 100% of phase 01 (17 of 17 plans)
 | Phase 01 P16 | 34 min | 3 tasks | 8 files |
 | Phase 01 P17 | 19 min | 2 tasks | 28 files |
 | Phase 01 P18 | 22 min | 3 tasks | 4 files |
+| Phase 01 P19 | 18 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: describeError cannot throw (IN-17): both reads wrapped, one shared UNRENDERABLE_ERROR literal with recordError. Six store call sites invoke it unwrapped, so a handled store failure would have become an unhandled rejection out of recordObservation.
 - [Phase 01]: P9-D3 RESTATED (plan 01-18, CR-08): a receiver key is resolved through a one-hop assembly in every spelling, a conditional on both branches, and a comma sequence to its rightmost operand; the residual is two hops, a function boundary, and a key the walk never saw bound — The gate's stated reach was wider than its executed reach for the fourth review running, inside the file rewritten for that defect one wave earlier. The bound is now derived FROM the code and written identically into the gate header, REQUIREMENTS.md, STATE.md and WINDOWS.md; the exemption is preserved by re-measurement (23 files, 0 violations), not by argument.
 - [Phase 01]: CORE-11 stays unchecked after plan 01-18; plan 01-19 owns the flip — The requirement's own text enumerates 'no dynamic code construction' and WR-23's `const e = eval; e(s)` is still silent, as is IN-20's `const g = globalThis`. CORE-11 was reverted from [x] to [ ] at e7cc4b6 for exactly this reason; re-checking it one blindness early would repeat the act that revert undid.
+- [Phase 01]: CORE-11 marked [x] against an eight-row discharge table — every surface its own first sentence enumerates has a fixture that has been observed failing — The box was reverted at e7cc4b6 because the gate could not go red on dynamic code construction, a shape the requirement enumerates. WR-23 closed that in all four alias spellings and IN-20 closed the receiver they sit on, each mutation-proven separately. The table is the evidence and the box is not.
+- [Phase 01]: WR-26 resolved by correcting the DOCBLOCK rather than the branch, picked by measurement — The review's own proposed narrowing was applied and run and changed nothing; removing the branch entirely changed exactly two shapes, both ordinary + index compositions of the class that got WR-19 narrowed; and WR-26's motivating shape is silent under every variant because residual (b) silences it, not the numeric exemption. isProvablyNumeric now states that it PROVES for literals and arithmetic and ASSUMES BY NAME, failing OPEN, for a member or method call.
+- [Phase 01]: Residual (a) split: receiver KEYS stop at one hop, ALIAS CHAINS resolve to arbitrary depth in document order — Found by measurement while writing what was expected to be a routine two-hop silence fixture, which failed. Every alias set is grown by consulting the live set, so chains resolve to any depth — true of fetchAliases and navigatorAliases since they were written and named by no residual list. The phase's signature defect running in the direction of the gate reaching FURTHER than its disclosure, recorded with the same weight.
 
 ### Known Risks Carried Forward
 
@@ -220,8 +224,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T08:27:25.622Z
-**Stopped at:** Completed 01-18-PLAN.md
+**Last session:** 2026-08-24T08:54:50.319Z
+**Stopped at:** Completed 01-19-PLAN.md
 **Resume file:** None
 
 ### Blockers

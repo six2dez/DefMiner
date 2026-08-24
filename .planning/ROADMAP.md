@@ -144,7 +144,7 @@ Plans:
 
 **Wave 19** *(blocked on 01-18 — shares `outbound-prohibition.spec.ts`, and CORE-11's checkbox cannot flip until the last enumerated shape is enforced)*
 
-- [ ] 01-19-PLAN.md — **The last three CORE-11 blindnesses, and the checkbox**: `const e = eval; e(s)` reports clean in the rule whose whole argument is that a string this gate cannot read into makes a passing gate meaningless (WR-23); `isProvablyNumeric` claims it proves rather than assumes while deciding by member name and failing open (WR-26); `globalThis` has no one-hop alias while `navigator` does (IN-20). Then CORE-11 marked complete against an executed gate, its own enumeration discharged item by item — *wave 19*
+- [x] 01-19-PLAN.md — **The last three CORE-11 blindnesses, and the checkbox**: `const e = eval; e(s)` reports clean in the rule whose whole argument is that a string this gate cannot read into makes a passing gate meaningless (WR-23); `isProvablyNumeric` claims it proves rather than assumes while deciding by member name and failing open (WR-26); `globalThis` has no one-hop alias while `navigator` does (IN-20). Then CORE-11 marked complete against an executed gate, its own enumeration discharged item by item — *wave 19*
 
 **Wave 20** *(blocked on 01-19 — the tree must be quiet for a deliberate mutation, and the whole round is serialised)*
 
