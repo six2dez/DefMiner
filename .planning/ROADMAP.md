@@ -148,7 +148,7 @@ Plans:
 
 **Wave 20** *(blocked on 01-19 — the tree must be quiet for a deliberate mutation, and the whole round is serialised)*
 
-- [ ] 01-20-PLAN.md — **WR-22**: the CR-07 padding branch cost `normaliseObservedUrl` its idempotence at the `URL_MAX` cut, found independently at two different cut points; the truncation moved to a segment boundary, the invariant sentence scoped to what it is true of, the idempotence case rewritten to SEARCH for the adversarial cut instead of hard-coding one, and the IN-18 pin — which defers on the strength of the invariant this branch already broke — resolved by execution — *wave 20*
+- [x] 01-20-PLAN.md — **WR-22**: the CR-07 padding branch cost `normaliseObservedUrl` its idempotence at the `URL_MAX` cut, found independently at two different cut points; the truncation moved to a segment boundary, the invariant sentence scoped to what it is true of, the idempotence case rewritten to SEARCH for the adversarial cut instead of hard-coding one, and the IN-18 pin — which defers on the strength of the invariant this branch already broke — resolved by execution — *wave 20*
 
 **Wave 21** *(blocked on 01-20 — sequencing, not code: each plan mutates the shared tree to prove its gate can fail while asserting whole-suite green)*
 

@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-19-PLAN.md
-last_updated: "2026-08-24T08:55:07.171Z"
+stopped_at: Completed 01-20-PLAN.md
+last_updated: "2026-08-24T09:16:47.146Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 52c5b582e69b76a254e972bedd5e595f0285f256
+state_head: 6423c85afc4225cd6200062f04ad65985f68faba
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 3 of 22
+Plan: 21 of 22
 Status: Ready to execute
-Last activity: 2026-08-24 — Phase 01 execution started
+Last activity: 2026-08-24 — Completed 01-20 (URL_MAX segment-boundary truncation, WR-22 / IN-18)
 
-Progress: [██████████] 100% of phase 01 (17 of 17 plans)
+Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
 
 > The frontmatter's project-wide bar is still not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it has
@@ -41,12 +41,16 @@ Progress: [██████████] 100% of phase 01 (17 of 17 plans)
 > phase-local one, computed from the 17 PLAN / 17 SUMMARY files on disk and stated with
 > its basis rather than as an unexplained number.
 >
-> THE PROSE ABOVE WAS STALE UNTIL THIS PLAN, and correcting it is worth naming rather
-> than doing quietly. It read "Plan: 4 of 17" and "100% of phase 01 (14 of 14 plans)"
-> after the re-verification of 2026-08-21 grew the denominator from 14 to 17 — so the bar
-> read 100% while three plans were unwritten, which is the confident-green shape this
-> phase has spent five rounds removing from its gates. It is now recomputed from the
-> files on disk, which is the only number that cannot drift.
+> THE PROSE ABOVE WENT STALE AGAIN AND IS CORRECTED AGAIN, named rather than fixed
+> quietly, because the SHAPE of the staleness is the point. It read "Plan: 4 of 22" and
+> "100% of phase 01 (17 of 17 plans)" while 22 PLAN files and 20 SUMMARY files sat on
+> disk — so the bar read 100% with two plans unwritten, which is the SAME
+> confident-green failure the identical note recorded at 01-17 for the 14 -> 17 move.
+> The `Plan:` counter is what drifts: `state.advance-plan` increments whatever number is
+> already there, so once it falls behind it stays behind and the bar built on it reads
+> full. Recomputed here from the files on disk (22 PLAN / 20 SUMMARY = 91%), which is
+> the only number that cannot drift, and the `Plan:` counter set to 21 from the same
+> count rather than from its own previous value.
 
 ## Performance Metrics
 
@@ -88,6 +92,7 @@ Progress: [██████████] 100% of phase 01 (17 of 17 plans)
 | Phase 01 P17 | 19 min | 2 tasks | 28 files |
 | Phase 01 P18 | 22 min | 3 tasks | 4 files |
 | Phase 01 P19 | 18 min | 3 tasks | 4 files |
+| Phase 01 P20 | 25 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -182,6 +187,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: CORE-11 marked [x] against an eight-row discharge table — every surface its own first sentence enumerates has a fixture that has been observed failing — The box was reverted at e7cc4b6 because the gate could not go red on dynamic code construction, a shape the requirement enumerates. WR-23 closed that in all four alias spellings and IN-20 closed the receiver they sit on, each mutation-proven separately. The table is the evidence and the box is not.
 - [Phase 01]: WR-26 resolved by correcting the DOCBLOCK rather than the branch, picked by measurement — The review's own proposed narrowing was applied and run and changed nothing; removing the branch entirely changed exactly two shapes, both ordinary + index compositions of the class that got WR-19 narrowed; and WR-26's motivating shape is silent under every variant because residual (b) silences it, not the numeric exemption. isProvablyNumeric now states that it PROVES for literals and arithmetic and ASSUMES BY NAME, failing OPEN, for a member or method call.
 - [Phase 01]: Residual (a) split: receiver KEYS stop at one hop, ALIAS CHAINS resolve to arbitrary depth in document order — Found by measurement while writing what was expected to be a routine two-hop silence fixture, which failed. Every alias set is grown by consulting the live set, so chains resolve to any depth — true of fetchAliases and navigatorAliases since they were written and named by no residual list. The phase's signature defect running in the direction of the gate reaching FURTHER than its disclosure, recorded with the same weight.
+- [Phase 01]: P20-D1: normaliseObservedUrl truncates on a query-segment boundary — past URL_MAX it drops back to the last `&`, so the stored value never ends inside a segment or inside a `<redacted>` marker. Measured cost: exactly one trailing segment, never two. — Reproduced independently by sweep (n=4 first differing length, 25 of 40 lengths not fixed points) before any production change; the old byte cut severed a segment, and CR-07 / P10-D1 then redact the remnant whole on a second pass.
+- [Phase 01]: P20-D2 (the no-separator branch): with no `?` inside the cut, or a query with no `&` inside it, the URL_MAX byte cut STANDS unchanged — the branch retains exactly what it retained before. — Dropping back to the last `/` or to the `?` would truncate an oversized path back to its authority, discarding ~2 KB a segment-boundary cut would have kept — a materially larger retention decision belonging to the operator. Measured: 0 bytes discarded beyond the byte cut on all four measured inputs, so the plan bound held and no checkpoint was opened.
+- [Phase 01]: P20-D3/D4: the redactDelimitedSegment idempotence sentence is SCOPED to the helper (not deleted), and IN-18 is CLOSED by execution with its deferral rationale deleted rather than replaced. — The sentence reasoned correctly about the helper and only its scope was wrong. IN-18 deferred the repair to protect an idempotence invariant the branch it named had already broken at 25 of 40 swept cut points, so the reason could not survive under either outcome; on its own fixture the amended truncation gives len 2039 with a whole trailing segment, so it is closed.
 
 ### Known Risks Carried Forward
 
@@ -224,10 +232,11 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T08:54:50.319Z
-**Stopped at:** Completed 01-19-PLAN.md
+**Last session:** 2026-08-24T09:16:05.479Z
+**Stopped at:** Completed 01-20-PLAN.md
 **Resume file:** None
 
 ### Blockers
 
 - SPIKE-10 cross-day cache hit rate is UNDEFINED (1 day sampled, denominator 0) and collection has STOPPED — the recorder LaunchAgent was uninstalled. **CORRECTION (2026-08-21, plan 01-08): the 8998 INSTANCE WAS NOT KILLED.** This line previously claimed it was, per plan 00-04's teardown responsibility; that claim is false. `caido-cli --data-path .spike/recorder-data --listen 127.0.0.1:8998 --no-open --debug` is pid 79273 and has been up since 2026-08-20 (16h44m elapsed when observed). It is deliberately LEFT RUNNING — 01-08 found it while enumerating plugin databases and has no mandate to kill an operator process. Its plugin database holds `cache_log`, not DefMiner's tables, so it affects no count in 01-08. **Worth an operator decision, not taken here and NOT assumed either way:** the uninstalled LaunchAgent is what drove collection, so a bare instance being up does not by itself mean sampling resumed — but this line's opening premise (collection stopped, cross-day denominator 0) now rests on a teardown that provably only half happened, so it should be checked rather than inherited. 01-08 did not check it: the SPIKE-10 question is outside this plan's scope and re-opening it is the operator's call. Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. To re-measure: bash scripts/spike/recorder-agent.sh install, let it span 2+ calendar days, then re-run analyse-spike-10.py + aggregate.py + render-go-no-go.py. Revisit after 2026-09-03.
+- DISCLOSED OPEN (plan 01-20, WR-22): normaliseObservedUrl is a fixed point across the swept range (parameter-name lengths 1..64 at 300/900 params, 128 cuts) but NOT for every input. Two no-separator classes remain — a head-side cut can sever a `;` parameter marker (severed but stable), and a single-segment query cut inside its NAME is not a fixed point at all. Neither discloses anything new (recordObservation applies the function once per row). Both pinned in observations.spec.ts and disclosed in schema.spec.ts.
