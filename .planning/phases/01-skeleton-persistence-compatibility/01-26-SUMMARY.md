@@ -1033,3 +1033,18 @@ Carried forward, each with an owner or with the explicit fact that nothing owns 
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-24*
+
+## Self-Check: PASSED
+
+All seven modified files exist on disk. All six commits are present in
+`git log --all`. `pnpm test` re-run after the metadata close-out: 31 files /
+1148 tests, zero failures. `git status --porcelain packages/ tests/ .planning/`
+shows only `.planning/config.json`, a pre-existing modification that predates
+this plan and is not mine — no uncommitted work from this wave remains.
+
+`REQUIREMENTS.md` is byte-clean, which the plan requires: `STORE-03` and
+`STORE-07` were already `[x]` from earlier waves, and `CORE-11` is correctly
+BLOCKED by the shared-ID gate (`requirements.ready-ids` → `blocked: [CORE-11]`,
+because a sibling plan declares it and has no SUMMARY yet). That gate's answer
+and this plan's own instruction — CORE-11's box stays `[ ]`, wave 28 owns the
+flip and only against the derived text — agree.
