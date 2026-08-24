@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
-stopped_at: Completed 01-31-PLAN.md
-last_updated: "2026-08-24T20:14:29.291Z"
+stopped_at: Completed 01-32-PLAN.md
+last_updated: "2026-08-24T20:55:02.323Z"
 last_activity: 2026-08-24
 last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
-state_head: 9d4e0d25858e9aefbb8c0beafaf272a7f10c77bd
+state_head: 938e526bc3eaf067308aa29ef6b72b122bddf90e
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 32
-  completed_plans: 31
+  completed_plans: 32
 ---
 
 # Project State
@@ -168,6 +168,7 @@ Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 | Phase 01 P29 | 28 min | 3 tasks | 4 files |
 | Phase 01 P30 | 41 min | 3 tasks | 4 files |
 | Phase 01 P31 | 39 min | 3 tasks | 5 files |
+| Phase 01 P32 | 31 min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -342,8 +343,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T20:14:29.270Z
-**Stopped at:** Completed 01-31-PLAN.md
+**Last session:** 2026-08-24T20:54:55.106Z
+**Stopped at:** Completed 01-32-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -352,3 +353,4 @@ None.
 - DISCLOSED OPEN (plan 01-20, WR-22): normaliseObservedUrl is a fixed point across the swept range (parameter-name lengths 1..64 at 300/900 params, 128 cuts) but NOT for every input. Two no-separator classes remain — a head-side cut can sever a `;` parameter marker (severed but stable), and a single-segment query cut inside its NAME is not a fixed point at all. Neither discloses anything new (recordObservation applies the function once per row). Both pinned in observations.spec.ts and disclosed in schema.spec.ts.
 - CORE-11's residual class is still open: six consecutive rounds of bounds authored rather than derived. Wave 27 owns the derivation; wave 28 owns the CORE-11 checkbox flip, and only against the derived text.
 - [Phase 01] CORE-11 blocked by silence-operator-around-global-receiver: `(ok && globalThis).fetch(url)`, `(globalThis ?? self)`, `(globalThis || self)`, `(b ? globalThis : self)`, `(ok && window)` and `(ok && navigator).sendBeacon(u,d)` all report NOTHING. Blocks TWO enumerated CORE-11 clauses. Scoped fix: reach operatorReceiver from the GLOBAL receiver path as receiverKind/keyReceiver already do. See 01-28-SUMMARY.md section 4.
+- CORE-11 blocked by FIVE named rows (plan 01-32): an array element position, an object-literal property, a class field, a parameter default and a for-of binding each bind no receiver, so const [r] = [sdk.requests]; r.send(req) and its four twins are SILENT while six other one-hop binding spellings of sdk.requests report. Discharging them means widening five initializer shapes, re-measuring the real tree after each, re-running the discharge table, and moving CORE11_BOX_EXPECTED and the ledger row in the SAME commit.
