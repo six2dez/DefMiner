@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
-stopped_at: Completed 01-28-PLAN.md
-last_updated: "2026-08-24T14:10:29.828Z"
+stopped_at: Completed 01-29-PLAN.md
+last_updated: "2026-08-24T19:09:37.823Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: ba64b9dc0faf93085637da5185f2dfd08b96a859
+state_head: a02ae57e75f8ba10eb222c3c59b6b57d6284d396
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 28
-  completed_plans: 28
+  total_plans: 32
+  completed_plans: 29
 ---
 
 # Project State
@@ -28,11 +28,27 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 28 of 28
-Status: Phase complete — ready for verification
-Last activity: 2026-08-24 — Completed 01-26 (WR-28/29/30/31 + IN-23..26: six disclosures brought level with their code, the head-side residual swept instead of pinned at one offset)
+Plan: 30 of 32
+Status: Gap-closure round 6 in progress — 29 of 32 plans summarised
+Last activity: 2026-08-24 — Completed 01-29 (WR-32: a row's CLAUSE bound to the BRANCHES it names, by execution — 60 probes across 32 rows; the verifier's own `PlusEqualsToken` mutation now turns the `assembledNames` ROW red)
 
-Progress: [█████████▒] 92% of phase 01 (26 of 28 plans)
+Progress: [█████████▒] 91% of phase 01 (29 of 32 plans)
+
+> WAVE 29. THE COUNTERS WERE STALE AND ARE CORRECTED FROM THE FILE COUNT ON DISK,
+> recorded rather than quietly fixed, by the rule these notes have followed since
+> 01-17. `state.advance-plan` returned `{"advanced": false, "reason": "last_plan",
+> "current_plan": 28, "total_plans": 28}` — it read a frontmatter that predated
+> round 6's four new plans — while writing the correct 32/29 into the frontmatter
+> it recomputes from disk. The body counter still read `28 of 28`. The truth on
+> disk is 32 PLAN files and 29 SUMMARY files, so the next plan is 30; that is the
+> only number that cannot drift, and it is what the line above now carries.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter` — which is now ELEVEN
+> consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23, 01-24, 01-26 and 01-29).
+> Steady handler behaviour on this repo, not a transient. The bar above is the
+> phase-local one, recomputed from the 32 PLAN / 29 SUMMARY files on disk and
+> stated with its basis.
 
 > WAVE 26. `state.update-progress` withheld the project-wide bar again —
 > `progress percent withheld by buildStateFrontmatter` — which is now TEN
@@ -131,6 +147,7 @@ Progress: [█████████▒] 92% of phase 01 (26 of 28 plans)
 | Phase 01 P26 | 30 min | 3 tasks | 7 files |
 | Phase 01 P27 | 22 min | 4 tasks | 4 files |
 | Phase 01 P28 | 8 min | 2 tasks | 4 files |
+| Phase 01 P29 | 28 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -253,6 +270,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The mechanism table stays HAND-WRITTEN and the derived block is AUTHORITATIVE: the two are indexed on spelling vs mechanism and neither can be rendered from the other.
 - [Phase 01]: CORE-11's box stays [ ] and requirements-completed is deliberately EMPTY; wave 28 owns the flip, against the generated block.
 - [Phase 01]: [Phase 01] P28-D1: an OPEN AND UNOWNED silence in the derived residual is an unclosed finding, not a bound — it blocks a CORE-11 discharge row where a classified residual (a)/(b)/(b2) does not. CORE-11 stays `[ ]` with a NAMED blocking row. — Six of the derived block's seven silences carry a residual class, a reason, a probe and a counter-probe; the seventh carries an ownership gap instead. `(ok && globalThis).fetch(url)` and four twins report NOTHING while the SDK twins of the identical operator class report outbound-send — wave 25 closed the operator for the SDK resolver and never reached the global one. CORE-11's sentence enumerates `no global fetch by ANY RECEIVER`, so the gate cannot go red on a shape the prohibition's own statement names, which is the arithmetic e7cc4b6 reverted and the arithmetic plan 01-18 applied to hold this same box open over `const e = eval; e(s)`. The same silence also blocks `no navigator.sendBeacon`. Discharge table and executed probes: 01-28-SUMMARY.md.
+- [Phase 01]: Wave 29 (WR-32): a registry row's CLAUSE is bound to the BRANCHES it names by EXECUTION — ResolverRecord.branches, 60 probes across 32 rows, each read off its own code site. The verifier's own PlusEqualsToken deletion now turns the assembledNames ROW red; the row-level case still passes, which is exactly the seam that was open.
+- [Phase 01]: Wave 29: branches carries a `names` field rather than the reviewer's cheaper flat `probes` array — a flat array proves N probes RUN, not that they CORRESPOND to the N branches the clause names, which is the whole of WR-32.
+- [Phase 01]: Wave 29: FALSIFIED_HANDOFFS records the owning wave as DATA rather than prose inside a clause, each entry carrying the probe that measured its phrase falsified plus that probe's open-state answer — so a widening that never re-adds the phrase turns the entry RED, the direction the vocabulary guard cannot reach. Its pin is expected to fall to ZERO and it deliberately carries NO non-vacuity assertion.
+- [Phase 01]: Wave 29: UNBOUNDED_QUANTIFIERS' reach is DECLARED-PHRASING OR NOTHING. A universal spelled outside the list is unmatched and unbounded — disclosed as limit (c) of four in the generated block on both surfaces, never claimed away.
 
 ### Known Risks Carried Forward
 
@@ -295,8 +316,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T14:10:01.625Z
-**Stopped at:** Completed 01-28-PLAN.md
+**Last session:** 2026-08-24T19:09:37.804Z
+**Stopped at:** Completed 01-29-PLAN.md
 **Resume file:** None
 
 ### Blockers

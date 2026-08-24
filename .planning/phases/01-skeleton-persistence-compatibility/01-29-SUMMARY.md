@@ -649,6 +649,16 @@ None.
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-24*
 
+## Post-Plan Note — one transient suite failure, recorded rather than absorbed
+
+The first `pnpm test` run issued immediately after `state.record-session` and
+`roadmap.update-plan-progress` reported `1 failed | 1274 passed`. Three consecutive
+re-runs are clean at `31 files / 1275 tests`. The cause is a read-during-write race:
+`tests/pins.spec.ts` reads `.planning/STATE.md` at test time and the state handler was
+still writing it. Not a defect in this plan's changes, and recorded here rather than
+smoothed because a single transient failure that nobody writes down is how a real one
+gets dismissed later.
+
 ## Self-Check: PASSED
 
 All modified files exist on disk; all four commits (`4d61c73`, `8eb82cc`, `006756d`, `47e0d0d`) exist in git history; `git diff --diff-filter=D b85ac63 HEAD` reports no deleted files.
