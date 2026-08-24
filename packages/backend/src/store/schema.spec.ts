@@ -276,19 +276,38 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               corrected here, because a long path with a long
  *                               FIRST parameter is the more ordinary shape and it
  *                               is squarely inside the class. Inside the class
- *                               there are TWO shapes and exactly one of them is a
- *                               fixed point: (1) a cut landing inside a `;`
- *                               parameter's `<redacted>` MARKER is stable — a
- *                               second pass re-expands and re-truncates to the
- *                               same byte; (2) a cut landing inside a parameter
- *                               NAME is NOT stable — the second pass sees a
- *                               segment with no `=`, P10-D1 redacts it WHOLE, and
- *                               the value can SHRINK by a byte. Shape (2) used to
- *                               be asserted STABLE from ONE chosen offset
- *                               (WR-28); a sweep of the 71 head lengths around
- *                               that offset finds 11 that are not fixed points,
- *                               so the claim here is now what a sweep finds
- *                               rather than what one offset showed. NEITHER shape
+ *                               there are THREE shapes and exactly one of them is
+ *                               a fixed point (corrected 2026-08-24, WR-35 —
+ *                               RE-DERIVED from `observations.ts`'s own WR-22
+ *                               paragraph, which has enumerated both unstable
+ *                               shapes correctly since it was written): (1) a cut
+ *                               landing inside a `;` parameter's `<redacted>`
+ *                               MARKER is stable — a second pass re-expands and
+ *                               re-truncates to the same byte; (2) a cut landing
+ *                               JUST PAST THE `=` leaves a segment whose value
+ *                               half is EMPTY, and `redactDelimitedSegment`'s
+ *                               CR-07 padding branch redacts it WHOLE, so the
+ *                               retained name is destroyed and the value SHRINKS
+ *                               by a byte — this is the FIRST unstable offset in
+ *                               the band and the one both fixtures build their
+ *                               exemplars on, because they read it out of their
+ *                               own sweep; (3) a cut landing inside a parameter
+ *                               NAME is not stable either — the second pass sees
+ *                               a segment with no `=` at all, P10-D1 redacts it
+ *                               WHOLE, and the value does NOT shrink. Shapes (2)
+ *                               and (3) used to be asserted STABLE from ONE
+ *                               chosen offset (WR-28), and until 2026-08-24 all
+ *                               three disclosures named (3) alone while pointing
+ *                               at an exemplar that exhibits (2). WHAT THE SWEEP
+ *                               ASSERTS IS THE INSTABILITY'S SHAPE, NOT A COUNT
+ *                               (IN-28, 2026-08-24): that the unstable set is
+ *                               NON-EMPTY, CONTIGUOUS and STRICTLY INTERIOR to
+ *                               the swept range. Two bare numbers stood here — a
+ *                               range width and a band size — with no derivation
+ *                               behind either, which is the defect the sibling
+ *                               fixture states in its own words: a number with no
+ *                               derivation goes RED for the wrong reason the day
+ *                               a constant moves. NEITHER shape
  *                               discloses anything new, and that half is MEASURED
  *                               rather than argued: the sweeps assert secret
  *                               absence at BOTH passes at every offset they walk

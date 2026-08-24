@@ -138,13 +138,28 @@
 //             ARRAY literal (`const a = [e.message]; a[0]`, and its `.join("")`
 //             twin).
 //             WHAT WAS WRONG, both halves stated because both were overstated:
-//             (i) a value routed through an OBJECT literal REPORTS — the
-//             object-literal value is itself one of the two guarded POSITIONS,
-//             so `const o = { m: e.message }; o.m` and the direct
-//             `{ error: { m: e.message } }` both fire; (ii) "an accumulator
-//             that is neither a `+=` nor a `.push`" REPORTS — `let s = "";
-//             s = s + e.message` fires `unredacted-concat` through the plain
-//             `+`. Both are asserted in the firing direction below.
+//             (i) a value routed through an object literal AS A NAMED PROPERTY
+//             VALUE reports — `const o = { m: e.message }; o.m` and the direct
+//             `{ error: { m: e.message } }` both fire, because an
+//             object-literal value is itself one of the two guarded POSITIONS.
+//             A SPREAD IS NOT, and that is the SCOPE OF THE CORRECTION rather
+//             than a footnote to it (WR-36, 2026-08-24): `{ ...e }`,
+//             `Object.assign({}, e)` and `structuredClone(e)` each report `[]`
+//             and are OPEN, measured 2026-08-24. `{ ...e }` puts the caught
+//             binding's own enumerable properties straight into the returned
+//             literal, and `derivesFrom` reads a `SpreadAssignment` as neither
+//             a render nor a derivation. THE CORRECTION THAT STOOD HERE NAMED
+//             THE WHOLE CLASS `an OBJECT literal` while having been measured on
+//             two NAMED-PROPERTY shapes — a correction written to remove an
+//             overstatement introducing a narrower one, three lines below the
+//             paragraph that says a residual overstated is the same failure
+//             mode as one understated. All three spread shapes are pinned in
+//             the SAME case as the two firing ones, so a reader meets the
+//             boundary where it is rather than two hundred lines away;
+//             (ii) "an accumulator that is neither a `+=` nor a `.push`"
+//             REPORTS — `let s = ""; s = s + e.message` fires
+//             `unredacted-concat` through the plain `+`. Both are asserted in
+//             the firing direction below.
 //             THE METHOD FINDING, recorded because it is the reusable part: the
 //             enumeration was read off the BRANCHES of `derivesFrom`, which was
 //             the right method and is why items 2, 4 and 5 are right. The step
@@ -1421,12 +1436,20 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
     }
   });
 
-  it("CORRECTED BY EXECUTION (IN-25): the two halves of residual item 3 that REPORT — a value routed through an OBJECT literal, and an accumulator built with a plain `+`", () => {
+  it("CORRECTED BY EXECUTION (IN-25), THEN SCOPED BY EXECUTION (WR-36): a NAMED PROPERTY VALUE of an object literal reports and a SPREAD does not — both directions in ONE case", () => {
     // ITEM 3 NAMED FIVE THINGS AND TWO OF THEM FIRE. The object-literal route
     // fires because an object-literal value is itself one of the two guarded
     // POSITIONS — the branch enumeration missed it by not being crossed with the
     // position rules. The accumulator fires through the plain `+`, which the
     // concat rule reads exactly as it reads `+=`.
+    //
+    // AND THE BOUNDARY OF THAT CORRECTION LIVES HERE, NOT TWO HUNDRED LINES
+    // AWAY (WR-36, 2026-08-24). The IN-25 text named the class `an OBJECT
+    // literal` while having been measured on two NAMED-PROPERTY shapes. A SPREAD
+    // is a value routed through an object literal too and it is SILENT, so the
+    // three spread-shaped counterexamples are asserted in this same case, right
+    // under the two that fire. A reader who meets only the firing half learns a
+    // class that is wider than the measurement.
     expect(
       rulesOf(
         "function f() { try { g(); } catch (e) { const o = { m: e.message }; return { ok: false, error: o.m }; } }",
@@ -1442,9 +1465,27 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
         'function f() { try { g(); } catch (e) { let s = ""; s = s + e.message; return { ok: false, error: s }; } }',
       ),
     ).toEqual(["unredacted-concat"]);
+
+    // THE THREE SPREAD-SHAPED COUNTEREXAMPLES, MEASURED 2026-08-24 (WR-36).
+    // Each is a value routed through an object literal and each is SILENT,
+    // because `derivesFrom` reads a `SpreadAssignment` as neither a render nor a
+    // derivation. They are pinned HERE so that the day one of them closes, the
+    // scoped correction above goes RED and has to be rewritten with it.
+    for (const spread of [
+      "{ ...e }",
+      "Object.assign({}, e)",
+      "structuredClone(e)",
+    ]) {
+      expect(
+        rulesOf(
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${spread} }; } }`,
+        ),
+        `${spread} is a value routed through an object literal and was measured SILENT on 2026-08-24. If it now reports, the IN-25 correction's NAMED-PROPERTY scoping is no longer the boundary and both the comment at the head of this file and the residual case below have to change with it.`,
+      ).toEqual([]);
+    }
   });
 
-  it("RESIDUAL, STILL OPEN AFTER IN-25 — the halves that stay silent: a bare-identifier callee, a comma expression, an `await`, and an ARRAY literal", () => {
+  it("RESIDUAL, STILL OPEN AFTER IN-25 AND AFTER WR-36's SCOPING — a bare-identifier callee, a comma expression, an `await`, an ARRAY literal, and (2026-08-24) the three SPREAD shapes", () => {
     // MEASURED SILENCES, every one, and none of them may be cited as evidence
     // that any rule holds. They are here so the corrected items 2 and 3 go RED
     // the day one of them is closed, which is the same reason the two IN-22
@@ -1474,6 +1515,23 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
         'function f() { try { g(); } catch (e) { const a = [e.message]; return { ok: false, error: a.join("") }; } }',
       ),
     ).toEqual([]);
+    // ADDED 2026-08-24 (WR-36). The three SPREAD shapes belong on the residual
+    // list as well as beside the firing pair: the list is what a reader consults
+    // to ask "what is still open", and a shape corrected out of the firing
+    // paragraph but never added here would be open and unlisted — which is the
+    // exact state WR-36 found the whole class in.
+    for (const spread of [
+      "{ ...e }",
+      "Object.assign({}, e)",
+      "structuredClone(e)",
+    ]) {
+      expect(
+        rulesOf(
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${spread} }; } }`,
+        ),
+        `${spread} is on the OPEN residual list and was measured silent on 2026-08-24. If it reports now, remove it from this list and from the scoped IN-25 correction at the head of this file, in the same commit.`,
+      ).toEqual([]);
+    }
   });
 
   it("RESIDUAL, PINNED (IN-22): a `join` appearing BEFORE its `push` in document order is missed", () => {

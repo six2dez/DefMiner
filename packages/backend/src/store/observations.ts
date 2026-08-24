@@ -455,14 +455,30 @@ export function redactQueryValues(url: string): string {
  * a one-parameter query is; the earlier disclosure scoped it to a query of one
  * segment only, and that scoping was too narrow.
  *
- * Inside the class there are two shapes and only one of them is a fixed point:
+ * Inside the class there are THREE shapes and only one of them is a fixed point.
+ * The unstable pair is the SAME pair the WR-22 paragraph sixty lines above already
+ * enumerates correctly; it is RE-DERIVED from there rather than re-authored, which
+ * is what WR-35 found this paragraph had stopped doing:
  *
  *   a cut landing inside a `;` parameter's `<redacted>` MARKER is stable — the
  *   second pass re-expands the marker and re-truncates to the same byte;
  *
- *   a cut landing inside a parameter NAME is NOT stable — the second pass sees a
- *   segment with no `=`, decision P10-D1 redacts it WHOLE, and the stored value can
- *   SHRINK by a byte.
+ *   a cut landing just past the `=` leaves a segment whose value half is EMPTY,
+ *   and {@link redactDelimitedSegment}'s CR-07 padding branch redacts such a
+ *   segment WHOLE — the retained name is destroyed on the second pass and the
+ *   stored value SHRINKS by a byte. THIS IS THE FIRST UNSTABLE OFFSET IN THE
+ *   BAND, and it is the one the exemplars in `observations.spec.ts` are built on,
+ *   because that fixture reads `headUnstable[0]` out of its own sweep;
+ *
+ *   a cut landing inside a parameter NAME is NOT stable either — the second pass
+ *   sees a segment with no `=` at all, and decision P10-D1 redacts it WHOLE for
+ *   the same reason.
+ *
+ * WHY BOTH ARE NAMED HERE, 2026-08-24 (WR-35). This paragraph, `observations.spec.ts`
+ * and `schema.spec.ts` all named the parameter-NAME mechanism alone — and the offset
+ * their own exemplars use takes the OTHER branch. A disclosure that describes the
+ * one mechanism its exemplar does not exhibit is the same title-versus-mechanism
+ * substitution this phase has now found four times.
  *
  * Both shapes are DISCLOSED in `schema.spec.ts`'s `observations.url` entry and
  * pinned by SWEEPS — not by chosen offsets — in `observations.spec.ts`. The sweeps

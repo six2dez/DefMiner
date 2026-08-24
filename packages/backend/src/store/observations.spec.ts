@@ -996,12 +996,32 @@ describe("normaliseObservedUrl", () => {
     // branch is swept above, and the residual is stated as what the sweep finds.
     //
     // THE MECHANISM, written down so the band stays re-derivable when `URL_MAX`
-    // or the marker text moves. A head-side cut landing INSIDE the `<redacted>`
-    // marker IS a fixed point: the second pass re-expands the marker and
-    // re-truncates to the same byte. A head-side cut landing inside the
-    // parameter NAME is NOT: the second pass sees a `;` segment with no `=` at
-    // all, decision P10-D1 redacts that segment WHOLE, and the stored value can
-    // SHRINK by a byte on the second pass.
+    // or the marker text moves. There are THREE shapes, not two, and the
+    // correction is WR-35, 2026-08-24 — RE-DERIVED from `observations.ts`'s own
+    // WR-22 paragraph, which has enumerated both unstable shapes correctly since
+    // the day it was written, rather than re-authored here.
+    //
+    // (1) A head-side cut landing INSIDE the `<redacted>` marker IS a fixed
+    //     point: the second pass re-expands the marker and re-truncates to the
+    //     same byte.
+    // (2) A head-side cut landing JUST PAST THE `=` leaves a `;` segment whose
+    //     value half is EMPTY. `redactDelimitedSegment`'s CR-07 padding branch
+    //     redacts such a segment WHOLE, so the retained NAME is destroyed on the
+    //     second pass and the string SHRINKS by a byte. THIS IS THE FIRST
+    //     UNSTABLE OFFSET IN THE BAND — swept in this session, the band is
+    //     2019..2029 and n=2019's pass-1 tail is `pppp;jsessionid=`, an `=` with
+    //     nothing after it — and it is therefore the offset `headUnstable[0]`
+    //     hands to the exemplar below.
+    // (3) A head-side cut landing inside the parameter NAME is NOT stable
+    //     either: the second pass sees a `;` segment with no `=` at all, decision
+    //     P10-D1 redacts that segment WHOLE. Swept in this session, that is
+    //     n=2020..2029, whose pass-1 tails are `ppppp;jsessionid`,
+    //     `pppppp;jsessioni` and so on — no `=` anywhere in the last segment.
+    //
+    // ALL THREE DISCLOSURES USED TO NAME (3) ALONE, and the exemplar every one of
+    // them points at exhibits (2). That is the same title-versus-mechanism
+    // substitution CR-08, CR-09 and WR-32 each were, and it is why the exemplar
+    // variable below is now named for the branch it takes.
     //
     // WHAT IS ASSERTED IS THE INSTABILITY'S SHAPE, NOT A LITERAL BAND. Writing
     // `2019` and `2029` into this file would be the same defect one layer up: a
@@ -1058,17 +1078,45 @@ describe("normaliseObservedUrl", () => {
     expect(normaliseObservedUrl(markerCut)).toBe(markerCut);
 
     // The first offset the sweep FOUND unstable — read out of the run, never
-    // hard-coded. The cut lands just past the `=`, so the second pass has a `;`
-    // segment with an empty value half and redacts it whole: one byte shorter.
-    const nameCut = normaliseObservedUrl(
+    // hard-coded. RENAMED 2026-08-24 (WR-35): this was `nameCut`, named for the
+    // parameter-NAME branch, while every assertion under it describes the
+    // EMPTY-VALUE one — the tail it asserts is `;jsessionid=`, an `=` with
+    // nothing after it, which is shape (2) and not shape (3). The cut lands just
+    // past the `=`, the second pass sees a `;` segment with an empty value half,
+    // and the CR-07 padding branch redacts it whole: one byte shorter. A variable
+    // named for a mechanism its own assertions do not exhibit is how a reader
+    // learns the wrong mechanism from a green test.
+    const emptyValueCut = normaliseObservedUrl(
       `https://cdn.test/${"p".repeat(headUnstable[0])};jsessionid=SECRETSESSION`,
     );
+    expect(emptyValueCut.length).toBe(URL_MAX);
+    expect(emptyValueCut.slice(-12)).toBe(";jsessionid=");
+    const emptyValueCutTwice = normaliseObservedUrl(emptyValueCut);
+    expect(emptyValueCutTwice).not.toBe(emptyValueCut);
+    expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1);
+    expect(emptyValueCutTwice.slice(-11)).toBe(";<redacted>");
+
+    // SHAPE (3), THE ONE THE DISCLOSURES USED TO NAME ALONE, PINNED BESIDE IT SO
+    // THE PAIR IS VISIBLE IN ONE PLACE (WR-35). The offset is read out of the
+    // same run — the LAST member of the band — and the discriminator is asserted
+    // rather than described: its final `;` segment carries NO `=` at all, which
+    // is what sends it down P10-D1's whole-segment branch instead of CR-07's
+    // padding branch. It is unstable too, and it does NOT shrink.
+    const nameCut = normaliseObservedUrl(
+      `https://cdn.test/${"p".repeat(headUnstable[headUnstable.length - 1])};jsessionid=SECRETSESSION`,
+    );
     expect(nameCut.length).toBe(URL_MAX);
-    expect(nameCut.slice(-12)).toBe(";jsessionid=");
+    expect(
+      /;[^;]*=/.test(nameCut.slice(nameCut.lastIndexOf(";"))),
+      "the LAST offset of the head-side band was expected to cut inside the parameter NAME, leaving a final `;` segment with no `=`. It has one, so both ends of the band now take the CR-07 padding branch and the two-mechanism disclosure above is stale.",
+    ).toBe(false);
     const nameCutTwice = normaliseObservedUrl(nameCut);
     expect(nameCutTwice).not.toBe(nameCut);
-    expect(nameCutTwice.length).toBe(nameCut.length - 1);
-    expect(nameCutTwice.slice(-11)).toBe(";<redacted>");
+    expect(nameCutTwice.length).toBe(nameCut.length);
+    // THE DISCRIMINATOR, STATED AS AN ASSERTION: shape (2) SHRINKS and shape (3)
+    // does not. If these two ever agree, one of the two branches stopped being
+    // reachable from this band and the disclosure above has to change with it.
+    expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1);
 
     // (c) RESIDUAL, PINNED — the class the sweep above cannot reach, stated
     // against the BRANCH CONDITION and not against the fixture that found it

@@ -3055,9 +3055,24 @@ export function auditSource(file: string, source: string): Violation[] {
   };
 
   /**
-   * The string an expression denotes: a literal, or a single-hop `const` bound to
-   * one. `undefined` means THE WALK COULD NOT READ IT — never "there was nothing
-   * there" — and every caller treats the two differently.
+   * EVERY string an expression can denote: the literal itself, or the whole
+   * collected set of literals `constStrings` recorded for a name — which is every
+   * literal that name is bound to anywhere in the file, through a declaration, an
+   * assignment, a logical assignment or an operator initializer, whatever the
+   * `const`/`let`/`var` spelling. It returns a SET and it can return an EMPTY one;
+   * it never returns `undefined`, and its callers ask about SIZE rather than about
+   * absence.
+   *
+   * CORRECTED 2026-08-24 (IN-27), AND THE PARAGRAPH THAT STOOD HERE WAS NOT WRONG
+   * SO MUCH AS ON THE WRONG FUNCTION. It read "the string an expression denotes: a
+   * literal, or a single-hop `const` bound to one. `undefined` means THE WALK
+   * COULD NOT READ IT" — a correct description of `literalOf`, which is directly
+   * below and which had no docblock at all. It went stale the day CR-10 split the
+   * single-valued reader from the multi-valued one and left the paragraph on the
+   * half it stopped describing. Both registry rows were and are correct, so this
+   * was a code comment and nothing else — which is exactly the kind of drift a
+   * reader has no way to detect, because a docblock is the one artifact in this
+   * file that no assertion reads.
    */
   function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
     if (node === undefined) return NO_LITERALS;
@@ -3071,6 +3086,17 @@ export function auditSource(file: string, source: string): Violation[] {
     return NO_LITERALS;
   }
 
+  /**
+   * The ONE string an expression denotes, for the callers that need exactly one:
+   * a member name, a module specifier. `undefined` means THE WALK COULD NOT READ
+   * IT — never "there was nothing there" — and it is returned for BOTH the
+   * no-binding case and the two-or-more-bindings case, because a name the file
+   * rebinds is a name this reader cannot answer for. Every caller treats that
+   * `undefined` as `outbound-unanalysable` rather than as clean.
+   *
+   * MOVED HERE 2026-08-24 (IN-27) from `literalsOf` above, which is multi-valued
+   * and cannot return `undefined` at all.
+   */
   function literalOf(node: ts.Node | undefined): string | undefined {
     const literals = literalsOf(node);
     if (literals.size !== 1) return undefined;
@@ -5930,10 +5956,23 @@ const RESOLVER_EXEMPTIONS: Readonly<Record<string, string>> = Object.freeze({
   add: "records a Violation into the output array; it resolves no expression and reads no binding.",
   bindString:
     "WRITES a literal into constStrings; it is the collector's setter, and what it feeds is stated by the constStrings row.",
+  // WR-33, REWRITTEN 2026-08-24 AT FULL WEIGHT. What stood here said `collect`
+  // "decides nothing about what an expression IS". That is MATERIALLY FALSE, and
+  // it was false in the worst available place: the guard's own POPULATION 3
+  // paragraph names "an inline branch in `collect`" as residue it cannot see, and
+  // this entry — the entry ON that function — told a reader the residue was not
+  // there. A declared blind spot and the list that excuses it agreeing that
+  // nothing is there is how a blind spot survives a review.
   collect:
-    "the first document-order pass. It invokes the collectors and records bindings; it decides nothing about what an expression IS.",
+    "the first document-order pass: it invokes the collectors and records bindings. IT ALSO DECIDES TWO THINGS INLINE, and both are POPULATION 3 in this guard's own terms - residue enumerated by neither half. (1) Its ASSIGNING_OPERATORS test decides which right-hand expressions ever reach a resolver at all, which is the entirety of CR-12. (2) Its `+=` compound-assembly branch decides that a string accumulation makes a name an UNREADABLE key. Neither decision is a registered mechanism; what covers them instead is the fixtures and the per-operator BranchProbes on the clauses they feed.",
+  // WR-33, REWRITTEN 2026-08-24 AT THE VERIFIER'S WEIGHT, WHICH IS LOWER THAN THE
+  // REVIEWER'S AND THE DIFFERENCE IS THE POINT. The verifier SPLIT this finding:
+  // `collect`'s reason is materially false, `visit`'s is MISLEADING RATHER THAN
+  // FALSE, because each individual resolution genuinely IS delegated. Writing this
+  // one as flatly false would be borrowing weight a measurement declined to give
+  // it — the same defect as an overstated residual, one list over.
   visit:
-    "the second document-order pass. It applies the rules to the bindings collect() produced; every resolution it performs is delegated to a registered mechanism.",
+    "the second document-order pass: it applies the rules to the bindings collect() produced, and each INDIVIDUAL resolution it performs is delegated to a registered mechanism - unwrap, receiverKind, literalOf and the global resolvers are all registry rows. WHAT IS NOT REGISTERED IS THE DISPATCH: which resolver is consulted where. visit chooses unwrap for a call callee and never operatorReceiver, and that choice is the seam CR-11 lived in. TWO FURTHER RULES ARE DECIDED INLINE HERE and are POPULATION 3 for the same reason collect's two are: the require(...) specifier rule, and the navigator-destructure rule.",
   // --- declared at module scope, in the resolver region ---
   shippedFiles:
     "enumerates the .ts files under both SOURCE_ROOTS. A filesystem walk, not an expression resolver.",
@@ -8958,6 +8997,28 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // is `scripts/ci/**/*.spec.ts` and the second is the one that matches here.
   const LEDGER = ".planning/REQUIREMENTS.md";
 
+  /**
+   * THE EXPECTED STATE OF CORE-11's CHECKBOX, AS A VALUE THE SUITE CAN SEE.
+   *
+   * WR-34, 2026-08-24, AND IT IS THE SMALLEST FINDING IN ITS REPORT SITTING
+   * CLOSEST TO THE WOUND. The one case in this repository named for CORE-11's box
+   * matched it with a regex whose checkbox position was the CHARACTER CLASS
+   * `[<space>x]` — accepting a space OR an `x` — and then asserted a ROW COUNT. It would have stayed green
+   * through the exact flip that has been reverted twice, at `e7cc4b6` and at
+   * `faca607`. A test titled for an enforcement its body does not perform is this
+   * phase's own recurring defect, and it had installed itself in the case named
+   * for the box those two reverts are about.
+   *
+   * THE AUTOMATED VERIFY COMMAND IN EVERY PLAN THAT TOUCHES THIS LEDGER GREPS THE
+   * SAME TWO-STATE CHARACTER CLASS — STATE-AGNOSTIC ON PURPOSE, in waves 19, 27, 28,
+   * 29, 30, 31 and 32 alike, because `[ ]` is a legitimate outcome of a discharge
+   * and a verify demanding `[x]` would be PRESSURE ON the discharge rather than a
+   * check OF it. That grep asserts the entry is present and well formed. THIS
+   * constant asserts WHICH STATE it is in. The two are complementary and neither
+   * replaces the other.
+   */
+  const CORE11_BOX_EXPECTED = "- [ ] **CORE-11**";
+
   it("the planning ledger read is NON-EMPTY and carries BOTH sentinels — non-vacuity, asserted BEFORE the rule", () => {
     const text = readPlanningLedger(LEDGER);
     expect(
@@ -9016,15 +9077,23 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     ).toBe(RESOLVER_REGISTRY.length);
   });
 
-  it("CORE-11's entry is present and well-formed, and its box is what plan 01-27 left it", () => {
+  it("CORE-11's entry is present and well-formed, and ITS BOX IS THE STATE `CORE11_BOX_EXPECTED` PINS", () => {
     const text = readPlanningLedger(LEDGER);
     const rows = text
       .split("\n")
       .filter((l) => /^- \[[ x]\] \*\*CORE-11\*\*/.test(l));
+    // RETAINED, not replaced. The row-count assertion is what makes the state
+    // assertion below meaningful: a state check against zero rows, or against the
+    // first of two, would pass having measured the wrong thing.
     expect(
       rows.length,
       `${LEDGER} should carry exactly one CORE-11 checkbox row; it carries ${rows.length}.`,
     ).toBe(1);
+    const row = rows[0] ?? "";
+    expect(
+      row.startsWith(CORE11_BOX_EXPECTED),
+      `CORE-11's checkbox in ${LEDGER} is not the state this suite pins.\n  PINNED  : ${CORE11_BOX_EXPECTED}\n  SHIPPED : ${row.slice(0, 24)}\n\nThis box has been flipped early and REVERTED TWICE — at \`e7cc4b6\` after gap-closure round 3 and at \`faca607\` after round 4 — and until 2026-08-24 the one case named for it could not see it: its regex was the character class \`[ x]\`, which matches BOTH states, so it stayed green through both flips and both reverts.\n\nTHERE IS EXACTLY ONE LEGITIMATE WAY OUT AND EDITING THIS CONSTANT ON ITS OWN IS NOT IT. \`CORE11_BOX_EXPECTED\` changes in the SAME COMMIT as the ledger row AND as a re-executed discharge table that probes every surface CORE-11's own first sentence enumerates — with, per row, the rule identifier the probe produced, the fixture that asserts it and the plan that watched that fixture fail. If ANY enumerated surface still carries a named blocking shape, the box stays \`[ ]\`, that row is named in the ledger, and this constant says \`[ ]\`. \`[ ]\` IS A CORRECT OUTCOME; an unexamined \`[x]\` is not.`,
+    ).toBe(true);
   });
 
   // THE TEXT IS BOUND TO THE REGISTRY, BY BYTES.
