@@ -188,7 +188,7 @@ Plans:
 
 **Wave 30** *(blocked on 01-29 — the widening is proven at branch granularity against the mechanism wave 29 builds)*
 
-- [ ] 01-30-PLAN.md — **CR-13, the sharpest**: `const k = b ? "requests" : "net"; sdk[k].send(req)` reports nothing, one hop, while all four twins of the identical conditional report. Closed at the seam by an operator-literal descent built on the existing `operatorOperands` — one definition, not a fourth copy — wired into both the declaration and the assignment branch in the same plan, with the two registry clauses it falsifies word for word (`constStrings`, `literalsOf`) rewritten from the code rather than from the paragraph, every measured silence re-executed against the widened walk, three separately executed mutation proofs and a real-tree zero after each widening — *wave 30*
+- [x] 01-30-PLAN.md — **CR-13, the sharpest**: `const k = b ? "requests" : "net"; sdk[k].send(req)` reports nothing, one hop, while all four twins of the identical conditional report. Closed at the seam by an operator-literal descent built on the existing `operatorOperands` — one definition, not a fourth copy — wired into both the declaration and the assignment branch in the same plan, with the two registry clauses it falsifies word for word (`constStrings`, `literalsOf`) rewritten from the code rather than from the paragraph, every measured silence re-executed against the widened walk, three separately executed mutation proofs and a real-tree zero after each widening — *wave 30*
 
 **Wave 31** *(blocked on 01-30 — the assembled-key shapes run through wave 30's descent)*
 
