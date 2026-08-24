@@ -160,7 +160,7 @@ Plans:
 
 **Wave 23** *(gap closure round 5 — re-verification 2026-08-24 kept UAT gap 2 open for its THIRD distinct cause and found the ledger moving the wrong way: CORE-11's box was checked against a disclosure falsified in three sentences; blocked on Wave 22)*
 
-- [ ] 01-23-PLAN.md — **CR-09, the blocker**: `collect(sf)` completes before `visit(sf)`, so the READ-position bound round 4 wrote into five artifacts to replace the last false one is itself false — seven executed shapes report where it says they are silent, and the fixture pinning it is green because its BINDINGS are inverted, not its read. The measured binding-declaration-order bound written in its place, the fixture split so each half is sensitive to the variable its title names, and the falsified clause marked-but-preserved in `REQUIREMENTS.md` — *wave 23*
+- [x] 01-23-PLAN.md — **CR-09, the blocker**: `collect(sf)` completes before `visit(sf)`, so the READ-position bound round 4 wrote into five artifacts to replace the last false one is itself false — seven executed shapes report where it says they are silent, and the fixture pinning it is green because its BINDINGS are inverted, not its read. The measured binding-declaration-order bound written in its place, the fixture split so each half is sensitive to the variable its title names, and the falsified clause marked-but-preserved in `REQUIREMENTS.md` — *wave 23*
 
 **Wave 24** *(blocked on 01-23 — shares `outbound-prohibition.spec.ts`, and narrowing a false sentence produces a narrower false sentence)*
 

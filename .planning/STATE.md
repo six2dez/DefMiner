@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-22-PLAN.md
-last_updated: "2026-08-24T11:22:15.459Z"
+stopped_at: Completed 01-23-PLAN.md
+last_updated: "2026-08-24T11:43:24.704Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: f2383cffe43f716f622826c122a458e0be540ecb
+state_head: 025e2691e3168c5ffa3f305c9afa0a93427f9fbf
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 28
-  completed_plans: 22
+  completed_plans: 23
 ---
 
 # Project State
@@ -28,29 +28,32 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 1 of 28
-Status: Executing Phase 01
-Last activity: 2026-08-24 — Phase 01 execution started
+Plan: 24 of 28
+Status: Executing Phase 01 — 01-23 complete, 01-24 next
+Last activity: 2026-08-24 — Completed 01-23 (CR-09: the READ-position bound deleted and replaced with the collect/visit bound)
 
-Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
+Progress: [████████░░] 82% of phase 01 (23 of 28 plans)
 
 > The frontmatter's project-wide bar is still not recomputed here: `state.update-progress`
 > returned `progress percent withheld by buildStateFrontmatter` on this run too — it has
-> now done so on SEVEN consecutive plans (01-07 … 01-11, 01-14 and 01-17), so this is the
-> handler's steady behaviour on this repo and not a transient. The figure above is the
-> phase-local one, computed from the 17 PLAN / 17 SUMMARY files on disk and stated with
-> its basis rather than as an unexplained number.
+> now done so on EIGHT consecutive plans (01-07 … 01-11, 01-14, 01-17 and 01-23), so this
+> is the handler's steady behaviour on this repo and not a transient. The figure above is
+> the phase-local one, computed from the 28 PLAN / 23 SUMMARY files on disk and stated
+> with its basis rather than as an unexplained number.
 >
 > THE PROSE ABOVE WENT STALE AGAIN AND IS CORRECTED AGAIN, named rather than fixed
-> quietly, because the SHAPE of the staleness is the point. It read "Plan: 4 of 22" and
-> "100% of phase 01 (17 of 17 plans)" while 22 PLAN files and 20 SUMMARY files sat on
-> disk — so the bar read 100% with two plans unwritten, which is the SAME
-> confident-green failure the identical note recorded at 01-17 for the 14 -> 17 move.
+> quietly, because the SHAPE of the staleness is the point and it is the same shape a
+> third time. It read "Plan: 2 of 28" and "91% of phase 01 (20 of 22 plans)" while 28
+> PLAN files and 23 SUMMARY files sat on disk — so the counter had been reset to 1 at the
+> start of this execution run and `state.advance-plan` then incremented it to 2, twenty-one
+> plans behind the truth, while the bar quoted a 22-plan denominator that six new plans had
+> already superseded. That is the SAME confident-wrong failure the identical notes recorded
+> at 01-17 for the 14 -> 17 move and at 01-20 for the 17 -> 22 move.
 > The `Plan:` counter is what drifts: `state.advance-plan` increments whatever number is
-> already there, so once it falls behind it stays behind and the bar built on it reads
-> full. Recomputed here from the files on disk (22 PLAN / 20 SUMMARY = 91%), which is
-> the only number that cannot drift, and the `Plan:` counter set to 21 from the same
-> count rather than from its own previous value.
+> already there, so once it is reset or falls behind it stays wrong and any bar built on it
+> is wrong with it. Recomputed here from the files on disk (28 PLAN / 23 SUMMARY = 82%),
+> which is the only number that cannot drift, and the `Plan:` counter set to 24 from the
+> same count rather than from its own previous value.
 
 ## Performance Metrics
 
@@ -95,6 +98,7 @@ Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
 | Phase 01 P20 | 25 min | 2 tasks | 3 files |
 | Phase 01 P21 | 12 min | 2 tasks | 1 files |
 | Phase 01 P22 | 13 min | 2 tasks | 3 files |
+| Phase 01 P23 | 15 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -198,6 +202,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: A gate's detection predicate is proven against the real file's bytes by planting a literal into the text in memory, not only against a hand-written fixture.
 - [Phase 01]: padded_segments_reached keeps bool(raw_rows) and adds any('?' in r ...) — the two catch different empty cases; an all() over an empty generator is True and that answer is written into committed evidence.
 - [Phase 01]: No live Caido cycle for IN-21: the predicate is pure and its empty-generator branch is structurally unreachable on a passing live run, so standalone execution proves strictly more.
+- [Phase 01]: P23-D1: the two requirement-tier ledgers are marked IDENTICALLY — the same inline `FALSIFIED 2026-08-24 (CR-09)` token inserted at the falsified clause in both `REQUIREMENTS.md` and `STATE.md` — so one repository-wide grep finds every falsified clause — An earlier draft marked REQUIREMENTS.md only, on the reasoning that a decision log is read as a history in date order where the newest amendment is live by construction. That is a READING CONVENTION, and this round exists precisely because a sentence propagated by being copied and read OUT of order across four artifacts — an argument that holds for one ledger holds for the other. The marker is an INSERTION beside the words and preserves them byte-identical, so it costs append-never-rewrite nothing in either file, which means the asymmetry bought no protection it would otherwise lose.
+- [Phase 01]: P23-D2: WINDOWS.md entry 25 — this correction's own first replacement entry — QUOTED the superseded wording instead of naming it, and was closed through `gsd-tools windows fixed` and superseded by entry 26 rather than hand-edited — Quoting put the falsified clause on an OPEN ledger entry, which is the exact thing the plan's own criterion forbids and the same restate-rather-than-name mistake the gate file's rule exists to prevent. Caught by running the criterion rather than by reading. Hand-editing the JSON block would have desynchronised the frontmatter counters and hidden the error; closing through the tool leaves the mistake visible in the record and keeps the ledger's tooling authoritative.
+- [Phase 01]: P23-D3: CORE-11's box stays `[ ]` after plan 01-23, deliberately — wave 28 owns the flip and only against wave 27's DERIVED residual, never an authored one — `faca607` reverted the box because the `[x]` plan 01-19 set had been flipped against the very sentence CR-09 falsified — the second time a flip was made against a disclosure whose stated reach exceeded its executed reach, after `e7cc4b6`. Flipping here would repeat the act that revert undid. Independently confirmed by the shared-ID gate: `requirements ready-ids` reports 0/1 ready, because sibling plans in this phase also declare CORE-11 and have not finished.
+- [Phase 01]: P23-D4: the measured bound on the outbound gate is the DECLARATION ORDER OF THE BINDINGS RELATIVE TO EACH OTHER, not the position of a read — `collect(sf)` completes before `visit(sf)` begins, so a use may sit above every declaration in the file — Derived from two lines of code rather than from the previous paragraph, which is what the last four rounds each did wrongly. Seven shapes the old sentence called silent were executed and all seven report. A chain resolves to ANY DEPTH provided each link's declaration follows the declaration of the name it is grown from, because every alias set is grown by consulting the LIVE set during that one collect pass; one inverted link silences it wherever the read sits. Keys stop at one hop for a different reason — `constStrings` and `assembledNames` read the INITIALIZER's shape and never the live set — and that contrast is now stated in one comment beside the key cases.
 
 ### Known Risks Carried Forward
 
@@ -240,8 +248,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T09:49:53.349Z
-**Stopped at:** Completed 01-22-PLAN.md
+**Last session:** 2026-08-24T11:43:24.684Z
+**Stopped at:** Completed 01-23-PLAN.md
 **Resume file:** None
 
 ### Blockers
