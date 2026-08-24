@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
-status: executing
-stopped_at: Completed 01-27-PLAN.md
-last_updated: "2026-08-24T13:56:05.214Z"
+status: verifying
+stopped_at: Completed 01-28-PLAN.md
+last_updated: "2026-08-24T14:10:29.828Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 6201435318bdba2fe91693c7ba9cd4e42fd13312
+state_head: ba64b9dc0faf93085637da5185f2dfd08b96a859
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 28
-  completed_plans: 27
+  completed_plans: 28
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
 Plan: 28 of 28
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-24 — Completed 01-26 (WR-28/29/30/31 + IN-23..26: six disclosures brought level with their code, the head-side residual swept instead of pinned at one offset)
 
 Progress: [█████████▒] 92% of phase 01 (26 of 28 plans)
@@ -130,6 +130,7 @@ Progress: [█████████▒] 92% of phase 01 (26 of 28 plans)
 | Phase 01 P25 | 21 min | 3 tasks | 2 files |
 | Phase 01 P26 | 30 min | 3 tasks | 7 files |
 | Phase 01 P27 | 22 min | 4 tasks | 4 files |
+| Phase 01 P28 | 8 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -251,6 +252,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The coverage guard's bound is REGISTERED OR LISTED over TWO enumerated populations — collectors matching a declared convention and resolver functions in both scopes — not 'detectable'. The third population (inline branches, differently-shaped bindings) is declared in its docblock and in the generated limits paragraph.
 - [Phase 01]: The mechanism table stays HAND-WRITTEN and the derived block is AUTHORITATIVE: the two are indexed on spelling vs mechanism and neither can be rendered from the other.
 - [Phase 01]: CORE-11's box stays [ ] and requirements-completed is deliberately EMPTY; wave 28 owns the flip, against the generated block.
+- [Phase 01]: [Phase 01] P28-D1: an OPEN AND UNOWNED silence in the derived residual is an unclosed finding, not a bound — it blocks a CORE-11 discharge row where a classified residual (a)/(b)/(b2) does not. CORE-11 stays `[ ]` with a NAMED blocking row. — Six of the derived block's seven silences carry a residual class, a reason, a probe and a counter-probe; the seventh carries an ownership gap instead. `(ok && globalThis).fetch(url)` and four twins report NOTHING while the SDK twins of the identical operator class report outbound-send — wave 25 closed the operator for the SDK resolver and never reached the global one. CORE-11's sentence enumerates `no global fetch by ANY RECEIVER`, so the gate cannot go red on a shape the prohibition's own statement names, which is the arithmetic e7cc4b6 reverted and the arithmetic plan 01-18 applied to hold this same box open over `const e = eval; e(s)`. The same silence also blocks `no navigator.sendBeacon`. Discharge table and executed probes: 01-28-SUMMARY.md.
 
 ### Known Risks Carried Forward
 
@@ -293,8 +295,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T13:55:54.845Z
-**Stopped at:** Completed 01-27-PLAN.md
+**Last session:** 2026-08-24T14:10:01.625Z
+**Stopped at:** Completed 01-28-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -302,3 +304,4 @@ None.
 - SPIKE-10 cross-day cache hit rate is UNDEFINED (1 day sampled, denominator 0) and collection has STOPPED — the recorder LaunchAgent was uninstalled. **CORRECTION (2026-08-21, plan 01-08): the 8998 INSTANCE WAS NOT KILLED.** This line previously claimed it was, per plan 00-04's teardown responsibility; that claim is false. `caido-cli --data-path .spike/recorder-data --listen 127.0.0.1:8998 --no-open --debug` is pid 79273 and has been up since 2026-08-20 (16h44m elapsed when observed). It is deliberately LEFT RUNNING — 01-08 found it while enumerating plugin databases and has no mandate to kill an operator process. Its plugin database holds `cache_log`, not DefMiner's tables, so it affects no count in 01-08. **Worth an operator decision, not taken here and NOT assumed either way:** the uninstalled LaunchAgent is what drove collection, so a bare instance being up does not by itself mean sampling resumed — but this line's opening premise (collection stopped, cross-day denominator 0) now rests on a teardown that provably only half happened, so it should be checked rather than inherited. 01-08 did not check it: the SPIKE-10 question is outside this plan's scope and re-opening it is the operator's call. Phase 1 budgets against CACHE_HIT_RATE_ASSUMED=0.40. To re-measure: bash scripts/spike/recorder-agent.sh install, let it span 2+ calendar days, then re-run analyse-spike-10.py + aggregate.py + render-go-no-go.py. Revisit after 2026-09-03.
 - DISCLOSED OPEN (plan 01-20, WR-22): normaliseObservedUrl is a fixed point across the swept range (parameter-name lengths 1..64 at 300/900 params, 128 cuts) but NOT for every input. Two no-separator classes remain — a head-side cut can sever a `;` parameter marker (severed but stable), and a single-segment query cut inside its NAME is not a fixed point at all. Neither discloses anything new (recordObservation applies the function once per row). Both pinned in observations.spec.ts and disclosed in schema.spec.ts.
 - CORE-11's residual class is still open: six consecutive rounds of bounds authored rather than derived. Wave 27 owns the derivation; wave 28 owns the CORE-11 checkbox flip, and only against the derived text.
+- [Phase 01] CORE-11 blocked by silence-operator-around-global-receiver: `(ok && globalThis).fetch(url)`, `(globalThis ?? self)`, `(globalThis || self)`, `(b ? globalThis : self)`, `(ok && window)` and `(ok && navigator).sendBeacon(u,d)` all report NOTHING. Blocks TWO enumerated CORE-11 clauses. Scoped fix: reach operatorReceiver from the GLOBAL receiver path as receiverKind/keyReceiver already do. See 01-28-SUMMARY.md section 4.

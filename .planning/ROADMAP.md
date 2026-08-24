@@ -180,7 +180,7 @@ Plans:
 
 **Wave 28** *(blocked on 01-27 — the residual it flips against does not exist until then)*
 
-- [ ] 01-28-PLAN.md — **CORE-11's flip, and only then**: the box has been reverted twice, at `e7cc4b6` and `faca607`, both times because its Complete status rested on a disclosure that turned out false. Discharged item by item as a table of executed results — one row per surface the requirement's own sentence names plus one per shape this round closed, each with its rule identifier, its fixture title and the summary where that fixture was observed failing — flipped against the DERIVED residual verified current before the box is touched, with a state-agnostic verify so the honest `[ ]` outcome cannot fail its own gate — *wave 28*
+- [x] 01-28-PLAN.md — **CORE-11's flip, and only then**: the box has been reverted twice, at `e7cc4b6` and `faca607`, both times because its Complete status rested on a disclosure that turned out false. Discharged item by item as a table of executed results — one row per surface the requirement's own sentence names plus one per shape this round closed, each with its rule identifier, its fixture title and the summary where that fixture was observed failing — flipped against the DERIVED residual verified current before the box is touched, with a state-agnostic verify so the honest `[ ]` outcome cannot fail its own gate — *wave 28*
 
 ### Phase 2: Error Containment & Observability
 
