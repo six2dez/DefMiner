@@ -117,6 +117,37 @@
 //        AND absent from this list, which is the failure mode this enumeration
 //        exists to prevent.
 //
+//    WHICH MECHANISM READS WHICH SPELLING — THE TABLE, added 2026-08-24 (CR-08),
+//    and it is the part of this fix meant to stop the defect RECURRING rather
+//    than to fix this instance of it. CR-08's finding was not only that shapes
+//    were missed; it was that a fixture resolving through `constStrings` sat
+//    under the assembled-key rule as that rule's bound, green whether or not the
+//    rule worked. A reader with this table cannot make that substitution again,
+//    because every fixture below names its mechanism in its own title and every
+//    mechanism here names the shapes it — and only it — resolves.
+//
+//      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
+//      -------------------------------------    -----------------    ---------------------
+//      sdk["requests"]                          literalOf            outbound-send
+//      const r = "requests"; sdk[r]             constStrings         outbound-send
+//      sdk["req" + "uests"]                     isAssembledKey       outbound-unanalysable
+//      const k = "req"+"uests"; sdk[k]          assembledNames       outbound-unanalysable
+//        (and the let/assignment, template, .join("") and opaque-call spellings
+//         of that same one-hop binding — all `assembledNames`)
+//      sdk[b ? "requests" : "net"]              conditional branch   outbound-send
+//                                               of receiverKind
+//      sdk[(0, "requests")]                     unwrap's CommaToken  outbound-send
+//                                               arm, then literalOf
+//      const a="requests"; const b=a; sdk[b]    NOTHING              [] — residual (a)
+//      ctx[root] where root is a PARAMETER      NOTHING              [] — residual (b)
+//      cur[key] where key is a LOOP BINDING     NOTHING              [] — residual (b)
+//      x[i + 1] / MIGRATIONS[len - 1]           isProvablyNumeric    [] — an index, not a name
+//
+//    Everything in the NOTHING rows is a measured silence, not a bound: reverting
+//    any branch in this file leaves those rows green. They are asserted below as
+//    silences and labelled as such, so none of them can ever again be cited as
+//    evidence that some rule holds.
+//
 //    THE RESIDUAL, precisely, and it has THREE parts after the 2026-08-22
 //    widening:
 //      (a) a value that flows through a FUNCTION BOUNDARY, or through MORE THAN
@@ -444,10 +475,35 @@ function rootHasSubdirectory(root: string): boolean {
  * clean. Parens, `as`, `satisfies`, `!` and the legacy `<T>x` assertion all mean
  * "the same value, differently typed", so all five unwrap.
  *
- * DUPLICATED DELIBERATELY: `store/error-redaction.spec.ts` needs the same helper
- * and gets its own copy, per boundary 3 in the header. Sharing it would mean one
- * gate's refactor silently changing the other gate's scope, and these two gates
- * enforce different requirements for different reasons.
+ * A COMMA SEQUENCE UNWRAPS TOO, ADDED 2026-08-24 (CR-08), AND THE PLACEMENT IS A
+ * DECISION WITH A BLAST RADIUS — RECORDED HERE RATHER THAN LEFT TO BE FOUND.
+ * `(0, "requests")` IS `"requests"`: a comma expression's value is its rightmost
+ * operand, universally, at every call site. That is the same claim the five
+ * wrappers above make — "the same value, differently expressed" — so it belongs
+ * here and not in one caller.
+ *
+ * BLAST RADIUS, STATED EXPLICITLY BECAUSE IT IS WIDE, AND MEASURED RATHER THAN
+ * ASSUMED. `unwrap` is called from `isProvablyNumeric`, `isAssembledKey`,
+ * `receiverKind`, `literalOf`, `isFetchExpression`, `isNavigatorReceiver` and
+ * `isGlobalReceiver` — SEVEN callers, all of which change at once. That is the
+ * point rather than a cost: the alternative, resolving commas only in key
+ * position, would leave `sdk[(0, "requests")]` reported while `(0, sdk.requests)
+ * .send(req)` stayed silent, which is a NEW asymmetry of exactly the kind CR-08
+ * was raised to remove.
+ *
+ * WHAT THE WIDENING ACTUALLY CHANGED, executed with the block removed and
+ * restored rather than predicted — three shapes moved from `[]` to reported:
+ * `(0, sdk.requests).send(req)`, `const r = (0, sdk.requests); r.send(req)`, and
+ * `(0, eval)(s)`. `(0, globalThis.fetch)(url)` already reported by another path
+ * and is NOT a gain of this change; it is named here so nobody credits it to one.
+ *
+ * REAL-TREE COST: none measured. 23 files over both `SOURCE_ROOTS`, zero
+ * violations, run after the block landed.
+ *
+ * A NOTE ON WRITING FIXTURES FOR THIS. `await (X).send(req)` does NOT parse as an
+ * await of a parenthesised expression — TS reads `await(X)` as a CALL and `.send`
+ * as a member of its result, so such a fixture is green for a reason that has
+ * nothing to do with any rule here. Comma fixtures below therefore omit `await`.
  */
 function unwrap(node: ts.Expression): ts.Expression {
   let current = node;
@@ -460,6 +516,13 @@ function unwrap(node: ts.Expression): ts.Expression {
       ts.isTypeAssertionExpression(current)
     ) {
       current = current.expression;
+      continue;
+    }
+    if (
+      ts.isBinaryExpression(current) &&
+      current.operatorToken.kind === ts.SyntaxKind.CommaToken
+    ) {
+      current = current.right;
       continue;
     }
     return current;
@@ -772,6 +835,47 @@ export function auditSource(file: string, source: string): Violation[] {
   const poisonedNumericNames = new Set<string>();
 
   /**
+   * WHAT A READABLE KEY IS — DEFINED EXACTLY ONCE, CALLED FROM EVERY BRANCH.
+   *
+   * Factored out 2026-08-24 (CR-08). A conditional key needs this same resolution
+   * run twice, once per branch, and TWO COPIES OF "WHAT A READABLE KEY IS" IS HOW
+   * boundary 2 AND THE CODE CAME APART IN THE FIRST PLACE. One definition, three
+   * call sites (the direct key and both conditional branches), so they cannot
+   * disagree about what the walk can read.
+   *
+   * The ORDER is load-bearing and is the order below:
+   *   1. a key that REDUCES to a literal is a NAMED receiver (`constStrings`) —
+   *      first, so `const r = "requests"; sdk[r].send(req)` keeps reporting
+   *      `outbound-send` and is never downgraded to unanalysable;
+   *   2. a key the walk WATCHES being assembled inline is UNREADABLE
+   *      (`isAssembledKey`);
+   *   3. a key bound ONE HOP back to such an assembly is UNREADABLE
+   *      (`assembledNames`);
+   *   4. anything else — a parameter, a loop binding, a name the walk never saw
+   *      bound, more than one hop — is NOT a receiver. That is residual (b), set
+   *      by real-tree measurement rather than by preference.
+   */
+  const keyReceiver = (key: ts.Expression): ReceiverKind => {
+    const literal = literalOf(key);
+    if (literal !== undefined)
+      return RECEIVERS.has(literal) ? literal : undefined;
+    // The key will not reduce. If the walk can SEE it being assembled, it says
+    // so rather than treating the result as an ordinary object; a key it merely
+    // cannot follow is the disclosed one-more-hop residual, not concealment.
+    if (isAssembledKey(key, numericNames, poisonedNumericNames)) {
+      return UNREADABLE_RECEIVER;
+    }
+    // CR-08: the SAME assembly, one hop back. A name the walk watched being
+    // assembled is a key it saw being hidden — binding it first hides nothing
+    // more, and the member-level and global-level paths have always said so.
+    const identifier = unwrap(key);
+    if (ts.isIdentifier(identifier) && assembledNames.has(identifier.text)) {
+      return UNREADABLE_RECEIVER;
+    }
+    return undefined;
+  };
+
+  /**
    * The outbound receiver an expression denotes — or the admission that the walk
    * cannot tell, which is the third state and NOT the same as "not a receiver".
    */
@@ -784,31 +888,25 @@ export function auditSource(file: string, source: string): Violation[] {
       return inner.name.text;
     }
     if (ts.isElementAccessExpression(inner)) {
-      const key = literalOf(inner.argumentExpression);
-      if (key !== undefined) return RECEIVERS.has(key) ? key : undefined;
-      // The key will not reduce. If the walk can SEE it being assembled, it says
-      // so rather than treating the result as an ordinary object; a key it merely
-      // cannot follow is the disclosed one-more-hop residual, not concealment.
-      if (
-        isAssembledKey(
-          inner.argumentExpression,
-          numericNames,
-          poisonedNumericNames,
-        )
-      ) {
-        return UNREADABLE_RECEIVER;
+      const key = unwrap(inner.argumentExpression);
+      // A CONDITIONAL KEY IS READ ON BOTH BRANCHES, with `initializerReceiver`'s
+      // semantics mirrored rather than reinvented: a receiver that is outbound on
+      // one path is outbound. `sdk[b ? "requests" : "net"]` HIDES NOTHING — both
+      // keys are string literals naming outbound receivers — so it resolves to a
+      // NAMED receiver and reports `outbound-send`. Calling it unanalysable would
+      // be a second overclaim, quieter and in the opposite direction: a site the
+      // walk can read COMPLETELY, reported as one it cannot read.
+      if (ts.isConditionalExpression(key)) {
+        const whenTrue = keyReceiver(key.whenTrue);
+        const whenFalse = keyReceiver(key.whenFalse);
+        if (typeof whenTrue === "string") return whenTrue;
+        if (typeof whenFalse === "string") return whenFalse;
+        return whenTrue === UNREADABLE_RECEIVER ||
+          whenFalse === UNREADABLE_RECEIVER
+          ? UNREADABLE_RECEIVER
+          : undefined;
       }
-      // CR-08: the SAME assembly, one hop back. A name the walk watched being
-      // assembled is a key it saw being hidden — binding it first hides nothing
-      // more, and the member-level and global-level paths have always said so.
-      // A key that reduced to a literal was already resolved above, so the
-      // positive control (`const r = "requests"`) is still a NAMED receiver and
-      // is never downgraded to unreadable by this branch.
-      const identifier = unwrap(inner.argumentExpression);
-      if (ts.isIdentifier(identifier) && assembledNames.has(identifier.text)) {
-        return UNREADABLE_RECEIVER;
-      }
-      return undefined;
+      return keyReceiver(key);
     }
     if (ts.isIdentifier(inner)) {
       const alias = receiverAliases.get(inner.text);
@@ -1750,14 +1848,14 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
   const rulesOf = (src: string, file = "fixture.ts"): string[] =>
     auditSource(file, src).map((v) => v.rule);
 
-  it("outbound-unanalysable fires on an ASSEMBLED receiver key", () => {
+  it("through isAssembledKey: an INLINE assembled receiver key is unreadable", () => {
     expect(
       rulesOf('await sdk["req" + "uests"].send(req);'),
       'sdk["req" + "uests"].send(req) still reports clean',
     ).toContain("outbound-unanalysable");
   });
 
-  it("outbound-unanalysable fires on an assembled receiver key bound to a name first", () => {
+  it("through unreadableAliases: an unreadable RECEIVER EXPRESSION bound to a name reports where the name is USED", () => {
     // The binding is remembered and the report lands where the name is USED as a
     // receiver, which is what keeps an ordinary dictionary read that is never a
     // receiver out of the violation list.
@@ -1797,7 +1895,28 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
-  it("outbound-unanalysable fires on an assembled MEMBER of an identified global receiver", () => {
+  it.each([
+    ["a `+` concatenation", 'const k = "req" + "uests";'],
+    ["the ASSIGNMENT spelling", 'let k;\nk = "req" + "uests";'],
+    ["a TEMPLATE interpolation", 'let k = `req${"uests"}`;'],
+    ["an ARRAY join", 'const k = ["req", "uests"].join("");'],
+    ["an opaque CALL result", "const k = g();"],
+  ])(
+    "through assembledNames: every spelling of a bound assembly is unreadable — %s",
+    (_label, binding) => {
+      // The five shapes 01-VERIFICATION.md's CR-08 probe executed, every one of
+      // which returned `[]` before 2026-08-24. MECHANISM IS `assembledNames` for
+      // all five: none of these keys reduces to a literal, so `constStrings` and
+      // `literalOf` cannot resolve any of them and reverting them changes nothing
+      // here. Reverting the `assembledNames` consultation drives all five red.
+      expect(
+        rulesOf(`${binding}\nawait sdk[k].send(req);`),
+        `${binding} sdk[k].send(req) still reports clean`,
+      ).toContain("outbound-unanalysable");
+    },
+  );
+
+  it("through the global-member path: an assembled MEMBER of an identified global receiver is unreadable", () => {
     // The sharper of the two shapes: the receiver is POSITIVELY identified —
     // `isGlobalReceiver` says so — and it is the member name that will not
     // reduce, so every global branch simply never ran.
@@ -1810,28 +1929,113 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
-  it("outbound-unanalysable fires on a DESTRUCTURE off an assembled receiver key", () => {
+  it("through isAssembledKey plus the destructure collector: a DESTRUCTURE off an assembled key is unreadable", () => {
     expect(
       rulesOf('const { send } = sdk["req" + "uests"];\nawait send(req);'),
     ).toContain("outbound-unanalysable");
   });
 
-  it("the TWO-HOP shape is still the DISCLOSED residual, and this asserts what it ACTUALLY reports", () => {
-    // Measured on 2026-08-22, not assumed: a bare identifier key is not evidence
-    // of concealment, it is the one-more-hop indirection boundary 2 states as the
-    // residual — so this reports NOTHING, and that fact is written down here
-    // rather than left for the next reader to discover with a probe.
+  it("through nothing: the TWO-HOP shape is still the DISCLOSED residual, and this asserts what it ACTUALLY reports", () => {
+    // Measured on 2026-08-22, not assumed: a bare identifier key the walk never
+    // watched being bound to an assembly is not evidence of concealment, it is
+    // the one-more-hop indirection boundary 2 states as the residual — so this
+    // reports NOTHING, and that fact is written down here rather than left for
+    // the next reader to discover with a probe.
+    //
+    // NO MECHANISM RESOLVES THIS, WHICH IS THE POINT. `constStrings` stops at one
+    // hop, `assembledNames` stops at one hop, and neither `b` nor `a` is a
+    // conditional or a comma. Reverting ANY branch in this file leaves it green,
+    // so unlike every other case here it is asserted as a MEASURED SILENCE rather
+    // than as a bound — and it must never again be used to stand in for one.
     expect(
       rulesOf('const a = "requests";\nconst b = a;\nawait sdk[b].send(req);'),
     ).toEqual([]);
-    // The ONE-hop version of the same shape is caught, which is what makes the
-    // residual a bound rather than a hole: `constStrings` resolves one hop.
-    expect(rulesOf('const r = "requests";\nawait sdk[r].send(req);')).toContain(
-      "outbound-send",
-    );
+    // WHAT USED TO SIT HERE, AND WHY IT DOES NOT ANY MORE (CR-08). A
+    // `constStrings` assertion — `const r = "requests"; sdk[r].send(req)` — stood
+    // at this spot under the sentence "The ONE-hop version of the same shape is
+    // caught, which is what makes the residual a bound rather than a hole". That
+    // sentence was FALSE and the placement was worse than the sentence: the case
+    // resolves through `constStrings`, so it was green whether or not the
+    // assembled-key rule could see a hop at all — a green-because-it-cannot-fail
+    // assertion wearing the costume of a bound, read by the next reader as proof
+    // that the bound held. It has moved to its own mechanism-named case below,
+    // and the case that ACTUALLY exercises one hop of assembly is the
+    // `assembledNames` case above.
   });
 
-  it("an ordinary DYNAMIC lookup is not an assembled key, and stays quiet", () => {
+  it("through constStrings: a key bound ONE HOP to a LITERAL is a NAMED receiver, not an unreadable one", () => {
+    // The positive control, restored to its own title with its real mechanism
+    // named. `literalOf` consults `constStrings`, resolves `r` to "requests", and
+    // `keyReceiver` returns the NAMED receiver before either unreadable branch is
+    // reached — which is what keeps a readable site from being downgraded to
+    // `outbound-unanalysable` by the CR-08 widening.
+    //
+    // This case bounds `constStrings` AND NOTHING ELSE. It does not bound the
+    // assembled-key rule, it does not bound `assembledNames`, and it must never
+    // again be cited as doing so.
+    const rules = rulesOf('const r = "requests";\nawait sdk[r].send(req);');
+    expect(rules).toContain("outbound-send");
+    expect(
+      rules,
+      "a site the walk can read COMPLETELY was downgraded to unreadable",
+    ).not.toContain("outbound-unanalysable");
+  });
+
+  it('through the CONDITIONAL resolver: `sdk[b ? "requests" : "net"]` hides nothing, so it reports outbound-send', () => {
+    // CR-08's sharper half, and it was undisclosed everywhere: reported by no
+    // rule and named by no residual list. Both keys are string literals naming
+    // outbound receivers, so this is a site the walk can read COMPLETELY.
+    //
+    // MECHANISM: the conditional branch of `receiverKind`, mirroring
+    // `initializerReceiver`'s stated semantics — a receiver that is outbound on
+    // one path is outbound. Reverting that branch drives this red.
+    const rules = rulesOf('await sdk[b ? "requests" : "net"].send(req);');
+    expect(
+      rules,
+      'sdk[b ? "requests" : "net"].send(req) still reports clean',
+    ).toContain("outbound-send");
+    // AND NOT UNANALYSABLE. Reporting a completely readable site as unreadable
+    // would be a second overclaim, quieter and in the opposite direction — the
+    // gate saying "I could not read this" about something it read perfectly.
+    expect(
+      rules,
+      "a conditional of two receiver literals was reported as UNREADABLE",
+    ).not.toContain("outbound-unanalysable");
+    // One outbound branch is enough, exactly as `initializerReceiver` has it.
+    expect(rulesOf('await sdk[b ? "requests" : "zzz"].send(req);')).toContain(
+      "outbound-send",
+    );
+    // Neither branch a receiver, and neither branch hidden: still nothing.
+    expect(rulesOf('await sdk[b ? "aaa" : "zzz"].send(req);')).toEqual([]);
+    // A branch the walk WATCHES being assembled is unreadable, not silent — the
+    // third state surviving through the conditional.
+    expect(
+      rulesOf('await sdk[b ? "req" + "uests" : "zzz"].send(req);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it('through the COMMA SEQUENCE rule plus constStrings: `sdk[(0, "requests")]` is its rightmost operand', () => {
+    // A comma expression's value IS its rightmost operand, so this hides nothing
+    // either. MECHANISM: the `CommaToken` arm of `unwrap` (see its docblock for
+    // the placement decision and its measured blast radius), which then hands a
+    // plain string literal to `literalOf`.
+    //
+    // NOTE ON THE MISSING `await`: `await (X)` parses as a CALL to something named
+    // `await`, not as an await of a parenthesised expression, so a fixture written
+    // that way would be green for a parsing reason and prove nothing.
+    expect(
+      rulesOf('sdk[(0, "requests")].send(req);'),
+      'sdk[(0, "requests")].send(req) still reports clean',
+    ).toContain("outbound-send");
+    // The same rule at the RECEIVER level rather than in key position — the
+    // reason the comma arm lives in `unwrap` and not in the key resolver.
+    expect(
+      rulesOf("(0, sdk.requests).send(req);"),
+      "(0, sdk.requests).send(req) still reports clean",
+    ).toContain("outbound-send");
+  });
+
+  it("through NOTHING, and that is residual (b): an ordinary DYNAMIC lookup is not an assembled key and stays quiet", () => {
     // THE false positives that decided the bound, both lifted verbatim from the
     // real tree: `compat.ts`'s documented dotted-path walk, and array indexing in
     // `store/observations.ts`. A gate that called either an outbound network
@@ -1862,7 +2066,7 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toEqual([]);
   });
 
-  it("a numeric name POISONED by a string binding stops exempting the key", () => {
+  it("through isProvablyNumeric's poisoning: a numeric name POISONED by a string binding stops exempting the key", () => {
     // The over-approximation is deliberate and it fails SAFE: a name bound to a
     // number somewhere and to something else somewhere else is not a proven index.
     expect(
