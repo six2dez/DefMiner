@@ -2864,9 +2864,9 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     ).toEqual([]);
     // The same inverted bindings with the read moved LAST — still silent. The
     // read is not what is doing the work here.
-    expect(
-      rulesOf("const g = a;\nconst a = globalThis;\ng.fetch(u);"),
-    ).toEqual([]);
+    expect(rulesOf("const g = a;\nconst a = globalThis;\ng.fetch(u);")).toEqual(
+      [],
+    );
   });
 
   it("through globalThisAliases: MOVING THE READ CHANGES NOTHING — a use written ABOVE its own binding REPORTS, because `collect(sf)` completes before `visit(sf)` begins", () => {
