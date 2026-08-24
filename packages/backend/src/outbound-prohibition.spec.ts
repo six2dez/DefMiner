@@ -3476,6 +3476,16 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     // ordinary in this codebase and a gate that calls every destructured name an
     // assembled receiver key gets deleted rather than fixed.
     //
+    // MEASURED NON-EVIDENCE, RECORDED SO NOBODY CITES THIS CASE FOR THE BRANCH.
+    // Deleting both binding-pattern reads from the collector (mutation MB1,
+    // 2026-08-24) drives the POSITIVE case above RED and leaves this entire case
+    // GREEN. That is correct and expected — every assertion here is a silence,
+    // and removing a branch cannot break a silence — but it means this case
+    // proves the branch does not OVER-report and proves nothing whatever about
+    // whether it reports at all. The rule that caught it is plan 01-18's: a
+    // fixture that stays green under the mutation it sits beside is titled as
+    // non-evidence rather than left looking like coverage.
+    //
     // Ordinary strings are not assemblies, so nothing is collected and the
     // lookup stays quiet even in receiver position.
     expect(
