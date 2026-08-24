@@ -254,14 +254,64 @@
 //        sdk.requests[m](req)                     undefined
 //      let s = "harmless"; s = "caido:http";    literalOf returns    outbound-unanalysable
 //        await import(s)                          undefined
-//      sdk[b ? "requests" : "net"]              conditional branch   outbound-send
-//                                               of receiverKind
+//      sdk[b ? "requests" : "net"]              operatorReceiver     outbound-send
+//                                               via keyReceiver      — ROW CORRECTED
+//                                                                      2026-08-24 (WR-27):
+//                                                                      the mechanism MOVED.
+//                                                                      It named a hand-written
+//                                                                      block in receiverKind's
+//                                                                      element-access arm; that
+//                                                                      block is gone and the arm
+//                                                                      calls keyReceiver, which
+//                                                                      descends through the ONE
+//                                                                      shared operator resolver.
+//                                                                      Behaviour unchanged.
 //      sdk[(0, "requests")]                     unwrap's CommaToken  outbound-send
 //                                               arm, then literalOf
 //      const a="requests"; const b=a; sdk[b]    NOTHING              [] — residual (a)
 //      ctx[root] where root is a PARAMETER      NOTHING              [] — residual (b)
 //      cur[key] where key is a LOOP BINDING     NOTHING              [] — residual (b)
 //      x[i + 1] / MIGRATIONS[len - 1]           isProvablyNumeric    [] — an index, not a name
+//
+//      ROWS ADDED 2026-08-24 (WR-27), ONE PER POSITION AN OPERATOR CAN OCCUPY.
+//      The table had exactly ONE operator row — the conditional KEY — and a
+//      reader checking this gate's treatment of an operator would have found it,
+//      matched their shape against it and stopped. Two of the four positions
+//      below were silent. The point of the four rows is that a reader can now
+//      see that all four go through ONE descent, so the next operator question
+//      is answered in one place or in none:
+//
+//      SPELLING (operator, by POSITION)         RESOLVED BY          REPORTS
+//      -------------------------------------    -----------------    ---------------------
+//      (b ? sdk.requests : sdk.net).send(req)   operatorReceiver     outbound-send
+//        CALL-RECEIVER position                   via receiverKind     — WR-27, and it was
+//                                                                       `[]` before wave 25
+//      (sdk.requests ?? sdk.net).send(req)      operatorReceiver     outbound-send
+//      (sdk.requests || sdk.net).send(req)        via receiverKind,    — the same class as the
+//      (ok && sdk.requests).send(req)             RECEIVER_OPERATORS    conditional; `&&` is in
+//        CALL-RECEIVER position                                         the set BY MEASUREMENT
+//      sdk[b ? "requests" : "net"]              operatorReceiver     outbound-send
+//        KEY position                             via keyReceiver
+//      const r = b ? sdk.requests : sdk.net;    operatorReceiver     outbound-send
+//        r.send(req)                              via receiverKind,    — initializerReceiver is
+//        INITIALIZER position                      which initializer-    now a NAME for
+//                                                  Receiver now IS      receiverKind
+//      sdk[b ? (c ? "requests" : "x") : "y"]    operatorReceiver     outbound-send
+//        NESTED KEY position                      via keyReceiver      — keyReceiver passes
+//                                                 recursing on itself   ITSELF as the resolver,
+//                                                                       so nesting resolves at
+//                                                                       any depth
+//      (b ? cache : client).send(req)           operatorReceiver     [] — the third state:
+//      (cache ?? client).send(req)                returns undefined    NOT A RECEIVER, and the
+//      (ready && cache).send(req)                                      twin of every row above
+//      (ok && globalThis).fetch(url)            NOTHING              [] — the descent is NOT
+//      (b ? navigator : x).sendBeacon(u, d)                            reached from
+//      (b ? eval : x)(src)                                             isGlobalReceiver /
+//        an operator around a GLOBAL receiver                          isFetchExpression /
+//                                                                      isNavigatorReceiver.
+//                                                                      OPEN and UNOWNED,
+//                                                                      MEASURED IDENTICAL
+//                                                                      before and after wave 25
 //
 //    Everything in the NOTHING rows is a measured silence, not a bound: reverting
 //    any branch in this file leaves those rows green. They are asserted below as
@@ -365,13 +415,23 @@
 //    recorded in `01-12-SUMMARY.md`, `01-16-SUMMARY.md`, `01-18-SUMMARY.md` and
 //    `01-19-SUMMARY.md` are what stand behind it.
 //
-//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-24 =================
-//    RE-DERIVED from the branches above and copied WORD FOR WORD into
-//    `.planning/WINDOWS.md`. If the two disagree, the code wins and the prose
-//    is the defect. `REQUIREMENTS.md` and `STATE.md` still carry the WAVE-23
-//    text and are deliberately untouched here — see the last paragraph.
-//    NARROWED 2026-08-24 (CR-10), and the narrowing is why this block now says
-//    01-24 rather than 01-23. THREE CLAUSES ARE SUPERSEDED AND THEY ARE NAMED
+//    ================= THE FINAL RESIDUAL, AFTER PLAN 01-25 =================
+//    RE-DERIVED from the branches above and RENDERED PROGRAMMATICALLY into
+//    `.planning/WINDOWS.md` from one canonical source, so "the same words
+//    rather than two paraphrases" is a machine check and not a promise. If the
+//    two disagree, the code wins and the prose is the defect. `REQUIREMENTS.md`
+//    and `STATE.md` still carry OLDER text and are deliberately untouched here
+//    — see the last paragraph.
+//    WIDENED 2026-08-24 (WR-27), and the widening is why this block now says
+//    01-25 rather than 01-24. NOTHING HERE IS SUPERSEDED BY WR-27 AND THAT IS
+//    THE POINT OF IT: the shape it closed — an operator in CALL-RECEIVER
+//    position — was named by NO clause in any previous version of this block,
+//    so this round WIDENS a self-declared-open enumeration rather than
+//    correcting a false one. The omission is recorded as the finding inside the
+//    residual itself, three paragraphs down, because that is where a reader
+//    auditing this list for completeness will be standing.
+//    NARROWED 2026-08-24 (CR-10), one wave earlier. THREE CLAUSES ARE
+//    SUPERSEDED BY THAT ROUND AND THEY ARE NAMED
 //    RATHER THAN REQUOTED, because a block that states a bound and also carries
 //    its own false version gives a skimmer two sentences and no way to tell
 //    which is live: THE SINGLE-DIRECTION CLAIM in boundary 2, THE EVERY-SPELLING
@@ -382,54 +442,110 @@
 //    the same place: a stale first literal shadowed every later rebinding of the
 //    same name, so `let k = "harmless"; k = "requests"; sdk[k].send(req)` was
 //    SILENT — the direction a reader was told could not happen — and `+=` was
-//    not read at all. THAT IS THE SIXTH CONSECUTIVE ROUND IN WHICH A BOUND WAS
-//    AUTHORED RATHER THAN DERIVED, and narrowing it closes the INSTANCE, not
-//    the class.
+//    not read at all. THAT WAS THE SIXTH CONSECUTIVE ROUND IN WHICH A BOUND WAS
+//    AUTHORED RATHER THAN DERIVED; WR-27 IS THE SEVENTH, and each closes an
+//    INSTANCE, not the class. Wave 27 owns the derivation that would.
 //
 //    CORE-11's clause `no sdk.requests.send IN ANY SPELLING` IS BOUND,
 //    AND THIS IS WHAT BOUNDS IT — the phrase is not an absolute and must
-//    not be read as one. RE-DERIVED FOR WAVE 24 BY READING THE BRANCHES:
-//    `keyReceiver`'s four steps, the two `constStrings` write sites, the
-//    three `assembledNames` write sites and `literalOf` itself — not by
-//    narrowing the previous paragraph, which is the method plan 01-21
-//    recorded as having enumerated two classes while missing a third
-//    sitting in the same function.
+//    not be read as one. RE-DERIVED FOR WAVE 25 BY READING THE BRANCHES:
+//    `receiverKind`'s four arms, `keyReceiver`'s steps including the
+//    operator step above step 0, `initializerReceiver` (which is now a
+//    NAME for `receiverKind`), `operatorReceiver` and the
+//    `RECEIVER_OPERATORS` set — not by narrowing the previous paragraph,
+//    which is the method plan 01-21 recorded as having enumerated two
+//    classes while missing a third sitting in the same function.
 //
-//    A RECEIVER OR GLOBAL ALIAS CHAIN resolves to ANY DEPTH, provided
-//    each link's DECLARATION appears after the declaration of the name it
-//    is grown from. UNCHANGED BY THIS WAVE. The mechanism is that
-//    `auditSource` runs `collect(sf)` to COMPLETION before `visit(sf)`
-//    begins, while every alias set is grown by consulting the LIVE set
-//    during that one collect pass — so a four-hop chain reports with the
-//    USE written ABOVE all four declarations and the use site's POSITION
-//    IS IRRELEVANT. What is silent is an INVERTED BINDING: `const b = a;
-//    const a = fetch; b(u)` reports nothing, wherever the read sits.
+//    THE OPERATOR CLASS IS CLOSED IN ALL FOUR POSITIONS AS OF WAVE 25,
+//    THROUGH ONE DESCENT AND NOT THREE COPIES. `? :`, `??`, `||` and `&&`
+//    are read in CALL-RECEIVER position (`(b ? sdk.requests :
+//    sdk.net).send(req)`), in KEY position (`sdk[b ? "requests" :
+//    "net"]`), in INITIALIZER position (`const r = sdk.requests ??
+//    sdk.net; r.send(req)`) and in NESTED KEY position (`sdk[b ? (c ?
+//    "requests" : "x") : "y"]`), by `operatorReceiver` — ONE function,
+//    reached from `receiverKind` and from `keyReceiver`, each passing
+//    ITSELF as the leaf resolver so nesting resolves at any depth. THE
+//    THREE-STATE ANSWER, in the order the element-access arm already used
+//    and copied from there rather than reinvented: any operand naming a
+//    receiver makes the expression THAT RECEIVER; else any operand the
+//    walk cannot read makes it UNREADABLE; else it is NOT A RECEIVER.
 //
-//    A RECEIVER KEY RESOLVES ONE HOP, AND WHAT ONE HOP MEANS WIDENED IN
-//    WAVE 24. It resolves: a literal; a literal bound at a DECLARATION OR
-//    AN ASSIGNMENT, in the `const`, `let` and `var` spellings; a name
-//    REBOUND, because ANY binding of a name that names an outbound
-//    receiver now makes the key one, so `let k = "harmless"; k =
-//    "requests"; sdk[k].send(req)` reports where it was silent; an
-//    assembly inline; an assembly bound or assigned; AN ASSEMBLY
-//    ACCUMULATED WITH `+=`; a conditional; and a comma sequence. Where a
-//    name carries BOTH a literal binding and a watched assembly, THE
-//    ASSEMBLY WINS and the site reports `outbound-unanalysable` rather
-//    than naming a surface off a string the file has since rebuilt.
+//    AND THE SHAPE THIS WAVE CLOSED WAS NAMED BY NO PRIOR RESIDUAL LIST
+//    AT ALL — NOT UNDERSTATED BY THEM, OMITTED FROM THEM. Before wave 25
+//    no clause here named a call-position operator: not the two-hop
+//    clause, not the function-boundary clause, not the parameter or
+//    loop-binding clauses, not the another-file clause. A reader
+//    enumerating this gate's blind spots would have finished the list and
+//    stopped, and been wrong. THAT OMISSION IS THE FINDING, and it is
+//    recorded here where the list is rather than only in a summary,
+//    because an enumeration that grows silently is one nobody can audit
+//    for completeness in either direction. WHAT THIS IS NOT, SAID SO THE
+//    ROUND DOES NOT INFLATE ITSELF: it is not the correction of a false
+//    sentence. This list declares itself open and WR-27 WIDENED it,
+//    exactly as round 4's wave 21 framed WR-24; CR-09 by contrast was a
+//    residual that ASSERTED something false, which is the heavier
+//    finding, and this wave does not borrow its weight. Equally, an
+//    omitted shape is not a harmless one — completeness in both
+//    directions is precisely what a residual list is trusted for.
 //
-//    `literalOf`, which resolves MEMBER NAMES and MODULE SPECIFIERS
-//    through that same map, IS SINGLE-VALUED: a name carrying more than
-//    one distinct binding answers "could not read", and "could not read"
-//    REPORTS at every one of its call sites. Measured in all four
-//    positions where a name can now resolve differently, THE WAVE-24
-//    WIDENING CREATED NO NEW SILENCE — a named surface becomes
-//    `outbound-unanalysable` where the walk read two strings, and nothing
-//    went quiet. THE MIRROR of the widening, `let k = "requests"; k =
-//    "harmless"`, REPORTS: any-binding-wins OVER-approximates, which is
-//    the direction every other set in this pass already errs in. The
-//    rejected alternative — a POISONED map in the shape of
-//    `poisonedNumericNames` — was MEASURED and would have left CR-10's
-//    own shapes silent and created a new silence at the mirror.
+//    `&&` IS IN THE SET AND WAS SETTLED BY MEASUREMENT, NOT BY SYMMETRY
+//    WITH THE OTHER THREE, because the symmetry argument genuinely does
+//    not carry: `a && b` yields `a` when `a` is FALSY, so its left
+//    operand is usually a guard rather than a value. BOTH READINGS WERE
+//    IMPLEMENTED AND RUN. THE REAL TREE DID NOT DISCRIMINATE — 23 files,
+//    ZERO violations, under `&&` in and under `&&` out alike — so nothing
+//    about shipped code chose this and no claim is made that it did. THE
+//    SHAPES DISCRIMINATED: excluding `&&` left `(ok &&
+//    sdk.requests).send(req)`, the ordinary way to write a guarded
+//    outbound call and one with `sdk.requests` written out in full,
+//    SILENT — which is WR-27's own finding reproduced one operator over,
+//    inside the wave closing it. THE COST IS DISCLOSED AND PINNED BY ITS
+//    OWN ASSERTION: `(sdk.requests && ok).send(req)`, where the receiver
+//    is the guard and the value is something else, REPORTS. That
+//    OVER-approximates, in the direction every other set in this file
+//    errs. `+` is deliberately absent from `RECEIVER_OPERATORS` and must
+//    stay absent — every operator in that set yields one of its operands
+//    UNCHANGED, which is what makes either-side semantics sound, while
+//    `"req" + "uests"` is the ASSEMBLY `isAssembledKey` owns. The sibling
+//    gate one directory over, `store/error-redaction.spec.ts`'s
+//    `derivesFrom`, already descends this same set of four with
+//    either-side semantics (WR-24, plan 01-21) and cites
+//    `initializerReceiver` in THIS file as its reason; excluding `&&`
+//    here would have manufactured the disagreement that docblock was
+//    written to prevent. That is corroboration, not the reason.
+//
+//    THE DESCENT EXISTED THREE TIMES AND THEREFORE EXISTED TWICE, WHICH
+//    IS WHY THE THIRD FACE WENT UNTAUGHT WHILE THE OTHER TWO WERE TAUGHT
+//    IN THE SAME ROUND. `initializerReceiver` unwrapped a conditional,
+//    `receiverKind`'s element-access arm unwrapped one, and
+//    `receiverKind` ITSELF did not — so a conditional written directly in
+//    call position fell through every branch to `return undefined`, the
+//    state every caller reads as NOT A RECEIVER, for a site with a
+//    literal `sdk.requests` in it. Wave 25 collapsed the copies:
+//    `initializerReceiver` is now a name for `receiverKind`, the
+//    element-access arm calls `keyReceiver`, and both reach
+//    `operatorReceiver`. THE COLLAPSE ALSO CORRECTED A PRECEDENCE NO LIST
+//    NAMED EITHER, found by reading the three copies side by side rather
+//    than predicted: `initializerReceiver` was `receiverKind(whenTrue) ??
+//    receiverKind(whenFalse)`, and `??` does not skip
+//    `UNREADABLE_RECEIVER` because a symbol is neither null nor undefined
+//    — so an UNREADABLE LEFT branch shadowed a NAMED RIGHT branch in
+//    initializer position and in no other position. `const r = b ? sdk[k1
+//    + k2] : sdk.net` reported `outbound-unanalysable` while `const r = b
+//    ? sdk.net : sdk[k1 + k2]` reported `outbound-net`: two spellings of
+//    one shape answered differently by operand ORDER. Both now report the
+//    named receiver; both REPORTED before and after, so the correction
+//    changed WHICH rule is named and nothing went quiet.
+//
+//    `keyReceiver`'s DOCBLOCK CLAIM IS NOW TRUE OF THE CODE rather than
+//    true of two callers. It has said since CR-08 that it is the single
+//    definition of what a readable key is, called from the direct key and
+//    both conditional branches "so they cannot disagree about what the
+//    walk can read" — a claim made by a function that did not itself
+//    handle a conditional, so a conditional INSIDE a branch was exactly
+//    where they disagreed and `sdk[b ? (c ? "requests" : "x") : "y"]` was
+//    silent. `keyReceiver` now recurses through `operatorReceiver`
+//    passing itself.
 //
 //    WHAT REMAINS SILENT, READ OFF THE BRANCHES: TWO HOPS OF KEY — `const
 //    a = "requests"; const b = a; sdk[b]` — because `constStrings` and
@@ -443,39 +559,63 @@
 //    was measured to change nothing except to re-poison ordinary `+`
 //    indexing.
 //
-//    STILL OPEN AFTER THIS WAVE, EACH NAMED WITH THE WAVE THAT OWNS IT,
-//    because a residual that narrows without saying what is still open is
-//    the omission this round exists to stop: the CONDITIONAL RECEIVER IN
-//    CALL POSITION with its `??` and `||` twins — WAVE 25 (WR-27); the
-//    NESTED CONDITIONAL KEY — WAVE 25; the DESTRUCTURED KEY BINDING,
-//    `const { k } = o; sdk[k].send(req)` — WAVE 26 (IN-26). Wave 26 also
-//    owns `packages/backend/src/store/*`, `tests/pins.spec.ts` and
-//    `scripts/phase1/tracer-e2e.sh`.
+//    AND ONE SHAPE THIS WAVE OPENED BY MEASURING WHERE THE DESCENT STOPS
+//    INSTEAD OF ASSUMING IT IS UNIVERSAL — disclosed on the day it was
+//    found rather than left for a later round's finding.
+//    `operatorReceiver` is reached from `receiverKind` and `keyReceiver`
+//    AND FROM NOWHERE ELSE. `isGlobalReceiver`, `isFetchExpression` and
+//    `isNavigatorReceiver` resolve their own spellings through the alias
+//    sets and do not consult it, so AN OPERATOR WRAPPING A GLOBAL
+//    RECEIVER IS STILL SILENT in every spelling: `(ok &&
+//    globalThis).fetch(url)`, `(g ?? globalThis)["fetch"](url)`, `(b ?
+//    globalThis : x).fetch(url)`, `(b ? navigator : x).sendBeacon(u, d)`,
+//    `(b ? fetch : x)(url)` and `(b ? eval : x)(src)` all report `[]`,
+//    MEASURED IDENTICAL BEFORE AND AFTER THIS WAVE against commit
+//    278a0d2~1. This wave neither closed them nor broke them and claims
+//    no credit for them; the contrast that shows the boundary is the
+//    RESOLVER and not the operator is that `(b ? sdk.requests :
+//    x).send(req)` DOES report, because that path goes through
+//    `receiverKind`. Pinned by a fixture titled as a MEASURED SILENCE.
+//
+//    STILL OPEN AFTER THIS WAVE, EACH NAMED WITH THE WAVE THAT OWNS IT OR
+//    WITH THE FACT THAT NOTHING DOES, because a residual that narrows in
+//    one place while quietly widening in another is the omission this
+//    round exists to stop: the DESTRUCTURED KEY BINDING, `const { k } =
+//    o; sdk[k].send(req)` — WAVE 26 (IN-26); the OPERATOR AROUND A GLOBAL
+//    RECEIVER, above — OPEN AND UNOWNED, no plan in this phase claims it,
+//    and wave 27's derivation is what will carry it forward rather than
+//    rediscover it. Wave 26 also owns `packages/backend/src/store/*`,
+//    `tests/pins.spec.ts` and `scripts/phase1/tracer-e2e.sh`.
 //
 //    Every exemption here is preserved BY MEASUREMENT, re-run after each
-//    widening and again in wave 24: 23 files over both `SOURCE_ROOTS`,
+//    widening and again in wave 25: 23 files over both `SOURCE_ROOTS`,
 //    ZERO violations, with `compat.ts`'s `at()` `cur[key]` and
 //    `ctx[root]`, `observations.ts`'s `segments[i]` and
-//    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. The
-//    `+=` branch DOES fire on shipped code — it marks `examined` and
-//    `deleted` in `store/retention.ts`, `out` in `telemetry.ts` and
-//    `start` in `engine/src/chunker.ts` as assembled — and all four files
-//    still report ZERO, because none of those names is ever used as a
-//    receiver key. That is measured, not argued.
+//    `MIGRATIONS[MIGRATIONS.length - 1]` all asserted quiet by name. AN
+//    OPERATOR DESCENT IN CALL-RECEIVER POSITION IS THE WIDENING MOST
+//    LIKELY TO FIRE ON ORDINARY SHIPPED CODE — picking one of two
+//    ordinary collaborators with `? :`, `??`, `||` or `&&` is common, and
+//    a gate that flags it gets deleted rather than fixed — so every
+//    widening in this wave shipped with its must-stay-quiet twin IN THE
+//    SAME COMMIT: `(useCache ? cache : client)`, `(cache ?? client)`,
+//    `(cache || client)`, `(ready && cache)` and an ordinary object
+//    defining a method named `send` all report `[]`.
 //
 //    WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE.
-//    This wave closes CR-10's INSTANCE and does not close the class that
-//    produced it — an authored bound nobody re-derived — which is now SIX
-//    consecutive rounds. `REQUIREMENTS.md` and `STATE.md` are
-//    deliberately NOT amended in this wave: both carry an authored
-//    residual, wave 27 derives the replacement and wave 28 reconciles
-//    both ledgers to it in one move, and a fourth hand-authored copy
-//    would be another place the next drift can start. CORE-11's box stays
-//    `[ ]`; wave 28 owns the flip and only against the derived text.
-//    NOTHING LEAKED: CR-10 is a PROSPECTIVE BLINDNESS in a test-only
-//    gate, no outbound call exists in any non-spec source under either
-//    root, the gate runs green over the real tree inside a 1132-test
-//    suite, and `pnpm check:bundle` reports one specifier, `crypto`.
+//    This wave closes WR-27's INSTANCE and does not close the class that
+//    produced it — an authored bound nobody re-derived — which is now
+//    SEVEN consecutive rounds. `REQUIREMENTS.md` and `STATE.md` are
+//    deliberately NOT amended in this wave, for the reason wave 24
+//    recorded: both carry an authored residual, wave 27 derives the
+//    replacement and wave 28 reconciles both requirement-tier ledgers to
+//    it in ONE move, and another hand-authored copy would be another
+//    place the next drift can start. CORE-11's box stays `[ ]`; wave 28
+//    owns the flip and only against the derived text. NOTHING LEAKED:
+//    WR-27 is a PROSPECTIVE BLINDNESS in a test-only gate, no outbound
+//    call exists in any non-spec source under either root, the gate runs
+//    green over the real tree — 23 files, ZERO violations — inside a
+//    1143-test suite, and `pnpm check:bundle` reports the shipped
+//    bundle's entire import set as one specifier, `crypto`.
 //
 //    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
 //    from the `[x]` that commit `e7cc4b6` reverted is the reason it may be:
