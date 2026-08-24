@@ -1004,7 +1004,7 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
        2 above already states and which is restated here only to keep the
        four limits together.
 
-RESOLVERS - 34 entries.
+RESOLVERS - 35 entries.
 
 * constStrings - a receiver or global KEY resolves when a string literal bound at a string-literal declaration, a string-literal assignment, a logical assignment or an operator initializer names an outbound receiver; bindings are file-wide and ANY-BINDING-WINS, so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13), the phrase this clause used to carry: "ANY string literal the name is bound to anywhere in the file" - measured, a conditional, ?? or || initializer bound a literal neither this collector nor literalsOf read; that shape is CLOSED 2026-08-24 by operatorLiteralBinding and the branch below is its probe; the string-literal assignment branch has since 2026-08-24 (CR-12) read ASSIGNING_OPERATORS, so the three logical spellings bind through it too; and the phrase STAYS falsified because a parameter, a loop binding, a name bound in another file and a second hop of key each still bind nothing
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1254,7 +1254,7 @@ RESOLVERS - 34 entries.
     branch:    "a member of a global receiver" at auditSource > aliasedGlobalOf > (DYNAMIC_CODE.has(member) || OUTBOUND_CONSTRUCTORS.has(member)) && - probe "const e = globalThis.eval;\ne(src);" - reports outbound-dynamic-code, outbound-dynamic-code
     branch:    "a destructure off one" at auditSource > collect > globalAliases.set(el.name.text, property); - probe "const { eval: ev } = globalThis;\nev(src);" - reports outbound-dynamic-code
 
-* unwrap - strips parentheses, `as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver
+* unwrap - strips parentheses, `as`/satisfies assertions, an angle-bracket type assertion, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver. CORRECTED 2026-08-24 (IN-29): the angle-bracket form was one of the five wrappers the code strips and the only one this clause did not name, which is the direction of MORE stripping rather than less - it is probeable in .ts source and the branch below is its probe
     read off:  module scope > function unwrap(node: ts.Expression): ts.Expression {
     probe:     "(0, sdk.net).connect(x);"
     reports:   outbound-net
@@ -1263,6 +1263,7 @@ RESOLVERS - 34 entries.
     branch:    "parentheses" at module scope > unwrap > ts.isParenthesizedExpression(current) || - probe "(sdk.requests).send(req);" - reports outbound-send
     branch:    "non-null assertions" at module scope > unwrap > ts.isNonNullExpression(current) || - probe "sdk.requests!.send(req);" - reports outbound-send
     branch:    "a COMMA SEQUENCE" at module scope > unwrap > current.operatorToken.kind === ts.SyntaxKind.CommaToken - probe "(0, sdk.requests).send(req);" - reports outbound-send
+    branch:    "an angle-bracket type assertion" at module scope > unwrap > ts.isTypeAssertionExpression(current) - probe "const g = <any>globalThis;\ng.fetch(url);" - reports outbound-fetch
 
 * operatorReceiver - ONE descent for the four RECEIVER_OPERATORS (`? :`, `??`, `||`, `&&`) reached from receiverKind and keyReceiver and from NOWHERE ELSE: any operand naming a receiver makes the expression that receiver, else any unreadable operand makes it unreadable, else it is not a receiver
     read off:  module scope > const operatorReceiver = (
@@ -1331,7 +1332,16 @@ RESOLVERS - 34 entries.
     reports:   [] - nothing
     branch:    "the RENAMED spelling" at module scope > boundPropertyName > const property = el.propertyName ?? el.name; - probe "const { p: k } = { p: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
 
-* destructuredInitializer - the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26)
+* reportReceiverMembers - the members a destructure off a POSITIVELY IDENTIFIED receiver binds, minus the read-only allowlist - defined once and reached from the flat spelling and from a nested pattern of an identified receiver, so `const { requests: { send } } = sdk` reports what its two halves already reported one at a time. RECEIVER-ANCHORED: an ordinary object destructured the same way binds nothing, which is the counter-probe
+    read off:  auditSource > const reportReceiverMembers = (
+    probe:     "const { requests: { send } } = sdk;\nsend(req);"
+    reports:   outbound-send
+    counter:   "const { cache: { send } } = app;\nsend(req);"
+    reports:   [] - nothing
+    branch:    "the flat spelling" at auditSource > visit > reportReceiverMembers(node.name, kind); - probe "const { send } = sdk.requests;\nsend(req);" - reports outbound-send
+    branch:    "a nested pattern of an identified receiver" at auditSource > visit > reportReceiverMembers(el.name, property); - probe "const { requests: { send } } = sdk;\nsend(req);" - reports outbound-send
+
+* destructuredInitializer - the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26). CORRECTED 2026-08-24 (WR-37): what it reads is the ASSEMBLY a KEY is built from and nothing else. A RECEIVER bound through an array ELEMENT position reaches no branch here and is carried as its own measured silence below; a NESTED pattern reaches no branch here either and is closed at reportReceiverMembers instead, because that one is a COMPOSITION of two shapes already resolved rather than a widening
     read off:  module scope > function destructuredInitializer(
     probe:     "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);"
     reports:   outbound-unanalysable
@@ -1340,7 +1350,7 @@ RESOLVERS - 34 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 9 entries.
+MEASURED SILENCES - 16 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1404,6 +1414,55 @@ MEASURED SILENCES - 9 entries.
     probe:     "const b = a;\nconst a = fetch;\nb(url);"
     reports:   [] - nothing
     counter:   "const a = fetch;\nconst b = a;\nb(url);"
+    reports:   outbound-fetch
+
+* silence-array-slot-receiver - a RECEIVER bound through an array ELEMENT position is silent. The binding-pattern branch beside it reads only an assembled KEY and grows no receiver, so neither `const [r] = [sdk.requests]` nor `const a = [sdk.requests]; a[0]` binds anything. The one-hop binding of the same receiver REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this
+    read off:  auditSource > collect > } else if (ts.isArrayBindingPattern(node.name)) {
+    probe:     "const [r] = [sdk.requests];\nr.send(req);"
+    reports:   [] - nothing
+    counter:   "const r = sdk.requests;\nr.send(req);"
+    reports:   outbound-send
+
+* silence-object-literal-property-receiver - a RECEIVER reached as a named member of an object LITERAL is silent: `const o = { r: sdk.requests }; o.r.send(req)` binds nothing, because the collector reads an initializer that IS a receiver and never one that CONTAINS one. The one-hop binding REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this
+    read off:  auditSource > const receiverAliases = new Map<string, string>()
+    probe:     "const o = { r: sdk.requests };\no.r.send(req);"
+    reports:   [] - nothing
+    counter:   "const r = sdk.requests;\nr.send(req);"
+    reports:   outbound-send
+
+* silence-class-field-receiver - a RECEIVER held in a CLASS FIELD is silent: `class C { r = sdk.requests; m() { this.r.send(req); } }` binds nothing, because the collector reads variable declarations and assignments and not property declarations. The same call written directly inside the method REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this
+    read off:  auditSource > const collect = (node: ts.Node): void => {
+    probe:     "class C { r = sdk.requests; m() { this.r.send(req); } }"
+    reports:   [] - nothing
+    counter:   "class C { m() { sdk.requests.send(req); } }"
+    reports:   outbound-send
+
+* silence-parameter-default-receiver - a RECEIVER supplied as a PARAMETER DEFAULT is silent: `function f(r = sdk.requests) { r.send(req); }` binds nothing, because a parameter is never bound in the collect pass at all. The same receiver bound outside the function REPORTS - that is the counter-probe. Residual (b) names a parameter for KEYS ONLY, so a reader checking it there will not find this RECEIVER twin
+    read off:  auditSource > const receiverAliases = new Map<string, string>()
+    probe:     "function f(r = sdk.requests) { r.send(req); }"
+    reports:   [] - nothing
+    counter:   "const r = sdk.requests;\nfunction f() { r.send(req); }"
+    reports:   outbound-send
+
+* silence-for-of-binding-receiver - a RECEIVER bound by a `for…of` head is silent: `for (const r of [sdk.requests]) { r.send(req); }` binds nothing, because the loop binding has no initializer the collector can read - the value comes from the iterable. The same receiver bound outside the loop REPORTS - that is the counter-probe. Residual (b) names a loop binding for KEYS ONLY, so a reader checking it there will not find this RECEIVER twin
+    read off:  auditSource > const receiverAliases = new Map<string, string>()
+    probe:     "for (const r of [sdk.requests]) { r.send(req); }"
+    reports:   [] - nothing
+    counter:   "const r = sdk.requests;\nfor (const x of xs) { r.send(req); }"
+    reports:   outbound-send
+
+* silence-tagged-template-key - a KEY built by a TAGGED TEMPLATE is silent: `const k = String.raw`requests`` binds nothing, because the string readers test ts.isStringLiteralLike and a tagged template is a call on a template rather than a literal. The plain literal binding REPORTS - that is the counter-probe. CONTRIVED and unreachable in this codebase; recorded rather than closed
+    read off:  auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
+    probe:     "const k = String.raw`requests`;\nsdk[k].send(req);"
+    reports:   [] - nothing
+    counter:   "const k = \"requests\";\nsdk[k].send(req);"
+    reports:   outbound-send
+
+* silence-doubled-global-receiver - a GLOBAL RECEIVER reached through ITSELF is silent: `globalThis.globalThis.fetch(url)` reports nothing, because the inner member name is not one of the surfaces any rule tests and the receiver rules anchor on a member NAME rather than on the receiver alone. The single-hop spelling REPORTS - that is the counter-probe. CONTRIVED and unreachable in this codebase; recorded rather than closed
+    read off:  auditSource > const isGlobalReceiver = (node: ts.Expression): boolean =>
+    probe:     "globalThis.globalThis.fetch(url);"
+    reports:   [] - nothing
+    counter:   "globalThis.fetch(url);"
     reports:   outbound-fetch
 END DERIVED RESIDUAL
 */
@@ -3234,6 +3293,49 @@ export function auditSource(file: string, source: string): Violation[] {
     return undefined;
   };
 
+  /**
+   * THE MEMBERS A DESTRUCTURE OFF A POSITIVELY IDENTIFIED RECEIVER BINDS —
+   * DEFINED ONCE, REACHED FROM THE FLAT SPELLING AND FROM THE NESTED ONE.
+   *
+   * WR-37, 2026-08-24. `const { send } = sdk.requests` reported and
+   * `const { requests } = sdk` reported, and the COMBINED spelling —
+   * `const { requests: { send } } = sdk` — reported NOTHING, because the rule
+   * below read a binding pattern exactly one level deep and skipped any element
+   * whose own name was a pattern.
+   *
+   * WHY THIS ONE IS CLOSED AND ITS FIVE SIBLINGS ARE NOT, WHICH IS A DISTINCTION
+   * ABOUT CLASS AND NOT ABOUT EFFORT. The nested destructure is a COMPOSITION of
+   * two shapes this gate already resolves: the outer element names a receiver the
+   * way `const { requests } = sdk` does, and the inner names are members of it the
+   * way `const { send } = sdk.requests` are. Nothing new has to be decided. Its
+   * five siblings — an array-slot receiver, an object-literal property, a class
+   * field, a parameter default and a `for…of` binding — are each a GENUINE
+   * WIDENING: each teaches the walk to read an initializer SHAPE it has never
+   * read, each therefore needs its own real-tree measurement, and each is carried
+   * as a MEASURED SILENCE row with an executed probe rather than closed here
+   * without one.
+   */
+  const reportReceiverMembers = (
+    pattern: ts.ObjectBindingPattern,
+    kind: string,
+  ): void => {
+    for (const el of pattern.elements) {
+      const property = boundPropertyName(el);
+      if (property === undefined) {
+        add(
+          "outbound-unanalysable",
+          `a destructure off a \`${kind}\` receiver whose property name this walk cannot read`,
+        );
+        continue;
+      }
+      if (kind === SEND_RECEIVER && REQUESTS_READ_ONLY.has(property)) continue;
+      add(
+        kind === NET_RECEIVER ? "outbound-net" : "outbound-send",
+        `\`${property}\`, destructured from a \`${kind}\` receiver`,
+      );
+    }
+  };
+
   const collect = (node: ts.Node): void => {
     // WR-23's negative side. A top-level `function Function(...)` / `class
     // WebSocket {}` binds that name for the whole module, so the bare call in
@@ -3553,22 +3655,22 @@ export function auditSource(file: string, source: string): Violation[] {
           "a destructure off an element access whose key this walk cannot read, so the receiver it selects could be `requests` or `net`",
         );
       } else if (kind !== undefined) {
+        reportReceiverMembers(node.name, kind);
+      } else {
+        // WR-37, 2026-08-24 — THE NESTED SPELLING. The initializer is not itself
+        // a receiver (`sdk` is not), but an ELEMENT of the pattern names one the
+        // same way `const { requests } = sdk` does, and that element's own name is
+        // a pattern whose members are members of it. Both halves already resolved;
+        // only their composition did not.
         for (const el of node.name.elements) {
           const property = boundPropertyName(el);
-          if (property === undefined) {
-            add(
-              "outbound-unanalysable",
-              `a destructure off a \`${kind}\` receiver whose property name this walk cannot read`,
-            );
-            continue;
+          if (
+            property !== undefined &&
+            ts.isObjectBindingPattern(el.name) &&
+            RECEIVERS.has(property)
+          ) {
+            reportReceiverMembers(el.name, property);
           }
-          if (kind === SEND_RECEIVER && REQUESTS_READ_ONLY.has(property)) {
-            continue;
-          }
-          add(
-            kind === NET_RECEIVER ? "outbound-net" : "outbound-send",
-            `\`${property}\`, destructured from a \`${kind}\` receiver`,
-          );
         }
       }
     }
@@ -4766,7 +4868,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "unwrap",
     kind: "resolver",
     clause:
-      "strips parentheses, `as`/satisfies assertions, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver",
+      "strips parentheses, `as`/satisfies assertions, an angle-bracket type assertion, non-null assertions and a COMMA SEQUENCE down to its rightmost operand, so a wrapped receiver is still that receiver. CORRECTED 2026-08-24 (IN-29): the angle-bracket form was one of the five wrappers the code strips and the only one this clause did not name, which is the direction of MORE stripping rather than less - it is probeable in .ts source and the branch below is its probe",
     site: "module scope > function unwrap(node: ts.Expression): ts.Expression {",
     probe: "(0, sdk.net).connect(x);",
     expect: Object.freeze(["outbound-net"] as const),
@@ -4792,6 +4894,16 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
           "module scope > unwrap > current.operatorToken.kind === ts.SyntaxKind.CommaToken",
         probe: "(0, sdk.requests).send(req);",
         expect: Object.freeze(["outbound-send"] as const),
+      }),
+      // IN-29, 2026-08-24. The fifth wrapper. It IS probeable in `.ts` source —
+      // this file parses every fixture with `ts.ScriptKind.TS`, where
+      // `<any>x` is a type assertion rather than JSX — so no limit is recorded
+      // and a real probe is written instead.
+      Object.freeze({
+        names: "an angle-bracket type assertion",
+        anchor: "module scope > unwrap > ts.isTypeAssertionExpression(current)",
+        probe: "const g = <any>globalThis;\ng.fetch(url);",
+        expect: Object.freeze(["outbound-fetch"] as const),
       }),
     ] as readonly BranchProbe[]),
   }),
@@ -5025,11 +5137,39 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
       }),
     ] as readonly BranchProbe[]),
   }),
+  // WR-37, 2026-08-24. One definition of what a destructure off an identified
+  // receiver binds, reached from the flat spelling and from the nested one.
+  Object.freeze({
+    id: "reportReceiverMembers",
+    kind: "resolver",
+    clause:
+      "the members a destructure off a POSITIVELY IDENTIFIED receiver binds, minus the read-only allowlist - defined once and reached from the flat spelling and from a nested pattern of an identified receiver, so `const { requests: { send } } = sdk` reports what its two halves already reported one at a time. RECEIVER-ANCHORED: an ordinary object destructured the same way binds nothing, which is the counter-probe",
+    site: "auditSource > const reportReceiverMembers = (",
+    probe: "const { requests: { send } } = sdk;\nsend(req);",
+    expect: Object.freeze(["outbound-send"] as const),
+    counterProbe: "const { cache: { send } } = app;\nsend(req);",
+    counterExpect: Object.freeze([] as const),
+    branches: Object.freeze([
+      Object.freeze({
+        names: "the flat spelling",
+        anchor: "auditSource > visit > reportReceiverMembers(node.name, kind);",
+        probe: "const { send } = sdk.requests;\nsend(req);",
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+      Object.freeze({
+        names: "a nested pattern of an identified receiver",
+        anchor:
+          "auditSource > visit > reportReceiverMembers(el.name, property);",
+        probe: "const { requests: { send } } = sdk;\nsend(req);",
+        expect: Object.freeze(["outbound-send"] as const),
+      }),
+    ] as readonly BranchProbe[]),
+  }),
   Object.freeze({
     id: "destructuredInitializer",
     kind: "resolver",
     clause:
-      "the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26)",
+      "the initializer a binding element resolves to in BOTH binding-pattern spellings - object property and array slot - so a declared assembly reached through a destructure is read (IN-26). CORRECTED 2026-08-24 (WR-37): what it reads is the ASSEMBLY a KEY is built from and nothing else. A RECEIVER bound through an array ELEMENT position reaches no branch here and is carried as its own measured silence below; a NESTED pattern reaches no branch here either and is closed at reportReceiverMembers instead, because that one is a COMPOSITION of two shapes already resolved rather than a widening",
     site: "module scope > function destructuredInitializer(",
     probe: 'const [k] = ["req" + "uests"];\nsdk[k].send(req);',
     expect: Object.freeze(["outbound-unanalysable"] as const),
@@ -5194,6 +5334,99 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     counterProbe: "const a = fetch;\nconst b = a;\nb(url);",
     counterExpect: Object.freeze(["outbound-fetch"] as const),
   }),
+  // WR-37's FIVE SIBLINGS, 2026-08-24. Each is a RECEIVER bound through an
+  // initializer shape the collector has never read, and each is therefore a
+  // GENUINE WIDENING with its own real-tree measurement to do — a different class
+  // from the nested destructure closed in this same plan, which was a composition
+  // of two shapes already resolved. All five probes and all five counter-probes
+  // were RUN before these rows were written.
+  //
+  // THEY SAY SO HERE BECAUSE RESIDUAL (b) DOES NOT. Residual (b) is written about
+  // KEYS - a parameter, a loop binding, a name bound in another file - so a reader
+  // checking whether the RECEIVER twins are covered will not find them there. That
+  // gap is the reason these are rows rather than a sentence in (b).
+  Object.freeze({
+    id: "silence-array-slot-receiver",
+    kind: "measured-silence",
+    clause:
+      "a RECEIVER bound through an array ELEMENT position is silent. The binding-pattern branch beside it reads only an assembled KEY and grows no receiver, so neither `const [r] = [sdk.requests]` nor `const a = [sdk.requests]; a[0]` binds anything. The one-hop binding of the same receiver REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this",
+    site: "auditSource > collect > } else if (ts.isArrayBindingPattern(node.name)) {",
+    probe: "const [r] = [sdk.requests];\nr.send(req);",
+    expect: Object.freeze([] as const),
+    counterProbe: "const r = sdk.requests;\nr.send(req);",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-object-literal-property-receiver",
+    kind: "measured-silence",
+    clause:
+      "a RECEIVER reached as a named member of an object LITERAL is silent: `const o = { r: sdk.requests }; o.r.send(req)` binds nothing, because the collector reads an initializer that IS a receiver and never one that CONTAINS one. The one-hop binding REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this",
+    site: "auditSource > const receiverAliases = new Map<string, string>()",
+    probe: "const o = { r: sdk.requests };\no.r.send(req);",
+    expect: Object.freeze([] as const),
+    counterProbe: "const r = sdk.requests;\nr.send(req);",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-class-field-receiver",
+    kind: "measured-silence",
+    clause:
+      "a RECEIVER held in a CLASS FIELD is silent: `class C { r = sdk.requests; m() { this.r.send(req); } }` binds nothing, because the collector reads variable declarations and assignments and not property declarations. The same call written directly inside the method REPORTS - that is the counter-probe. Residual (b) is written about KEYS ONLY and does not cover this",
+    site: "auditSource > const collect = (node: ts.Node): void => {",
+    probe: "class C { r = sdk.requests; m() { this.r.send(req); } }",
+    expect: Object.freeze([] as const),
+    counterProbe: "class C { m() { sdk.requests.send(req); } }",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-parameter-default-receiver",
+    kind: "measured-silence",
+    clause:
+      "a RECEIVER supplied as a PARAMETER DEFAULT is silent: `function f(r = sdk.requests) { r.send(req); }` binds nothing, because a parameter is never bound in the collect pass at all. The same receiver bound outside the function REPORTS - that is the counter-probe. Residual (b) names a parameter for KEYS ONLY, so a reader checking it there will not find this RECEIVER twin",
+    site: "auditSource > const receiverAliases = new Map<string, string>()",
+    probe: "function f(r = sdk.requests) { r.send(req); }",
+    expect: Object.freeze([] as const),
+    counterProbe: "const r = sdk.requests;\nfunction f() { r.send(req); }",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-for-of-binding-receiver",
+    kind: "measured-silence",
+    clause:
+      "a RECEIVER bound by a `for…of` head is silent: `for (const r of [sdk.requests]) { r.send(req); }` binds nothing, because the loop binding has no initializer the collector can read - the value comes from the iterable. The same receiver bound outside the loop REPORTS - that is the counter-probe. Residual (b) names a loop binding for KEYS ONLY, so a reader checking it there will not find this RECEIVER twin",
+    site: "auditSource > const receiverAliases = new Map<string, string>()",
+    probe: "for (const r of [sdk.requests]) { r.send(req); }",
+    expect: Object.freeze([] as const),
+    counterProbe:
+      "const r = sdk.requests;\nfor (const x of xs) { r.send(req); }",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  // IN-30, 2026-08-24. TWO CONTRIVED SPELLINGS, RECORDED SO THAT A SEVENTH ROUND
+  // DOES NOT SPEND A FINDING ON THEM. Neither is reachable in this codebase and
+  // neither is worth a branch; what they are worth is a row, because a shape
+  // measured and then left unwritten is a shape somebody rediscovers.
+  Object.freeze({
+    id: "silence-tagged-template-key",
+    kind: "measured-silence",
+    clause:
+      "a KEY built by a TAGGED TEMPLATE is silent: `const k = String.raw`requests`` binds nothing, because the string readers test ts.isStringLiteralLike and a tagged template is a call on a template rather than a literal. The plain literal binding REPORTS - that is the counter-probe. CONTRIVED and unreachable in this codebase; recorded rather than closed",
+    site: "auditSource > function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {",
+    probe: "const k = String.raw`requests`;\nsdk[k].send(req);",
+    expect: Object.freeze([] as const),
+    counterProbe: 'const k = "requests";\nsdk[k].send(req);',
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-doubled-global-receiver",
+    kind: "measured-silence",
+    clause:
+      "a GLOBAL RECEIVER reached through ITSELF is silent: `globalThis.globalThis.fetch(url)` reports nothing, because the inner member name is not one of the surfaces any rule tests and the receiver rules anchor on a member NAME rather than on the receiver alone. The single-hop spelling REPORTS - that is the counter-probe. CONTRIVED and unreachable in this codebase; recorded rather than closed",
+    site: "auditSource > const isGlobalReceiver = (node: ts.Expression): boolean =>",
+    probe: "globalThis.globalThis.fetch(url);",
+    expect: Object.freeze([] as const),
+    counterProbe: "globalThis.fetch(url);",
+    counterExpect: Object.freeze(["outbound-fetch"] as const),
+  }),
   // `silence-operator-around-global-receiver` STOOD HERE AND IS REMOVED, 2026-08-24
   // (CR-11). It is not reworded and it is not narrowed: the silence it measured
   // NO LONGER EXISTS. Re-measured after the shared descent landed, every one of
@@ -5318,6 +5551,15 @@ export const BRANCH_VOCABULARY: readonly string[] = Object.freeze([
   "the RENAMED spelling",
   "object property",
   "array slot",
+  // IN-29 and WR-37, 2026-08-24. The fifth wrapper `unwrap` strips, and the two
+  // sites the destructure reporter is reached from. Spelled so that none of the
+  // three contains another, and so that "the flat spelling" does not contain and
+  // is not contained by "the bare spelling" — the substring trap this list has
+  // now avoided three times, first recorded when "a logical assignment" was
+  // spelled so as not to contain "an assignment".
+  "an angle-bracket type assertion",
+  "the flat spelling",
+  "a nested pattern of an identified receiver",
 ]);
 
 /**
@@ -8363,7 +8605,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       hits.length,
       `BRANCH_VOCABULARY matched ${hits.length} clause-phrase pairs: ${hits.join(" | ")}. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(80);
+    ).toBe(83);
   });
 
   // THE COVERAGE GUARD. A clause naming a branch with no probe is a failing test.
@@ -8397,11 +8639,11 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       branches.length,
       `the registry carries ${branches.length} branch probes. A SHRINKING enumeration is the failure this pin exists to catch.`,
-    ).toBe(97);
+    ).toBe(100);
     expect(
       new Set(branches.map(([id]) => id)).size,
-      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 34 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
-    ).toBe(35);
+      "the number of ROWS carrying at least one branch, pinned. A row that lost its branches is invisible to a total-count check alone if another row grew one. 35 resolvers plus the one measured-silence row whose clause names a branch of constStrings.",
+    ).toBe(36);
 
     // A PLAIN SUBSTRING SEARCH HERE WOULD BE VACUOUS, AND THIS TASK ADDED A THIRD
     // SURFACE THAT WOULD SATISFY ONE. The anchor text occurs (1) inside the
@@ -8665,7 +8907,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // rather than silent. A guard that used to see 47 members and now sees 3 is
     // still "non-empty" and still broken.
     expect(collectors.length).toBe(11);
-    expect(functions.length).toBe(41);
+    expect(functions.length).toBe(42);
   });
 
   it("every member of BOTH populations is a registry row OR a named, reasoned exemption", () => {
