@@ -580,3 +580,17 @@ $ git diff --exit-code -- 01-01..01-26 PLANs, 01-VERIFICATION.md, 01-REVIEW.md, 
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-24*
+
+## Self-Check: PASSED
+
+All four modified files and this SUMMARY exist on disk. All five commits
+(`7f62ca9`, `d640908`, `1002df9`, `0a8bbdd`, `6201435`) resolve in `git log`.
+`deriveResidual` is present in the gate file, the derived block's BEGIN sentinel
+is present in `.planning/REQUIREMENTS.md`, and `deriveResidual` is named as a
+pointer in both `.planning/STATE.md` and `.planning/WINDOWS.md` — the four
+artifacts the `must_haves.artifacts` block requires, each carrying the string it
+requires. Every plan-level `<verification>` item was re-run at the end of task 3
+and is recorded above: 31 files / 1200 tests green, typecheck / lint / knip exit
+0, bundle at exactly one specifier `crypto`, real tree 23 files / ZERO
+violations, CORE-11's box `[ ]`, and the frozen plan/verification/review/UAT
+files clean under `git diff --exit-code`.
