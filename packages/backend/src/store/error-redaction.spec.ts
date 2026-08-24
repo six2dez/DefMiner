@@ -258,6 +258,40 @@ function unwrap(node: ts.Node): ts.Node {
  * A `describeError(...)` call is the SAFE form and terminates the descent with
  * `false` at whatever depth it appears, which is what keeps
  * `describeError(e).slice(0, 200)` — a call, on a member, of a call — quiet.
+ *
+ * WIDENED 2026-08-22 (WR-24) BY THE OPERATOR CLASS, and the shape that forced it
+ * is the STANDARD one rather than an exotic spelling. The five steps above all
+ * have a single sub-expression to walk into, so an OPERATOR between the binding
+ * and the render position stopped the descent dead. Executed against
+ * `auditSource("store/x.ts", src)` before the change:
+ *
+ *   catch(e){ return { ok:false, error: e.message }; }              ["unredacted-object-value"]
+ *   catch(e){ return { ok:false, error: e instanceof Error ? e.message : "x" }; }  []
+ *   catch(e){ return { ok:false, error: e.message ?? "x" }; }       []
+ *   catch(e){ return { ok:false, error: e.message || "x" }; }       []
+ *
+ * `e instanceof Error ? e.message : String(e)` is exactly what
+ * `useUnknownInCatchVariables` — which this repository enables, and which this
+ * docblock already cites as the reason the cast forms matter — pushes an author
+ * toward when narrowing a caught `unknown` before rendering it. It is likelier in
+ * a Phase 2 `finishAnalysis` than either accumulator idiom WR-17 added.
+ *
+ * So a `ConditionalExpression` descends into BOTH BRANCHES and a `??`, `||` or
+ * `&&` descends into BOTH OPERANDS, with EITHER-SIDE semantics: a render that is
+ * unsafe on one path is unsafe. That is the same reasoning `initializerReceiver`
+ * uses one package away in `../outbound-prohibition.spec.ts` for its own
+ * conditionals, and stating the symmetry here is what keeps the two gates from
+ * drifting into disagreeing about the same operator.
+ *
+ * The CONDITION of a `? :` is deliberately NOT descended. `e instanceof Error`
+ * renders nothing; only the branch that becomes the value can carry the error's
+ * bytes into `analyses.error`.
+ *
+ * `isSafeRenderCall` still terminates the descent at every one of these new
+ * depths, because each branch and each operand re-enters this function from the
+ * top. A descent that reached PAST a `describeError(...)` call would have broken
+ * the gate rather than widened it, so each new failing fixture below ships with
+ * its `describeError` twin asserted quiet in the same commit.
  */
 function derivesFrom(node: ts.Node, names: ReadonlySet<string>): boolean {
   let current: ts.Node = node;
@@ -285,6 +319,31 @@ function derivesFrom(node: ts.Node, names: ReadonlySet<string>): boolean {
         current = callee.expression;
         continue;
       }
+    }
+    // ---- OPERATOR CLASS, branch 1 of 2: a conditional (WR-24). ------------
+    // EITHER branch deriving from the binding makes the whole expression derive
+    // from it. Recursive rather than a `continue`, because a conditional has TWO
+    // sub-expressions to walk and the loop above carries only one `current`.
+    if (ts.isConditionalExpression(current)) {
+      return (
+        derivesFrom(current.whenTrue, names) ||
+        derivesFrom(current.whenFalse, names)
+      );
+    }
+    // ---- OPERATOR CLASS, branch 2 of 2: `??`, `||`, `&&` (WR-24). ---------
+    // The same either-side rule for the two operands. `+` and `+=` are handled
+    // as a RENDER FORM by their own rule below and are not listed here: this
+    // step answers "does this VALUE derive from the binding", and `"x" + e` is a
+    // render, not a passthrough.
+    if (
+      ts.isBinaryExpression(current) &&
+      (current.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+        current.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        current.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+    ) {
+      return (
+        derivesFrom(current.left, names) || derivesFrom(current.right, names)
+      );
     }
     break;
   }
@@ -1095,6 +1154,165 @@ describe("the two positions CR-05 names — a return value and an object-literal
     expect(rulesOf("const f = (e: unknown) => String(e);")).toContain(
       "unredacted-persisted-error",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE OPERATOR CLASS — WR-24. An operator between the binding and the render.
+// ---------------------------------------------------------------------------
+// Every source string below is the REVIEW'S OWN CATCH-BLOCK SHAPE rather than a
+// paraphrase of it, so the fixture and the finding are one artifact rather than
+// two similar ones. All four reported `[]` until 2026-08-22.
+describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` between the binding and the render (WR-24)", () => {
+  const rulesOf = (src: string, file = "fixture.ts"): string[] =>
+    auditSource(file, src).map((v) => v.rule);
+
+  // ---- The CONDITIONAL branch of `derivesFrom`, on its own. ---------------
+  // Titled separately from the logical-operator cases below because the two
+  // branches were reverted SEPARATELY to prove each is load-bearing on its own,
+  // and a mutation proof is only readable if the red titles name their branch.
+  it("CONDITIONAL branch — flags the standard narrowing idiom as an OBJECT-LITERAL value (WR-24)", () => {
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "x" }; } }',
+      ),
+    ).toContain("unredacted-object-value");
+  });
+
+  it("CONDITIONAL branch — flags the standard narrowing idiom RETURNED (WR-24)", () => {
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { return e instanceof Error ? e.message : "x"; } }',
+      ),
+    ).toContain("unredacted-return");
+  });
+
+  it("CONDITIONAL branch — flags the binding in EITHER branch, not just the first (WR-24)", () => {
+    // Either-side semantics stated as an executed case: a render that is unsafe
+    // on one path is unsafe. `String(e)` in the false branch is a render in its
+    // own right, so the shape used here reaches the binding only through the
+    // conditional itself.
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { return { ok: false, error: false ? "x" : e.message }; } }',
+      ),
+    ).toContain("unredacted-object-value");
+  });
+
+  // ---- The LOGICAL-OPERATOR branch of `derivesFrom`, on its own. ----------
+  it.each([
+    [
+      'OBJECT-LITERAL value — e.message ?? "x"',
+      'function f() { try { g(); } catch (e) { return { ok: false, error: e.message ?? "x" }; } }',
+      "unredacted-object-value",
+    ],
+    [
+      'OBJECT-LITERAL value — e.message || "x"',
+      'function f() { try { g(); } catch (e) { return { ok: false, error: e.message || "x" }; } }',
+      "unredacted-object-value",
+    ],
+    [
+      // The `&&` spelling goes beyond the four shapes the review executed: the
+      // fix covers it, so it is asserted rather than left as an untested
+      // consequence of the same branch.
+      'OBJECT-LITERAL value — e.message && "x"',
+      'function f() { try { g(); } catch (e) { return { ok: false, error: e.message && "x" }; } }',
+      "unredacted-object-value",
+    ],
+    [
+      'RETURNED — e.message ?? "x"',
+      'function f() { try { g(); } catch (e) { return e.message ?? "x"; } }',
+      "unredacted-return",
+    ],
+    [
+      'RETURNED — e.message || "x"',
+      'function f() { try { g(); } catch (e) { return e.message || "x"; } }',
+      "unredacted-return",
+    ],
+    [
+      'RETURNED — e.message && "x"',
+      'function f() { try { g(); } catch (e) { return e.message && "x"; } }',
+      "unredacted-return",
+    ],
+  ])("LOGICAL-OPERATOR branch — flags %s (WR-24)", (_shape, src, rule) => {
+    expect(rulesOf(src), `${_shape} still reports clean`).toContain(rule);
+  });
+
+  it("the already-covered bare `error: e.message` still reports — the widening broke nothing (WR-24)", () => {
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, error: e.message }; } }",
+      ),
+    ).toContain("unredacted-object-value");
+  });
+
+  // ---- THE SAFE TWINS. Same commit as the branches, never after. ----------
+  // A widening that cannot tell the safe form from the unsafe one has not
+  // widened the gate, it has broken it.
+  it.each([
+    [
+      "describeError(e) in a CONDITIONAL branch",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: e instanceof Error ? describeError(e) : "x" }; } }',
+    ],
+    [
+      "describeError(e) as a `??` operand",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e) ?? "x" }; } }',
+    ],
+    [
+      "describeError(e) as a `||` operand",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e) || "x" }; } }',
+    ],
+    [
+      "describeError(e) as an `&&` operand",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e) && "x" }; } }',
+    ],
+    [
+      // The existing call-on-a-member-of-a-call case, re-run at each new depth:
+      // this is the REAL shape of every catch in this directory.
+      "describeError(e).slice(0, 200) in a CONDITIONAL branch",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: e instanceof Error ? describeError(e).slice(0, 200) : "x" }; } }',
+    ],
+    [
+      "describeError(e).slice(0, 200) as a `??` operand",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e).slice(0, 200) ?? "x" }; } }',
+    ],
+    [
+      "describeError(e).slice(0, 200) as a `||` operand",
+      'function f() { try { g(); } catch (e) { return { ok: false, error: describeError(e).slice(0, 200) || "x" }; } }',
+    ],
+  ])("SAFE TWIN — stays quiet on %s (WR-24)", (_shape, src) => {
+    expect(
+      rulesOf(src),
+      `${_shape} FIRED — the widening lost the safe/unsafe distinction`,
+    ).toEqual([]);
+  });
+
+  // ---- IN-22's two limits, PINNED rather than merely named. ---------------
+  // THE PINNING DECISION, and its reason, are written in the residual paragraph
+  // in this file's header as well as here: `schema.spec.ts` one directory away
+  // pins each of its OPEN grammars with a case that goes red the day somebody
+  // closes it, and a residual naming a limit with nothing asserting it is a
+  // sentence that can rot silently. These two assert the CURRENT behaviour.
+  it("RESIDUAL, PINNED (IN-22): a push onto a MEMBER receiver is unseen — the push rule needs a bare identifier", () => {
+    // `names.add(receiver.text)` runs only when the unwrapped push receiver is an
+    // identifier, so `o.parts` never becomes a tracked name and the join below it
+    // reaches nothing. Goes RED the day the push rule accepts a member receiver.
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { const o = { parts: [] }; o.parts.push(e.message); return { ok: false, error: o.parts.join(" ") }; } }',
+      ),
+    ).toEqual([]);
+  });
+
+  it("RESIDUAL, PINNED (IN-22): a `join` appearing BEFORE its `push` in document order is missed", () => {
+    // `names` GROWS during the walk, so at the moment the join is visited the
+    // array is not yet a tracked name. Boundary 2 states the document-order
+    // limit; this case is what makes the statement falsifiable.
+    expect(
+      rulesOf(
+        'function f() { try { g(); } catch (e) { const a = []; const out = a.join(""); a.push(e.message); return { ok: false, error: out }; } }',
+      ),
+    ).toEqual([]);
   });
 });
 
