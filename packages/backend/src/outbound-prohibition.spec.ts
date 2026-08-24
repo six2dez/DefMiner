@@ -208,6 +208,22 @@
 //    because every fixture below names its mechanism in its own title and every
 //    mechanism here names the shapes it — and only it — resolves.
 //
+//    THE TABLE'S FATE, DECIDED 2026-08-24 (wave 27) RATHER THAN LEFT AS TWO
+//    HAND-MAINTAINED LISTS OF ONE FACT. It STAYS HAND-WRITTEN, and the derived
+//    block above it is AUTHORITATIVE. The reason is that the two are indexed on
+//    different things and neither index can be rendered from the other: this
+//    table is organised by SPELLING — what a reader arrives holding — while
+//    `RESOLVER_REGISTRY` is organised by MECHANISM, which is what the code has.
+//    Rendering this table from the registry would cost the spelling index, which
+//    is the only reason the table exists; rendering the registry from this table
+//    would make the executed probes secondary to a paragraph, which is the defect
+//    wave 27 removes. WHERE THEY DISAGREE, THE DERIVED BLOCK WINS AND A ROW HERE
+//    IS THE DEFECT — the derived block's entries are executed against
+//    `auditSource`; these rows are not. A future wave that wants one list should
+//    widen the registry to carry spellings and render this table from it; that is
+//    a separate decision needing its own measurement, and this wave changes no
+//    rule.
+//
 //      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
 //      -------------------------------------    -----------------    ---------------------
 //      sdk["requests"]                          literalOf            outbound-send
@@ -764,7 +780,16 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
 1. Each entry below is verified by EXECUTION: its probe and its counter-probe
    are run through auditSource and asserted against the rule identifiers
    recorded here, so a branch removed from the walk turns its own entry red.
-2. It does NOT prove the registry enumerates every mechanism the walk has.
+2. It does NOT prove the registry enumerates every mechanism the walk has. A
+   coverage guard enumerates TWO populations out of this file's own source -
+   collectors matching a declared naming convention, and resolver functions
+   declared inside the audit function or at module scope in the resolver
+   region - and requires each member to be an entry below OR a NAMED, reasoned
+   entry on an explicit exemption list. The bound is REGISTERED OR LISTED over
+   those two populations. It is NOT `detectable`: a resolver written as NEITHER
+   shape - an inline branch in the walk, a differently-shaped binding, a
+   resolver declared inside another function - is enumerated by neither half
+   and is NOT caught.
 3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and
    do not cover that resolver's whole domain.
 4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody
@@ -3464,7 +3489,16 @@ export function deriveResidual(registry: readonly ResolverRecord[]): string {
     "1. Each entry below is verified by EXECUTION: its probe and its counter-probe",
     "   are run through auditSource and asserted against the rule identifiers",
     "   recorded here, so a branch removed from the walk turns its own entry red.",
-    "2. It does NOT prove the registry enumerates every mechanism the walk has.",
+    "2. It does NOT prove the registry enumerates every mechanism the walk has. A",
+    "   coverage guard enumerates TWO populations out of this file's own source -",
+    "   collectors matching a declared naming convention, and resolver functions",
+    "   declared inside the audit function or at module scope in the resolver",
+    "   region - and requires each member to be an entry below OR a NAMED, reasoned",
+    "   entry on an explicit exemption list. The bound is REGISTERED OR LISTED over",
+    "   those two populations. It is NOT `detectable`: a resolver written as NEITHER",
+    "   shape - an inline branch in the walk, a differently-shaped binding, a",
+    "   resolver declared inside another function - is enumerated by neither half",
+    "   and is NOT caught.",
     "3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and",
     "   do not cover that resolver's whole domain.",
     "4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody",
@@ -3527,6 +3561,162 @@ export function extractDerivedBlock(
     );
   }
   return lines.slice(first + 1, last).join("\n");
+}
+
+/**
+ * THE COVERAGE GUARD'S EXEMPTION LIST — EVERY ENTRY NAMED, EVERY ENTRY REASONED.
+ *
+ * THIS LIST IS THE POINT, NOT A LOOPHOLE. A function inside the enumerated
+ * populations that is genuinely not a resolver goes here BY NAME with one clause
+ * saying why. That converts an invisible population into a LISTED one: adding a
+ * resolver function is a failing test until somebody either registers it or
+ * writes it down here, and a reviewer can read this list and DISAGREE with an
+ * entry. An unnamed blind spot cannot be disagreed with — which is exactly what
+ * five rounds of authored residual were.
+ *
+ * An EMPTY list would also be a failure of this design, not a success: it would
+ * mean the enumeration is matching nothing that needs excusing, which in a file
+ * this size means the enumeration stopped matching.
+ */
+const RESOLVER_EXEMPTIONS: Readonly<Record<string, string>> = Object.freeze({
+  // --- declared inside auditSource ---
+  add: "records a Violation into the output array; it resolves no expression and reads no binding.",
+  bindString:
+    "WRITES a literal into constStrings; it is the collector's setter, and what it feeds is stated by the constStrings row.",
+  collect:
+    "the first document-order pass. It invokes the collectors and records bindings; it decides nothing about what an expression IS.",
+  visit:
+    "the second document-order pass. It applies the rules to the bindings collect() produced; every resolution it performs is delegated to a registered mechanism.",
+  // --- declared at module scope, in the resolver region ---
+  shippedFiles:
+    "enumerates the .ts files under both SOURCE_ROOTS. A filesystem walk, not an expression resolver.",
+  rootHasSubdirectory:
+    "a non-vacuity check on that filesystem walk — it answers whether a root has any subdirectory at all.",
+  operatorOperands:
+    "extracts the operands operatorReceiver descends into. Its behaviour is stated by the operatorReceiver row and it has no independent answer.",
+  aliasSuffix:
+    "formats the ` (an alias of \\`x\\`)` fragment of a violation message.",
+  callDetail: "formats the violation detail for a call site.",
+  constructionDetail: "formats the violation detail for a `new` site.",
+  auditSource:
+    "the entry point that HOSTS every resolver. It is the subject the registry describes, not a member of it.",
+  formatRules: "renders a rule-id list into the generated text.",
+  plural: "renders a count into the generated text.",
+  formatEntry: "renders one registry row into the generated text.",
+  deriveResidual:
+    "renders the residual text from the registry. It reads no AST and resolves no expression.",
+  extractDerivedBlock:
+    "pulls a sentinel-delimited span out of a file's TEXT. It reads no AST and resolves no expression.",
+  enumerateResolverPopulations:
+    "reads this file's own source TEXT to enumerate the two populations the guard checks. It is the guard's input, not a mechanism of the walk.",
+});
+
+/**
+ * THE COVERAGE GUARD — WHAT IT ENUMERATES, AND WHAT IT CANNOT SEE.
+ *
+ * THE BOUND IS "REGISTERED OR LISTED OVER TWO ENUMERATED POPULATIONS". It is NOT
+ * "every new resolver is detectable", and no sentence in this file, in the
+ * generated text or in any summary may say that it is. Stating a stronger bound
+ * than the mechanism has is the exact defect this whole plan exists to reduce, and
+ * a guard that overclaims about itself is the sixth instance of it.
+ *
+ * POPULATION 1 — COLLECTORS. Every `const <name> = new Map<…>` or
+ * `new Set<…>` declared at auditSource's own indentation, inside auditSource's own
+ * line span. That naming convention is DECLARED here rather than inferred, so a
+ * later author who renames a collector out of it is renaming out of a stated rule.
+ *
+ * POPULATION 2 — RESOLVER FUNCTIONS, IN BOTH SCOPES. Every `function <name>(` and
+ * every `const <name> = (` declared at auditSource's own indentation inside
+ * auditSource, AND every one declared at column zero in the resolver region — from
+ * the first `import` to the first `describe(`.
+ *
+ * WHY BOTH SCOPES, RECORDED AS A DISCREPANCY RATHER THAN SMOOTHED OVER. The plan
+ * that commissioned this guard described population 2 as "function declarations
+ * inside the audit function" and named `isAssembledKey`, `isProvablyNumeric` and
+ * `unwrap` as members of it. MEASURED, all three are declared at MODULE scope, so
+ * the literal reading of that sentence would have excluded the three functions the
+ * sentence itself cited. The population spans both scopes because the measurement
+ * said so, not because the plan did. The half that matters most is the
+ * auditSource half — WR-27 was a defect in `receiverKind`, wave 24 edited
+ * `keyReceiver` and wave 25 edited `initializerReceiver` — so a guard blind to the
+ * function-shaped population would have been blind exactly where this round's
+ * findings came from.
+ *
+ * POPULATION 3 — ENUMERATED BY NEITHER HALF, AND THEREFORE NOT CAUGHT. A resolver
+ * written as NEITHER a matching collector NOR a declared function: an inline branch
+ * in `collect` or `visit`, a differently-shaped binding (`const f = function () {}`,
+ * a class method, a resolver reached through an object literal), or a resolver
+ * declared inside another function. Nothing below sees any of those. That residue
+ * is named HERE rather than left to be discovered, because an undeclared blind spot
+ * is the artifact this mechanism replaces.
+ *
+ * NON-VACUITY IS ASSERTED FOR BOTH POPULATIONS BEFORE THE RULE. A convention that
+ * stops matching — because a later author renames a collector, wraps the functions
+ * differently, or moves auditSource — must FAIL LOUDLY rather than pass having
+ * enumerated nothing. That failure mode is the one this whole mechanism exists to
+ * remove and it must not be reintroduced by its own guard.
+ */
+const AUDIT_FN_OPEN =
+  "export function auditSource(file: string, source: string): Violation[] {";
+const COLLECTOR_CONVENTION = /^const (\w+) = new (?:Map|Set)</;
+const FUNCTION_CONVENTION =
+  /^(?:export )?(?:function (\w+)\(|const (\w+) = \()/;
+
+type Populations = {
+  readonly collectors: readonly string[];
+  readonly functions: readonly string[];
+};
+
+/**
+ * Enumerate both populations out of the gate file's OWN SOURCE TEXT.
+ *
+ * Exported so the guard's input can be inspected rather than trusted, and because
+ * `knip`'s `ignoreExportsUsedInFile` makes an in-file export honest here.
+ */
+export function enumerateResolverPopulations(text: string): Populations {
+  const lines = text.split("\n");
+  const open = lines.indexOf(AUDIT_FN_OPEN);
+  if (open === -1) {
+    throw new SentinelMissingError(
+      `the audit function's opening line was not found. Looked for exactly: ${AUDIT_FN_OPEN}. The coverage guard cannot bound its first population without it — fix the anchor rather than deleting the guard.`,
+    );
+  }
+  let close = open + 1;
+  while (close < lines.length && lines[close] !== "}") close += 1;
+
+  const importAt = lines.findIndex((l) => l.startsWith("import "));
+  const describeAt = lines.findIndex((l) => l.startsWith("describe("));
+
+  const collectors: string[] = [];
+  const functions: string[] = [];
+
+  for (let k = open + 1; k < close; k += 1) {
+    const line = lines[k] ?? "";
+    // auditSource's own indentation, exactly: two spaces and not three.
+    if (!line.startsWith("  ") || line.startsWith("   ")) continue;
+    const body = line.slice(2);
+    const collector = COLLECTOR_CONVENTION.exec(body);
+    if (collector?.[1] !== undefined) {
+      collectors.push(collector[1]);
+      continue;
+    }
+    const fn = FUNCTION_CONVENTION.exec(body);
+    const name = fn?.[1] ?? fn?.[2];
+    if (name !== undefined) functions.push(name);
+  }
+
+  for (let k = importAt; k < describeAt; k += 1) {
+    const line = lines[k] ?? "";
+    if (line === "" || line.startsWith(" ")) continue;
+    const fn = FUNCTION_CONVENTION.exec(line);
+    const name = fn?.[1] ?? fn?.[2];
+    if (name !== undefined) functions.push(name);
+  }
+
+  return Object.freeze({
+    collectors: Object.freeze(collectors),
+    functions: Object.freeze(functions),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -5662,6 +5852,65 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
         DERIVED_END,
       ),
     ).toBe("a\nb");
+  });
+
+  // ---------------------------------------------------------------------------
+  // THE THIRD BINDING: THE REGISTRY TO THE FILE'S OWN POPULATIONS
+  // ---------------------------------------------------------------------------
+  it("BOTH resolver populations enumerate a NON-EMPTY set — non-vacuity, asserted BEFORE the rule", () => {
+    const { collectors, functions } = enumerateResolverPopulations(gateText);
+    expect(
+      collectors.length,
+      `the collector convention ${String(COLLECTOR_CONVENTION)} matched NOTHING inside auditSource. A guard that enumerates zero members passes having checked nothing, which is precisely the failure this mechanism exists to remove — reintroduced by its own guard. Either a collector was renamed out of the convention or auditSource's line span moved; fix the convention, do not delete the guard.`,
+    ).toBeGreaterThan(0);
+    expect(
+      functions.length,
+      `the function convention ${String(FUNCTION_CONVENTION)} matched NOTHING in either scope. Same failure, same instruction: fix the convention rather than the assertion.`,
+    ).toBeGreaterThan(0);
+    // The counts this run found, pinned so a SHRINKING enumeration is visible
+    // rather than silent. A guard that used to see 47 members and now sees 3 is
+    // still "non-empty" and still broken.
+    expect(collectors.length).toBe(11);
+    expect(functions.length).toBe(37);
+  });
+
+  it("every member of BOTH populations is a registry row OR a named, reasoned exemption", () => {
+    const { collectors, functions } = enumerateResolverPopulations(gateText);
+    const registered = new Set(RESOLVER_REGISTRY.map((r) => r.id));
+    const exempt = new Set(Object.keys(RESOLVER_EXEMPTIONS));
+
+    const unaccounted = [...collectors, ...functions].filter(
+      (name) => !registered.has(name) && !exempt.has(name),
+    );
+    expect(
+      unaccounted,
+      `resolver-shaped declaration(s) ${unaccounted.join(", ")} are NEITHER a RESOLVER_REGISTRY row NOR an entry on RESOLVER_EXEMPTIONS. Either add a registry row — with a probe and a counter-probe you have RUN — or add an exemption naming it with one clause saying why it is not a resolver. Silently absent is the one option this guard removes.`,
+    ).toEqual([]);
+  });
+
+  it("the exemption list is NON-EMPTY and every entry carries a reason", () => {
+    const entries = Object.entries(RESOLVER_EXEMPTIONS);
+    expect(
+      entries.length,
+      "RESOLVER_EXEMPTIONS is empty. In a file this size that means the enumeration stopped matching the things that need excusing — an empty list is a broken guard, not a clean one.",
+    ).toBeGreaterThan(0);
+    for (const [name, reason] of entries) {
+      expect(
+        reason.trim().length,
+        `exemption \`${name}\` carries no reason. An unexplained exemption is an unnamed blind spot wearing a name.`,
+      ).toBeGreaterThan(20);
+    }
+  });
+
+  it("the shipped block carries exactly ONE entry per registry row — a truncated block FAILS", () => {
+    const shipped = extractDerivedBlock(gateText, DERIVED_BEGIN, DERIVED_END);
+    const entries = shipped
+      .split("\n")
+      .filter((l) => l.startsWith(ENTRY_MARK)).length;
+    expect(
+      entries,
+      `the block shipped in ${GATE_FILE} carries ${entries} entries and the registry has ${RESOLVER_REGISTRY.length}. A block that was truncated, or pasted as a prefix, would otherwise pass every byte comparison it happens to still match. Regenerate the whole span.`,
+    ).toBe(RESOLVER_REGISTRY.length);
   });
 
   // THE TEXT IS BOUND TO THE REGISTRY, BY BYTES.
