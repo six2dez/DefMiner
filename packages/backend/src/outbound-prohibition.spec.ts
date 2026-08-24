@@ -737,6 +737,9 @@ function unwrap(node: ts.Expression): ts.Expression {
  */
 const UNREADABLE_RECEIVER = Symbol("unreadable-receiver");
 
+/** The empty answer from `literalsOf` — one allocation, never mutated. */
+const NO_LITERALS: ReadonlySet<string> = new Set<string>();
+
 /** A named outbound receiver, a receiver the walk cannot read, or neither. */
 type ReceiverKind = string | typeof UNREADABLE_RECEIVER | undefined;
 
@@ -1072,7 +1075,19 @@ export function auditSource(file: string, source: string): Violation[] {
    */
   const receiverAliases = new Map<string, string>();
   const fetchAliases = new Set<string>([FETCH_GLOBAL]);
-  const constStrings = new Map<string, string>();
+  /**
+   * EVERY string literal a name is bound to ANYWHERE IN THE FILE, not the first
+   * one the walk happened to read.
+   *
+   * WIDENED 2026-08-24 (CR-10), and the shape of the map is the fix. It used to
+   * be `Map<string, string>` written ONLY at the declaration branch, so
+   * `let k = "harmless"; k = "requests"; sdk[k].send(req)` resolved `k` to
+   * `"harmless"` FOREVER and reported nothing — while `k = "requests"` sat in
+   * the AST twelve tokens away, a value the walk READS and then discarded in
+   * favour of an older one. That is the reporting side of this file's own
+   * reported-versus-followed distinction, and it was silent.
+   */
+  const constStrings = new Map<string, Set<string>>();
   /**
    * Names whose binding the walk WATCHED BEING ASSEMBLED — `const k = "req" +
    * "uests"`, a template, or a call whose result is not provably numeric.
@@ -1213,9 +1228,10 @@ export function auditSource(file: string, source: string): Violation[] {
    * disagree about what the walk can read.
    *
    * The ORDER is load-bearing and is the order below:
-   *   1. a key that REDUCES to a literal is a NAMED receiver (`constStrings`) —
-   *      first, so `const r = "requests"; sdk[r].send(req)` keeps reporting
-   *      `outbound-send` and is never downgraded to unanalysable;
+   *   1. a key ANY OF WHOSE BINDINGS names an outbound receiver IS one
+   *      (`constStrings`) — first, so `const r = "requests"; sdk[r].send(req)`
+   *      keeps reporting `outbound-send` and is never downgraded to
+   *      unanalysable;
    *   2. a key the walk WATCHES being assembled inline is UNREADABLE
    *      (`isAssembledKey`);
    *   3. a key bound ONE HOP back to such an assembly is UNREADABLE
@@ -1223,12 +1239,31 @@ export function auditSource(file: string, source: string): Violation[] {
    *   4. anything else — a parameter, a loop binding, a name the walk never saw
    *      bound, more than one hop — is NOT a receiver. That is residual (b), set
    *      by real-tree measurement rather than by preference.
+   *
+   * STEP 1 WIDENED 2026-08-24 (CR-10), AND THE WIDENING IS WHY IT STILL COMES
+   * FIRST. It used to read "a key that REDUCES to a literal", singular, against a
+   * map holding ONE literal per name — the FIRST one, written only at the
+   * declaration branch. `let k = "harmless"; k = "requests"; sdk[k].send(req)`
+   * therefore resolved to "harmless" forever and steps 2 and 3 were unreachable
+   * for that name. The map now holds EVERY literal a name is bound to anywhere in
+   * the file and step 1 asks whether ANY of them names a receiver.
+   * WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: ANY-BINDING-WINS
+   * OVER-approximates — `let k = "requests"; k = "harmless"` reports, and it is
+   * asserted below as THE MIRROR. The rejected alternative, a POISONED map in the
+   * shape of `poisonedNumericNames`, would have UNDER-approximated in both
+   * directions: measured, it left CR-10's own shapes 1 and 2 silent. Both
+   * mechanisms were run over the real tree; both reported ZERO. See
+   * `01-24-SUMMARY.md` section 2.
    */
   const keyReceiver = (key: ts.Expression): ReceiverKind => {
-    const literal = literalOf(key);
-    if (literal !== undefined)
-      return RECEIVERS.has(literal) ? literal : undefined;
-    // The key will not reduce. If the walk can SEE it being assembled, it says
+    // CR-10 step 1: ANY binding of this name that names an outbound receiver
+    // makes the key one. A single-binding name behaves exactly as before, so
+    // `const r = "requests"; sdk[r].send(req)` still reports `outbound-send`
+    // and is still never downgraded to unanalysable.
+    for (const literal of literalsOf(key)) {
+      if (RECEIVERS.has(literal)) return literal;
+    }
+    // The key names no receiver. If the walk can SEE it being assembled, it says
     // so rather than treating the result as an ordinary object; a key it merely
     // cannot follow is the disclosed one-more-hop residual, not concealment.
     if (isAssembledKey(key, numericNames, poisonedNumericNames)) {
@@ -1292,16 +1327,31 @@ export function auditSource(file: string, source: string): Violation[] {
    * one. `undefined` means THE WALK COULD NOT READ IT — never "there was nothing
    * there" — and every caller treats the two differently.
    */
-  function literalOf(node: ts.Node | undefined): string | undefined {
-    if (node === undefined) return undefined;
-    if (ts.isStringLiteralLike(node)) return node.text;
-    if (ts.isIdentifier(node)) return constStrings.get(node.text);
+  function literalsOf(node: ts.Node | undefined): ReadonlySet<string> {
+    if (node === undefined) return NO_LITERALS;
+    if (ts.isStringLiteralLike(node)) return new Set([node.text]);
+    if (ts.isIdentifier(node))
+      return constStrings.get(node.text) ?? NO_LITERALS;
     if (ts.isExpression(node)) {
       const inner = unwrap(node);
-      if (inner !== node) return literalOf(inner);
+      if (inner !== node) return literalsOf(inner);
     }
+    return NO_LITERALS;
+  }
+
+  function literalOf(node: ts.Node | undefined): string | undefined {
+    const literals = literalsOf(node);
+    if (literals.size !== 1) return undefined;
+    for (const only of literals) return only;
     return undefined;
   }
+
+  /** Record one more string literal this name is bound to. */
+  const bindString = (name: string, literal: string): void => {
+    const bound = constStrings.get(name);
+    if (bound === undefined) constStrings.set(name, new Set([literal]));
+    else bound.add(literal);
+  };
 
   /** The member name a property or element access reads, if the walk can read it. */
   const memberName = (
@@ -1449,9 +1499,8 @@ export function auditSource(file: string, source: string): Violation[] {
 
       if (ts.isIdentifier(node.name)) {
         // `const m = "send"` / `const spec = "caido:http"` — one hop, no more.
-        const literal = literalOf(init);
-        if (literal !== undefined && ts.isStringLiteralLike(init)) {
-          constStrings.set(node.name.text, literal);
+        if (ts.isStringLiteralLike(init)) {
+          bindString(node.name.text, init.text);
         }
         // `const k = "req" + "uests"` — the assembly the walk WATCHED. Read
         // against the numeric sets as they stand here; see `assembledNames`.
@@ -1532,6 +1581,14 @@ export function auditSource(file: string, source: string): Violation[] {
       // from, so it is covered by construction rather than by a second edit.
       if (isAssembledKey(node.right, numericNames, poisonedNumericNames)) {
         assembledNames.add(node.left.text);
+      }
+      // CR-10: `k = "requests"` — the STRING the assignment binds. This branch
+      // grew every OTHER set from its right-hand side and never this one, which
+      // is why a declaration's harmless first literal outlived every rebinding
+      // of the same name.
+      const assignedString = unwrap(node.right);
+      if (ts.isStringLiteralLike(assignedString)) {
+        bindString(node.left.text, assignedString.text);
       }
     }
 
@@ -2345,10 +2402,49 @@ describe("a module specifier the walk can resolve, and one it cannot", () => {
     ).toContain("outbound-import");
   });
 
+  it('through literalOf\'s SINGLE-VALUED contract: a SPECIFIER rebound mid-file no longer resolves to the stale first literal — `let s = "harmless"; s = "caido:http"; await import(s)` — A WIDENING THIS PLAN MEASURED RATHER THAN PREDICTED', () => {
+    // The third caller of the string map, and the one whose change is a NEW
+    // REPORT rather than a redirected one. BEFORE this plan the walk resolved
+    // `s` to the stale "harmless", compared it against `caido:http`, found no
+    // match and said NOTHING — a dynamic import of the forbidden specifier,
+    // silent, because the specifier was rebound after its declaration.
+    //
+    // AFTER: `literalOf` answers `undefined` for a name with two bindings, and an
+    // unreducible specifier is REPORTED. It is `outbound-unanalysable` rather
+    // than `outbound-import` for the same reason the global-key case above is:
+    // the walk will not pick one of two strings it read.
+    //
+    // NOT ENUMERATED BY CR-10 AND NOT PREDICTED BY THIS PLAN. It was found by
+    // probing every caller of the map, which is why task 1 required the call
+    // sites be listed before the map was touched.
+    expect(
+      rulesOf('let s = "harmless";\ns = "caido:http";\nawait import(s);'),
+    ).toContain("outbound-unanalysable");
+  });
+
   it("outbound-unanalysable fires on an ASSEMBLED specifier", () => {
     expect(rulesOf('const m = await import("caido:" + "http");')).toContain(
       "outbound-unanalysable",
     );
+  });
+
+  it('through literalOf\'s SINGLE-VALUED contract: a MEMBER name rebound mid-file becomes UNREADABLE rather than resolving to the stale first literal — `let m = "harmless"; m = "send"; sdk.requests[m](req)`', () => {
+    // THE OTHER CALLERS OF THE STRING MAP, ASSERTED RATHER THAN ASSUMED SAFE.
+    // `memberName` resolves through the same map, so widening the map changes it
+    // too — and this plan measured the change rather than reasoning about it.
+    //
+    // BEFORE this plan: `outbound-send`. `m` resolved to the stale "harmless",
+    // which is not on the read-only allowlist, so the member rule fired — the
+    // RIGHT answer for the WRONG reason, off a string the file had already
+    // overwritten.
+    // AFTER: `outbound-unanalysable`. `literalOf` is the SINGLE-valued reader and
+    // answers `undefined` when a name carries more than one binding; an
+    // unreadable member of an identified receiver is reported as unreadable.
+    // BOTH REPORT. The direction changed and the disclosure changed with it.
+    const rules = rulesOf(
+      'let m = "harmless";\nm = "send";\nawait sdk.requests[m](req);',
+    );
+    expect(rules).toContain("outbound-unanalysable");
   });
 
   it("outbound-unanalysable fires on a computed member of an identified receiver", () => {
@@ -2540,6 +2636,87 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     expect(rulesOf('sdk[k].send(req);\nconst k = "req" + "uests";')).toContain(
       "outbound-unanalysable",
     );
+  });
+
+  it('through constStrings\' WHOLE-FILE BINDINGS: a name REBOUND to a receiver name IS one — `let k = "harmless"; k = "requests"; sdk[k].send(req)` — CR-10 shape 1 of 5', () => {
+    // CR-10, shape 1, and the mechanism named in the title is the whole fix.
+    // `constStrings` used to be a `Map<string, string>` written ONLY at the
+    // declaration branch, so `k` resolved to "harmless" FOREVER and the two
+    // unreadable branches beneath `keyReceiver`'s literal lookup were
+    // unreachable for that name. Both strings are string literals sitting in the
+    // AST twelve tokens apart: this was never a value the walk could not FOLLOW,
+    // it was a value the walk READ and discarded in favour of an older one.
+    //
+    // The map now holds EVERY literal a name is bound to anywhere in the file and
+    // `keyReceiver` reports if ANY of them names a receiver — which is exactly
+    // the property boundary 2 already claimed for file-wide bindings and did not
+    // have. `outbound-send` and NOT `outbound-unanalysable`: the walk can read
+    // this site completely.
+    const rules = rulesOf(
+      'let k = "harmless";\nk = "requests";\nawait sdk[k].send(req);',
+    );
+    expect(rules).toContain("outbound-send");
+    expect(
+      rules,
+      "a site the walk can read COMPLETELY was downgraded to unreadable",
+    ).not.toContain("outbound-unanalysable");
+  });
+
+  it("through constStrings' WHOLE-FILE BINDINGS: the `var` spelling of the same rebinding — CR-10 shape 2 of 5", () => {
+    // Same mechanism, different declaration keyword. It is asserted separately
+    // because `var` is the spelling a minified or transpiled bundle produces and
+    // a reader must not have to infer it from the `let` case.
+    expect(
+      rulesOf('var k = "harmless";\nk = "requests";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-send");
+  });
+
+  it('through constStrings\' WHOLE-FILE BINDINGS, ANY-BINDING-WINS — THE MIRROR, and it errs by OVER-approximating: `let k = "requests"; k = "harmless"; sdk[k].send(req)` REPORTS', () => {
+    // THE MIRROR OF THE WIDENING, ASSERTED RATHER THAN LEFT FOR NEXT ROUND.
+    // Any mechanism that makes a later binding visible has to answer what
+    // happens when the LAST binding is the harmless one. Two were honest and
+    // both were MEASURED (01-24-SUMMARY section 2):
+    //   ANY-BINDING-WINS (implemented) reports here — an OVER-approximation,
+    //     acceptable only because the real tree was re-run and is still ZERO,
+    //     and because it is the direction boundary 2 already claims.
+    //   A POISONED MAP (rejected) would silence this — but it ALSO silenced
+    //     shapes 1 and 2 above, which are the shapes CR-10 is about, and it
+    //     would have created a NEW under-approximation here.
+    // So this case errs toward REPORTING. It is not a residual; it is the
+    // disclosed cost of the chosen mechanism.
+    expect(
+      rulesOf('let k = "requests";\nk = "harmless";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-send");
+  });
+
+  it("through constStrings' ASSIGNMENT-SIDE WRITE: the control that proves the misses were real — `let k; k = \"requests\"; sdk[k].send(req)` — AND THE PLAN'S OWN PREDICTION FOR IT WAS WRONG", () => {
+    // RECORDED RATHER THAN SMOOTHED OVER. Both 01-REVIEW.md's CR-10 entry and
+    // 01-24-PLAN.md list this as a CONTROL that already reported, offered as
+    // proof that the shapes above were genuine misses rather than a fixture
+    // artefact. MEASURED BEFORE ANY CHANGE IN THIS PLAN, it reported `[]`.
+    //
+    // The reason is one line stronger than CR-10 said: the assignment branch
+    // never wrote `constStrings` AT ALL, so it was not that a stale literal beat
+    // a later one — a name bound to a string ONLY by assignment resolved to
+    // nothing whatever. The stale-literal path is real and shapes 1 and 2 pin
+    // it; this control is a SECOND defect the same branch carried, and it is
+    // closed by the same assignment-side write.
+    expect(
+      rulesOf('let k;\nk = "requests";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-send");
+  });
+
+  it('through assembledNames, unchanged by CR-10: the two assembly controls still report — `let k; k = "req" + "uests"` and `let k = 1; k = "req" + "uests"`', () => {
+    // The controls that DID report before this plan and must still. They resolve
+    // through `assembledNames`, whose assignment-side write already existed, so a
+    // regression here would mean the new string write had shadowed the assembly
+    // branch — the exact failure mode this plan is closing, running backwards.
+    expect(
+      rulesOf('let k;\nk = "req" + "uests";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
+    expect(
+      rulesOf('let k = 1;\nk = "req" + "uests";\nawait sdk[k].send(req);'),
+    ).toContain("outbound-unanalysable");
   });
 
   it("through NOTHING: the KEY contrast — TWO HOPS is still silent whichever side of the bindings the use sits on — A MEASURED SILENCE", () => {
@@ -3041,6 +3218,34 @@ describe("the RECEIVER the alias sets sit on resolves the hop they already resol
     expect(rulesOf("b(u);\nconst a = fetch;\nconst b = a;")).toContain(
       "outbound-fetch",
     );
+  });
+
+  it('through constStrings\' WHOLE-FILE BINDINGS in GLOBAL-KEY position: `let k = "harmless"; k = "fetch"; globalThis[k](url)` REPORTS — CR-10 shape 3 of 5', () => {
+    // CR-10, shape 3. The same stale first literal, one level out: `memberName`
+    // resolves the key through the SAME `constStrings` map, so `globalThis[k]`
+    // read "harmless", found no outbound global of that name, and said nothing.
+    //
+    // WHY `outbound-unanalysable` AND NOT `outbound-fetch`, STATED SO NO READER
+    // HAS TO GUESS: `literalOf` is the SINGLE-valued reader and it now answers
+    // `undefined` for a name with more than one binding — the walk read two
+    // different strings and will not pick one. An unreadable member of a
+    // POSITIVELY IDENTIFIED global receiver is reported, which is the
+    // `globalThis["fet"+"ch"]` half of WR-19. The single-binding control below
+    // resolves completely and reports `outbound-fetch` instead; both report, and
+    // the difference between them is what the walk could read.
+    expect(
+      rulesOf('let k = "harmless";\nk = "fetch";\nglobalThis[k](url);'),
+    ).toContain("outbound-unanalysable");
+  });
+
+  it('through constStrings\' ASSIGNMENT-SIDE WRITE in GLOBAL-KEY position: `let k; k = "fetch"; globalThis[k](url)` resolves COMPLETELY and reports outbound-fetch', () => {
+    // The single-binding control for the case above, and a second widening this
+    // plan measured rather than predicted: before the assignment branch wrote
+    // `constStrings`, this shape reported `outbound-unanalysable` — the walk knew
+    // something was hidden but could not say what. It now reads `k` as "fetch"
+    // and names the surface. A gate that can name the surface should.
+    const rules = rulesOf('let k;\nk = "fetch";\nglobalThis[k](url);');
+    expect(rules).toContain("outbound-fetch");
   });
 
   it("through NOTHING: a receiver KEY still stops at exactly ONE hop, which is where residual (a)'s original wording IS right", () => {
