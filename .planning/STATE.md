@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
-status: executing
-stopped_at: Completed 01-21-PLAN.md
-last_updated: "2026-08-24T09:33:29.186Z"
+status: verifying
+stopped_at: Completed 01-22-PLAN.md
+last_updated: "2026-08-24T09:50:06.417Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 01 execution started
-state_head: 1977b00467817118c2c679add584413986dd021b
+state_head: 502bbce4f98ae187576387a996f45686b94625a5
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
 Plan: 22 of 22
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-24 — Completed 01-20 (URL_MAX segment-boundary truncation, WR-22 / IN-18)
 
 Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
@@ -94,6 +94,7 @@ Progress: [█████████░] 91% of phase 01 (20 of 22 plans)
 | Phase 01 P19 | 18 min | 3 tasks | 4 files |
 | Phase 01 P20 | 25 min | 2 tasks | 3 files |
 | Phase 01 P21 | 12 min | 2 tasks | 1 files |
+| Phase 01 P22 | 13 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P20-D3/D4: the redactDelimitedSegment idempotence sentence is SCOPED to the helper (not deleted), and IN-18 is CLOSED by execution with its deferral rationale deleted rather than replaced. — The sentence reasoned correctly about the helper and only its scope was wrong. IN-18 deferred the repair to protect an idempotence invariant the branch it named had already broken at 25 of 40 swept cut points, so the reason could not survive under either outcome; on its own fixture the amended truncation gives len 2039 with a whole trailing segment, so it is closed.
 - [Phase 01]: WR-24: derivesFrom descends the OPERATOR class — a conditional's two branches and a `??`/`||`/`&&` binary's two operands — with either-side semantics; the condition of a `? :` is deliberately not descended. — The standard useUnknownInCatchVariables narrowing idiom `e instanceof Error ? e.message : String(e)` reported [] while the bare `e.message` beside it reported. Either-side matches initializerReceiver one package away.
 - [Phase 01]: IN-22: pin the two named limits with executed "RESIDUAL, PINNED" cases; deliberately do NOT pin the three open residual CLASSES — both halves recorded in the residual paragraph itself. — A fixture for one shape of an open class would pin an example while reading as though it pinned the class — a narrower guarantee wearing a wider claim, which is this round's subject.
+- [Phase 01]: Executing the mutation matrix's before-half rather than citing it corrected the finding: only two of 01-REVIEW.md WR-25's five enumerated breaks were silent; three were already loud, because the four-component loopback addresses the gate must not flag are what make a mis-set component-count comparison a false positive.
+- [Phase 01]: A gate's detection predicate is proven against the real file's bytes by planting a literal into the text in memory, not only against a hand-written fixture.
+- [Phase 01]: padded_segments_reached keeps bool(raw_rows) and adds any('?' in r ...) — the two catch different empty cases; an all() over an empty generator is True and that answer is written into committed evidence.
+- [Phase 01]: No live Caido cycle for IN-21: the predicate is pure and its empty-generator branch is structurally unreachable on a passing live run, so standalone execution proves strictly more.
 
 ### Known Risks Carried Forward
 
@@ -235,8 +240,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T09:33:15.213Z
-**Stopped at:** Completed 01-21-PLAN.md
+**Last session:** 2026-08-24T09:49:53.349Z
+**Stopped at:** Completed 01-22-PLAN.md
 **Resume file:** None
 
 ### Blockers

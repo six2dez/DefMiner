@@ -156,7 +156,7 @@ Plans:
 
 **Wave 22** *(blocked on 01-21 — this plan breaks its own predicate five ways in turn and plants a literal into a committed script, so it needs the tree quiet)*
 
-- [ ] 01-22-PLAN.md — **WR-25 + IN-21, the two gates whose failing path has never run**: the WR-21 gate built last round has no executed failing path — the tracer carries no three-component version literal, so the filter's true branch never runs and five plausible breaks leave it green forever. The predicate lifted out as a pure export, executed against the real file's bytes with a literal planted in, and proven detectable one break at a time; plus `padded_segments_reached`, an `all()` over an empty generator that would record REACHED having measured nothing — *wave 22*
+- [x] 01-22-PLAN.md — **WR-25 + IN-21, the two gates whose failing path has never run**: the WR-21 gate built last round has no executed failing path — the tracer carries no three-component version literal, so the filter's true branch never runs and five plausible breaks leave it green forever. The predicate lifted out as a pure export, executed against the real file's bytes with a literal planted in, and proven detectable one break at a time; plus `padded_segments_reached`, an `all()` over an empty generator that would record REACHED having measured nothing — *wave 22*
 
 ### Phase 2: Error Containment & Observability
 
