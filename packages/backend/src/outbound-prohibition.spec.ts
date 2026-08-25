@@ -1466,18 +1466,18 @@ MEASURED SILENCES - 20 entries.
     counter:   "globalThis.fetch(url);"
     reports:   outbound-fetch
 
-* silence-global-fetch-receiver-position - the global fetch in RECEIVER position is silent: `fetch.call(null, url)` reports nothing, and so do the `.apply` and `.bind` spellings beside it, because the member arm that names the fetch surface tests whether the MEMBER is `fetch` and here the member is `call` while `fetch` is the receiver. The member-qualified receiver REPORTS - that is the counter-probe, and it is what shows the machinery exists and is simply not reached from this position. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
-    probe:     "fetch.call(null, url);"
+* silence-global-fetch-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): the readable spellings this row was written for - `fetch.call(null, url)`, `fetch.apply(...)`, `fetch.bind(...)` - now report through the receiver-position arm this wave added, so the row is cut back to the mechanism that SURVIVES rather than deleted. What survives: an UNREADABLE computed member of the bare global fetch is silent, because the catch-all that reports an unreadable member is guarded on `isGlobalReceiver` and the bare global fetch is not one of the four receivers that guard accepts. The identical unreadable-member shape on a receiver the guard DOES accept reports outbound-unanalysable - that is the counter-probe, and the asymmetry between the two is the whole content of the row. `could not read` still does not mean `clean` here. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    probe:     "fetch[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
-    counter:   "globalThis.fetch.call(null, url);"
-    reports:   outbound-fetch
+    counter:   "globalThis[\"fet\" + \"ch\"](url);"
+    reports:   outbound-unanalysable
 
-* silence-fetch-alias-receiver-position - a POSITIVELY IDENTIFIED fetch alias in RECEIVER position is silent: `const f = fetch; f.call(null, url)` reports nothing while `f(url)` on the next line reports outbound-fetch. One binding, one position over, two answers. `fetchAliases` holds the name and `isFetchExpression` answers true for it, but the member arm never puts that question to a receiver. The CALLEE spelling of the SAME alias REPORTS - that is the counter-probe. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
-    probe:     "const f = fetch;\nf.call(null, url);"
+* silence-fetch-alias-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `const f = fetch; f.call(null, url)` was silent while `f(url)` on the next line reported - one binding, one position over, two answers - and the receiver-position arm this wave added closed that particular spelling. What SURVIVES is the unreadable half: an unreadable computed member of an identified fetch alias is silent, because the arm that was added requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers. The SAME alias with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    probe:     "const f = fetch;\nf[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
-    counter:   "const f = fetch;\nf(url);"
+    counter:   "const f = fetch;\nf.call(null, url);"
     reports:   outbound-fetch
 
 * silence-bare-global-argument-position - a bare global handed to a call as an ARGUMENT is silent: `Reflect.apply(fetch, null, [url])` reports nothing, because an identifier with no member written beside it is interrogated only where a CALLEE is expected and this shape writes down no member of it for the member arm to read. The member-qualified twin of the identical shape REPORTS - that is the counter-probe - and the difference between the two is that one NAMES a member and the other does not. A mechanism distinct from receiver position, rowed separately for that reason. DISCLOSED, not ended
@@ -3775,6 +3775,33 @@ export function auditSource(file: string, source: string): Violation[] {
           `a \`${FETCH_GLOBAL}\` member of \`${unwrap(node.expression).getText()}\``,
         );
       } else if (
+        member !== undefined &&
+        ts.isIdentifier(unwrap(node.expression)) &&
+        isFetchExpression(node.expression)
+      ) {
+        // CR-15, 2026-08-25, wave 34 — THE RECEIVER-POSITION ARM, AND IT WIDENS
+        // ONE MECHANISM RATHER THAN ENDING A CLASS. `fetch.call(null, url)` and
+        // `const f = fetch; f.call(null, url)` reached no arm above: each names
+        // the fetch surface as a RECEIVER and the arm that reports that surface
+        // reads the MEMBER. The receiver is asked the same question here that
+        // `isFetchExpression` already answers for a callee, so the answer is the
+        // GLOBAL's surface rather than the local spelling — the rule
+        // `globalNameOf`'s docblock sets for the two rules that read it.
+        //
+        // THE IDENTIFIER RESTRICTION IS LOAD-BEARING, NOT TIDINESS. Without it
+        // `globalThis.fetch.call(url)` reports TWICE: once from the arm above on
+        // the inner `globalThis.fetch`, and again here on the outer node. A
+        // member-qualified receiver is already answered one visit down, so this
+        // arm takes only the spelling that writes the global as a bare name.
+        //
+        // WHAT IT DOES NOT REACH IS ROWED, NOT ASSUMED. The argument-position
+        // shape and the unreadable-member spelling of this same receiver stay
+        // silent after this arm and each carries its own registry row.
+        add(
+          "outbound-fetch",
+          `a reference to \`${member}\` on the global \`${FETCH_GLOBAL}\``,
+        );
+      } else if (
         member === BEACON_METHOD &&
         isNavigatorReceiver(node.expression)
       ) {
@@ -5493,22 +5520,22 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "silence-global-fetch-receiver-position",
     kind: "measured-silence",
     clause:
-      "the global fetch in RECEIVER position is silent: `fetch.call(null, url)` reports nothing, and so do the `.apply` and `.bind` spellings beside it, because the member arm that names the fetch surface tests whether the MEMBER is `fetch` and here the member is `call` while `fetch` is the receiver. The member-qualified receiver REPORTS - that is the counter-probe, and it is what shows the machinery exists and is simply not reached from this position. DISCLOSED, not ended",
-    site: "auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {",
-    probe: "fetch.call(null, url);",
+      "NARROWED BY MEASUREMENT 2026-08-25 (wave 34): the readable spellings this row was written for - `fetch.call(null, url)`, `fetch.apply(...)`, `fetch.bind(...)` - now report through the receiver-position arm this wave added, so the row is cut back to the mechanism that SURVIVES rather than deleted. What survives: an UNREADABLE computed member of the bare global fetch is silent, because the catch-all that reports an unreadable member is guarded on `isGlobalReceiver` and the bare global fetch is not one of the four receivers that guard accepts. The identical unreadable-member shape on a receiver the guard DOES accept reports outbound-unanalysable - that is the counter-probe, and the asymmetry between the two is the whole content of the row. `could not read` still does not mean `clean` here. DISCLOSED, not ended",
+    site: "auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {",
+    probe: 'fetch["ca" + "ll"](null, url);',
     expect: Object.freeze([] as const),
-    counterProbe: "globalThis.fetch.call(null, url);",
-    counterExpect: Object.freeze(["outbound-fetch"] as const),
+    counterProbe: 'globalThis["fet" + "ch"](url);',
+    counterExpect: Object.freeze(["outbound-unanalysable"] as const),
   }),
   Object.freeze({
     id: "silence-fetch-alias-receiver-position",
     kind: "measured-silence",
     clause:
-      "a POSITIVELY IDENTIFIED fetch alias in RECEIVER position is silent: `const f = fetch; f.call(null, url)` reports nothing while `f(url)` on the next line reports outbound-fetch. One binding, one position over, two answers. `fetchAliases` holds the name and `isFetchExpression` answers true for it, but the member arm never puts that question to a receiver. The CALLEE spelling of the SAME alias REPORTS - that is the counter-probe. DISCLOSED, not ended",
-    site: "auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {",
-    probe: "const f = fetch;\nf.call(null, url);",
+      "NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `const f = fetch; f.call(null, url)` was silent while `f(url)` on the next line reported - one binding, one position over, two answers - and the receiver-position arm this wave added closed that particular spelling. What SURVIVES is the unreadable half: an unreadable computed member of an identified fetch alias is silent, because the arm that was added requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers. The SAME alias with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended",
+    site: "auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {",
+    probe: 'const f = fetch;\nf["ca" + "ll"](null, url);',
     expect: Object.freeze([] as const),
-    counterProbe: "const f = fetch;\nf(url);",
+    counterProbe: "const f = fetch;\nf.call(null, url);",
     counterExpect: Object.freeze(["outbound-fetch"] as const),
   }),
   Object.freeze({
@@ -5776,7 +5803,7 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
     literalsOf:
       'Bounded by the collected set constStrings recorded — the SAME branches, so this clause inherits constStrings\' bound exactly, widening with it (2026-08-24, CR-13). MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` now reports outbound-send. The universal is STILL false and inherits the same residual: parameter, loop binding, second hop of key and cross-file binding are each MEASURED silent.',
     isFetchExpression:
-      "Bounded by the FOUR spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, a one-hop alias, and - since 2026-08-24 (CR-11) - an operator around any of those, read through operatorOperandMatching. MEASURED after that widening: `const f = fetch ?? x; f(url)` reports outbound-fetch, and so does `(ok && fetch)(url)`, which needed a SIXTH site (bareFetchCallee) because the bare-call rule asked its own inline question. The universal is STILL false and the bound is what remains outside those four branches, each MEASURED silent in this same session: a function boundary (`function h(g) { g.fetch(url); } h(globalThis)`), an array-slot binding (`[globalThis][0].fetch(url)`), a class field and a parameter default - all report NOTHING.",
+      "Bounded by the FOUR spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, a one-hop alias, and - since 2026-08-24 (CR-11) - an operator around any of those, read through operatorOperandMatching. MEASURED after that widening: `const f = fetch ?? x; f(url)` reports outbound-fetch, and so does `(ok && fetch)(url)`, which needed a SIXTH site (bareFetchCallee) because the bare-call rule asked its own inline question. The universal is STILL false and the bound is what remains outside those four branches, each MEASURED silent in this same session: a function boundary (`function h(g) { g.fetch(url); } h(globalThis)`), an array-slot binding (`[globalThis][0].fetch(url)`), a class field and a parameter default - all report NOTHING. WIDENED 2026-08-25 (CR-15, wave 34) with RECEIVER POSITION, which this entry did not name at all before: the member arm now asks this same question of a receiver written as a bare name, so MEASURED after that widening `fetch.call(null, url)` reports outbound-fetch and so does `const f = fetch; f.call(null, url)`, while `globalThis.fetch.call(null, url)` still reports EXACTLY ONCE because the arm takes only the bare-name spelling. The bound after it is still not empty and is MEASURED, not assumed: `Reflect.apply(fetch, null, [url])` reports NOTHING because the global is an argument and no member of it is written down, and `fetch[\"ca\" + \"ll\"](null, url)` reports NOTHING because the member will not reduce - each has its own registry row, and the set of ways a value reaches a call is open.",
   });
 
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
@@ -6402,6 +6429,49 @@ describe("the gate's own failure paths", () => {
     // `cache.fetch(url)` is a method on an object, not the global, and reaches
     // nothing outside the process.
     expect(rulesOf("const res = await cache.fetch(url);")).toEqual([]);
+  });
+
+  // CR-15, 2026-08-25, wave 34. THE RECEIVER-POSITION ARM, WITH ITS FAILING PATH
+  // AND ITS CONTROL IN ONE CASE. The pair below is the finding in two lines: the
+  // SAME binding, silent as a receiver and reporting as a callee, until this arm
+  // existed. Both directions are asserted here so that neutering the arm's EFFECT
+  // while leaving its condition intact turns THIS case red.
+  it("outbound-fetch fires on the global in RECEIVER position, and on an identified alias in the same position — with the CALLEE spelling of that alias as the control in the same case", () => {
+    expect(rulesOf("fetch.call(null, url);")).toEqual(["outbound-fetch"]);
+    expect(rulesOf("fetch.apply(null, [url]);")).toEqual(["outbound-fetch"]);
+    expect(rulesOf("const f = fetch;\nf.call(null, url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    // The control: the same alias one position over. It reported BEFORE this arm
+    // and reports after it, so a case that only asserted the receiver spelling
+    // could not tell the arm from the rule it sits beside.
+    expect(rulesOf("const f = fetch;\nf(url);")).toEqual(["outbound-fetch"]);
+  });
+
+  it("the member-qualified global fetch under `.call` reports EXACTLY ONCE — the receiver-position arm does not double the arm above it", () => {
+    // The identifier restriction in the receiver-position arm exists for this
+    // assertion. Drop it and this case reports twice.
+    expect(rulesOf("globalThis.fetch.call(null, url);")).toEqual([
+      "outbound-fetch",
+    ]);
+    expect(rulesOf("globalThis.fetch(url);")).toEqual(["outbound-fetch"]);
+  });
+
+  it("the SDK send member under `.call` reports — the structural twin that showed the machinery existed before the arm did", () => {
+    expect(rulesOf("sdk.requests.send.call(null, req);")).toEqual([
+      "outbound-send",
+    ]);
+  });
+
+  // A MEASURED SILENCE, TITLED AS ONE. Neither line below can go red under the
+  // mutation the cases above sit beside, because no branch answers either shape.
+  // Each is measured by a registry row named here so a reader is sent to the
+  // probe rather than left to infer one: `silence-bare-global-argument-position`
+  // measured the first, `silence-global-fetch-receiver-position` the second.
+  // Recording them beside the arm is what keeps the arm from reading as a class.
+  it("MEASURED SILENCE — the global as a call ARGUMENT, and an unreadable member of it, are both still silent after the receiver-position arm", () => {
+    expect(rulesOf("Reflect.apply(fetch, null, [url]);")).toEqual([]);
+    expect(rulesOf('fetch["ca" + "ll"](null, url);')).toEqual([]);
   });
 
   // --- outbound-import -----------------------------------------------------
@@ -8753,7 +8823,7 @@ const maskQuantifiers = (text: string): string => {
 /**
  * THE KEY AN EXEMPTION IS WRITTEN UNDER. The normalized line the occurrence
  * STARTS on, with the phrasings masked to `{qN}` tokens, truncated, plus the
- * phrasing's own index. THE MASKING IS LOad-BEARING, not cosmetic: an unmasked
+ * phrasing's own index. THE MASKING IS LOAD-BEARING, not cosmetic: an unmasked
  * key would carry a declared phrasing verbatim, the scan would find it inside
  * this very map, and the map would generate the obligations it exists to
  * discharge. `no exemption KEY carries a declared phrasing` pins that below.

@@ -640,18 +640,18 @@ MEASURED SILENCES - 20 entries.
     counter:   "globalThis.fetch(url);"
     reports:   outbound-fetch
 
-* silence-global-fetch-receiver-position - the global fetch in RECEIVER position is silent: `fetch.call(null, url)` reports nothing, and so do the `.apply` and `.bind` spellings beside it, because the member arm that names the fetch surface tests whether the MEMBER is `fetch` and here the member is `call` while `fetch` is the receiver. The member-qualified receiver REPORTS - that is the counter-probe, and it is what shows the machinery exists and is simply not reached from this position. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
-    probe:     "fetch.call(null, url);"
+* silence-global-fetch-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): the readable spellings this row was written for - `fetch.call(null, url)`, `fetch.apply(...)`, `fetch.bind(...)` - now report through the receiver-position arm this wave added, so the row is cut back to the mechanism that SURVIVES rather than deleted. What survives: an UNREADABLE computed member of the bare global fetch is silent, because the catch-all that reports an unreadable member is guarded on `isGlobalReceiver` and the bare global fetch is not one of the four receivers that guard accepts. The identical unreadable-member shape on a receiver the guard DOES accept reports outbound-unanalysable - that is the counter-probe, and the asymmetry between the two is the whole content of the row. `could not read` still does not mean `clean` here. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    probe:     "fetch[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
-    counter:   "globalThis.fetch.call(null, url);"
-    reports:   outbound-fetch
+    counter:   "globalThis[\"fet\" + \"ch\"](url);"
+    reports:   outbound-unanalysable
 
-* silence-fetch-alias-receiver-position - a POSITIVELY IDENTIFIED fetch alias in RECEIVER position is silent: `const f = fetch; f.call(null, url)` reports nothing while `f(url)` on the next line reports outbound-fetch. One binding, one position over, two answers. `fetchAliases` holds the name and `isFetchExpression` answers true for it, but the member arm never puts that question to a receiver. The CALLEE spelling of the SAME alias REPORTS - that is the counter-probe. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
-    probe:     "const f = fetch;\nf.call(null, url);"
+* silence-fetch-alias-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `const f = fetch; f.call(null, url)` was silent while `f(url)` on the next line reported - one binding, one position over, two answers - and the receiver-position arm this wave added closed that particular spelling. What SURVIVES is the unreadable half: an unreadable computed member of an identified fetch alias is silent, because the arm that was added requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers. The SAME alias with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    probe:     "const f = fetch;\nf[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
-    counter:   "const f = fetch;\nf(url);"
+    counter:   "const f = fetch;\nf.call(null, url);"
     reports:   outbound-fetch
 
 * silence-bare-global-argument-position - a bare global handed to a call as an ARGUMENT is silent: `Reflect.apply(fetch, null, [url])` reports nothing, because an identifier with no member written beside it is interrogated only where a CALLEE is expected and this shape writes down no member of it for the member arm to read. The member-qualified twin of the identical shape REPORTS - that is the counter-probe - and the difference between the two is that one NAMES a member and the other does not. A mechanism distinct from receiver position, rowed separately for that reason. DISCLOSED, not ended
