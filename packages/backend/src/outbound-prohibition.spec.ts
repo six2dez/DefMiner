@@ -1467,14 +1467,14 @@ MEASURED SILENCES - 21 entries.
     reports:   outbound-fetch
 
 * silence-global-fetch-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): the readable spellings this row was written for - `fetch.call(null, url)`, `fetch.apply(...)`, `fetch.bind(...)` - now report through the receiver-position arm this wave added, so the row is cut back to the mechanism that SURVIVES rather than deleted. What survives: an UNREADABLE computed member of the bare global fetch is silent, because the catch-all that reports an unreadable member is guarded on `isGlobalReceiver` and the bare global fetch is not one of the four receivers that guard accepts. The identical unreadable-member shape on a receiver the guard DOES accept reports outbound-unanalysable - that is the counter-probe, and the asymmetry between the two is the whole content of the row. `could not read` still does not mean `clean` here. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    read off:  auditSource > (isGlobalReceiver(node.expression) ||
     probe:     "fetch[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
     counter:   "globalThis[\"fet\" + \"ch\"](url);"
     reports:   outbound-unanalysable
 
 * silence-fetch-alias-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `const f = fetch; f.call(null, url)` was silent while `f(url)` on the next line reported - one binding, one position over, two answers - and the receiver-position arm this wave added closed that particular spelling. What SURVIVES is the unreadable half: an unreadable computed member of an identified fetch alias is silent, because the arm that was added requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers. The SAME alias with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    read off:  auditSource > (isGlobalReceiver(node.expression) ||
     probe:     "const f = fetch;\nf[\"ca\" + \"ll\"](null, url);"
     reports:   [] - nothing
     counter:   "const f = fetch;\nf.call(null, url);"
@@ -1494,11 +1494,11 @@ MEASURED SILENCES - 21 entries.
     counter:   "globalThis.eval.call(null, src);"
     reports:   outbound-dynamic-code
 
-* silence-unreadable-member-of-navigator - an UNREADABLE computed member of a positively identified `navigator` receiver is silent: `const m = "send" + "Beacon"; navigator[m](u, d)` reports nothing. TWO arms would have caught it and neither can - the beacon arm reads the MEMBER name and there is none to read, and the catch-all that reports an unreadable member is guarded on the four global receivers, which `navigator` is not one of - so the shape falls through the chain entirely. The identical shape on a receiver that guard accepts reports outbound-unanalysable, and the SHARPEST counter-probe is the navigator DESTRUCTURE, which is the same receiver family getting the opposite answer inside the same rule. `could not read` does not mean `clean`, and on this one receiver family it was being treated as though it did. DISCLOSED, not ended
-    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
-    probe:     "const m = \"send\" + \"Beacon\";\nnavigator[m](u, d);"
+* silence-unreadable-member-of-navigator - NARROWED BY MEASUREMENT 2026-08-25 (wave 34), AND THE MEASUREMENT CONTRADICTED THE PREDICTION. This row was written for the five spellings of an unreadable computed member on a positively identified `navigator` receiver, ALL silent; the arm this wave widened now reports every one of them, INCLUDING the parameter-key spelling the plan predicted would survive. It does not survive: on a receiver this arm accepts, an unreadable member reports whatever the reason the key would not reduce, so the reason the key is unbound never comes up. What DOES survive is the RESOLUTION boundary rather than the readability one: an unreadable member of a `navigator` handed across a FUNCTION BOUNDARY is silent, because the parameter is never bound to the receiver and no resolver answers for it - the same limit the `isFetchExpression` entry of QUANTIFIED_CLAUSES already bounds for global receivers, met here on the navigator family. The identical shape written one function boundary nearer REPORTS - that is the counter-probe. DISCLOSED, not ended
+    read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
+    probe:     "function h(n) { const m = \"send\" + \"Beacon\"; return n[m](u, d); }\nh(navigator);"
     reports:   [] - nothing
-    counter:   "const m = \"send\" + \"Beacon\";\nconst { [m]: b } = navigator;\nb(u, d);"
+    counter:   "const m = \"send\" + \"Beacon\";\nnavigator[m](u, d);"
     reports:   outbound-unanalysable
 END DERIVED RESIDUAL
 */
@@ -3834,7 +3834,26 @@ export function auditSource(file: string, source: string): Violation[] {
           "outbound-global-ctor",
           `a reference to \`${member}\` on a global receiver`,
         );
-      } else if (member === undefined && isGlobalReceiver(node.expression)) {
+      } else if (
+        member === undefined &&
+        (isGlobalReceiver(node.expression) ||
+          isNavigatorReceiver(node.expression))
+      ) {
+        // CR-16, 2026-08-25, wave 34 — `navigator` JOINS THE RECEIVERS THIS ARM
+        // ACCEPTS, and that is the whole of the change. Before it, `const m =
+        // "send" + "Beacon"; navigator[m](u, d)` fell through the entire chain:
+        // the beacon arm above tests the MEMBER name and there is none to test,
+        // and this arm accepted only the four global receivers. The identical
+        // shape on `globalThis`, on `window`, on an identified send receiver AND
+        // on a navigator DESTRUCTURE twenty lines away all reported already, so
+        // the machinery existed and one receiver family was not reaching it.
+        //
+        // WHAT IT DOES NOT REACH IS ROWED. A member whose key is a function
+        // PARAMETER stays silent after this arm for the reason
+        // `silence-parameter-key` already records — the key is never bound at
+        // all, so nothing marks it unreadable. That is an existing mechanism and
+        // it is cross-referenced rather than given a duplicate row.
+        //
         // The other half of WR-19, and the sharper of the two shapes:
         // `globalThis["fet" + "ch"](u)`. The receiver is POSITIVELY identified —
         // `isGlobalReceiver` says so — and the member name is the part that will
@@ -5528,7 +5547,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     kind: "measured-silence",
     clause:
       "NARROWED BY MEASUREMENT 2026-08-25 (wave 34): the readable spellings this row was written for - `fetch.call(null, url)`, `fetch.apply(...)`, `fetch.bind(...)` - now report through the receiver-position arm this wave added, so the row is cut back to the mechanism that SURVIVES rather than deleted. What survives: an UNREADABLE computed member of the bare global fetch is silent, because the catch-all that reports an unreadable member is guarded on `isGlobalReceiver` and the bare global fetch is not one of the four receivers that guard accepts. The identical unreadable-member shape on a receiver the guard DOES accept reports outbound-unanalysable - that is the counter-probe, and the asymmetry between the two is the whole content of the row. `could not read` still does not mean `clean` here. DISCLOSED, not ended",
-    site: "auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {",
+    site: "auditSource > (isGlobalReceiver(node.expression) ||",
     probe: 'fetch["ca" + "ll"](null, url);',
     expect: Object.freeze([] as const),
     counterProbe: 'globalThis["fet" + "ch"](url);',
@@ -5539,7 +5558,7 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     kind: "measured-silence",
     clause:
       "NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `const f = fetch; f.call(null, url)` was silent while `f(url)` on the next line reported - one binding, one position over, two answers - and the receiver-position arm this wave added closed that particular spelling. What SURVIVES is the unreadable half: an unreadable computed member of an identified fetch alias is silent, because the arm that was added requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers. The SAME alias with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended",
-    site: "auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {",
+    site: "auditSource > (isGlobalReceiver(node.expression) ||",
     probe: 'const f = fetch;\nf["ca" + "ll"](null, url);',
     expect: Object.freeze([] as const),
     counterProbe: "const f = fetch;\nf.call(null, url);",
@@ -5575,12 +5594,12 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "silence-unreadable-member-of-navigator",
     kind: "measured-silence",
     clause:
-      "an UNREADABLE computed member of a positively identified `navigator` receiver is silent: `const m = \"send\" + \"Beacon\"; navigator[m](u, d)` reports nothing. TWO arms would have caught it and neither can - the beacon arm reads the MEMBER name and there is none to read, and the catch-all that reports an unreadable member is guarded on the four global receivers, which `navigator` is not one of - so the shape falls through the chain entirely. The identical shape on a receiver that guard accepts reports outbound-unanalysable, and the SHARPEST counter-probe is the navigator DESTRUCTURE, which is the same receiver family getting the opposite answer inside the same rule. `could not read` does not mean `clean`, and on this one receiver family it was being treated as though it did. DISCLOSED, not ended",
-    site: "auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {",
-    probe: 'const m = "send" + "Beacon";\nnavigator[m](u, d);',
+      "NARROWED BY MEASUREMENT 2026-08-25 (wave 34), AND THE MEASUREMENT CONTRADICTED THE PREDICTION. This row was written for the five spellings of an unreadable computed member on a positively identified `navigator` receiver, ALL silent; the arm this wave widened now reports every one of them, INCLUDING the parameter-key spelling the plan predicted would survive. It does not survive: on a receiver this arm accepts, an unreadable member reports whatever the reason the key would not reduce, so the reason the key is unbound never comes up. What DOES survive is the RESOLUTION boundary rather than the readability one: an unreadable member of a `navigator` handed across a FUNCTION BOUNDARY is silent, because the parameter is never bound to the receiver and no resolver answers for it - the same limit the `isFetchExpression` entry of QUANTIFIED_CLAUSES already bounds for global receivers, met here on the navigator family. The identical shape written one function boundary nearer REPORTS - that is the counter-probe. DISCLOSED, not ended",
+    site: "auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {",
+    probe:
+      'function h(n) { const m = "send" + "Beacon"; return n[m](u, d); }\nh(navigator);',
     expect: Object.freeze([] as const),
-    counterProbe:
-      'const m = "send" + "Beacon";\nconst { [m]: b } = navigator;\nb(u, d);',
+    counterProbe: 'const m = "send" + "Beacon";\nnavigator[m](u, d);',
     counterExpect: Object.freeze(["outbound-unanalysable"] as const),
   }),
   // `silence-operator-around-global-receiver` STOOD HERE AND IS REMOVED, 2026-08-24
@@ -6495,6 +6514,39 @@ describe("the gate's own failure paths", () => {
   it("MEASURED SILENCE — the global as a call ARGUMENT, and an unreadable member of it, are both still silent after the receiver-position arm", () => {
     expect(rulesOf("Reflect.apply(fetch, null, [url]);")).toEqual([]);
     expect(rulesOf('fetch["ca" + "ll"](null, url);')).toEqual([]);
+  });
+
+  // CR-16, 2026-08-25, wave 34. THE UNREADABLE-MEMBER ARM, ON THE ONE RECEIVER
+  // FAMILY IT DID NOT ACCEPT, with the destructure that already reported as the
+  // control in the same case.
+  it("outbound-unanalysable fires on an unreadable computed member of an identified `navigator` receiver — with the DESTRUCTURE spelling that already reported as the control in the same case", () => {
+    expect(
+      rulesOf('const m = "send" + "Beacon";\nnavigator[m](u, d);'),
+    ).toEqual(["outbound-unanalysable"]);
+    expect(
+      rulesOf('const n = navigator;\nconst m = "send" + "Beacon";\nn[m](u, d);'),
+    ).toEqual(["outbound-unanalysable"]);
+    // The control: the same receiver family, the same unreadable key, spelled as
+    // a destructure. It reported twenty lines away in this rule BEFORE the arm
+    // was widened, which is what made the asymmetry a finding rather than a
+    // guess.
+    expect(
+      rulesOf(
+        'const m = "send" + "Beacon";\nconst { [m]: b } = navigator;\nb(u, d);',
+      ),
+    ).toEqual(["outbound-unanalysable"]);
+    // And the arm did not become a catch-all for ordinary objects.
+    expect(rulesOf('const m = "se" + "nd";\nplain[m](x);')).toEqual([]);
+  });
+
+  // A MEASURED SILENCE, TITLED AS ONE. `silence-unreadable-member-of-navigator`
+  // carries the probe; the mechanism is the resolution boundary, not readability.
+  it("MEASURED SILENCE — an unreadable member of a `navigator` handed across a FUNCTION BOUNDARY is still silent after the arm was widened", () => {
+    expect(
+      rulesOf(
+        'function h(n) { const m = "send" + "Beacon"; return n[m](u, d); }\nh(navigator);',
+      ),
+    ).toEqual([]);
   });
 
   // --- outbound-import -----------------------------------------------------
