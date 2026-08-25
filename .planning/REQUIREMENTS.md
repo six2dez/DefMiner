@@ -525,7 +525,7 @@ RESOLVERS - 35 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 21 entries.
+MEASURED SILENCES - 22 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -661,12 +661,19 @@ MEASURED SILENCES - 21 entries.
     counter:   "Reflect.apply(sdk.requests.send, sdk.requests, [req]);"
     reports:   outbound-send
 
-* silence-dynamic-code-global-receiver-position - a DYNAMIC-CODE global in RECEIVER position is silent: `eval.call(null, src)` reports nothing, and `Function.call(null, src)` reports nothing, because the dynamic-code arm reads DYNAMIC_CODE against the MEMBER and the member here is `call`, while `globalNameOf` is consulted where a callee is expected. The member-qualified receiver REPORTS - that is the counter-probe. A mechanism distinct from the fetch surface, because this family resolves through `globalNameOf` rather than through `isFetchExpression`, so it is a separate decision and a separate row. DISCLOSED, not ended
-    read off:  auditSource > DYNAMIC_CODE.has(member) &&
-    probe:     "eval.call(null, src);"
+* silence-dynamic-code-global-receiver-position - NARROWED BY MEASUREMENT 2026-08-25 (wave 34): `eval.call(null, src)` and `Function.call(null, src)` were silent and now report through the dynamic-code receiver arm this wave added - a SECOND arm and a second decision, because this family resolves through `dynamicCodeOf` rather than through `isFetchExpression`. What SURVIVES is the unreadable half: an unreadable computed member of a dynamic-code global is silent, because the arm requires a member name it can read and the unreadable catch-all beyond it accepts only the four global receivers and `navigator`. The SAME receiver with a readable member REPORTS - that is the counter-probe, so the two differ by readability alone. DISCLOSED, not ended
+    read off:  auditSource > dynamicCodeOf(node.expression) !== undefined
+    probe:     "eval[\"ca\" + \"ll\"](null, src);"
     reports:   [] - nothing
-    counter:   "globalThis.eval.call(null, src);"
+    counter:   "eval.call(null, src);"
     reports:   outbound-dynamic-code
+
+* silence-outbound-ctor-receiver-position - an OUTBOUND CONSTRUCTOR global in RECEIVER position is silent: `WebSocket.call(null, u)` reports nothing, because the constructor arm reads OUTBOUND_CONSTRUCTORS against the MEMBER and is guarded on the receiver being reached THROUGH a global, while `outboundCtorOf` is consulted where a `new` target or a callee is expected rather than on a receiver. The member-qualified spelling of the identical shape REPORTS - that is the counter-probe. MEASURED after the two arms this wave added, neither of which reaches this family. DISCLOSED, not ended
+    read off:  auditSource > OUTBOUND_CONSTRUCTORS.has(member) &&
+    probe:     "WebSocket.call(null, u);"
+    reports:   [] - nothing
+    counter:   "globalThis.WebSocket.call(null, u);"
+    reports:   outbound-global-ctor
 
 * silence-unreadable-member-of-navigator - NARROWED BY MEASUREMENT 2026-08-25 (wave 34), AND THE MEASUREMENT CONTRADICTED THE PREDICTION. This row was written for the five spellings of an unreadable computed member on a positively identified `navigator` receiver, ALL silent; the arm this wave widened now reports every one of them, INCLUDING the parameter-key spelling the plan predicted would survive. It does not survive: on a receiver this arm accepts, an unreadable member reports whatever the reason the key would not reduce, so the reason the key is unbound never comes up. What DOES survive is the RESOLUTION boundary rather than the readability one: an unreadable member of a `navigator` handed across a FUNCTION BOUNDARY is silent, because the parameter is never bound to the receiver and no resolver answers for it - the same limit the `isFetchExpression` entry of QUANTIFIED_CLAUSES already bounds for global receivers, met here on the navigator family. The identical shape written one function boundary nearer REPORTS - that is the counter-probe. DISCLOSED, not ended
     read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
