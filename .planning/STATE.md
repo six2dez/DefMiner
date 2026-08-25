@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
-stopped_at: Completed 01-32-PLAN.md
-last_updated: "2026-08-24T20:55:02.323Z"
+stopped_at: Completed 01-33-PLAN.md
+last_updated: "2026-08-25T10:05:11.728Z"
 last_activity: 2026-08-24
 last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
-state_head: 938e526bc3eaf067308aa29ef6b72b122bddf90e
+state_head: e42f2658434ea9de9517955fcac82a9d7582c078
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 35
+  completed_plans: 33
 ---
 
 # Project State
@@ -169,6 +169,7 @@ Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 | Phase 01 P30 | 41 min | 3 tasks | 4 files |
 | Phase 01 P31 | 39 min | 3 tasks | 5 files |
 | Phase 01 P32 | 31 min | 4 tasks | 8 files |
+| Phase 01 P33 | 24 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -301,6 +302,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P31-D4: wave 29's isFetchExpression handoff was RE-HOMED to wave 32 rather than discharged — MEASURED, its probe (ok && fetch)(url) is CR-11's operator-around-a-global shape and it stayed GREEN when the CR-12 widening landed while the other two went red. finding stays CR-12 because that is what the row's own dated FALSIFIED marker carries
 - [Phase 01]: P31-D5: the assembledNames clause correction landed in TASK 1's commit rather than task 2's — wave 29's handoff case goes red the instant the widening lands and task 1 must end green; the plan's stronger same-commit-as-the-code requirement is preserved
 - [Phase 01]: P31-D6: residual (b6) — a logical assignment whose TARGET is a MEMBER (o.r ??= sdk.requests) — is DISCLOSED as a measured-silence row rather than folded in: growing an alias keyed on a member path is a different collector, not a wider operator set, and needs its own real-tree measurement
+- [Phase 01]: Wave 33: the gate file's hand-written header states no bound of its own — CR-14 and WR-38 closed by DELETION rather than correction, kept deleted by a whole-file wrap-tolerant quantifier guard with three anchored non-vacuous exclusions and 29 named exemptions. Exclusion three NARROWED by pinning the registry line range against the live clause strings (12==12). No rule widened, no shape closed; CR-15/CR-16 are wave 34's and CORE-11's box is wave 35's.
 
 ### Known Risks Carried Forward
 
@@ -343,8 +345,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-24T20:54:55.106Z
-**Stopped at:** Completed 01-32-PLAN.md
+**Last session:** 2026-08-25T10:04:53.047Z
+**Stopped at:** Completed 01-33-PLAN.md
 **Resume file:** None
 
 ### Blockers
