@@ -1436,7 +1436,7 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
     }
   });
 
-  it("CORRECTED BY EXECUTION (IN-25), THEN SCOPED BY EXECUTION (WR-36): a NAMED PROPERTY VALUE of an object literal reports and a SPREAD does not — both directions in ONE case", () => {
+  it("CORRECTED BY EXECUTION (IN-25), THEN SCOPED BY EXECUTION (WR-36), THEN SPLIT BY MECHANISM (WR-40, 2026-08-25): a NAMED PROPERTY VALUE of an object literal reports, while a spread element and an undescended call ARGUMENT do not — both directions in ONE case", () => {
     // ITEM 3 NAMED FIVE THINGS AND TWO OF THEM FIRE. The object-literal route
     // fires because an object-literal value is itself one of the two guarded
     // POSITIONS — the branch enumeration missed it by not being crossed with the
@@ -1467,25 +1467,32 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
     ).toEqual(["unredacted-concat"]);
 
     // THE THREE SPREAD-SHAPED COUNTEREXAMPLES, MEASURED 2026-08-24 (WR-36).
-    // Each is a value routed through an object literal and each is SILENT,
-    // because `derivesFrom` reads a `SpreadAssignment` as neither a render nor a
-    // derivation. They are pinned HERE so that the day one of them closes, the
-    // scoped correction above goes RED and has to be rewritten with it.
-    for (const spread of [
-      "{ ...e }",
-      "Object.assign({}, e)",
-      "structuredClone(e)",
-    ]) {
+    // Each is a value routed through an object literal and each is SILENT — but
+    // NOT for one reason, which is what WR-40 found on 2026-08-25. The first is
+    // silent because the object-literal position rule iterates property
+    // assignments and a spread element is not one. The second and third are
+    // silent because a call's ARGUMENTS are never descended: `derivesFrom`
+    // follows a callee's RECEIVER and stops there. `Object.assign({}, e)`
+    // contains no spread at all, so calling it a spread shape described the wrong
+    // code to anyone who came looking. They are pinned HERE so that the day one
+    // of them closes, the scoped correction above goes RED and has to be
+    // rewritten with it — and the mechanism travels with each shape so the reader
+    // knows which code to check.
+    for (const [shape, mechanism] of [
+      ["{ ...e }", "a spread element is not a property assignment"],
+      ["Object.assign({}, e)", "a call's ARGUMENTS are never descended"],
+      ["structuredClone(e)", "a call's ARGUMENTS are never descended"],
+    ] as const) {
       expect(
         rulesOf(
-          `function f() { try { g(); } catch (e) { return { ok: false, error: ${spread} }; } }`,
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${shape} }; } }`,
         ),
-        `${spread} is a value routed through an object literal and was measured SILENT on 2026-08-24. If it now reports, the IN-25 correction's NAMED-PROPERTY scoping is no longer the boundary and both the comment at the head of this file and the residual case below have to change with it.`,
+        `${shape} is a value routed through an object literal and was measured SILENT through the mechanism "${mechanism}" on 2026-08-25. If it now reports, the IN-25 correction's NAMED-PROPERTY scoping is no longer the boundary and both the comment at the head of this file and the residual case below have to change with it.`,
       ).toEqual([]);
     }
   });
 
-  it("RESIDUAL, STILL OPEN AFTER IN-25 AND AFTER WR-36's SCOPING — a bare-identifier callee, a comma expression, an `await`, an ARRAY literal, and (2026-08-24) the three SPREAD shapes", () => {
+  it("RESIDUAL, STILL OPEN AFTER IN-25 AND AFTER WR-36's SCOPING — a bare-identifier callee, a comma expression, an `await`, an ARRAY literal, and (2026-08-24) the object-literal, unwalked-argument and bare-callee mechanisms", () => {
     // MEASURED SILENCES, every one, and none of them may be cited as evidence
     // that any rule holds. They are here so the corrected items 2 and 3 go RED
     // the day one of them is closed, which is the same reason the two IN-22
@@ -1515,21 +1522,75 @@ describe("the OPERATOR class of render — a conditional, `??`, `||` and `&&` be
         'function f() { try { g(); } catch (e) { const a = [e.message]; return { ok: false, error: a.join("") }; } }',
       ),
     ).toEqual([]);
-    // ADDED 2026-08-24 (WR-36). The three SPREAD shapes belong on the residual
-    // list as well as beside the firing pair: the list is what a reader consults
-    // to ask "what is still open", and a shape corrected out of the firing
-    // paragraph but never added here would be open and unlisted — which is the
-    // exact state WR-36 found the whole class in.
-    for (const spread of [
-      "{ ...e }",
-      "Object.assign({}, e)",
-      "structuredClone(e)",
-    ]) {
+    // ADDED 2026-08-24 (WR-36), SPLIT BY MECHANISM 2026-08-25 (WR-40/WR-42).
+    // THREE SHAPES WERE FILED UNDER ONE MECHANISM AND THEY EXHIBIT THREE. Filing
+    // a shape under a mechanism it does not exhibit is the defect this phase has
+    // now found five times, and a list is where it does the most damage: a reader
+    // consults the list to ask what is still open, and a wrong mechanism sends
+    // them to the wrong code.
+    //
+    //   (i)  THE OBJECT-LITERAL POSITION RULE ITERATES PROPERTY ASSIGNMENTS, AND
+    //        A SPREAD ELEMENT IS NOT ONE. `{ ...e }` in a property position is
+    //        silent for this reason and this reason only. It is the mechanism the
+    //        text here has described since it was written.
+    //
+    //   (ii) A CALL'S ARGUMENTS ARE NEVER DESCENDED. `derivesFrom` follows a
+    //        callee's RECEIVER and stops; the argument list is not walked at all.
+    //        `Object.assign({}, e)` is silent through THIS mechanism and contains
+    //        no spread whatsoever — filing it beside `{ ...e }` said the opposite.
+    //        This mechanism was not named anywhere on this list before today, and
+    //        naming it is the point of the split. `structuredClone(e)` and
+    //        `Object.entries(e)` are the same mechanism.
+    //
+    //   (iii) A BARE-IDENTIFIER CALLEE BREAKS THE DESCENT — which is ALREADY the
+    //        first item of this very list, twenty lines above, so a shape whose
+    //        silence comes from it is CROSS-REFERENCED there rather than restated
+    //        here. Restating an item is how a list acquires two entries that move
+    //        independently.
+    for (const [shape, mechanism] of [
+      ["{ ...e }", "(i) a spread element is not a property assignment"],
+      ["Object.assign({}, e)", "(ii) a call's ARGUMENTS are never descended"],
+      ["structuredClone(e)", "(ii) a call's ARGUMENTS are never descended"],
+      ["Object.entries(e)", "(ii) a call's ARGUMENTS are never descended"],
+    ] as const) {
       expect(
         rulesOf(
-          `function f() { try { g(); } catch (e) { return { ok: false, error: ${spread} }; } }`,
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${shape} }; } }`,
         ),
-        `${spread} is on the OPEN residual list and was measured silent on 2026-08-24. If it reports now, remove it from this list and from the scoped IN-25 correction at the head of this file, in the same commit.`,
+        `${shape} is on the OPEN residual list through mechanism ${mechanism} and was measured silent on 2026-08-25. If it reports now, remove it from this list and from the scoped IN-25 correction at the head of this file, in the same commit — and check the OTHER shapes filed under the same mechanism, which is why the mechanism is written here rather than left to be inferred.`,
+      ).toEqual([]);
+    }
+  });
+
+  // WR-42, 2026-08-25. FOUR FURTHER SHAPES OF THE SAME TWO MECHANISMS, MEASURED,
+  // AND EXACTLY ONE OF THEM PINNED. The file's own decision note eighty lines
+  // above says why only one: an item naming an open CLASS is deliberately not
+  // pinned, because "a fixture would pin one example while READING as though it
+  // pinned the class — a narrower guarantee wearing a wider claim". So the class
+  // is stated WITH its mechanism in the comment, and the single pinned example
+  // says in its own title that it is one example.
+  it("RESIDUAL, ONE EXAMPLE OF AN OPEN CLASS PINNED (WR-42): the TOP-LEVEL spread of the caught binding into the returned literal — the plainest spelling an author would type, and the one a reader looks for and does not find", () => {
+    // Mechanism (i) again, one position over: the spread is not in a property's
+    // VALUE, it IS the property list. The object-literal rule iterates property
+    // assignments either way, so neither position is reached.
+    expect(
+      rulesOf(
+        "function f() { try { g(); } catch (e) { return { ok: false, ...e }; } }",
+      ),
+      "the TOP-LEVEL spread of a caught binding into the returned literal was measured silent on 2026-08-25. It is pinned as ONE EXAMPLE of an open class, not as the class: if it reports now, re-measure the class before deleting this case.",
+    ).toEqual([]);
+  });
+
+  it("MEASURED SILENCES, NOT PINNED AS A CLASS (WR-42): the array spread, and two further shapes routing the binding through a call whose arguments are not descended", () => {
+    // Recorded so a later round finds a measurement instead of a blank, and NOT
+    // presented as bounding the class — each of the two mechanisms is open and
+    // the comment above says so.
+    for (const shape of ["[...e]", "Object.entries(e)", "Object.values(e)"]) {
+      expect(
+        rulesOf(
+          `function f() { try { g(); } catch (e) { return { ok: false, error: ${shape} }; } }`,
+        ),
+        `${shape} was measured silent on 2026-08-25. It is recorded, not pinned as a bound on its mechanism.`,
       ).toEqual([]);
     }
   });
