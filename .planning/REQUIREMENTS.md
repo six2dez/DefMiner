@@ -525,7 +525,7 @@ RESOLVERS - 35 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 20 entries.
+MEASURED SILENCES - 21 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -667,6 +667,13 @@ MEASURED SILENCES - 20 entries.
     reports:   [] - nothing
     counter:   "globalThis.eval.call(null, src);"
     reports:   outbound-dynamic-code
+
+* silence-unreadable-member-of-navigator - an UNREADABLE computed member of a positively identified `navigator` receiver is silent: `const m = "send" + "Beacon"; navigator[m](u, d)` reports nothing. TWO arms would have caught it and neither can - the beacon arm reads the MEMBER name and there is none to read, and the catch-all that reports an unreadable member is guarded on the four global receivers, which `navigator` is not one of - so the shape falls through the chain entirely. The identical shape on a receiver that guard accepts reports outbound-unanalysable, and the SHARPEST counter-probe is the navigator DESTRUCTURE, which is the same receiver family getting the opposite answer inside the same rule. `could not read` does not mean `clean`, and on this one receiver family it was being treated as though it did. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === undefined && isGlobalReceiver(node.expression)) {
+    probe:     "const m = \"send\" + \"Beacon\";\nnavigator[m](u, d);"
+    reports:   [] - nothing
+    counter:   "const m = \"send\" + \"Beacon\";\nconst { [m]: b } = navigator;\nb(u, d);"
+    reports:   outbound-unanalysable
 <!-- END DERIVED RESIDUAL -->
 
 
