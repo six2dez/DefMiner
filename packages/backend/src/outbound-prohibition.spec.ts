@@ -2768,8 +2768,8 @@ export function auditSource(file: string, source: string): Violation[] {
    * is stated here because it is TRUE HERE and nowhere else: this collector
    * reads the INITIALIZER'S SHAPE and never the live set, so it cannot chain.
    * Three sibling docblocks carried the identical sentence about ALIAS sets,
-   * which are grown from the live set and do chain to any depth; all three were
-   * deleted on 2026-08-24 (WR-30) after being executed and found to report.
+   * which are grown from the live set and DO chain, link after link; all three
+   * were deleted on 2026-08-24 (WR-30) after being executed and found to report.
    * That they read as true to a skimmer is precisely because THIS one is.
    *
    * WHAT COUNTS AS A DECLARATION HERE, WIDENED 2026-08-24 (IN-26). Three
@@ -2786,14 +2786,14 @@ export function auditSource(file: string, source: string): Violation[] {
    * RELATIVE TO A USE — THE READ-POSITION BOUND, whose superseded words are
    * preserved in `01-VERIFICATION.md`'s CR-09 entry and are not requoted here.
    * It was false: `collect(sf)` completes before `visit(sf)` begins, so a
-   * binding anywhere in the file is seen from anywhere in the file, use sites
-   * included above it. `sdk[k].send(req);\nconst k = "req"+"uests";` reports.
+   * binding is seen from EVERY use site the module has, those written above it
+   * included. `sdk[k].send(req);\nconst k = "req"+"uests";` reports.
    * What DOES bound a key is the ONE HOP above, and the mechanism behind it is
    * the mechanism that makes keys different from aliases: this collector and
    * `constStrings` read the INITIALIZER'S SHAPE and never the live set, so a
    * key cannot be grown from a name already in the set and therefore cannot
    * chain — while every ALIAS set is grown FROM the live set and therefore
-   * chains to any depth. Bindings remain file-wide, which over-approximates
+   * chains link after link. Bindings remain file-wide, which over-approximates
    * (a name bound anywhere counts everywhere), which is the posture every other
    * set in this pass already takes.
    *
@@ -2946,8 +2946,8 @@ export function auditSource(file: string, source: string): Violation[] {
    * map holding ONE literal per name — the FIRST one, written only at the
    * declaration branch. `let k = "harmless"; k = "requests"; sdk[k].send(req)`
    * therefore resolved to "harmless" forever and steps 2 and 3 were unreachable
-   * for that name. The map now holds EVERY literal a name is bound to anywhere in
-   * the file and step 1 asks whether ANY of them names a receiver.
+   * for that name. The map now holds EVERY literal a name is bound to at ANY OF
+   * ITS COLLECTING BRANCHES, and step 1 asks whether ANY of them names a receiver.
    * WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: ANY-BINDING-WINS
    * OVER-approximates — `let k = "requests"; k = "harmless"` reports, and it is
    * asserted below as THE MIRROR. The rejected alternative, a POISONED map in the
@@ -3058,8 +3058,8 @@ export function auditSource(file: string, source: string): Violation[] {
   /**
    * EVERY string an expression can denote: the literal itself, or the whole
    * collected set of literals `constStrings` recorded for a name — which is every
-   * literal that name is bound to anywhere in the file, through a declaration, an
-   * assignment, a logical assignment or an operator initializer, whatever the
+   * literal that name is bound to through a declaration, an assignment, a
+   * logical assignment or an operator initializer, whatever the
    * `const`/`let`/`var` spelling. It returns a SET and it can return an EMPTY one;
    * it never returns `undefined`, and its callers ask about SIZE rather than about
    * absence.
@@ -6533,7 +6533,7 @@ describe("the 22-shape gate-reach probe from 01-VERIFICATION.md", () => {
 // shapes, because the fixtures were written by the same reasoning that wrote the
 // rule. These were written and confirmed RED against the round-1 walk before a
 // line of that walk was touched.
-describe("the global fetch, in every reachable spelling", () => {
+describe("the global fetch, in the four spellings isFetchExpression branches on", () => {
   const rulesOf = (src: string, file = "fixture.ts"): string[] =>
     auditSource(file, src).map((v) => v.rule);
 
@@ -7011,7 +7011,7 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     //   ALIASES DO CHAIN because every alias set is grown BY CONSULTING THE
     //   LIVE SET (`isFetchExpression`, `isNavigatorReceiver`, `aliasedGlobalOf`,
     //   `isGlobalReceiver`, `initializerReceiver`), so each new binding can
-    //   resolve from the previous one to any depth.
+    //   resolve from the previous one, link after link.
     // And because `collect(sf)` runs to COMPLETION before `visit(sf)` begins,
     // NEITHER of them is bounded by the position of a use. That is what this
     // case asserts and it is the half CR-09 falsified.
@@ -7040,8 +7040,8 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     // AST twelve tokens apart: this was never a value the walk could not FOLLOW,
     // it was a value the walk READ and discarded in favour of an older one.
     //
-    // The map now holds EVERY literal a name is bound to anywhere in the file and
-    // `keyReceiver` reports if ANY of them names a receiver — which is exactly
+    // The map now holds EVERY literal a name is bound to at ANY OF ITS COLLECTING
+    // BRANCHES and `keyReceiver` reports if ANY of them names a receiver — which is exactly
     // the property boundary 2 already claimed for file-wide bindings and did not
     // have. `outbound-send` and NOT `outbound-unanalysable`: the walk can read
     // this site completely.
@@ -7724,7 +7724,8 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     // itself handle a conditional — so the moment a conditional appeared INSIDE a
     // branch, the two DID disagree and this shape was silent. The claim is now a
     // fact: `keyReceiver` descends through `operatorReceiver`, passing ITSELF as
-    // the resolver, so nesting resolves by construction at any depth.
+    // the resolver, so nesting resolves through the same four RECEIVER_OPERATORS
+    // at each level.
     //
     // WHICH TASK ACTUALLY CLOSED THIS, RECORDED RATHER THAN ABSORBED. The plan
     // assigned this shape to its second task, alongside the binary operators.
@@ -8586,63 +8587,43 @@ const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
 
     // --- CODE ABOVE THE REGISTRY ---
     "Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "which are grown from the live set and do chain to {q2}; all three were :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "binding {q0} is seen from {q0}, use sites :: q0":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "binding {q0} is seen from {q0}, use sites :: q0 #2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "chains to {q2}. Bindings remain file-wide, which over-approximates :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "for that name. The map now holds EVERY literal a name is bound to anywhere in :: q0":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "the file and step 1 asks whether {q4} names a receiver. :: q4":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "CODE. Not a claim about the OUTBOUND WALK's resolution reach at all: it describes the FILE WALK's directory recursion, which really is unbounded in depth and is pinned by the 23-file non-vacuity assertion over both SOURCE_ROOTS. Two different walks, and only one of them has a residual.",
+    "ITS COLLECTING BRANCHES, and step 1 asks whether {q4} names a receiver. :: q4":
+      "CODE. Bounded IN THE SAME SENTENCE by the clause immediately before it, which names the collecting branches. The `anywhere` half of this sentence was REWRITTEN OUT in wave 33; what remains is the predicate that clause governs.",
     "WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: {q8} :: q8":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "CODE. A one-line RULE LABEL, defined by the table in the header and used here to name the direction the mechanism errs in. It states no reach; the sentence it labels states the direction.",
     "collected set of literals `constStrings` recorded for a name — which is every :: q3":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "literal that name is bound to {q0}, through a declaration, an :: q0":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "CODE. Bounded IN THE SAME SENTENCE by the four branches enumerated immediately after it - a declaration, an assignment, a logical assignment and an operator initializer. The redundant `anywhere` clause that sat between them was REWRITTEN OUT in wave 33.",
 
     // --- BELOW THE REGISTRY ---
     "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q0":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY, and one of THREE occurrences forming a single QUOTATION. This is the docblock of the list itself, quoting the two universals round 6 executed and DISPROVED. The quotation is the evidence for why the list exists; deleting it would leave the list without its reason.",
     "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q7":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY, and one of THREE occurrences forming a single QUOTATION. This is the docblock of the list itself, quoting the two universals round 6 executed and DISPROVED. The quotation is the evidence for why the list exists; deleting it would leave the list without its reason.",
     "file` and `silent in {q5}`. A universal a reviewer cannot execute and :: q5":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. The third occurrence of the same quotation begun on the line above - the second falsified universal, quoted for the same reason.",
     '"Bounded by DECLARATION ORDER inside the single collect pass, and by the branches that write the… :: q1':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY, and a member of the QUANTIFIED_CLAUSES NAMED CLASS. Every value in that map exists to state what MEASURABLY BOUNDS a clause's universal, so it necessarily quotes the universal it bounds. The class cannot grow silently: it is bounded by QUANTIFIED_CLAUSES' own key set, which the coverage guard already pins one row at a time.",
     "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
     "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2 #2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    'describe("the global fetch, in {q6}", () => { :: q6':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
     '"through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "resolve from the previous one to {q2}. :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "The map now holds EVERY literal a name is bound to {q0} and :: q0":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "`keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. A PARAMETERISED test title. The spellings it names are the case's own parameter table, sitting directly beneath it, so the title's universal is enumerated by data rather than claimed by prose.",
+    "BRANCHES and `keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
+      "BELOW REGISTRY. Bounded IN THE SAME SENTENCE by the clause on the line above naming the collecting branches; the `anywhere` half was REWRITTEN OUT in wave 33.",
     "it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. A test TITLE naming the rule label under test. The title's job is to say which mechanism the case exercises, and the case beneath it is the assertion.",
     "{q8} (implemented) reports here — an OVER-approximation, :: q8":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. Names the rule label and states, in the same breath, the direction it errs in - an OVER-approximation. A label plus its direction is a description, not a reach.",
     'was read "in {q5}" and through "either a declaration or an :: q5':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. A QUOTATION, in quotation marks, of a claim this file's own header used to make and which the sentence after it records as FALSE. Quoting a claim in order to falsify it is not making it.",
     'it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
-    "the resolver, so nesting resolves by construction at {q2}. :: q2":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. A test TITLE naming the rule label under test, in the same shape as the case above it.",
     "universal — `silent in {q5}` — and that ROW WAS REMOVED when its :: q5":
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. A QUOTATION, in backticks, of the universal carried by the registry row that was REMOVED on 2026-08-24 (CR-11). It records why the row went; it asserts nothing about what the walk reaches now.",
     '"row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-0… :: q5':
-      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+      "BELOW REGISTRY. An ASSERTION MESSAGE that fires only if the removed row comes back. It quotes the row's own named set - the spellings THAT ROW named - and is bounded by that set. A message complaining about a phrasing is not asserting it.",
   });
 
 /**
