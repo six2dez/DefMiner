@@ -5684,9 +5684,9 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     id: "silence-aliased-module-loader-specifier",
     kind: "measured-silence",
     clause:
-      "a MODULE LOADER reached by way of a local binding is silent in BOTH directions: `const r = require; r(\"caido:http\")` reports nothing, and so does `const r = require; r(s)` where the specifier will not reduce - so the `could not read does not mean clean` half of that rule is unreachable once the loader is bound to a local name, and an unreadable specifier behind such a name is treated as clean. The DIRECT spelling reports in both directions - that is the counter-probe. DISPOSITION AND ITS REASON, so this is a decision rather than an omission: NOT widened, because the surface it protects is bounded from the other end by a check on the SHIPPED BUNDLE, which is asserted at exactly one import specifier and which a spec file never enters; growing the resolver machinery here would add reach the bundle check already has. Recorded so a later round finds a decision instead of a blank. DISCLOSED, not ended",
+      'a MODULE LOADER reached by way of a local binding is silent in BOTH directions: `const r = require; r("caido:http")` reports nothing, and so does `const r = require; r(s)` where the specifier will not reduce - so the `could not read does not mean clean` half of that rule is unreachable once the loader is bound to a local name, and an unreadable specifier behind such a name is treated as clean. The DIRECT spelling reports in both directions - that is the counter-probe. DISPOSITION AND ITS REASON, so this is a decision rather than an omission: NOT widened, because the surface it protects is bounded from the other end by a check on the SHIPPED BUNDLE, which is asserted at exactly one import specifier and which a spec file never enters; growing the resolver machinery here would add reach the bundle check already has. Recorded so a later round finds a decision instead of a blank. DISCLOSED, not ended',
     site: "auditSource > } else if (specifier === undefined) {",
-    probe: 'const r = require;\nr(s);',
+    probe: "const r = require;\nr(s);",
     expect: Object.freeze([] as const),
     counterProbe: "require(s);",
     counterExpect: Object.freeze(["outbound-unanalysable"] as const),
@@ -5991,7 +5991,7 @@ export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>> =
     literalsOf:
       'Bounded by the collected set constStrings recorded — the SAME branches, so this clause inherits constStrings\' bound exactly, widening with it (2026-08-24, CR-13). MEASURED with the same probe: `const r = ok ? "requests" : "x"; sdk[r].send(req)` now reports outbound-send. The universal is STILL false and inherits the same residual: parameter, loop binding, second hop of key and cross-file binding are each MEASURED silent.',
     isFetchExpression:
-      "Bounded by the FOUR spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, a one-hop alias, and - since 2026-08-24 (CR-11) - an operator around any of those, read through operatorOperandMatching. MEASURED after that widening: `const f = fetch ?? x; f(url)` reports outbound-fetch, and so does `(ok && fetch)(url)`, which needed a SIXTH site (bareFetchCallee) because the bare-call rule asked its own inline question. The universal is STILL false and the bound is what remains outside those four branches, each MEASURED silent in this same session: a function boundary (`function h(g) { g.fetch(url); } h(globalThis)`), an array-slot binding (`[globalThis][0].fetch(url)`), a class field and a parameter default - all report NOTHING. WIDENED 2026-08-25 (CR-15, wave 34) with RECEIVER POSITION, which this entry did not name at all before: the member arm now asks this same question of a receiver written as a bare name, so MEASURED after that widening `fetch.call(null, url)` reports outbound-fetch and so does `const f = fetch; f.call(null, url)`, while `globalThis.fetch.call(null, url)` still reports EXACTLY ONCE because the arm takes only the bare-name spelling. The bound after it is still not empty and is MEASURED, not assumed: `Reflect.apply(fetch, null, [url])` reports NOTHING because the global is an argument and no member of it is written down, and `fetch[\"ca\" + \"ll\"](null, url)` reports NOTHING because the member will not reduce - each has its own registry row, and the set of ways a value reaches a call is open.",
+      'Bounded by the FOUR spellings the function branches on: a bare identifier in fetchAliases, a FETCH_GLOBAL member of a global receiver, a one-hop alias, and - since 2026-08-24 (CR-11) - an operator around any of those, read through operatorOperandMatching. MEASURED after that widening: `const f = fetch ?? x; f(url)` reports outbound-fetch, and so does `(ok && fetch)(url)`, which needed a SIXTH site (bareFetchCallee) because the bare-call rule asked its own inline question. The universal is STILL false and the bound is what remains outside those four branches, each MEASURED silent in this same session: a function boundary (`function h(g) { g.fetch(url); } h(globalThis)`), an array-slot binding (`[globalThis][0].fetch(url)`), a class field and a parameter default - all report NOTHING. WIDENED 2026-08-25 (CR-15, wave 34) with RECEIVER POSITION, which this entry did not name at all before: the member arm now asks this same question of a receiver written as a bare name, so MEASURED after that widening `fetch.call(null, url)` reports outbound-fetch and so does `const f = fetch; f.call(null, url)`, while `globalThis.fetch.call(null, url)` still reports EXACTLY ONCE because the arm takes only the bare-name spelling. The bound after it is still not empty and is MEASURED, not assumed: `Reflect.apply(fetch, null, [url])` reports NOTHING because the global is an argument and no member of it is written down, and `fetch["ca" + "ll"](null, url)` reports NOTHING because the member will not reduce - each has its own registry row, and the set of ways a value reaches a call is open.',
   });
 
 export const FALSIFIED_HANDOFFS: readonly FalsifiedHandoff[] = Object.freeze([
@@ -6670,7 +6670,9 @@ describe("the gate's own failure paths", () => {
       rulesOf('const m = "send" + "Beacon";\nnavigator[m](u, d);'),
     ).toEqual(["outbound-unanalysable"]);
     expect(
-      rulesOf('const n = navigator;\nconst m = "send" + "Beacon";\nn[m](u, d);'),
+      rulesOf(
+        'const n = navigator;\nconst m = "send" + "Beacon";\nn[m](u, d);',
+      ),
     ).toEqual(["outbound-unanalysable"]);
     // The control: the same receiver family, the same unreadable key, spelled as
     // a destructure. It reported twenty lines away in this rule BEFORE the arm
@@ -6726,9 +6728,9 @@ describe("the gate's own failure paths", () => {
   // asserted here so a later edit that "fixes" the computed key has to move this
   // case rather than leave a docblock claiming the old shape.
   it("a COMPUTED destructure key off `navigator` reports the UNANALYSABLE surface, not the beacon one — the safe direction with the wrong rule identifier, asserted so the bound cannot rot", () => {
-    expect(rulesOf('const { ["sendBeacon"]: b } = navigator;\nb(u, d);')).toEqual(
-      ["outbound-unanalysable"],
-    );
+    expect(
+      rulesOf('const { ["sendBeacon"]: b } = navigator;\nb(u, d);'),
+    ).toEqual(["outbound-unanalysable"]);
     // The plain spelling of the same destructure, one bracket pair apart.
     expect(rulesOf("const { sendBeacon: b } = navigator;\nb(u, d);")).toEqual([
       "outbound-beacon",
@@ -6738,11 +6740,15 @@ describe("the gate's own failure paths", () => {
   // IN-33, 2026-08-25, wave 34. THE TWO NEIGHBOURS OF THE DESTRUCTURE CLOSURE,
   // executed rather than described, with the one-deep spelling as the control.
   it("MEASURED SILENCE — a destructure deeper than one element, and one nested through an array pattern, are both silent; the one-deep object spelling is the control", () => {
-    expect(rulesOf("const { a: { requests: { send } } } = wrap;\nsend(req);")).toEqual(
+    expect(
+      rulesOf("const { a: { requests: { send } } } = wrap;\nsend(req);"),
+    ).toEqual([]);
+    expect(rulesOf("const [{ send }] = [sdk.requests];\nsend(req);")).toEqual(
       [],
     );
-    expect(rulesOf("const [{ send }] = [sdk.requests];\nsend(req);")).toEqual([]);
-    expect(rulesOf("const { requests: [first] } = sdk;\nfirst(req);")).toEqual([]);
+    expect(rulesOf("const { requests: [first] } = sdk;\nfirst(req);")).toEqual(
+      [],
+    );
     expect(rulesOf("const { requests: { send } } = sdk;\nsend(req);")).toEqual([
       "outbound-send",
     ]);
