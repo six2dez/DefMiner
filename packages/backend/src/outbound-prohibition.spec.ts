@@ -96,8 +96,8 @@
 //          `globalAliases`, `globalThisAliases`, `unreadableAliases`. Grown from
 //          the LIVE set at the declaration branch and at the assignment branch,
 //          never removed from. They OVER-approximate: a name bound to an outbound
-//          receiver anywhere in the file is treated as one everywhere in it,
-//          inner scopes and later rebindings included.
+//          receiver AT EITHER COLLECTING BRANCH is treated as one at every later
+//          read, inner scopes and later rebindings included.
 //          CORRECTED 2026-08-24 (CR-12, wave 31), AND WHAT WAS WRONG WITH IT.
 //          This sentence read `at both the declaration and the assignment
 //          branch`, and `the assignment branch` meant ONE OPERATOR: the branch
@@ -658,7 +658,8 @@
 //    sdk.net; r.send(req)`) and in NESTED KEY position (`sdk[b ? (c ?
 //    "requests" : "x") : "y"]`), by `operatorReceiver` — ONE function,
 //    reached from `receiverKind` and from `keyReceiver`, each passing
-//    ITSELF as the leaf resolver so nesting resolves at any depth. THE
+//    ITSELF as the leaf resolver, so a NESTED operator resolves through the
+//    same four `RECEIVER_OPERATORS` at each level. THE
 //    THREE-STATE ANSWER, in the order the element-access arm already used
 //    and copied from there rather than reinvented: any operand naming a
 //    receiver makes the expression THAT RECEIVER; else any operand the
@@ -753,33 +754,29 @@
 //    was measured to change nothing except to re-poison ordinary `+`
 //    indexing.
 //
-//    AND ONE SHAPE THIS WAVE OPENED BY MEASURING WHERE THE DESCENT STOPS
-//    INSTEAD OF ASSUMING IT IS UNIVERSAL — disclosed on the day it was
-//    found rather than left for a later round's finding.
-//    `operatorReceiver` is reached from `receiverKind` and `keyReceiver`
-//    AND FROM NOWHERE ELSE. `isGlobalReceiver`, `isFetchExpression` and
-//    `isNavigatorReceiver` resolve their own spellings through the alias
-//    sets and do not consult it, so AN OPERATOR WRAPPING A GLOBAL
-//    RECEIVER IS STILL SILENT in every spelling: `(ok &&
-//    globalThis).fetch(url)`, `(g ?? globalThis)["fetch"](url)`, `(b ?
-//    globalThis : x).fetch(url)`, `(b ? navigator : x).sendBeacon(u, d)`,
-//    `(b ? fetch : x)(url)` and `(b ? eval : x)(src)` all report `[]`,
-//    MEASURED IDENTICAL BEFORE AND AFTER THIS WAVE against commit
-//    278a0d2~1. This wave neither closed them nor broke them and claims
-//    no credit for them; the contrast that shows the boundary is the
-//    RESOLVER and not the operator is that `(b ? sdk.requests :
-//    x).send(req)` DOES report, because that path goes through
-//    `receiverKind`. Pinned by a fixture titled as a MEASURED SILENCE.
+//    WHAT STOOD HERE, AND WHY IT IS GONE RATHER THAN CORRECTED. Two
+//    paragraphs occupied this spot until 2026-08-25 (wave 33, CR-14). The
+//    first asserted that an operator wrapping a global receiver was STILL
+//    SILENT, named six probes and claimed all six reported `[]`, and closed
+//    by pointing at a fixture titled as a measured silence. The second listed
+//    that same shape as open and unowned, with no plan in this phase claiming
+//    it. BOTH WERE FALSE BY THE TIME A READER MET THEM: wave 32 closed the
+//    shape through `operatorOperandMatching` and `bareFetchCallee`, the
+//    fixture they pointed at is now titled CLOSED (CR-11), and the registry
+//    row they rested on — `silence-operator-around-global-receiver` — was
+//    REMOVED, with a guard below asserting it never comes back.
 //
-//    STILL OPEN AFTER THIS WAVE, EACH NAMED WITH THE WAVE THAT OWNS IT OR
-//    WITH THE FACT THAT NOTHING DOES, because a residual that narrows in
-//    one place while quietly widening in another is the omission this
-//    round exists to stop: the DESTRUCTURED KEY BINDING, `const { k } =
-//    o; sdk[k].send(req)` — WAVE 26 (IN-26); the OPERATOR AROUND A GLOBAL
-//    RECEIVER, above — OPEN AND UNOWNED, no plan in this phase claims it,
-//    and wave 27's derivation is what will carry it forward rather than
-//    rediscover it. Wave 26 also owns `packages/backend/src/store/*`,
-//    `tests/pins.spec.ts` and `scripts/phase1/tracer-e2e.sh`.
+//    THEY ARE DELETED RATHER THAN RE-DATED, and that choice is the whole of
+//    wave 33. A corrected sentence is still an AUTHORED bound standing beside
+//    a DERIVED one, which is how seven consecutive waves each fixed a stale
+//    claim here and each acquired the next. THE RESIDUAL OF RECORD IS THE
+//    GENERATED SPAN BELOW, between the two sentinel lines, byte-compared to
+//    deriveResidual(RESOLVER_REGISTRY) by this suite. THIS PARAGRAPH RESTATES
+//    NO BOUND OF ITS OWN, deliberately, for the same reason
+//    `.planning/STATE.md` and `.planning/WINDOWS.md` do not. What was
+//    believed about this shape, when, and which six probes were run against
+//    it is preserved in `01-33-SUMMARY.md`, with the rule identifiers each
+//    one produces today — because a history is a record, not a bound.
 //
 //    Every exemption here is preserved BY MEASUREMENT, re-run after each
 //    widening and again in wave 25: 23 files over both `SOURCE_ROOTS`,
@@ -905,15 +902,19 @@
 //    waves 24 and 25 recorded: wave 27 derives the replacement text and
 //    wave 28 reconciles both requirement-tier ledgers to it in ONE move.
 //
-//    CORE-11 IS NOW MARKED COMPLETE IN `REQUIREMENTS.md`, and the difference
-//    from the `[x]` that commit `e7cc4b6` reverted is the reason it may be:
-//    every surface the requirement's own first sentence enumerates now has a
-//    fixture that has been OBSERVED FAILING. `const e = eval; e(s)` (WR-23) and
-//    `const g = globalThis; g.fetch(u)` (IN-20) — the two shapes that were
-//    silent when plan 01-18 deliberately left the box open — both report. The
-//    discharge table, one row per enumerated surface with its rule identifier,
-//    its fixture and the plan that watched that fixture fail, is in
-//    `01-19-SUMMARY.md`.
+//    CORE-11's BOX IS NOT STATED HERE, AS OF 2026-08-25 (wave 33, WR-38). A
+//    paragraph asserting the box was NOW MARKED COMPLETE stood at this spot
+//    and is DELETED. It contradicted the ledger row it named, roughly 8,100
+//    lines below it, and a header is the first thing a reader and a later
+//    planner meet — the worst available place to keep a second copy of a fact
+//    that has already been flipped early and reverted twice, at `e7cc4b6`
+//    and `faca607`. THE BOX'S STATE IS NOW STATED IN EXACTLY TWO PLACES:
+//    the CORE-11 row in `.planning/REQUIREMENTS.md`, and
+//    `CORE11_BOX_EXPECTED` below, which pins that row by bytes. This
+//    paragraph POINTS at both and asserts neither, so the contradiction
+//    cannot recur — one side of it no longer exists. The item-by-item
+//    discharge table is in `01-28-SUMMARY.md`; the table is the evidence and
+//    the checkbox is not.
 //    ========================================================================
 // 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
 //    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
@@ -8506,6 +8507,248 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
 });
 
 // ---------------------------------------------------------------------------
+// THE GATE FILE'S OWN BYTES CARRY NO BOUND OUTSIDE THE GENERATED SPAN
+// ---------------------------------------------------------------------------
+/**
+ * WHY THIS EXISTS, AND WHAT IT IS NOT.
+ *
+ * Every other guard in this file reads `RESOLVER_REGISTRY[].clause` and nothing
+ * else. The hand-written lines ahead of the registry are what a reader and a
+ * later planner meet FIRST, and until 2026-08-25 they raised ZERO obligations.
+ * Seven consecutive waves each corrected a stale claim there and each acquired
+ * the next one, because a corrected sentence is still an AUTHORED bound standing
+ * beside a DERIVED one.
+ *
+ * WAVE 33 DELETED THE BOUNDS RATHER THAN WIDENING THE SCAN OVER THEM. Widening
+ * the existing guards to read the header would have converted twenty stale
+ * sentences into twenty NEW obligations for the next author to keep true, on
+ * prose that will drift again. THE DELETION IS WHAT MAKES THE HEADER CORRECT.
+ * THIS GUARD ONLY KEEPS IT DELETED - it is the cheap, bounded thing that stops
+ * the surface being re-populated, and no sentence anywhere may claim more of it
+ * than that.
+ *
+ * ITS LIMITS, STATED HERE BECAUSE THIS IS WHERE IT IS CLAIMED:
+ *
+ * (1) IT IS A PHRASE LIST. Its reach is exactly the strings in
+ *     `UNBOUNDED_QUANTIFIERS` and no further. A universal spelled in words that
+ *     are not on that list passes it untouched - the same limit that list's own
+ *     docblock already states, now stated of this guard too. Rewriting a matched
+ *     sentence into a synonym would turn this guard green while preserving the
+ *     bound, and that would be gaming it rather than satisfying it.
+ *
+ * (2) IT IS NORMALIZATION-DEPENDENT, AND THE CONVENTION IS NAMED IN CODE RATHER
+ *     THAN LEFT IN A REGULAR EXPRESSION. Measured at wave 33 before any edit,
+ *     the hand-written region scored 20 occurrences scanned line by line and 24
+ *     scanned under the convention below. FOUR occurrences wrap across two
+ *     comment lines. A line-based scan - which is what this round's review
+ *     suggested - would report 20 while 24 exist: a stated reach exceeding an
+ *     executed one, which is the exact defect this round is about, arriving
+ *     inside its own fix. `normalizeGateLine` and `joinGateLines` are that
+ *     convention, written out so a reader does not have to infer it.
+ *
+ * (3) IT REACHES BYTES, NOT MEANING. A sentence that asserts a universal without
+ *     using a declared phrasing is invisible to it. It cannot read a claim; it
+ *     can only find a string.
+ *
+ * (4) EXCLUSION THREE IS COARSER THAN ITS NAME. It excludes the registry's whole
+ *     LINE RANGE, which is wider than the clause strings themselves and would
+ *     also swallow a docblock sitting between two rows. That coarseness is
+ *     NARROWED rather than merely disclosed: `exclusionThreeCarriesOnlyClauses`
+ *     below pins the count inside that range against the count inside the live
+ *     `clause` strings, so a phrasing written into a between-rows comment breaks
+ *     an equality instead of vanishing. Measured at wave 33: 12 and 12.
+ */
+const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
+  Object.freeze({
+    // --- HEADER (1..956) ---
+    "CR-10 `constStrings` holds {q3} a name is bound to at ANY OF :: q3":
+      "HEADER. The universal is bounded IN THE SAME SENTENCE by the clause that follows it, which names the collecting branches by name. Removing the phrasing would remove the thing the bound is stated about. The reach OF RECORD is the generated span.",
+    "ITS COLLECTING BRANCHES and reports if {q4} names a receiver, :: q4":
+      "HEADER. The predicate half of the sentence above, bounded by the same clause naming the collecting branches. Exempt as one thought with the entry above it, not as a second claim.",
+    "`{q0}` was REMOVED from the one before it, for the same :: q0":
+      "HEADER. A QUOTATION of a phrase recorded as REMOVED from a clause on 2026-08-24 (CR-13). Quoting a deleted bound in order to record that it was deleted is not asserting one.",
+    "AND `+=` WAS NEVER READ AT ALL, in a paragraph claiming every :: q5":
+      "HEADER. Quotes the FALSE claim a superseded paragraph made, in order to record that it was false. WRAPPED across two comment lines: a line-based scan does not see this occurrence at all, which is why the scan is not line-based.",
+    'k = "requests"; sdk[k] {q8} :: q8':
+      "HEADER. A cell in an ASCII table naming the RULE LABEL that fires for the row beside it. A label names a mechanism; it states no reach.",
+    'k = "requests"; sdk[k] {q8} :: q8 #2':
+      "HEADER. The same table cell one row down, for the `var` spelling. Distinct occurrence, identical reasoning, listed separately because the guard counts occurrences rather than lines.",
+    'k = "harmless"; sdk[k] {q8} — THE MIRROR, and it :: q8':
+      "HEADER. The same table cell for the MIRROR row, where the over-approximation is the point being shown.",
+    "{q2} :: q2":
+      "HEADER. A wrapped cell in the same ASCII table, labelling what the keyReceiver row already carries. What bounds it is QUANTIFIED_CLAUSES.keyReceiver - the four RECEIVER_OPERATORS - and not this cell.",
+    "is inside for a literal binding, for an assembled binding in every :: q5":
+      "HEADER. Bounded IN THE SAME SENTENCE by the four positions it enumerates and by the sentence after it, `Two hops is out`. WRAPPED across two comment lines.",
+    "a binding {q0} is seen. It is deleted, not softened. :: q0":
+      "HEADER. Records WHY a former exemption was DELETED, quoting the reach that falsified it. The sentence is about a deletion; it makes no claim of its own.",
+    "chains to {q2}. Executed: `const a = navigator; const b = a; :: q2":
+      "HEADER. Records a hop clause that was DELETED and pastes the probe executed against it. It points at (a) and at the generated span for the answer rather than answering.",
+
+    // --- CODE ABOVE THE REGISTRY ---
+    "Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "which are grown from the live set and do chain to {q2}; all three were :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "binding {q0} is seen from {q0}, use sites :: q0":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "binding {q0} is seen from {q0}, use sites :: q0 #2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "chains to {q2}. Bindings remain file-wide, which over-approximates :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "for that name. The map now holds EVERY literal a name is bound to anywhere in :: q0":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "the file and step 1 asks whether {q4} names a receiver. :: q4":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: {q8} :: q8":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "collected set of literals `constStrings` recorded for a name — which is every :: q3":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "literal that name is bound to {q0}, through a declaration, an :: q0":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+
+    // --- BELOW THE REGISTRY ---
+    "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q0":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q7":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "file` and `silent in {q5}`. A universal a reviewer cannot execute and :: q5":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    '"Bounded by DECLARATION ORDER inside the single collect pass, and by the branches that write the… :: q1':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2 #2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    'describe("the global fetch, in {q6}", () => { :: q6':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    '"through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "resolve from the previous one to {q2}. :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "The map now holds EVERY literal a name is bound to {q0} and :: q0":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "`keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "{q8} (implemented) reports here — an OVER-approximation, :: q8":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    'was read "in {q5}" and through "either a declaration or an :: q5':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    'it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "the resolver, so nesting resolves by construction at {q2}. :: q2":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    "universal — `silent in {q5}` — and that ROW WAS REMOVED when its :: q5":
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+    '"row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-0… :: q5':
+      "TASK 2 OF WAVE 33 TO TRIAGE. Carried here so the surface is CLOSED and the suite green at the task boundary, with the obligation VISIBLE rather than deferred in silence. Task 2 classifies this occurrence as DELETE, REWRITE or a reasoned exemption and replaces this text.",
+  });
+
+/**
+ * THE WHITESPACE CONVENTION, NAMED. One comment line, stripped of its leading
+ * `//`, `*` or `/**` marker and of one following space, with runs of whitespace
+ * collapsed to a single space and the ends trimmed.
+ */
+const normalizeGateLine = (line: string): string =>
+  line
+    .replace(/^\s*(\/\/+|\*\/|\/\*\*|\/\*|\*)\s?/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * The joined form, with an index that maps every character back to the 1-based
+ * line it came from. Joining is what makes a phrasing split across two comment
+ * lines visible; the index is what lets the failure message still name a line.
+ */
+const joinGateLines = (
+  lines: readonly string[],
+  lineNumbers: readonly number[],
+): { readonly text: string; readonly lineAt: readonly number[] } => {
+  let text = "";
+  const lineAt: number[] = [];
+  for (const n of lineNumbers) {
+    const t = normalizeGateLine(lines[n - 1] ?? "");
+    if (text.length > 0) {
+      text += " ";
+      lineAt.push(n);
+    }
+    for (let k = 0; k < t.length; k++) lineAt.push(n);
+    text += t;
+  }
+  return { text, lineAt };
+};
+
+/** Replaces each declared phrasing with a stable index token, longest first. */
+const maskQuantifiers = (text: string): string => {
+  let out = text;
+  for (const { phrase, index } of [...UNBOUNDED_QUANTIFIERS.entries()]
+    .map(([index, phrase]) => ({ index, phrase }))
+    .sort((a, b) => b.phrase.length - a.phrase.length)) {
+    out = out.split(phrase).join(`{q${index}}`);
+  }
+  return out;
+};
+
+/**
+ * THE KEY AN EXEMPTION IS WRITTEN UNDER. The normalized line the occurrence
+ * STARTS on, with the phrasings masked to `{qN}` tokens, truncated, plus the
+ * phrasing's own index. THE MASKING IS LOad-BEARING, not cosmetic: an unmasked
+ * key would carry a declared phrasing verbatim, the scan would find it inside
+ * this very map, and the map would generate the obligations it exists to
+ * discharge. `no exemption KEY carries a declared phrasing` pins that below.
+ */
+const exemptionKeyFor = (line: string, quantifierIndex: number): string => {
+  const masked = maskQuantifiers(normalizeGateLine(line));
+  const anchor = masked.length > 96 ? `${masked.slice(0, 96)}…` : masked;
+  return `${anchor} :: q${quantifierIndex}`;
+};
+
+/** Every occurrence of a declared phrasing in the joined form of a line set. */
+const quantifierOccurrences = (
+  lines: readonly string[],
+  lineNumbers: readonly number[],
+): readonly { line: number; endLine: number; quantifierIndex: number }[] => {
+  const { text, lineAt } = joinGateLines(lines, lineNumbers);
+  const found: { line: number; endLine: number; quantifierIndex: number }[] =
+    [];
+  UNBOUNDED_QUANTIFIERS.forEach((phrase, quantifierIndex) => {
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(phrase, from);
+      if (at < 0) break;
+      found.push({
+        line: lineAt[at] ?? -1,
+        endLine: lineAt[at + phrase.length - 1] ?? -1,
+        quantifierIndex,
+      });
+      from = at + phrase.length;
+    }
+  });
+  return found.sort(
+    (a, b) => a.line - b.line || a.quantifierIndex - b.quantifierIndex,
+  );
+};
+
+/** The keys the surface actually produces, with duplicates ordinal-suffixed. */
+const surfaceExemptionKeys = (
+  lines: readonly string[],
+  lineNumbers: readonly number[],
+): readonly { key: string; line: number; endLine: number }[] => {
+  const seen = new Map<string, number>();
+  return quantifierOccurrences(lines, lineNumbers).map((o) => {
+    const base = exemptionKeyFor(lines[o.line - 1] ?? "", o.quantifierIndex);
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return {
+      key: n === 1 ? base : `${base} #${n}`,
+      line: o.line,
+      endLine: o.endLine,
+    };
+  });
+};
+
+// ---------------------------------------------------------------------------
 // THE THREE BINDINGS: REGISTRY TO CODE, TEXT TO REGISTRY, REGISTRY TO THE FILE
 // ---------------------------------------------------------------------------
 describe("the residual is DERIVED — the registry is bound to the walk, and the shipped text to the registry", () => {
@@ -8859,6 +9102,204 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       ),
       "row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-08-24 (CR-11) because the silence it measured stopped existing — every spelling it named now reports through `operatorOperandMatching`. If an operator around a global receiver has gone silent again, that is a REGRESSION in the descent and not a row to restore; if a NEW and genuinely different silence was found, give it its own id and its own measured probe.",
     ).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // THE GATE FILE'S OWN BYTES: NO BOUND OUTSIDE THE GENERATED SPAN
+  // -------------------------------------------------------------------------
+  // Anchored, never line-numbered. An exclusion pinned to a literal line number
+  // silently slides the first time anything above it grows.
+  const lineOf = (predicate: (l: string) => boolean, from = 0): number => {
+    for (let i = from; i < gateLines.length; i++) {
+      if (predicate(gateLines[i])) return i + 1;
+    }
+    return -1;
+  };
+  const closingBracketAfter = (start: number): number =>
+    lineOf((l) => l === "]);", start);
+
+  const EXCLUSIONS = (() => {
+    const spanStart = lineOf((l) => l.startsWith("BEGIN DERIVED RESIDUAL"));
+    const spanEnd = lineOf((l) => l.startsWith("END DERIVED RESIDUAL"));
+    const listStart = lineOf((l) =>
+      l.startsWith("export const UNBOUNDED_QUANTIFIERS"),
+    );
+    const registryStart = lineOf((l) =>
+      l.startsWith("export const RESOLVER_REGISTRY"),
+    );
+    return [
+      {
+        name: "the machine-owned span between the sentinels",
+        from: spanStart,
+        to: spanEnd,
+        band: [100, 1500] as const,
+        // A token only the generated span carries.
+        proof:
+          "THE RESIDUAL OF CORE-11's OUTBOUND WALK - DERIVED, NOT AUTHORED.",
+        why: "it IS the derived residual; the phrasings in it are generated from the registry and byte-compared to deriveResidual(RESOLVER_REGISTRY).",
+      },
+      {
+        name: "the UNBOUNDED_QUANTIFIERS declaration",
+        from: listStart,
+        to: closingBracketAfter(listStart),
+        band: [5, 40] as const,
+        proof: "export const UNBOUNDED_QUANTIFIERS",
+        why: "it IS the list. It carries each declared phrasing by construction, and an exemption entry for it would be a second mechanism for the same fact.",
+      },
+      {
+        name: "the RESOLVER_REGISTRY declaration",
+        from: registryStart,
+        to: closingBracketAfter(registryStart),
+        band: [500, 3000] as const,
+        proof: 'id: "constStrings"',
+        why: "its clause strings are already obligated by the quantifier scan above plus QUANTIFIED_CLAUSES. NARROWED by the clause-count equality below, because the LINE RANGE is wider than the clauses.",
+      },
+    ];
+  })();
+
+  const EXCLUDED_LINES = new Set<number>(
+    EXCLUSIONS.flatMap((e) => {
+      const out: number[] = [];
+      for (let n = e.from; n <= e.to; n++) out.push(n);
+      return out;
+    }),
+  );
+  const SURFACE_LINES = gateLines
+    .map((_, i) => i + 1)
+    .filter((n) => !EXCLUDED_LINES.has(n));
+
+  // NON-VACUITY BEFORE THE RULE, IN BOTH DIRECTIONS. An exclusion that quietly
+  // matches nothing turns the guard green by excluding zero. One that quietly
+  // matches everything turns it green by excluding the file. Both are silent
+  // successes and both must fail loudly.
+  it("the three quantifier-surface exclusions are ANCHOR-DERIVED, NON-EMPTY, WITHIN A PINNED BAND and POSITIVELY IDENTIFIED — asserted BEFORE the rule", () => {
+    for (const e of EXCLUSIONS) {
+      expect(
+        e.from,
+        `exclusion \`${e.name}\` did not resolve: its opening anchor was not found in ${GATE_FILE}. An exclusion that resolves to nothing excludes nothing and the rule below would then demand an exemption for a construct that is legitimately allowed to carry the phrasings. Restore the anchor or re-point this exclusion at it.`,
+      ).toBeGreaterThan(0);
+      expect(
+        e.to,
+        `exclusion \`${e.name}\` found its opening anchor at line ${e.from} but no closing anchor after it. An unbounded exclusion runs to the end of the file and would exclude everything below line ${e.from}.`,
+      ).toBeGreaterThan(e.from);
+      const size = e.to - e.from + 1;
+      expect(
+        size,
+        `exclusion \`${e.name}\` resolved to ${size} lines (${e.from}..${e.to}), outside its pinned band of ${e.band[0]}..${e.band[1]}. Too few means the anchors collapsed onto each other and the exclusion now excludes almost nothing; too many means it swallowed the constructs around it. Either way the number moved for a reason and the reason belongs in this commit.`,
+      ).toBeGreaterThanOrEqual(e.band[0]);
+      expect(
+        size,
+        `exclusion \`${e.name}\` resolved to ${size} lines (${e.from}..${e.to}), above its pinned band of ${e.band[0]}..${e.band[1]}. It has grown over the constructs around it and is now hiding lines it was never meant to cover.`,
+      ).toBeLessThanOrEqual(e.band[1]);
+      expect(
+        gateLines.slice(e.from - 1, e.to).some((l) => l.includes(e.proof)),
+        `exclusion \`${e.name}\` resolved to lines ${e.from}..${e.to}, but that range does NOT contain ${JSON.stringify(e.proof)} — a token only that construct carries. The anchors matched something else. This is the direction where an exclusion silently relocates onto a different construct and keeps passing.`,
+      ).toBe(true);
+    }
+    expect(
+      SURFACE_LINES.length,
+      "the scanned surface is EMPTY: the three exclusions between them cover the whole file. The rule below would pass having read nothing.",
+    ).toBeGreaterThan(1000);
+  });
+
+  // EXCLUSION THREE, NARROWED. Excluding the registry's whole LINE RANGE is
+  // wider than excluding its clause strings: a docblock written between two rows
+  // would also be swallowed. Rather than leave that as a disclosed coarseness,
+  // the two counts are pinned against each other. Measured at wave 33: 12 inside
+  // the line range and 12 inside the live clause strings. A phrasing written
+  // into a between-rows comment makes those two numbers differ.
+  it("exclusion three carries ONLY clause strings — the registry line range and the live clauses agree, occurrence for occurrence", () => {
+    const registry = EXCLUSIONS[2];
+    const registryLines: number[] = [];
+    for (let n = registry.from; n <= registry.to; n++) registryLines.push(n);
+    const inRange = quantifierOccurrences(gateLines, registryLines).length;
+    let inClauses = 0;
+    for (const row of RESOLVER_REGISTRY) {
+      for (const phrase of UNBOUNDED_QUANTIFIERS) {
+        let from = 0;
+        for (;;) {
+          const at = row.clause.indexOf(phrase, from);
+          if (at < 0) break;
+          inClauses++;
+          from = at + phrase.length;
+        }
+      }
+    }
+    expect(
+      inClauses,
+      "the live clause strings carry NO declared phrasing at all. Either every clause was rewritten in one commit — possible, and then this case changes with it — or the phrasings stopped matching, and exclusion three is now excluding a range for a reason that no longer holds.",
+    ).toBeGreaterThan(0);
+    expect(
+      inRange,
+      `the registry's line range (${registry.from}..${registry.to}) carries ${inRange} declared-phrasing occurrences while its live \`clause\` strings carry ${inClauses}. The difference is ${inRange - inClauses} occurrence(s) sitting in the range but NOT in any clause — a docblock between two rows, or a comment inside one. Exclusion three is a LINE RANGE and would swallow it silently. Move the sentence out of the registry's range, or delete the phrasing from it; do not widen this pin.`,
+    ).toBe(inClauses);
+  });
+
+  // THE RULE. Every declared phrasing in this file's own bytes, outside the
+  // three exclusions above, is either GONE or carries a named, reasoned entry a
+  // reviewer can execute and disagree with.
+  it("the gate file's own bytes carry NO declared phrasing outside the three exclusions except by NAMED exemption", () => {
+    const found = surfaceExemptionKeys(gateLines, SURFACE_LINES);
+    const declared = Object.keys(HEADER_QUANTIFIER_EXEMPTIONS);
+    const declaredSet = new Set(declared);
+
+    expect(
+      declared.length,
+      "HEADER_QUANTIFIER_EXEMPTIONS is EMPTY. That is a legitimate END STATE — it means every declared phrasing outside the three exclusions was deleted — but it is reached by deleting sentences, not by emptying this map. If the surface really is clear, this expectation changes in the same commit as the last deletion.",
+    ).toBeGreaterThan(0);
+
+    // THE MASKING IS LOAD-BEARING. An unmasked key would carry a phrasing
+    // verbatim, the scan would find it inside this map, and the map would
+    // generate the obligations it exists to discharge.
+    for (const key of declared) {
+      for (const phrase of UNBOUNDED_QUANTIFIERS) {
+        expect(
+          key.includes(phrase),
+          `exemption key ${JSON.stringify(key)} carries a declared phrasing verbatim. Keys are MASKED to \`{qN}\` tokens for exactly this reason: an unmasked key is itself scanned, so the map would raise an obligation for its own text and no amount of entries could ever discharge it. Rebuild the key with exemptionKeyFor().`,
+        ).toBe(false);
+      }
+    }
+
+    const foundKeys = found.map((f) => f.key);
+    const missing = found.filter((f) => !declaredSet.has(f.key));
+    expect(
+      missing.map((m) => `line ${m.line}: ${m.key}`),
+      missing.length === 0
+        ? ""
+        : `${missing.length} declared-phrasing occurrence(s) in ${GATE_FILE} sit outside all three exclusions and carry NO exemption entry:\n${missing
+            .map(
+              (m) =>
+                `  line ${m.line}${m.endLine !== m.line ? ` (wraps to ${m.endLine})` : ""}: ${JSON.stringify(m.key)}`,
+            )
+            .join(
+              "\n",
+            )}\nYOU HAVE THREE CHOICES AND THE FIRST TWO ARE PREFERRED. (1) DELETE the sentence, if it states a bound on the walk's reach — the reach OF RECORD is the generated span between the sentinels and nothing hand-written beside it may restate it. (2) REWRITE it to say what the branch does WITHOUT the universal, naming the branches; do NOT swap the phrasing for a synonym, which turns this guard green while keeping the bound. (3) If the occurrence is not a claim about reach at all — a quotation, a test title, an assertion message complaining about the phrasing, a table label, or a QUANTIFIED_CLAUSES value stating what bounds a universal — add the key above to HEADER_QUANTIFIER_EXEMPTIONS with one clause saying WHICH of those it is. An exemption is a sentence a later author must keep true, so it is a cost; spend it deliberately.`,
+    ).toEqual([]);
+
+    const stale = declared.filter((k) => !foundKeys.includes(k));
+    expect(
+      stale,
+      stale.length === 0
+        ? ""
+        : `${stale.length} HEADER_QUANTIFIER_EXEMPTIONS entr(ies) match NOTHING in ${GATE_FILE}:\n${stale.map((k) => `  ${JSON.stringify(k)}`).join("\n")}\nThe sentence each one excused was deleted or reworded. DELETE the entry in the same commit — a map that outlives its sentences is a list of claims nobody is checking, which is the artifact this mechanism replaces.`,
+    ).toEqual([]);
+
+    // The equality is MACHINE-PINNED rather than hand-counted: an exemption
+    // covers exactly one occurrence, so the two totals move together or the
+    // suite goes red.
+    expect(
+      foundKeys.length,
+      `the surface carries ${foundKeys.length} declared-phrasing occurrence(s) outside the three exclusions while HEADER_QUANTIFIER_EXEMPTIONS holds ${declared.length} entr(ies). One entry excuses one occurrence; these two numbers are the same number or something is being counted twice.`,
+    ).toBe(declared.length);
+
+    // Every reason must actually say something. A blank excuse is an unnamed
+    // blind spot wearing a name.
+    for (const [key, reason] of Object.entries(HEADER_QUANTIFIER_EXEMPTIONS)) {
+      expect(
+        reason.trim().length,
+        `exemption ${JSON.stringify(key)} carries an empty or near-empty reason. The entry has to say WHY the occurrence is not a claim about reach, in words a reviewer can disagree with. "it is fine" is not a reason.`,
+      ).toBeGreaterThan(40);
+    }
   });
 
   it("every clause carrying a DECLARED quantifier phrasing names a MEASURED bound", () => {
