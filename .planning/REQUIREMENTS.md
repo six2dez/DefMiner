@@ -507,7 +507,7 @@ RESOLVERS - 35 entries.
     reports:   [] - nothing
     branch:    "the RENAMED spelling" at module scope > boundPropertyName > const property = el.propertyName ?? el.name; - probe "const { p: k } = { p: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
 
-* reportReceiverMembers - the members a destructure off a POSITIVELY IDENTIFIED receiver binds, minus the read-only allowlist - defined once and reached from the flat spelling and from a nested pattern of an identified receiver, so `const { requests: { send } } = sdk` reports what its two halves already reported one at a time. RECEIVER-ANCHORED: an ordinary object destructured the same way binds nothing, which is the counter-probe
+* reportReceiverMembers - the members a destructure off a POSITIVELY IDENTIFIED receiver binds, minus the read-only allowlist - defined once and reached from the flat spelling and from a nested pattern of an identified receiver, so `const { requests: { send } } = sdk` reports what its two halves already reported one at a time. RECEIVER-ANCHORED: an ordinary object destructured the same way binds nothing, which is the counter-probe. BOUNDED BY DEPTH AND BY PATTERN KIND, MEASURED 2026-08-25 (IN-33, wave 34): the composition descends ONE element and only into an object binding pattern, so a three-deep spelling reports NOTHING and an array binding pattern wrapping the same member reports NOTHING - both executed in that session and both rowed
     read off:  auditSource > const reportReceiverMembers = (
     probe:     "const { requests: { send } } = sdk;\nsend(req);"
     reports:   outbound-send
@@ -525,7 +525,7 @@ RESOLVERS - 35 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 22 entries.
+MEASURED SILENCES - 26 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -674,6 +674,34 @@ MEASURED SILENCES - 22 entries.
     reports:   [] - nothing
     counter:   "globalThis.WebSocket.call(null, u);"
     reports:   outbound-global-ctor
+
+* silence-aliased-module-loader-specifier - a MODULE LOADER reached by way of a local binding is silent in BOTH directions: `const r = require; r("caido:http")` reports nothing, and so does `const r = require; r(s)` where the specifier will not reduce - so the `could not read does not mean clean` half of that rule is unreachable once the loader is bound to a local name, and an unreadable specifier behind such a name is treated as clean. The DIRECT spelling reports in both directions - that is the counter-probe. DISPOSITION AND ITS REASON, so this is a decision rather than an omission: NOT widened, because the surface it protects is bounded from the other end by a check on the SHIPPED BUNDLE, which is asserted at exactly one import specifier and which a spec file never enters; growing the resolver machinery here would add reach the bundle check already has. Recorded so a later round finds a decision instead of a blank. DISCLOSED, not ended
+    read off:  auditSource > } else if (specifier === undefined) {
+    probe:     "const r = require;\nr(s);"
+    reports:   [] - nothing
+    counter:   "require(s);"
+    reports:   outbound-unanalysable
+
+* silence-tagged-template-fetch-call - the global fetch INVOKED AS A TAGGED TEMPLATE is silent: `fetch`, applied to a template rather than to an argument list, reports nothing, because the rule that answers for the bare global is anchored on a call expression and a tagged template is not one, so neither that rule nor the resolver it reads is reached at all. The ordinary call spelling REPORTS - that is the counter-probe. NOT THE SAME MECHANISM as `silence-tagged-template-key`, which is named here so the redirection is explicit: that row is about a tagged template BUILDING A LOOKUP KEY and the strings collector declining to read it, and it says nothing about this shape. CONTRIVED, and rowed rather than branched. DISCLOSED, not ended
+    read off:  auditSource > if (ts.isCallExpression(node)) {
+    probe:     "fetch`https://example.test/${p}`;"
+    reports:   [] - nothing
+    counter:   "fetch(\"https://example.test\");"
+    reports:   outbound-fetch
+
+* silence-destructure-deeper-than-one - a destructure NESTED MORE THAN ONE ELEMENT DEEP is silent: `const { a: { requests: { send } } } = wrap; send(req)` reports nothing, because the composition descends one element and asks its receiver question there, so a third level is never reached and the outer object is not an identified receiver anyway. The ONE-deep spelling off an identified receiver REPORTS - that is the counter-probe. The bound is DEPTH, stated in `reportReceiverMembers`' own clause since this date rather than left implicit in a closure claim. DISCLOSED, not ended
+    read off:  auditSource > reportReceiverMembers(el.name, property);
+    probe:     "const { a: { requests: { send } } } = wrap;\nsend(req);"
+    reports:   [] - nothing
+    counter:   "const { requests: { send } } = sdk;\nsend(req);"
+    reports:   outbound-send
+
+* silence-destructure-array-nested - a destructure whose nesting is an ARRAY BINDING PATTERN is silent: `const [{ send }] = [sdk.requests]; send(req)` reports nothing, and so does `const { requests: [first] } = sdk; first(req)`, because the composition looks at an object binding pattern and an array one is a different node kind. The object-nested spelling off the same receiver REPORTS - that is the counter-probe. The bound is PATTERN KIND, distinct from the depth bound its neighbour row measures, which is why the two are separate rows. DISCLOSED, not ended
+    read off:  auditSource > reportReceiverMembers(el.name, property);
+    probe:     "const [{ send }] = [sdk.requests];\nsend(req);"
+    reports:   [] - nothing
+    counter:   "const { requests: { send } } = sdk;\nsend(req);"
+    reports:   outbound-send
 
 * silence-unreadable-member-of-navigator - NARROWED BY MEASUREMENT 2026-08-25 (wave 34), AND THE MEASUREMENT CONTRADICTED THE PREDICTION. This row was written for the five spellings of an unreadable computed member on a positively identified `navigator` receiver, ALL silent; the arm this wave widened now reports every one of them, INCLUDING the parameter-key spelling the plan predicted would survive. It does not survive: on a receiver this arm accepts, an unreadable member reports whatever the reason the key would not reduce, so the reason the key is unbound never comes up. What DOES survive is the RESOLUTION boundary rather than the readability one: an unreadable member of a `navigator` handed across a FUNCTION BOUNDARY is silent, because the parameter is never bound to the receiver and no resolver answers for it - the same limit the `isFetchExpression` entry of QUANTIFIED_CLAUSES already bounds for global receivers, met here on the navigator family. The identical shape written one function boundary nearer REPORTS - that is the counter-probe. DISCLOSED, not ended
     read off:  auditSource > const isNavigatorReceiver = (node: ts.Expression): boolean => {
