@@ -1351,7 +1351,7 @@ RESOLVERS - 35 entries.
     branch:    "object property" at module scope > destructuredInitializer > if (ts.isObjectLiteralExpression(init)) { - probe "const { k } = { k: \"req\" + \"uests\" };\nsdk[k].send(req);" - reports outbound-unanalysable
     branch:    "array slot" at module scope > destructuredInitializer > if (ts.isArrayLiteralExpression(init)) { - probe "const [k] = [\"req\" + \"uests\"];\nsdk[k].send(req);" - reports outbound-unanalysable
 
-MEASURED SILENCES - 16 entries.
+MEASURED SILENCES - 20 entries.
 
 * silence-two-hop-key - residual (a), KEY half: TWO HOPS of key is silent. constStrings and assembledNames read the INITIALIZER'S SHAPE and never the live set, so a key cannot be grown from a name already in a set and therefore cannot chain. ONE hop reports - that is the counter-probe
     read off:  auditSource > const constStrings = new Map<string, Set<string>>()
@@ -1465,6 +1465,34 @@ MEASURED SILENCES - 16 entries.
     reports:   [] - nothing
     counter:   "globalThis.fetch(url);"
     reports:   outbound-fetch
+
+* silence-global-fetch-receiver-position - the global fetch in RECEIVER position is silent: `fetch.call(null, url)` reports nothing, and so do the `.apply` and `.bind` spellings beside it, because the member arm that names the fetch surface tests whether the MEMBER is `fetch` and here the member is `call` while `fetch` is the receiver. The member-qualified receiver REPORTS - that is the counter-probe, and it is what shows the machinery exists and is simply not reached from this position. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
+    probe:     "fetch.call(null, url);"
+    reports:   [] - nothing
+    counter:   "globalThis.fetch.call(null, url);"
+    reports:   outbound-fetch
+
+* silence-fetch-alias-receiver-position - a POSITIVELY IDENTIFIED fetch alias in RECEIVER position is silent: `const f = fetch; f.call(null, url)` reports nothing while `f(url)` on the next line reports outbound-fetch. One binding, one position over, two answers. `fetchAliases` holds the name and `isFetchExpression` answers true for it, but the member arm never puts that question to a receiver. The CALLEE spelling of the SAME alias REPORTS - that is the counter-probe. DISCLOSED, not ended
+    read off:  auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {
+    probe:     "const f = fetch;\nf.call(null, url);"
+    reports:   [] - nothing
+    counter:   "const f = fetch;\nf(url);"
+    reports:   outbound-fetch
+
+* silence-bare-global-argument-position - a bare global handed to a call as an ARGUMENT is silent: `Reflect.apply(fetch, null, [url])` reports nothing, because an identifier with no member written beside it is interrogated only where a CALLEE is expected and this shape writes down no member of it for the member arm to read. The member-qualified twin of the identical shape REPORTS - that is the counter-probe - and the difference between the two is that one NAMES a member and the other does not. A mechanism distinct from receiver position, rowed separately for that reason. DISCLOSED, not ended
+    read off:  auditSource > const bareFetchCallee = (node: ts.Expression): string | undefined => {
+    probe:     "Reflect.apply(fetch, null, [url]);"
+    reports:   [] - nothing
+    counter:   "Reflect.apply(sdk.requests.send, sdk.requests, [req]);"
+    reports:   outbound-send
+
+* silence-dynamic-code-global-receiver-position - a DYNAMIC-CODE global in RECEIVER position is silent: `eval.call(null, src)` reports nothing, and `Function.call(null, src)` reports nothing, because the dynamic-code arm reads DYNAMIC_CODE against the MEMBER and the member here is `call`, while `globalNameOf` is consulted where a callee is expected. The member-qualified receiver REPORTS - that is the counter-probe. A mechanism distinct from the fetch surface, because this family resolves through `globalNameOf` rather than through `isFetchExpression`, so it is a separate decision and a separate row. DISCLOSED, not ended
+    read off:  auditSource > DYNAMIC_CODE.has(member) &&
+    probe:     "eval.call(null, src);"
+    reports:   [] - nothing
+    counter:   "globalThis.eval.call(null, src);"
+    reports:   outbound-dynamic-code
 END DERIVED RESIDUAL
 */
 
@@ -5453,6 +5481,57 @@ export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([
     expect: Object.freeze([] as const),
     counterProbe: "globalThis.fetch(url);",
     counterExpect: Object.freeze(["outbound-fetch"] as const),
+  }),
+  // CR-15 AND THE RECEIVER-POSITION FAMILY, 2026-08-25, wave 34. FOUR ROWS AND NOT
+  // ONE, because four different mechanisms drop these shapes and a single row would
+  // file three of them under a mechanism they do not exhibit — the defect this phase
+  // has now found five times. THESE ROWS DISCLOSE. They do not end anything: the set
+  // of ways a value can be handed to a call is open, so no row here and no branch
+  // beside it is a terminal condition. What the rows change is that the shapes sit on
+  // a list generated from the code, which is what the adopted bar asks for.
+  Object.freeze({
+    id: "silence-global-fetch-receiver-position",
+    kind: "measured-silence",
+    clause:
+      "the global fetch in RECEIVER position is silent: `fetch.call(null, url)` reports nothing, and so do the `.apply` and `.bind` spellings beside it, because the member arm that names the fetch surface tests whether the MEMBER is `fetch` and here the member is `call` while `fetch` is the receiver. The member-qualified receiver REPORTS - that is the counter-probe, and it is what shows the machinery exists and is simply not reached from this position. DISCLOSED, not ended",
+    site: "auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {",
+    probe: "fetch.call(null, url);",
+    expect: Object.freeze([] as const),
+    counterProbe: "globalThis.fetch.call(null, url);",
+    counterExpect: Object.freeze(["outbound-fetch"] as const),
+  }),
+  Object.freeze({
+    id: "silence-fetch-alias-receiver-position",
+    kind: "measured-silence",
+    clause:
+      "a POSITIVELY IDENTIFIED fetch alias in RECEIVER position is silent: `const f = fetch; f.call(null, url)` reports nothing while `f(url)` on the next line reports outbound-fetch. One binding, one position over, two answers. `fetchAliases` holds the name and `isFetchExpression` answers true for it, but the member arm never puts that question to a receiver. The CALLEE spelling of the SAME alias REPORTS - that is the counter-probe. DISCLOSED, not ended",
+    site: "auditSource > } else if (member === FETCH_GLOBAL && isGlobalReceiver(node.expression)) {",
+    probe: "const f = fetch;\nf.call(null, url);",
+    expect: Object.freeze([] as const),
+    counterProbe: "const f = fetch;\nf(url);",
+    counterExpect: Object.freeze(["outbound-fetch"] as const),
+  }),
+  Object.freeze({
+    id: "silence-bare-global-argument-position",
+    kind: "measured-silence",
+    clause:
+      "a bare global handed to a call as an ARGUMENT is silent: `Reflect.apply(fetch, null, [url])` reports nothing, because an identifier with no member written beside it is interrogated only where a CALLEE is expected and this shape writes down no member of it for the member arm to read. The member-qualified twin of the identical shape REPORTS - that is the counter-probe - and the difference between the two is that one NAMES a member and the other does not. A mechanism distinct from receiver position, rowed separately for that reason. DISCLOSED, not ended",
+    site: "auditSource > const bareFetchCallee = (node: ts.Expression): string | undefined => {",
+    probe: "Reflect.apply(fetch, null, [url]);",
+    expect: Object.freeze([] as const),
+    counterProbe: "Reflect.apply(sdk.requests.send, sdk.requests, [req]);",
+    counterExpect: Object.freeze(["outbound-send"] as const),
+  }),
+  Object.freeze({
+    id: "silence-dynamic-code-global-receiver-position",
+    kind: "measured-silence",
+    clause:
+      "a DYNAMIC-CODE global in RECEIVER position is silent: `eval.call(null, src)` reports nothing, and `Function.call(null, src)` reports nothing, because the dynamic-code arm reads DYNAMIC_CODE against the MEMBER and the member here is `call`, while `globalNameOf` is consulted where a callee is expected. The member-qualified receiver REPORTS - that is the counter-probe. A mechanism distinct from the fetch surface, because this family resolves through `globalNameOf` rather than through `isFetchExpression`, so it is a separate decision and a separate row. DISCLOSED, not ended",
+    site: "auditSource > DYNAMIC_CODE.has(member) &&",
+    probe: "eval.call(null, src);",
+    expect: Object.freeze([] as const),
+    counterProbe: "globalThis.eval.call(null, src);",
+    counterExpect: Object.freeze(["outbound-dynamic-code"] as const),
   }),
   // `silence-operator-around-global-receiver` STOOD HERE AND IS REMOVED, 2026-08-24
   // (CR-11). It is not reworded and it is not narrowed: the silence it measured
