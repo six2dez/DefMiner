@@ -286,15 +286,30 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               re-truncates to the same byte; (2) a cut landing
  *                               JUST PAST THE `=` leaves a segment whose value
  *                               half is EMPTY, and `redactDelimitedSegment`'s
- *                               CR-07 padding branch redacts it WHOLE, so the
- *                               retained name is destroyed and the value SHRINKS
- *                               by a byte — this is the FIRST unstable offset in
- *                               the band and the one both fixtures build their
- *                               exemplars on, because they read it out of their
- *                               own sweep; (3) a cut landing inside a parameter
- *                               NAME is not stable either — the second pass sees
- *                               a segment with no `=` at all, P10-D1 redacts it
- *                               WHOLE, and the value does NOT shrink. Shapes (2)
+ *                               CR-07 padding branch redacts it WHOLE — this is
+ *                               the FIRST unstable offset in the band and the one
+ *                               both fixtures build their exemplars on, because
+ *                               they read it out of their own sweep; (3) a cut
+ *                               landing inside a parameter NAME is not stable
+ *                               either — the second pass sees a segment with no
+ *                               `=` at all and P10-D1 redacts it WHOLE. WHAT
+ *                               SEPARATES (2) FROM (3) IS THE BRANCH SELECTOR AND
+ *                               NOT A LENGTH (WR-39, 2026-08-25): the presence of
+ *                               an `=` in the final delimited segment is what
+ *                               chooses between the two branches, and that is
+ *                               what the sibling fixture now asserts. The LENGTH
+ *                               CHANGE is a consequence and it is NAME-LENGTH
+ *                               DEPENDENT — the retained tail is swapped for the
+ *                               `<redacted>` marker, so the move is the
+ *                               difference between the two. MEASURED across four
+ *                               parameter-name lengths bracketing the marker's
+ *                               own: a name of the marker's length moves by at
+ *                               most one byte, which is the coincidence an
+ *                               earlier round mistook for a mechanism, while a
+ *                               29-character name moves by up to twenty and a
+ *                               44-character name by up to thirty-five, each over
+ *                               a band that widens with the name. A one-character
+ *                               name does not move at all. Shapes (2)
  *                               and (3) used to be asserted STABLE from ONE
  *                               chosen offset (WR-28), and until 2026-08-24 all
  *                               three disclosures named (3) alone while pointing

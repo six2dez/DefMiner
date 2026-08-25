@@ -465,14 +465,29 @@ export function redactQueryValues(url: string): string {
  *
  *   a cut landing just past the `=` leaves a segment whose value half is EMPTY,
  *   and {@link redactDelimitedSegment}'s CR-07 padding branch redacts such a
- *   segment WHOLE — the retained name is destroyed on the second pass and the
- *   stored value SHRINKS by a byte. THIS IS THE FIRST UNSTABLE OFFSET IN THE
- *   BAND, and it is the one the exemplars in `observations.spec.ts` are built on,
- *   because that fixture reads `headUnstable[0]` out of its own sweep;
+ *   segment WHOLE — the retained name is replaced by the marker on the second
+ *   pass. THIS IS THE FIRST UNSTABLE OFFSET IN THE BAND, and it is the one the
+ *   exemplars in `observations.spec.ts` are built on, because that fixture reads
+ *   `headUnstable[0]` out of its own sweep;
  *
  *   a cut landing inside a parameter NAME is NOT stable either — the second pass
  *   sees a segment with no `=` at all, and decision P10-D1 redacts it WHOLE for
  *   the same reason.
+ *
+ * WHAT SELECTS BETWEEN THE TWO IS THE BRANCH CONDITION, NOT A LENGTH (WR-39,
+ * 2026-08-25). The presence of an `=` in the FINAL delimited segment is what sends
+ * a string down the padding branch rather than the whole-segment one; the length
+ * change is a CONSEQUENCE of swapping the retained tail for the `<redacted>`
+ * marker, so it is the difference between the retained tail's length and the
+ * marker's. That makes it NAME-LENGTH DEPENDENT, and an earlier round wrote a
+ * one-byte figure down here as though it were a property of the branch — the
+ * fixture it came from used a parameter name of exactly the marker's length.
+ * MEASURED in `observations.spec.ts` across four parameter-name lengths bracketing
+ * the marker's own: a one-character name does not move; a name of the marker's
+ * length moves by at most one byte; a 29-character name moves by up to twenty and
+ * a 44-character name by up to thirty-five, each over a band that widens with the
+ * name. Every one of those figures is read out of that sweep's run, never authored
+ * here.
  *
  * WHY BOTH ARE NAMED HERE, 2026-08-24 (WR-35). This paragraph, `observations.spec.ts`
  * and `schema.spec.ts` all named the parameter-NAME mechanism alone — and the offset

@@ -1006,8 +1006,9 @@ describe("normaliseObservedUrl", () => {
     //     same byte.
     // (2) A head-side cut landing JUST PAST THE `=` leaves a `;` segment whose
     //     value half is EMPTY. `redactDelimitedSegment`'s CR-07 padding branch
-    //     redacts such a segment WHOLE, so the retained NAME is destroyed on the
-    //     second pass and the string SHRINKS by a byte. THIS IS THE FIRST
+    //     redacts such a segment WHOLE, so the retained NAME is replaced by the
+    //     marker on the second pass and the string's length moves by the
+    //     difference between the two. THIS IS THE FIRST
     //     UNSTABLE OFFSET IN THE BAND — swept in this session, the band is
     //     2019..2029 and n=2019's pass-1 tail is `pppp;jsessionid=`, an `=` with
     //     nothing after it — and it is therefore the offset `headUnstable[0]`
@@ -1022,6 +1023,23 @@ describe("normaliseObservedUrl", () => {
     // them points at exhibits (2). That is the same title-versus-mechanism
     // substitution CR-08, CR-09 and WR-32 each were, and it is why the exemplar
     // variable below is now named for the branch it takes.
+    //
+    // WHAT DISCRIMINATES (2) FROM (3) IS THE BRANCH CONDITION, AND NOTHING ELSE
+    // (WR-39, 2026-08-25, wave 34). The selector is whether the final delimited
+    // segment carries an `=` AT ALL: with one, the CR-07 padding branch fires and
+    // the whole segment is replaced by the marker; without one, P10-D1's
+    // whole-segment branch fires. THAT is the property this file asserts.
+    //
+    // The LENGTH CHANGE is a consequence, not a mechanism, and it depends on the
+    // parameter NAME's length relative to the marker's — the retained tail is
+    // swapped for `<redacted>`, so a name shorter than the marker grows, a name
+    // exactly the marker's length moves by the punctuation alone, and a longer
+    // name shrinks by the difference. A previous round read a one-byte delta off
+    // a fixture whose parameter name happened to be TEN characters, the same
+    // length as the marker, and wrote that coincidence down as a property of the
+    // branch on three separate surfaces. The sweep below runs FOUR name lengths
+    // bracketing the marker's length from both sides and reads every band and
+    // every delta out of the run, so no number here is authored.
     //
     // WHAT IS ASSERTED IS THE INSTABILITY'S SHAPE, NOT A LITERAL BAND. Writing
     // `2019` and `2029` into this file would be the same defect one layer up: a
@@ -1113,10 +1131,114 @@ describe("normaliseObservedUrl", () => {
     const nameCutTwice = normaliseObservedUrl(nameCut);
     expect(nameCutTwice).not.toBe(nameCut);
     expect(nameCutTwice.length).toBe(nameCut.length);
-    // THE DISCRIMINATOR, STATED AS AN ASSERTION: shape (2) SHRINKS and shape (3)
-    // does not. If these two ever agree, one of the two branches stopped being
-    // reachable from this band and the disclosure above has to change with it.
-    expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1);
+    // THE DISCRIMINATOR, STATED AS AN ASSERTION ON THE BRANCH SELECTOR (WR-39,
+    // 2026-08-25). What stood here was BYTE-IDENTICAL to the assertion fourteen
+    // lines above it: it re-asserted a fact already asserted and could not detect
+    // the disagreement its own comment claimed to watch for. What replaces it
+    // asserts that the two pass-1 outputs the second pass reads take DIFFERENT
+    // branches — one final segment carries an `=` and the other does not — which
+    // is the property that actually separates the two shapes, and which no length
+    // comparison can stand in for.
+    const finalSegmentHasEquals = (u: string): boolean =>
+      /;[^;]*=/.test(u.slice(u.lastIndexOf(";")));
+    expect(
+      finalSegmentHasEquals(emptyValueCut),
+      "the FIRST offset of the head-side band was expected to leave a final `;` segment carrying an `=` with an empty value half — the CR-07 padding branch's selector.",
+    ).toBe(true);
+    expect(
+      finalSegmentHasEquals(nameCut),
+      "the LAST offset of the head-side band was expected to leave a final `;` segment with NO `=` — P10-D1's whole-segment selector.",
+    ).toBe(false);
+    expect(
+      finalSegmentHasEquals(emptyValueCut) === finalSegmentHasEquals(nameCut),
+      "both ends of the head-side band now take the SAME branch, so the band is one mechanism rather than two and the disclosures naming both shapes are stale.",
+    ).toBe(false);
+
+    // THE VARIED-LENGTH SWEEP (WR-39). The band and the deltas are read out of the
+    // run for FOUR parameter-name lengths chosen to bracket the redaction marker's
+    // own length from both sides: one character, the marker's exact length, and
+    // two clearly longer names. Nothing below is hard-coded — the point of the
+    // sweep is that the delta is a function of the name's length and the marker's,
+    // so writing any delta down here would reproduce the defect it corrects.
+    const REDACTION_MARKER = "<redacted>";
+    const HEAD_NAMES = [
+      "j",
+      "j".repeat(REDACTION_MARKER.length),
+      "j".repeat(29),
+      "j".repeat(44),
+    ];
+    const headProfiles: {
+      nameLength: number;
+      band: number[];
+      deltas: number[];
+    }[] = [];
+    for (const paramName of HEAD_NAMES) {
+      const band: number[] = [];
+      const deltas: number[] = [];
+      for (let n = HEAD_LO; n <= HEAD_HI; n += 1) {
+        const once = normaliseObservedUrl(
+          `https://cdn.test/${"p".repeat(n)};${paramName}=SECRETSESSION`,
+        );
+        const twice = normaliseObservedUrl(once);
+        // THE REDACTION HALF, ASSERTED AT EVERY SWEPT OFFSET OF EVERY LENGTH.
+        // This is the half that HOLDS, and it is unaffected by this finding.
+        expect(once.length).toBeLessThanOrEqual(URL_MAX);
+        expectSecretAbsent(
+          once,
+          "SECRETSESSION",
+          `name length ${paramName.length}, head length ${n}, pass 1`,
+        );
+        expectSecretAbsent(
+          twice,
+          "SECRETSESSION",
+          `name length ${paramName.length}, head length ${n}, pass 2`,
+        );
+        if (twice !== once) {
+          band.push(n);
+          deltas.push(twice.length - once.length);
+        }
+      }
+      headProfiles.push({ nameLength: paramName.length, band, deltas });
+    }
+    const profileSummary = headProfiles
+      .map(
+        (p) =>
+          `name=${p.nameLength} band=${p.band.length === 0 ? "(empty)" : `${p.band[0]}..${p.band[p.band.length - 1]}`} deltas=${[...new Set(p.deltas)].sort((a, b) => a - b).join(",")}`,
+      )
+      .join(" | ");
+    for (const profile of headProfiles) {
+      expect(
+        profile.band.length,
+        `the head-side residual is CLOSED for a parameter name of ${profile.nameLength} character(s) across n=${HEAD_LO}..${HEAD_HI}. Measured: ${profileSummary}`,
+      ).toBeGreaterThan(0);
+      expect(
+        profile.band[profile.band.length - 1] - profile.band[0] + 1,
+        `the head-side unstable set for a parameter name of ${profile.nameLength} character(s) is no longer ONE contiguous band: ${profile.band.join(" ")}`,
+      ).toBe(profile.band.length);
+      expect(
+        profile.band.every((n) => n > HEAD_LO && n < HEAD_HI),
+        `the unstable band for a parameter name of ${profile.nameLength} character(s) reaches an edge of the swept range — widen HEAD_LO/HEAD_HI before trusting this result`,
+      ).toBe(true);
+    }
+    // THE FINDING ITSELF, ASSERTED: the delta profile is NOT the same across name
+    // lengths, so no single delta describes the mechanism. If this ever holds, the
+    // three disclosures that now say the delta is name-length dependent are wrong
+    // together and change together.
+    const deltaSignatures = new Set(
+      headProfiles.map((p) =>
+        [...new Set(p.deltas)].sort((a, b) => a - b).join(","),
+      ),
+    );
+    expect(
+      deltaSignatures.size,
+      `every swept parameter-name length produced the SAME delta profile, so the delta is not name-length dependent after all and the WR-39 correction is itself wrong. Measured: ${profileSummary}`,
+    ).toBeGreaterThan(1);
+    // And the whole thing is READ OUT, so a reader of the run sees the profiles
+    // rather than a claim about them.
+    expect(
+      profileSummary.length,
+      "the varied-length sweep produced no summary to read.",
+    ).toBeGreaterThan(0);
 
     // (c) RESIDUAL, PINNED — the class the sweep above cannot reach, stated
     // against the BRANCH CONDITION and not against the fixture that found it
