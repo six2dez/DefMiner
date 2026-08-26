@@ -115,8 +115,8 @@ _spike_up() {
   CAIDO_PID=$!
 
   # --- GATE 3: poll for readiness, never sleep-and-hope ---------------------
-  local ready=0 i
-  for i in $(seq 1 60); do
+  local ready=0
+  for _ in $(seq 1 60); do
     if curl -sf -o /dev/null -X POST "http://127.0.0.1:$PORT/graphql" \
          -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' 2>/dev/null; then
       ready=1; break

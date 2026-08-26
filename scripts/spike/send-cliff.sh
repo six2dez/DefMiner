@@ -111,7 +111,6 @@ ensure_project() {
   [ -z "$pid" ] && { echo "  WARN: no project id" >&2; return 1; }
   gql "{\"query\":\"mutation{ selectProject(id:\\\"$pid\\\"){ error{ __typename } } }\"}" 90 >/dev/null
   echo "  project selected: $pid (TEMPORARY — a guest cannot create a persistent one)" >&2
-  PROJECT_ID="$pid"
   # Record the persistence class on the instance itself, so record-result.py
   # carries it into the result rather than the driver asserting it later.
   # createProject(temporary:false) returns PermissionDeniedUserError for a

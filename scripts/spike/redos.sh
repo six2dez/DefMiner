@@ -270,8 +270,6 @@ case "$STAGES" in *2*)
 echo "=== STAGE 2: unbounded n=40, port 8982 (TERMINAL) ===" >&2
 if up 8982 1; then
   S2_RUN="$RUN_ID"
-  S2_PORT="$PORT"
-  S2_TOKEN="$TOKEN"
   ensure_project
   start_origin
 
@@ -318,8 +316,6 @@ if up 8982 1; then
       -d '{"query":"{ __typename }"}' 2>/dev/null | python3 -c 'import sys
 try: print(round(float(sys.stdin.read())*1000,2))
 except Exception: print("null")')"
-    GQL_RC=$?
-
     # Proxy: does a request through the wedged instance still get a 200?
     PROXY_CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
       --proxy "http://127.0.0.1:$PORT" "http://127.0.0.1:$ORIGIN_PORT/ace-1.36.5.js?t=$ELAPSED" 2>/dev/null)"
@@ -392,6 +388,8 @@ PY
         REINSTALL_DONE=1
         echo "  attempting installPluginPackage(force:true) [hot reload] ..." >&2
         T0="$(python3 -c 'import time; print(time.time())')"
+        # `$f` is a GraphQL variable name and must stay literal in the JSON body.
+        # shellcheck disable=SC2016
         OPS='{"query":"mutation I($f: Upload){ installPluginPackage(input:{source:{file:$f},force:true}){ package{ id } error{ __typename } } }","variables":{"f":null}}'
         curl -s --max-time 120 -X POST "http://127.0.0.1:$PORT/graphql" \
           -H "Authorization: Bearer $TOKEN" \

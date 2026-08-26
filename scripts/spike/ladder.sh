@@ -108,8 +108,7 @@ run_probe() {
     sampler=$!
   fi
 
-  probe_install "$PKG" >/dev/null 2>"$rundir/raw/install.err"
-  if [ $? -ne 0 ]; then
+  if ! probe_install "$PKG" >/dev/null 2>"$rundir/raw/install.err"; then
     echo "  $label: install FAILED" >&2
     [ -n "$sampler" ] && kill "$sampler" 2>/dev/null
     teardown "$pid" "$rid" "$data" >/dev/null
@@ -270,7 +269,8 @@ make_big() {
   # already two DISTINCT bundles concatenated. Repetition inflates the string
   # table's internal duplication, so this is an allocation stress input and NOT a
   # realistic artifact — it is labelled as such in the result.
-  local mb="$1" f="$BIG/big-${mb}mb.js"
+  local mb="$1" f
+  f="$BIG/big-${mb}mb.js"
   if [ ! -f "$f" ]; then
     local src; src="$(ensure_composite)"
     local srcsz; srcsz="$(wc -c < "$src" | tr -d " ")"
@@ -321,4 +321,6 @@ PY
 esac
 
 rm -rf "$BIG"
+# POINTS contains only driver-generated, whitespace-free evidence filenames.
+# shellcheck disable=SC2012
 echo "=== ladder complete: $(ls "$POINTS" | wc -l | tr -d ' ') point files ===" >&2

@@ -39,6 +39,8 @@ probe_install() {
 
   # force:true is required for reinstall — without it a package whose version is
   # not greater than the installed one fails with AlreadyInstalled.
+  # `$f` is a GraphQL variable name and must stay literal in the JSON body.
+  # shellcheck disable=SC2016
   local ops='{"query":"mutation I($f: Upload){ installPluginPackage(input:{source:{file:$f},force:true}){ package{ id manifestId plugins{ __typename ... on PluginBackend{ id enabled } } } error{ __typename } } }","variables":{"f":null}}'
   local resp
   resp="$(curl -s -X POST "$CAIDO_URL/graphql" \
@@ -86,6 +88,9 @@ probe_call() {
   local body
   body="$(python3 -c 'import json,sys; print(json.dumps({"name": sys.argv[1], "args": json.loads(sys.argv[2])}))' "$fn" "$args")"
 
+  # The Python program is intentionally single-quoted; shell expansion would
+  # corrupt its source before Python receives it.
+  # shellcheck disable=SC2016
   curl -s --max-time "$tmo" -X POST "$CAIDO_URL/plugin/backend/$BACKEND_ID/function" \
     -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
     -d "$body" \

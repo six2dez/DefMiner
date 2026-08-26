@@ -31,7 +31,7 @@ mkdir -p "$RUN_DIR/raw"
 ORIGIN_LOG="$RUN_DIR/raw/origin.log"
 python3 scripts/spike/origin.py --dir corpus --port "$ORIGIN_PORT" > "$ORIGIN_LOG" 2>&1 &
 ORIGIN_PID=$!
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
   curl -sf -o /dev/null "http://127.0.0.1:$ORIGIN_PORT/_health" && break
   sleep 0.5
 done

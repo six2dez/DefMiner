@@ -77,9 +77,11 @@ if recorder_is_up; then
   exit 1
 fi
 
-export DATA_PATH="$(pwd)/.spike/recorder-data"
+DATA_PATH="$(pwd)/.spike/recorder-data"
+export DATA_PATH
 export KEEP_DATA=1
-export RUN_ID="recorder-$(date -u +%Y%m%dT%H%M%SZ)"
+RUN_ID="recorder-$(date -u +%Y%m%dT%H%M%SZ)"
+export RUN_ID
 
 # shellcheck disable=SC1091
 source scripts/spike/instance.sh

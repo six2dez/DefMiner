@@ -72,7 +72,13 @@ gql() {
     -H 'Content-Type: application/json' -d "$1"
 }
 
-plugin_dirs() { ls -1 "$DATA_09/plugins" 2>/dev/null | sort | tr '\n' ' '; }
+plugin_dirs() {
+  local path
+  for path in "$DATA_09"/plugins/*; do
+    [ -e "$path" ] || continue
+    printf '%s\n' "${path##*/}"
+  done | sort | tr '\n' ' '
+}
 
 probe_install probe/tier0-budgets
 BACKEND_1="$BACKEND_ID"; PACKAGE_1="$PACKAGE_ID"
