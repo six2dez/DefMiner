@@ -1583,7 +1583,7 @@ describe("the URL HEAD — userinfo and `;` path parameters (WR-11, T-01-57, T-0
 
   it("the USERNAME is redacted too, not just the password", () => {
     // Not optional. A username is the same class of disclosure as the OS
-    // username `telemetry.ts`'s `redactPaths` removes from the error path one
+    // username `telemetry.ts`'s `redactSensitiveTokens` removes from the error path one
     // module away.
     expect(normaliseObservedUrl("https://alice@cdn.test/app.js")).toBe(
       `https://${QUERY_VALUE_REDACTION}@cdn.test/app.js`,
@@ -1921,14 +1921,14 @@ describe("recordObservation writes the redacted URL, not the raw one", () => {
 // carries the weight.
 //
 // WHY IT READS `telemetry.ts` TOO, and this is the point of the widening rather
-// than a bonus. `telemetry.ts`'s `redactPaths` is a string scan justified
+// than a bonus. `telemetry.ts`'s `redactSensitiveTokens` is a string scan justified
 // ENTIRELY by `REDOS_RECOVERY = "kill"`: SPIKE-01 measured that a catastrophic
 // pattern hangs the QuickJS thread with no interrupt handler and that SIGKILL is
 // the only exit, taking `caido-cli` down with the operator's live project data.
 // A gate built one file away for exactly that reason, which cannot SEE the
 // function it was built for, has a hole precisely where its own motivation is.
 // The measured-linearity case bounds `redactUrls` — it does not bound a future
-// author's rewrite of `redactPaths` into WR-12's suggested
+// author's rewrite of `redactSensitiveTokens` into WR-12's suggested
 // `(?:\/[A-Za-z0-9._-]+){2,}`, which nests a quantifier inside a quantifier and
 // is the patch task 2 declined.
 //
@@ -2021,7 +2021,7 @@ const PATTERN_EXEMPTIONS: ReadonlyMap<
  */
 const PATTERN_SCAN_MARKERS: ReadonlyMap<string, readonly string[]> = new Map([
   ["observations.ts", ["redactQueryValues", "redactUrlHead"]],
-  ["telemetry.ts", ["redactPaths", "redactUrls"]],
+  ["telemetry.ts", ["redactSensitiveTokens", "redactUrls"]],
 ]);
 
 /** The name of the declaration a node sits inside, walking outwards. Used to
@@ -2333,7 +2333,7 @@ describe("the pattern gate's own failure paths, EXECUTED", () => {
       "export function redactUrls(t: string): string {",
       '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
       "}",
-      "export function redactPaths(t: string): string {",
+      "export function redactSensitiveTokens(t: string): string {",
       '  return t.replace(/(?:\\/[A-Za-z0-9._-]+){2,}/g, "<path-redacted>");',
       "}",
     ].join("\n");
@@ -2347,7 +2347,7 @@ describe("the pattern gate's own failure paths, EXECUTED", () => {
       "export function redactUrls(t: string): string {",
       "  return applyPattern(t);",
       "}",
-      "export function redactPaths(t: string): string {",
+      "export function redactSensitiveTokens(t: string): string {",
       '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
       "}",
     ].join("\n");
@@ -2489,7 +2489,7 @@ describe("a pattern that ARRIVES defeats none of the banned constructs (WR-20)",
       "export function redactUrls(t: string): string {",
       '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
       "}",
-      "export function redactPaths(t: string): string {",
+      "export function redactSensitiveTokens(t: string): string {",
       '  return t.replace(/(?:\\/[A-Za-z0-9._-]+){2,}/g, "<path-redacted>");',
       "}",
     ].join("\n");
@@ -2503,7 +2503,7 @@ describe("a pattern that ARRIVES defeats none of the banned constructs (WR-20)",
       "export function redactUrls(t: string): string {",
       "  return applyPattern(t);",
       "}",
-      "export function redactPaths(t: string): string {",
+      "export function redactSensitiveTokens(t: string): string {",
       '  return t.replace(/[a-z]+:\\/\\//gi, "<url-redacted>");',
       "}",
     ].join("\n");

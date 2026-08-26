@@ -354,59 +354,25 @@ const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
  *                               `unredacted-persisted-error` rule, which exists
  *                               because the one line that writes this column is
  *                               not inside a catch clause.
- *                               WHAT `describeError` REDACTS, stated as the two
- *                               grammars it MATCHES rather than as the phrase
- *                               this entry used to carry — "URL-shaped
- *                               substrings" (corrected 2026-08-21, plan 01-11,
- *                               WR-12). "URL-shaped" is wider than the pattern:
- *                               it requires an explicit scheme and a literal
- *                               `://`. What is enforced is (1) SCHEME-PREFIXED
- *                               URLs and (2) ABSOLUTE FILESYSTEM PATHS — the
- *                               second added 2026-08-21 so `sdk.meta.path()`,
- *                               which carries the operator's OS username, does
- *                               not cross the getStatus RPC (DEPLOY-02,
- *                               STORE-07). Both redactions run BEFORE the
- *                               truncation, URLs first.
- *                               NOT REDACTED, named so this entry is not read as
- *                               a complete guarantee. CORRECTED 2026-08-22 (plan
- *                               01-16, WR-18) FROM EXECUTED OUTPUT, and the
- *                               correction is not a rewording: this entry named
- *                               the WRONG shape. It said a SCHEME-RELATIVE
- *                               reference — `//cdn/app.js?token=T` — survives.
- *                               IT DOES NOT. `redactPaths` requires a leading
- *                               separator and two separators in total, and that
- *                               shape has both, so `redactPathToken` consumes it
- *                               WHOLE, query string included. Run through the
- *                               real `describeError`:
- *                                 in : failed to load
- *                                      //cdn.victim.example/app.js?token=SECRET
- *                                 out: Error: failed to load <path-redacted>
- *                               THE SHAPE THAT ACTUALLY SURVIVES is the
- *                               SCHEMELESS host reference —
- *                               `cdn.victim.example/a.js?token=T`, with NO
- *                               leading slash. It is not URL-shaped to
- *                               `redactUrls` (no literal `://`) and not
- *                               path-shaped to `redactPaths` (no leading
- *                               separator), so it survives with its query
- *                               INTACT:
- *                                 in : failed to load
- *                                      cdn.victim.example/app.js?token=SECRET
- *                                 out: Error: failed to load
- *                                      cdn.victim.example/app.js?token=SECRET
- *                               It appeared in NEITHER disclosure until this
- *                               date. Also open: a Windows `C:\Users\…` path,
- *                               which uses the other separator. The store layer
- *                               is not currently exposed to the schemeless form:
- *                               every URL bound into a store statement has
- *                               already been through `normaliseObservedUrl`,
- *                               which is why WR-12 rated the original of this
- *                               residual a warning rather than a blocker. BOTH
- *                               surviving residuals are now recorded beside
- *                               `redactPaths` in `telemetry.ts` — that
- *                               cross-reference was true of NEITHER named shape
- *                               before this correction — and BOTH directions are
- *                               asserted in `telemetry.spec.ts`, so this
- *                               paragraph is executed rather than believed.
+ *                               WHAT `describeError` REDACTS is stated as the
+ *                               grammars it matches: explicit-scheme URLs,
+ *                               POSIX absolute paths, Windows drive/UNC paths,
+ *                               scheme-relative URLs and dotted-host references
+ *                               without a scheme. Quoted paths may contain
+ *                               spaces. Redaction runs BEFORE truncation, with
+ *                               explicit URLs first so `file:///...` retains the
+ *                               right marker.
+ *                               The Windows, schemeless-host and quoted-space
+ *                               residuals documented here in WR-18 were closed
+ *                               during AF-07. `telemetry.spec.ts` executes each
+ *                               grammar plus negative controls for relative
+ *                               source paths, dates and single-segment mounts.
+ *                               An unquoted path still ends at whitespace; the
+ *                               user-bearing prefix is removed when it has enough
+ *                               separators and its remaining tail stays useful
+ *                               for diagnosis. This is the precise remaining
+ *                               boundary, not a claim that arbitrary strings are
+ *                               free of target data.
  *   settings.value            — OPERATOR configuration (retention bounds). Never
  *                               target bytes and never a credential: nothing in
  *                               Phase 1 writes a secret to settings, and a phase

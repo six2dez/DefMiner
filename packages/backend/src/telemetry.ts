@@ -288,7 +288,7 @@ export const PATH_REDACTION = "<path-redacted>";
 
 /** The characters this scan treats as whitespace. Written out rather than
  *  matched, because a character class is a pattern and this module is allowed
- *  exactly one (see {@link redactPaths}). */
+ *  exactly one (see {@link redactSensitiveTokens}). */
 const WHITESPACE_CHARS = " \t\n\r\f\v";
 
 /** Punctuation stripped from a token's ends before it is judged, and re-attached
@@ -297,29 +297,113 @@ const WHITESPACE_CHARS = " \t\n\r\f\v";
  *  wraps its path in the first of them. */
 const PATH_TRIM_PUNCTUATION = "'\"`()[],;:";
 
-/** The one separator this rule knows about. See the Windows residual on
- *  {@link redactPaths}. */
-const PATH_SEPARATOR = "/";
+const POSIX_PATH_SEPARATOR = "/";
+const WINDOWS_PATH_SEPARATOR = "\\";
+
+function countCharacter(text: string, character: string): number {
+  let count = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === character) count += 1;
+  }
+  return count;
+}
+
+function isAsciiLetter(character: string | undefined): boolean {
+  if (character === undefined) return false;
+  const code = character.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function isAbsolutePath(core: string): boolean {
+  if (
+    core.startsWith(POSIX_PATH_SEPARATOR) &&
+    countCharacter(core, POSIX_PATH_SEPARATOR) >= 2
+  ) {
+    return true;
+  }
+
+  if (
+    core.startsWith(WINDOWS_PATH_SEPARATOR + WINDOWS_PATH_SEPARATOR) &&
+    countCharacter(core, WINDOWS_PATH_SEPARATOR) >= 3
+  ) {
+    return true;
+  }
+
+  if (
+    core.length >= 3 &&
+    isAsciiLetter(core[0]) &&
+    core[1] === ":" &&
+    (core[2] === POSIX_PATH_SEPARATOR || core[2] === WINDOWS_PATH_SEPARATOR)
+  ) {
+    return countCharacter(core, core[2]) >= 2;
+  }
+
+  return false;
+}
+
+function isSchemelessHostReference(core: string): boolean {
+  let separator = core.length;
+  for (let i = 0; i < core.length; i += 1) {
+    if (
+      core[i] === POSIX_PATH_SEPARATOR ||
+      core[i] === "?" ||
+      core[i] === "#"
+    ) {
+      separator = i;
+      break;
+    }
+  }
+  if (separator === core.length || separator === 0) return false;
+
+  const authority = core.slice(0, separator);
+  if (
+    authority.includes("=") ||
+    authority.includes("'") ||
+    authority.includes('"')
+  ) {
+    return false;
+  }
+
+  const afterUserInfo = authority.slice(authority.lastIndexOf("@") + 1);
+  if (afterUserInfo.startsWith("[")) {
+    const close = afterUserInfo.indexOf("]");
+    return close > 1;
+  }
+
+  const colon = afterUserInfo.lastIndexOf(":");
+  const host = colon > 0 ? afterUserInfo.slice(0, colon) : afterUserInfo;
+  if (host === "localhost") return true;
+  const firstDot = host.indexOf(".");
+  return firstDot > 0 && firstDot < host.length - 1;
+}
+
+function sensitiveMarker(core: string): string | null {
+  if (isAbsolutePath(core)) return PATH_REDACTION;
+  if (isSchemelessHostReference(core)) return URL_REDACTION;
+  return null;
+}
 
 /**
- * Judge ONE whitespace-delimited token and redact it if it is an absolute path.
+ * Judge ONE token and redact it if it is an absolute path or a schemeless host
+ * reference.
  *
- * Strip the wrapping punctuation, then require TWO things of what is left: it
- * BEGINS with a separator, and it contains at least two of them. Both conditions
- * carry their weight:
+ * Strip the wrapping punctuation, then recognise POSIX paths, Windows drive
+ * paths, UNC paths and dotted host references followed by `/`, `?` or `#`.
+ * Absolute paths need enough separators to distinguish them from a lone mount
+ * point. Those conditions carry their weight:
  *
- *   "begins with a separator" is what keeps `2026/08/21` and
- *   `store/observations.ts` readable, and it is the condition DEPLOY-02 actually
- *   cares about — a SERVER-SIDE absolute path.
+ *   requiring an absolute prefix is what keeps `2026/08/21` and
+ *   `store/observations.ts` readable, while covering the server-side paths
+ *   DEPLOY-02 actually cares about;
  *
- *   "at least two" is what keeps a lone `/data` or `/tmp` readable. One segment
- *   is a mount point, not a disclosure.
+ *   requiring multiple separators is what keeps a lone `/data`, `/tmp` or
+ *   `C:\\data` readable. One segment is a location, not a user-bearing path.
  *
  * The stripped punctuation is RE-ATTACHED. A rule that ate the quotes would make
  * `unable to open database file: <path-redacted>` read as though the driver had
  * said something it did not.
  */
-function redactPathToken(token: string): string {
+function redactSensitiveToken(token: string): string {
   let start = 0;
   let end = token.length;
   while (start < end && PATH_TRIM_PUNCTUATION.includes(token[start]))
@@ -327,20 +411,32 @@ function redactPathToken(token: string): string {
   while (end > start && PATH_TRIM_PUNCTUATION.includes(token[end - 1]))
     end -= 1;
 
-  const core = token.slice(start, end);
-  if (!core.startsWith(PATH_SEPARATOR)) return token;
+  let sensitiveStart = start;
+  let marker = sensitiveMarker(token.slice(sensitiveStart, end));
 
-  let separators = 0;
-  for (let i = 0; i < core.length; i += 1) {
-    if (core[i] === PATH_SEPARATOR) separators += 1;
+  if (marker === null) {
+    const core = token.slice(start, end);
+    const labelEnd = core.indexOf("=");
+    if (labelEnd >= 0) {
+      sensitiveStart = start + labelEnd + 1;
+      while (
+        sensitiveStart < end &&
+        PATH_TRIM_PUNCTUATION.includes(token[sensitiveStart])
+      ) {
+        sensitiveStart += 1;
+      }
+      marker = sensitiveMarker(token.slice(sensitiveStart, end));
+    }
   }
-  if (separators < 2) return token;
 
-  return token.slice(0, start) + PATH_REDACTION + token.slice(end);
+  return marker === null
+    ? token
+    : token.slice(0, sensitiveStart) + marker + token.slice(end);
 }
 
 /**
- * Strip absolute filesystem paths out of a string bound for the RPC.
+ * Strip sensitive filesystem paths and schemeless host references out of a
+ * string bound for the RPC.
  *
  * WHY THIS EXISTS, and it is the half of WR-03's OWN RATIONALE that WR-03's fix
  * did not deliver. {@link redactUrls} requires a literal `://`, so a filesystem
@@ -367,44 +463,20 @@ function redactPathToken(token: string): string {
  * {@link redactUrls}, so a future rewrite of this function into WR-12's shape
  * fails a gate rather than depending on somebody re-reading this paragraph.
  *
- * THREE RESIDUALS, NAMED, because a redactor whose limits are unstated is
- * trusted further than it has earned. The count moved from TWO to THREE on
- * 2026-08-22 and the direction matters: the third was open the whole time and
- * this list did not name it, while the shape the downstream allowlist DID name
- * had quietly been closed by the path scan. A list that only shrinks is being
- * managed rather than measured.
+ * COVERAGE AND LIMITS. The scan now closes the residual families found during
+ * review: Windows drive/UNC paths, schemeless dotted-host references, quoted
+ * paths containing spaces and labelled `path=`/`url=` values.
+ * `telemetry.spec.ts` executes every shape.
  *
- *   WINDOWS. `C:\Users\<name>\AppData\…` uses a different separator and is NOT
- *   redacted by this rule. Caido runs on Windows, so this is real and not
- *   hypothetical. Closing it is a SECOND separator in this same scan — a handful
- *   of lines, no structural change — so whoever needs it knows the size of the
- *   job. It is out of Phase 1 only because no Windows path has been measured
- *   crossing this boundary, and a rule written against an unmeasured shape is
- *   how `redactUrls` came to cover one of the two grammars it was believed to
- *   cover.
- *
- *   A SCHEMELESS HOST REFERENCE. `cdn.victim.example/a.js?token=T` — no scheme
- *   and NO LEADING SEPARATOR — survives whole, query string included. It is not
- *   URL-shaped to {@link redactUrls}, which requires a literal `://`, and it is
- *   not path-shaped to this rule, which requires a leading separator. Recorded
- *   here on 2026-08-22 (WR-18) because `store/schema.spec.ts`'s `analyses.error`
- *   allowlist entry cites THIS block as the place its residuals are written down,
- *   and until this date that cross-reference was true of neither shape the entry
- *   named. The shape the entry USED to name — the SCHEME-RELATIVE
- *   `//cdn/a.js?token=T`, with a leading separator — is CLOSED: it begins with a
- *   separator and contains three, so `redactPathToken` consumes it whole. Both
- *   directions are asserted in `telemetry.spec.ts`, so this paragraph is executed
- *   rather than believed.
- *
- *   A PATH CONTAINING A SPACE loses only the portion before the space —
- *   `/Users/<name>/Library/Application` becomes the marker and
- *   `Support/…/data.db` stays. The USERNAME is in the redacted portion, which is
- *   the disclosure DEPLOY-02 names, and the tail is a fixed vendor path carrying
- *   nothing about the operator. Stated because it is visible in the output and a
- *   reader who has not been told will otherwise read the surviving tail as a
- *   failure of the rule rather than its stated edge.
+ * An unquoted path containing spaces still ends at the first whitespace. Its
+ * leading user-bearing segment is redacted when it has enough separators, but
+ * the non-sensitive tail remains diagnostic text. Conversely, a relative source
+ * reference whose first segment itself looks like a dotted hostname is redacted:
+ * the grammar is ambiguous without a scheme, and this RPC chooses target-data
+ * safety over that narrow diagnostic case. Ordinary relative source paths,
+ * dates and single-segment mount points remain readable and are pinned below.
  */
-function redactPaths(text: string): string {
+function redactSensitiveTokens(text: string): string {
   let out = "";
   let i = 0;
   while (i < text.length) {
@@ -415,8 +487,28 @@ function redactPaths(text: string): string {
       while (j < text.length && WHITESPACE_CHARS.includes(text[j])) j += 1;
       out += text.slice(i, j);
     } else {
-      while (j < text.length && !WHITESPACE_CHARS.includes(text[j])) j += 1;
-      out += redactPathToken(text.slice(i, j));
+      while (j < text.length && !WHITESPACE_CHARS.includes(text[j])) {
+        const quote = text[j];
+        const previous = j === i ? undefined : text[j - 1];
+        const isOpeningQuote =
+          (quote === "'" || quote === '"') &&
+          (j === i ||
+            previous === "=" ||
+            previous === ":" ||
+            previous === "(" ||
+            previous === "[" ||
+            previous === "{" ||
+            previous === ",");
+        if (isOpeningQuote) {
+          const closing = text.indexOf(quote, j + 1);
+          if (closing !== -1) {
+            j = closing + 1;
+            break;
+          }
+        }
+        j += 1;
+      }
+      out += redactSensitiveToken(text.slice(i, j));
     }
     i = j;
   }
@@ -435,9 +527,9 @@ function redactPaths(text: string): string {
  * a URL in the output, which is the half carrying the host — and the front half
  * of a PATH, which is the half carrying the operator's OS username.
  *
- * URLS FIRST, PATHS SECOND, and the order is load-bearing rather than
+ * URLS FIRST, SENSITIVE TOKENS SECOND, and the order is load-bearing rather than
  * arbitrary. A `file:///Users/…` or an `https://host/a/b` must be consumed WHOLE
- * as a URL; with the path scan running first it would be shredded into a path
+ * as a URL; with the token scan running first it would be shredded into a path
  * marker with the scheme still attached, which reads like a different failure
  * than the one that happened. `telemetry.spec.ts` asserts both orderings.
  *
@@ -477,7 +569,7 @@ export function describeError(e: unknown): string {
   }
 
   const text = name === "" || body.startsWith(name) ? body : name + ": " + body;
-  return redactPaths(redactUrls(text)).slice(0, ERROR_TEXT_LIMIT);
+  return redactSensitiveTokens(redactUrls(text)).slice(0, ERROR_TEXT_LIMIT);
 }
 
 /** Record the most recent error. Never throws — it is the error path.

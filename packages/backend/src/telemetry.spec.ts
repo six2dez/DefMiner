@@ -459,6 +459,34 @@ describe("describeError redacts an absolute filesystem path (WR-03's other half)
     expect(out).toBe("Error: open failed '" + PATH_REDACTION + "'");
   });
 
+  it("redacts a quoted POSIX path containing spaces as one value", () => {
+    const out = describeError(
+      new Error("open failed '" + PLUGIN_DB_PATH + "'"),
+    );
+    expect(out).toBe("Error: open failed '" + PATH_REDACTION + "'");
+    expect(out).not.toContain("Application Support");
+  });
+
+  it("redacts a quoted path containing spaces after an assignment prefix", () => {
+    const out = describeError(
+      new Error("open failed path='" + PLUGIN_DB_PATH + "'"),
+    );
+    expect(out).toBe("Error: open failed path='" + PATH_REDACTION + "'");
+    expect(out).not.toContain(FIXTURE_OS_USERNAME);
+    expect(out).not.toContain("Application Support");
+  });
+
+  it("redacts Windows drive and UNC paths without a regular expression", () => {
+    const drive = "C:\\Users\\private-user\\AppData\\Roaming\\Caido\\data.db";
+    const unc = "\\\\private-server\\share\\Caido\\data.db";
+    expect(describeError(new Error("open " + drive))).toBe(
+      "Error: open " + PATH_REDACTION,
+    );
+    expect(describeError(new Error("open " + unc))).toBe(
+      "Error: open " + PATH_REDACTION,
+    );
+  });
+
   it("redacts a URL and a path in the SAME message, and the URL still goes first", () => {
     // Order matters: URL first, so a `file:///…` or `https://host/a/b` is
     // consumed as a URL rather than shredded into a path marker.
@@ -497,7 +525,7 @@ describe("describeError redacts an absolute filesystem path (WR-03's other half)
   });
 });
 
-describe("describeError does NOT redact things that are not absolute paths", () => {
+describe("describeError keeps diagnostic controls and redacts ambiguous URL carriers", () => {
   // The diagnosability half. A rule that turned every error into markers would
   // be a blunt instrument, and a gate that destroys diagnosis gets deleted.
 
@@ -538,12 +566,13 @@ describe("describeError does NOT redact things that are not absolute paths", () 
   // justification for keeping that column on the T-01-21 allowlist, and until
   // 2026-08-22 it named the WRONG shape as the open residual. A reader auditing
   // that decision was told a closed grammar was dangerous and was not told about
-  // the open one. Both directions run here so the correction is a measurement
-  // rather than a rewording, and so re-opening either is a red test.
+  // the open one. AF-07 closed the latter; both directions still run here so
+  // that closure is a measurement rather than a rewording, and so re-opening
+  // either is a red test.
 
   it("REDACTS a SCHEME-RELATIVE reference — it begins with a separator and has three", () => {
     // The shape the allowlist entry used to name as surviving. It does NOT: it
-    // satisfies `redactPathToken`'s two conditions and is consumed whole,
+    // satisfies the absolute-path conditions and is consumed whole,
     // query string included.
     expect(
       describeError(
@@ -552,16 +581,28 @@ describe("describeError does NOT redact things that are not absolute paths", () 
     ).toBe(`Error: failed to load ${PATH_REDACTION}`);
   });
 
-  it("RESIDUAL, PINNED: a SCHEMELESS host reference survives with its query intact", () => {
-    // The shape that IS open, and that appeared in NEITHER disclosure until
-    // 2026-08-22. No `://` for `redactUrls`, no leading separator for
-    // `redactPaths`. Pinned so the day somebody closes it this case goes red and
-    // they update both disclosures deliberately.
+  it("redacts a SCHEMELESS host reference with its query", () => {
     expect(
       describeError(
         new Error("failed to load cdn.victim.example/app.js?token=SECRET"),
       ),
-    ).toBe("Error: failed to load cdn.victim.example/app.js?token=SECRET");
+    ).toBe(`Error: failed to load ${URL_REDACTION}`);
+  });
+
+  it("redacts a SCHEMELESS host query even when the URL has no path", () => {
+    expect(
+      describeError(
+        new Error("failed to load cdn.victim.example?token=SECRET"),
+      ),
+    ).toBe(`Error: failed to load ${URL_REDACTION}`);
+  });
+
+  it("redacts a SCHEMELESS host after an assignment prefix", () => {
+    expect(
+      describeError(
+        new Error("failed to load url=cdn.victim.example/app.js?token=SECRET"),
+      ),
+    ).toBe(`Error: failed to load url=${URL_REDACTION}`);
   });
 
   // -------------------------------------------------------------------------

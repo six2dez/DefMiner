@@ -253,7 +253,7 @@ function redactDelimitedSegment(segment: string): string {
  * — which is what a Vite dev server serves — and every scoped npm package path.
  *
  * BOTH HALVES OF THE USERINFO GO, never just the password. A username is the
- * same class of disclosure as the OS username `telemetry.ts`'s `redactPaths`
+ * same class of disclosure as the OS username `telemetry.ts`'s `redactSensitiveTokens`
  * strips out of the error path one module away. The `@` is KEPT: it records that
  * the URL carried userinfo without carrying it — strictly more signal than
  * WR-11's own recommendation, which was to drop userinfo entirely — and it is
