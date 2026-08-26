@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-44-PLAN.md
-last_updated: "2026-08-26T21:57:56.574Z"
-last_activity: 2026-08-26
-last_activity_desc: Plan 01-44 complete; 01-45 outstanding
-state_head: 52b99067fd0efd50e5de922a6439b3dbb7c3a45a
+stopped_at: Completed 01-45-PLAN.md
+last_updated: "2026-08-26T22:14:22.089Z"
+last_activity: 2026-08-27
+last_activity_desc: All 45 Phase 01 plans summarized; verification pass 12 outstanding
+state_head: dca732c8fe2db046aecd5e78b4075412cecf3e2f
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 45
-  completed_plans: 44
+  completed_plans: 45
 ---
 
 # Project State
@@ -27,12 +27,19 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 45 of 45 (44 of 45 plans summarized on disk)
-Status: Executing — 01-45 is the one outstanding plan
-Last activity: 2026-08-26 — 01-44 complete: CR-28's shared fixture and the deletion-only disclosure half
+Phase: 01 (Skeleton, Persistence & Compatibility) — READY FOR VERIFICATION
+Plan: 45 of 45 (45 of 45 plans summarized on disk)
+Status: Plan execution complete — verification pass 12 is outstanding
+Last activity: 2026-08-27 — 01-45 complete: identity, sentinel endpoints and malformed-key diagnostics
 
-Progress: [█████████░] 98% of phase 01 (44 of 45 plans)
+Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> WAVE 45 REPEATED ONLY THE BODY HALF OF THE RECORDED COUNTER DRIFT.
+> `state.advance-plan` correctly returned `last_plan` at 45 of 45 and recomputed
+> the frontmatter to 45/45, while the prose position above stayed at 44/45.
+> `state.update-progress` again withheld its percentage. The body is corrected
+> from the 45 PLAN and 45 SUMMARY files on disk; this is plan-execution
+> completion only, and verification pass 12 still owns the phase verdict.
 
 > WAVE 44 REPEATED THE RECORDED COUNTER DRIFT. `state.advance-plan` returned
 > `last_plan` at 43 of 43 while 45 PLAN files and 44 SUMMARY files were already
@@ -225,6 +232,7 @@ Progress: [█████████░] 98% of phase 01 (44 of 45 plans)
 | Phase 01 P42 | 22 min | 2 tasks | 1 files |
 | Phase 01 P43 | 20 min | 3 tasks | 1 files |
 | Phase 01 P44 | 15 min | 2 tasks | 1 files |
+| Phase 01 P45 | 14 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -443,8 +451,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T21:57:21.436Z
-**Stopped at:** Completed 01-44-PLAN.md
+**Last session:** 2026-08-26T22:14:22.063Z
+**Stopped at:** Completed 01-45-PLAN.md
 **Resume file:** None
 
 ### Blockers
