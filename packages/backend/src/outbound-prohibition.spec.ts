@@ -9949,6 +9949,10 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     }
     return -1;
   };
+  const REGISTRY_OPEN =
+    "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
+  const registryOpenIndex = (lines: readonly string[]): number =>
+    lines.findIndex((line) => line === REGISTRY_OPEN);
   // WR-48, 2026-08-26, wave 37. THIS MATCHED THE EXACT LINE `"]);"`, WHICH IS
   // NOT THE FORM A FROZEN ARRAY LITERAL NECESSARILY CLOSES WITH.
   // `RESOLVER_REGISTRY` closes with `] as readonly ResolverRecord[]);`, which
@@ -10350,16 +10354,16 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // below are FULL-LINE equalities. Do NOT "simplify" the duplication by
     // making both sides the same expression: that restores the tautology in the
     // same commit that claims to remove it.
-    const REGISTRY_OPEN =
-      "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
     const registryOpenHits = gateLines.filter(
-      (l) => l === REGISTRY_OPEN,
+      (line) => registryOpenIndex([line]) === 0,
     ).length;
     expect(
       registryOpenHits,
       `the locator ${JSON.stringify(REGISTRY_OPEN)} matches ${registryOpenHits} line(s) of ${GATE_FILE}, not exactly one. At ZERO the pin below would compare -1 against -1 and pass having compared nothing; ABOVE ONE it would pin to whichever line came first. Re-point the locator at the registry's real opening line — do not delete the pin.`,
     ).toBe(1);
-    const registryOpen = lineOf((l) => l === REGISTRY_OPEN);
+    const registryOpenZeroBased = registryOpenIndex(gateLines);
+    const registryOpen =
+      registryOpenZeroBased === -1 ? -1 : registryOpenZeroBased + 1;
 
     const LIST_OPEN =
       "export const UNBOUNDED_QUANTIFIERS: readonly string[] = Object.freeze([";
@@ -10430,22 +10434,16 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // synthetic array where an identifier that EXTENDS the real one is declared
   // above the real opener, a prefix finder resolves to the extended identifier
   // and a full-line finder resolves to the opener, and the two answers DIFFER.
-  // A future author who swaps either pin above back to a prefix matcher makes
-  // that case a tautology again; this one turns red instead of arguing.
-  //
-  // EVERY LINE OF THE SYNTHETIC ARRAY IS AN INDENTED, QUOTED STRING ELEMENT, so
-  // no line written here is a line the real full-line locators could match —
-  // which is what the two uniqueness assertions in the case above re-check
-  // against this file's real bytes.
+  // An edit that changes the shared registry resolution to a prefix matcher turns
+  // this fixture red; an author who leaves that shared binding untouched and
+  // inlines a fresh prefix predicate at the pin's own call site still bypasses it.
   it("a PREFIX locator and a FULL-LINE locator disagree once a longer identifier is declared above the real opener — CR-23's shape, over synthetic lines", () => {
-    const REAL_OPENER =
-      "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
     const synthetic: readonly string[] = Object.freeze([
       "// a file that happens to declare a longer name first",
       "export const RESOLVER_REGISTRY_STANDIN: readonly number[] = Object.freeze([1]);",
       "",
       "type ResolverRecord = { readonly clause: string };",
-      REAL_OPENER,
+      REGISTRY_OPEN,
       '  { clause: "a row" },',
       "] as readonly ResolverRecord[]);",
     ]);
@@ -10461,7 +10459,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     const prefixHit = synthetic.findIndex((l) =>
       l.startsWith("export const RESOLVER_REGISTRY"),
     );
-    const fullLineHit = synthetic.findIndex((l) => l === REAL_OPENER);
+    const fullLineHit = registryOpenIndex(synthetic);
 
     expect(
       prefixHit,
@@ -10485,7 +10483,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     expect(
       synthetic[fullLineHit],
       "the full-line finder did not resolve to the real opener, so this fixture no longer encodes the shape it is named for.",
-    ).toBe(REAL_OPENER);
+    ).toBe(REGISTRY_OPEN);
   });
 
   // EXCLUSION THREE, NARROWED. Excluding the registry's whole LINE RANGE is
