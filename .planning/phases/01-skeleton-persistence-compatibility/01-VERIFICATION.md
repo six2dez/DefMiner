@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-verified: 2026-08-26T14:40:00Z
+verified: 2026-08-26T17:50:00Z
 status: gaps_found
 score: 8/9 must-haves verified
 behavior_unverified: 0
@@ -8,58 +8,61 @@ overrides_applied: 0
 re_verification:
   previous_status: gaps_found
   previous_score: 8/9
-  previous_verified: 2026-08-26T09:45:00Z
-  round: 8
-  verification_pass: 9
-  history: "pass 4 (round 3) -> pass 5 (round 4) -> pass 6 (round 5) -> pass 7 (round 6) -> pass 8 (round 7) -> pass 9 (round 8). Score has read 8/9 for SEVEN consecutive passes and the open truth has been the same one every time: truth 9, CORE-11 outbound enforcement. CORE-11's box has been flipped and reverted THREE times — `e7cc4b6`, `faca607`, `4105fd0`."
+  previous_verified: 2026-08-26T14:40:00Z
+  round: 9
+  verification_pass: 10
+  history: "pass 4 (round 3) -> pass 5 (round 4) -> pass 6 (round 5) -> pass 7 (round 6) -> pass 8 (round 7) -> pass 9 (round 8) -> pass 10 (round 9). Score has read 8/9 for EIGHT consecutive passes and the open truth has been the same one every time: truth 9, CORE-11 outbound enforcement. CORE-11's box has been flipped and reverted THREE times — `e7cc4b6`, `faca607`, `4105fd0` — and has now stood at `[ ]` for three consecutive rounds with the pin agreeing."
   gaps_closed:
-    - "CR-18 — CLOSED, AND I MEASURED THE ROW RATHER THAN READING THE SUMMARY. `.planning/REQUIREMENTS.md:46` no longer STATES the box's state. The row is 23,966 bytes and still contains the strings `THE BOX IS DELIBERATELY STILL`, `WHY THE BOX IS` and `When this box is eventually` exactly ONCE each — but I extracted the surrounding bytes of all three and every one falls inside a SINGLE enumeration sentence that NAMES them as the passages removed: `THREE PASSAGES LEFT THIS ROW IN THIS CORRECTION and NONE was deleted: the passage opening \\`WHY THE BOX IS\\`, the passage opening \\`THE BOX IS DELIBERATELY STILL\\`, and the sentence opening \\`When this box is eventually\\``. That is MENTION, not USE. The three passages themselves are relocated and live at `:190`, `:192`, `:194` as `PASSAGE ONE/TWO/THREE`, in a dated block attributed to plan 01-38. The row's checkbox reads `- [ ] **CORE-11**` and the row asserts no state of its own. This is the cheaper of the two dispositions pass 8 prescribed and it is the one that was taken."
-    - "CR-19 — CLOSED, AND I RE-EXECUTED ALL SIX PROBES MYSELF THROUGH THE SHIPPED `auditSource` RATHER THAN ACCEPTING PLAN 01-38's REPORT OF HAVING DONE SO. `(ok && globalThis).fetch(url)` -> [\"outbound-fetch\"]; `(globalThis ?? self).fetch(url)` -> [\"outbound-fetch\"]; `(globalThis || self).fetch(url)` -> [\"outbound-fetch\"]; `(b ? globalThis : self).fetch(url)` -> [\"outbound-fetch\"]; `(ok && window).fetch(url)` -> [\"outbound-fetch\"]; `(ok && navigator).sendBeacon(u,d)` -> [\"outbound-beacon\"]. SIX OF SIX REPORT, which is what the corrected line now says. I also re-counted the registry rather than trusting the count: 61 rows, 26 of `kind: \"measured-silence\"`, and `id: \"silence-operator-around-global-receiver\"` returns ZERO hits — the one in-range occurrence at `:5751` is a tombstone COMMENT recording the removal, not a row. The line that was FALSE is now true and it does not instruct anyone to restore the row."
-    - "WR-48 — CLOSED, AND ITS CORRECTION IS HONEST, WHICH I CHECKED BY MEASURING BOTH NUMBERS. `CLOSES_FROZEN_ARRAY = /^\\]( as [^)]*)?\\);$/` matches `] as readonly ResolverRecord[]);` at `:5767`, so exclusion three now resolves 4135..5767 = 1633 lines, matching limit (4)'s restated figure to the line. I then sliced the 117 returned lines (5768..5884) and counted every one of the nine `UNBOUNDED_QUANTIFIERS` phrasings across them: `anywhere in the file` 0, `everywhere in the file` 0, `any depth` 0, `every literal` 0, `ANY of them` 0, `every spelling` 0, `every reachable spelling` 0, `ANY string literal` 0, `ANY-BINDING-WINS` 0. TOTAL ZERO — the docblock's `MEASURED AFTER THE CHANGE rather than predicted before it: ZERO` is accurate. Round 8 corrected a false description and its correction survived my measurement, which rounds 5 through 7 could not say."
-    - "THE ROUND OPENED AGAINST A MEASURED RED AND SAID SO. 01-36 reports HEAD `4105fd0` at 2 failed of 1372 — the box reverted without `CORE11_BOX_EXPECTED` moving — and regenerated the span before doing anything else. The pin now reads `const CORE11_BOX_EXPECTED = \"- [ ] **CORE-11**\";` at `:10311` and agrees with the shipped row. Measuring your own handoff RED before claiming to build on it is the discipline this phase keeps asking for."
-    - "NO REGRESSION, RE-ESTABLISHED INDEPENDENTLY AND NOT CARRIED FORWARD. `pnpm test` 31 files / 1374 tests exit 0. `pnpm exec tsc --build` exit 0. `pnpm check:bundle` -> `packages/backend/dist/index.js: 1 import specifier(s): crypto`. The gate suite alone: 434 passed (434). The walk covers 23 shipped non-spec modules across both SOURCE_ROOTS at ZERO violations. NO SHIPPED CODE CHANGED THIS ROUND — `git diff --name-only 9b3ff46..HEAD -- packages/ scripts/ | grep -v '\\.spec\\.ts$'` is EMPTY; the round's entire code delta is one test file, +467/-43."
+    - "CR-21 — CLOSED, AND I DROVE THE EXACT SHAPE THROUGH IT RATHER THAN READING THE DIFF. `nameableRemainder` now strips the sentinel BY REFERENCE (`:9256`, `.split(NO_PRECEDING_CONSTRUCT).join(\"\")`), not by re-spelling it. I planted the hand-written key `\"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2\"` — verbatim the key pass 9 laundered through the null-anchor case at 434/434 green — into `HEADER_QUANTIFIER_EXEMPTIONS` and ran the gate suite: THREE cases fired, `Tests 3 failed | 436 passed (439)`, and the load-bearing one is the null-anchor case itself: `exemption key \"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2\" carries an ANCHOR that reduces to NOTHING … expected 0 to be greater than 0`. Pass 9 measured that same remainder at 20 and passing. The arithmetic that let CR-17's shape back in is gone."
+    - "WR-51 — CLOSED, MEASURED BY THE SAME MUTATION PASS 9 USED. I replaced the body of `preAnchoringExemptionKeyForFixtureOnly` (`:9478-9488`) with `return \"CONSTANT\";` and ran the gate suite: `Tests 1 failed | 438 passed (439)`. Pass 9 ran that identical mutation at 434 of 434 GREEN. The counter-probe is now pinned to the live builder's LINE HALF over both array pairs, so the docblock's structural claim at `:9463-9469` is an assertion rather than a description."
+    - "WR-54's `to` ENDPOINTS — CLOSED, MEASURED BY THE SAME MUTATION PASS 9 USED. I reverted `CLOSES_FROZEN_ARRAY` at `:9976` to its pre-fix form `/^\\]\\);$/`, re-introducing WR-48's exact 117-line over-walk, and the suite went RED: `Tests 1 failed | 438 passed (439)` at `:10126`, naming the gap — `expected 5910 to be 5793`, a 117-line difference. Pass 9 ran that identical revert at 434 of 434 GREEN. Note the FROM endpoints are NOT closed — see CR-23 in `gaps`."
+    - "WR-52 — CLOSED. The own-header shape is now a SECOND array pair in the cross-construct fixture and the coverage sentence at `:10462-10470` states the measured 26/3 split rather than `the CROSS-CONSTRUCT case`. I confirmed the new pair is watched failing rather than merely present: reverting BOTH wave-39 scan bounds (`i = lineNumber`, `k <= lineNumber`) turns it RED with `an occurrence sitting ON its own construct header (an \\`it(\\` TITLE line) kept the SAME anchored key when its enclosing construct changed` (`Tests 2 failed | 437 passed`). Round 9 also carried across pass 9's refutation of the reviewer's stronger reading, in the bytes, at `:10472-10480` — a widening of a real fixture, correctly described as one."
+    - "WINDOWS 41 — CLOSED, ALL THREE SITES, READ IN THE BYTES. `:803-811` — the sentence stating CORE-11's box state and naming wave 28 as the owner of the flip is DELETED and replaced by a MARKED, dated bracket that points at the two authoritative surfaces and asserts nothing. `:910-917` — the same, for the clause inside the wave-30 sentence; the ledger-reconciliation clause is left standing with the reason stated, and it names no box state. `:925-943` — the false `THE BOX'S STATE IS NOW STATED IN EXACTLY TWO PLACES` is gone and NO COUNT REPLACES IT: the paragraph now names the two authoritative surfaces and states, in its own bytes, that a count stated wider than the grep that produced it is the defect being corrected. Measured after the sweep: the only site in this file stating the box's state is `CORE11_BOX_EXPECTED` at `:10983` (`\"- [ ] **CORE-11**\"`), and `.planning/REQUIREMENTS.md:46` reads `- [ ] **CORE-11**`. Four sites down to two, one of them in this file."
+    - "THE COUNTS WAVE 39 PUBLISHED — ALL CORRECT, RE-MEASURED WITH THE LIVE BUILDER IN-TREE RATHER THAN WITH A LIFTED COPY. I inserted a temporary case inside the gate's own `describe` (so it reads the shipped `constructAnchorFor`, `quantifierOccurrences`, `surfaceExemptionKeys` and `SURFACE_LINES`) and threw the measurement out through an assertion message: `{\"occurrences\":29,\"keys\":29,\"declared\":29,\"ownHeader\":0,\"notOwn\":29,\"sentinel\":0,\"maxDist\":234}`. 29/29/29 balanced, ZERO self-anchoring keys (pass 9 measured 3), ZERO sentinel-resolving occurrences, maximum occurrence-to-anchor distance 234. Every number limit (5) publishes about its own fix is true. Restored."
+    - "NO REGRESSION, RE-ESTABLISHED INDEPENDENTLY AND NOT CARRIED FORWARD. `pnpm test` 31 files / 1379 tests exit 0 (before any mutation and again after every restore). `pnpm exec tsc --build` exit 0. `pnpm check:bundle` -> `packages/backend/dist/index.js: 1 import specifier(s): crypto`. Gate suite alone: 439 passed (439). `find packages/*/src -name '*.ts' ! -name '*.spec.ts' | wc -l` -> 23 shipped modules across both SOURCE_ROOTS, walked at ZERO violations inside the green suite. NO SHIPPED CODE CHANGED THIS ROUND — `git diff --name-only 9b3ff46..HEAD -- packages/ scripts/ | grep -v '\\.spec\\.ts$'` is EMPTY, and `git log --stat bc0f4c2..HEAD -- packages/` touches exactly ONE file, the gate spec."
   gaps_remaining:
-    - "UAT gap 2 / truth 9 (CORE-11 outbound enforcement) — STILL OPEN, for the SEVENTH consecutive round. Criteria (1) DERIVED and (2) DRIFT-DETECTABLE remain discharged and I found no evidence against either. Criterion (3) THE SOLE BOUND is STILL unmet, and this round it fails on BOTH of its legs again — but they are not the same two legs. The DOCUMENT leg that failed in pass 8 (CR-18, CR-19) is genuinely CLOSED. The MECHANISM leg that failed in pass 8 (CR-17) is NOT: the fix built to close it narrowed the hole from 29 of 29 entries to 22 of 29 and I drove TWO fabricated relocations through the remainder at 434/434 green, plus a third through the sentinel the same wave introduced. CORE-11's `[x]` is NOT earned and the box must stay `[ ]`."
+    - "UAT gap 2 / truth 9 (CORE-11 outbound enforcement) — STILL OPEN, for the EIGHTH consecutive round. Criteria (1) DERIVED and (2) DRIFT-DETECTABLE remain discharged and I found no evidence against either. Criterion (3) THE SOLE BOUND is STILL unmet, and for the THIRD consecutive round it is the MECHANISM leg alone — the document leg closed in round 8 and did not re-open. Round 9 removed the two relocation SHAPES pass 9 prescribed and every one of its own published counts is true, but the relocation CLASS is not closed and the paragraph written to state the reach of the fix overstates it by a factor of five. I relocated a shipped occurrence 514 lines and then 1,129 lines, both at 439/439 green, byte-identical key, exemption reason false in both new homes. CORE-11's `[x]` is NOT earned and the box must stay `[ ]`."
   regressions:
-    - "NO behavioural regression. Truths 1-8 re-checked this session; no shipped source byte changed since pass 8, and the full suite grew 1372 -> 1374 with zero failures."
-    - "NO ledger regression this round. Pass 8's ledger regression (the `[x]` on a self-contradicting row) is gone: the box reads `[ ]`, the pin reads `[ ]`, and the row states no box state at all."
-    - "ONE NEW FINDING AGAINST ROUND 8's OWN CORRECTION, FOUND BY EXECUTION AND NOT BY THE REVIEWER (WR-54, below). WR-48's corrected recogniser is pinned by NOTHING. I reverted `CLOSES_FROZEN_ARRAY` to its pre-fix form `/^\\]\\);$/` — re-introducing the exact 117-line over-walk WR-48 was filed about — and the suite stayed GREEN at 434 of 434. Not the `proof` token, not the band, and not the clause-count equality the reviewer names as the mechanism that caught it. Warning, and it errs safe, but the correction can silently revert."
+    - "NO behavioural regression. Truths 1-8 re-checked this session; no shipped source byte changed since pass 9, and the full suite grew 1374 -> 1379 with zero failures."
+    - "NO ledger regression. The box reads `[ ]` at `REQUIREMENTS.md:46`, the pin at `:10983` reads `[ ]`, and after WINDOWS 41 no other site in the gate file states the box's state at all. Round 9 did not flip it and plan 01-41 did not run `requirements mark-complete`."
+    - "NO NEW FINDING OF MY OWN AGAINST ROUND 9's CORRECTIONS THAT THE REVIEWER DID NOT ALREADY FILE. Both of the reviewer's BLOCKERs reproduce on the real tree; nothing round 9 shipped as a pin failed to hold when I mutated what it pins, EXCEPT the two `.from` assertions, which the reviewer had already found (CR-23). That is a first for this phase: pass 9 found WR-54 by its own execution, pass 10 found nothing the reviewer had missed."
 gaps:
   - truth: "No shipped code can introduce outbound traffic without failing a gate (CORE-11 / UAT gap 2)"
     status: partial
-    reason: "I WAS ASKED TO ADJUDICATE CR-20 AND CR-21 BY EXECUTION RATHER THAN INHERIT THEM, AND THE REVIEWER USED AN OUT-OF-TREE HARNESS, SO I REPRODUCED BOTH BY MUTATING THE REAL FILE AND RUNNING THE REAL SUITE. BOTH HOLD. CR-20 (a) — SELF-ANCHORING, EXECUTED. I took the shipped occurrence at `:1838`, ` * Every non-spec module the plugin SHIPS, under either source root, at any depth.`, DELETED it from the docblock at `:1837` that describes the FILE WALK's directory recursion, and planted it verbatim as `// Every non-spec module the plugin SHIPS, under either source root, at any depth.` at `:7102`, immediately above an `it(` about `receiverAliases`' logical-assignment branch inside `describe(\"an outbound receiver, however it was bound\")` — a completely different construct 5,264 lines away, in a region about the OUTBOUND walk's resolution rather than the file walk's. RESULT: 434 passed (434), zero failures. Restored; 434 passed. That exemption's whole reason is construct-dependent — it reads `Not a claim about the OUTBOUND WALK's resolution reach at all: it describes the FILE WALK's directory recursion` — and the relocated sentence makes that reason FALSE while the key does not move. This is CR-17's mutation, one construct over, AFTER the fix. THE CAUSE, READ OFF THE CODE: `constructAnchorFor` opens its backward scan at `for (let i = lineNumber; i >= 1; i--)` (`:9226`) and then walks FORWARD from the header to the first line that names anything, `for (let k = head; k <= lineNumber; k++)` (`:9245`). For an occurrence that is the first content line of a docblock, or is itself an `it(` title, that forward walk lands on the occurrence's OWN line and the construct half becomes a 64-character prefix of the line half. It carries no positional information whatsoever. Three shipped keys are visibly of this shape on the face of the map — `Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2`, and the two `it(` titles at `:9094` and `:9100` whose halves are likewise prefix-and-whole of one line. CR-20 (b) — AMBIGUOUS ANCHOR TOKENS, ALSO EXECUTED. The anchor is a line of text and lines repeat. `grep -c '^\\s*it\\.each(\\[$'` returns 10, and the token `SPELLING (in receiver-key position) RESOLVED BY REPORTS` is produced by three table headers at `:283`, `:299` and `:361`. I moved the shipped occurrence at `:305` — the `var` twin cell `k = \"requests\"; sdk[k]  ANY-BINDING-WINS`, whose exemption reason reads `The same table cell one row down, for the \\`var\\` spelling` — out of the CR-10 table under `:299` and into the WAVE-34 LOGICAL-ASSIGNMENT table under `:361`, 58 lines down and about `??=` spellings rather than `var` rebinding. RESULT: 434 passed (434). Two different tables, two different subjects, one byte-identical key. CR-20 (c) — THE DISCLOSURE IS WRONG, NOT MERELY INCOMPLETE, AND THIS IS WHAT MAKES IT A BLOCKER RATHER THAN A WARNING. Limit (5) at `:9029-9036` states, flatly, `an exemption written for one construct is NOT discharged by an occurrence sitting under a DIFFERENT one`, and states the residual as `TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN INTERCHANGEABLE`. I executed two cross-construct relocations that the first sentence forbids and the second does not describe. That is a stated reach exceeding an executed reach, in the paragraph written to state the reach of the fix for that exact defect — this phase's signature failure, now two levels deep. CR-21 — CONFIRMED, EXECUTED IN TWO STEPS AGAINST THE REAL FILE. First the arithmetic, run rather than read: `nameableRemainder(\"!NO-PRECEDING-CONSTRUCT! §§ {q2}\")` = `\"NOPRECEDINGCONSTRUCT\"`, length 20, so the case at `:9971` (`no exemption key's ANCHOR reduces to nothing`) PASSES it. Then the mutation. STEP 1: I planted a bare docblock `/**` + ` * any depth` + ` */` at `:7102` — whose occurrence line masks entirely to `{q2}` so the forward walk finds nothing nameable and the builder returns the sentinel — and added the matching entry `\"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2\"` to `HEADER_QUANTIFIER_EXEMPTIONS`. RESULT: 434 passed (434). STEP 2: with the exemption entry UNCHANGED, I moved that docblock ~1,800 lines away into the middle of an `it.each` parameter table. RESULT: 434 passed (434). `\"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2\"` is precisely the `\"{q2} :: q2\"` shape CR-17 was filed about with twenty letters of decoration bolted on, it names no construct and no line, and it is laundered through the ONE case added in the SAME WAVE to forbid that shape. I also confirmed the second half of CR-21 by grep: `NO_PRECEDING_CONSTRUCT` returns exactly FOUR hits — the declaration at `:9167` and the two `return` sites at `:9251` and `:9253`. No `expect`, no assertion, nothing observes it. The docblock's claim that the empty-anchor shape `may not be produced silently by the builder itself` asserts a mechanism that does not exist. WHERE I DISAGREE WITH THE REVIEWER, STATED PLAINLY BECAUSE I WAS ASKED TO ADJUDICATE AND NOT TO INHERIT: WR-52's sharper claim is FALSE AS WRITTEN. The reviewer says the new fixture `would be green with constructAnchorFor reduced to (lines, n) => maskQuantifiers(normalizeGateLine(lines[n - 1] ?? \"\"))`. I applied exactly that reduction to the real file and ran the fixture by name: it FAILED, with `AssertionError: the anchored key did NOT change when the occurrence moved from one construct to another` — 1 failed, 433 skipped. The fixture's probe side is REAL and it catches a line-copying anchor. What is true of WR-52 is the narrower charge: the fixture deliberately chooses an occurrence that `is not its own construct header`, so it is structurally blind to the three shipped occurrences that ARE, and its coverage sentence `This fixture proves the CROSS-CONSTRUCT case` overclaims. Coverage overclaim, not vacuity. SEVERITY, STATED THE SAME WAY IT HAS BEEN EVERY ROUND AND NOT INFLATED: NOTHING LEAKS, AND I RE-ESTABLISHED THAT RATHER THAN CARRYING IT FORWARD. `pnpm test` 31 files / 1374 tests exit 0; `tsc --build` exit 0; `pnpm check:bundle` reports the shipped bundle's entire import set as ONE specifier, `crypto`; the walk covers 23 shipped modules across both SOURCE_ROOTS at zero violations; and no shipped source byte changed this round. Every finding here is a defect in a TEST-ONLY gate's enforcement of its own description. It is a blocker on the claim-versus-enforcement standard this phase set for itself and has now enforced nine times, and on nothing else."
+    reason: "I WAS ASKED TO ADJUDICATE CR-20 / CR-22 / CR-23 BY MUTATING THE REAL FILE RATHER THAN INHERIT THEM, AND THE REVIEWER USED AN OUT-OF-TREE HARNESS. I REPRODUCED ALL THREE AGAINST THE REAL TREE AND THE REAL SUITE, RESTORING BETWEEN EVERY RUN. ALL THREE HOLD. CR-20 IS NOT CLOSED. Round 9 built exactly what pass 9 prescribed and both changes are REAL — I verified each by watching it fail: reverting the two scan bounds turns two cases RED (`Tests 2 failed | 437 passed`), duplicating an in-use anchor's producer line turns the census RED (`1 anchor(s) IN USE are not produced by exactly one line`, `Tests 1 failed | 438 passed`), and the published counts are all true (29 occurrences, 29 keys, 29 entries, 0 self-anchoring, 0 sentinel, max distance 234). NONE OF THAT IDENTIFIES A SITE. The occurrence at `:436` — the wrapped ASCII-table cell whose entire normalized content is a declared phrasing, so its key is `SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ {q2} :: q2` and of which the file itself says at `:10281-10283` that `the construct half is what names it` — I moved TWICE. (1) 514 LINES, out of the table and into header section 3, landing under `the named non-vacuity assertion is the real protection against a walk that shrinks`: `Tests 439 passed (439)`. (2) 1,129 LINES, out of the table, ACROSS THE ENTIRE MACHINE-OWNED DERIVED-RESIDUAL SPAN (`/*` at `:952` … `*/` at `:1565`), to the top level beside the imports: `Tests 439 passed (439)`. In both new homes the entry's stated reason — `HEADER. A wrapped cell in the same ASCII table, labelling what the keyReceiver row already carries` — is false, the key is byte-identical (proved by the green stale-entry and count-equality checks, which fail on any key change), and neither the uniqueness census, the prefix case, the sentinel case nor the four range pins reports anything. THE CENSUS CANNOT REACH THIS AND THE REVIEWER IS RIGHT ABOUT WHY: it asserts the anchor has exactly ONE PRODUCER LINE, and `:417` is one line. CR-22 — CONFIRMED, AND I MEASURED THE RESIDUAL WITH THE LIVE BUILDER RATHER THAN ARGUING IT. Limit (5) at `:9090-9093` and the `constructAnchorFor` docblock at `:9343-9345` both close on `the maximum distance from an occurrence to its anchor is 234 LINES … so \\`the same construct\\` can span a couple of hundred lines and the interchangeability residual is that wide`. The 234 is RIGHT — I re-measured it at 234. The inference is WRONG. The residual is the ANCHOR'S SHADOW: every surface line resolving to the same anchor. I grouped all 8,846 surface lines by resolved anchor inside the gate's own describe block and got, largest first: `SPELLING (operator, by POSITION) RESOLVED BY REPORTS` — 574 surface lines, raw span 419..1574 (1,155 lines), holding FOUR shipped occurrences; the file's own title line — 283 surface lines, 2..284, FOUR occurrences; `it.each([` — 202 surface lines, 7012..8947; `WHY THIS EXISTS, AND WHAT IT IS NOT.` — 115; `THE LITERAL DESCENT OVER AN OPERATOR INITIALIZER…` — 98. The published figure understates the residual by a factor of FIVE, and my 1,129-line relocation stayed inside the widest shadow the whole way. This is the phase's signature defect — a stated reach exceeding an executed reach — at its TENTH recorded instance, and for the SECOND consecutive round it sits inside the paragraph written to state the reach of the fix for the NINTH. CR-23 — CONFIRMED, EXECUTED, AND THE ARITHMETIC MEASURED FROM INSIDE THE SUITE. `EXCLUSIONS` derives its two opening anchors at `:9983-9988` as `lineOf(l => l.startsWith(\"export const UNBOUNDED_QUANTIFIERS\"))` and `lineOf(l => l.startsWith(\"export const RESOLVER_REGISTRY\"))`; the WR-54 case at `:10080-10085` recomputes those two expressions CHARACTER FOR CHARACTER over the same `gateLines` through the same `lineOf`, then asserts `EXCLUSIONS[2].from`/`EXCLUSIONS[1].from` against them (`:10131-10134`, `:10150-10153`). They cannot fail. I planted ONE line — `export const RESOLVER_REGISTRY_DECOY: readonly number[] = Object.freeze([1]);` — 104 lines above the real registry, and the suite reported `Tests 439 passed (439)`, INCLUDING the assertion whose own message reads `Both endpoints are pinned because a width is two numbers, and pinning only the end leaves the other half free to move`. I then instrumented the surface non-vacuity assertion to print the number and measured the damage from inside the suite: SURFACE_LINES 8846 -> 8742. ONE HUNDRED AND FOUR pre-existing gate-file lines silently left the scanned surface (105 counting the decoy itself), the coarse band still passed, the `proof` token `id: \"constStrings\"` was still in range, and the `to` pin still passed. Any declared phrasing living in those 104 lines is now unguarded and nothing says so. My arithmetic differs from the reviewer's by one line (they report 8848 -> 8743 / 105) and the difference is immaterial. WHERE I ADD TO THE REVIEWER RATHER THAN INHERIT: I confirmed WR-55 EXHAUSTIVELY. `constructAnchorFor` reaches `return NO_PRECEDING_CONSTRUCT` only by running the backward scan off the top having accepted no line, and line 1 is a `//` comment with nothing above it, so recogniser (5) accepts it for every `lineNumber >= 2`. I evaluated the shipped builder at EVERY ONE of the file's 11,079 lines: the set of lines resolving to the sentinel is exactly `[1]`, count 1. So the occurrence-side sentinel case added this round is green BY CONSTRUCTION over 8,845 of the 8,846 surface lines, while `:9229-9232` and `:10295-10300` both state its reach as the whole scanned surface. That is the correct reading of pass 9's own `missing:` line — I wrote that it `is a real guard from the next sentence someone writes`, and measured, it is not: only a sentence on line 1 can ever trip it. The FIRST half of CR-21 is the load-bearing half and it is genuinely closed. SEVERITY, STATED THE SAME WAY IT HAS BEEN EVERY ROUND AND NOT INFLATED: NOTHING LEAKS, AND I RE-ESTABLISHED THAT RATHER THAN CARRYING IT FORWARD. `pnpm test` 31 files / 1379 tests exit 0; `tsc --build` exit 0; `pnpm check:bundle` reports the shipped bundle's entire import set as ONE specifier, `crypto`; the walk covers 23 shipped modules across both SOURCE_ROOTS at zero violations; no shipped source byte changed this round. I also re-executed the must-NOT itself through the shipped `auditSource`: `(ok && globalThis).fetch(url)` -> [\"outbound-fetch\"], `(globalThis ?? self).fetch(url)` -> [\"outbound-fetch\"], `(ok && navigator).sendBeacon(u,d)` -> [\"outbound-beacon\"], `fetch.call(null,url)` -> [\"outbound-fetch\"], `const f = fetch; f.call(null,url)` -> [\"outbound-fetch\"], `const m=\"send\"+\"Beacon\"; navigator[m](u,d)` -> [\"outbound-unanalysable\"], `sdk.requests.send(req)` -> [\"outbound-send\"], clean source -> []. `WebSocket.call(null,u)` -> [] and remains the disclosed named row `silence-outbound-ctor-receiver-position` at `:5696`, one of 26 `measured-silence` rows in a 61-row registry, with `silence-operator-around-global-receiver` still absent. Every finding here is a defect in a TEST-ONLY gate's enforcement of its own description. It is a blocker on the claim-versus-enforcement standard this phase set for itself and has now enforced ten times, and on nothing else."
     severity: major
     artifacts:
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "CR-20 — BLOCKER, REPRODUCED TWICE BY ME AT 434/434 GREEN AGAINST THE REAL FILE. `constructAnchorFor` (`:9210-9254`) resolves a masked LINE OF TEXT truncated to 64 chars, not a site. (a) The backward scan opens at `i = lineNumber` (`:9226`) and the forward walk is bounded by the occurrence (`:9245`), so an occurrence on its own construct header — or the first content line of a docblock — anchors to ITSELF; three shipped keys are of this shape and I relocated `:1838` across 5,264 lines into an unrelated construct for a byte-identical key. (b) Anchor tokens repeat: `it.each([` is produced by 10 lines and `SPELLING (in receiver-key position) RESOLVED BY REPORTS` by 3 (`:283`, `:299`, `:361`); I relocated `:305` between two of them for a byte-identical key. Seven of 29 entries are relocatable across constructs. (c) Limit (5) at `:9029-9036` states the opposite and discloses none of it."
+        issue: "CR-20 NOT CLOSED / CR-22 — BLOCKER, REPRODUCED TWICE BY ME AT 439/439 GREEN AGAINST THE REAL FILE. `constructAnchorFor` (`:9373-9420`) resolves the nearest preceding line five recognisers accept, and in this file those recognisers are sparse. Measured with the live builder over all 8,846 surface lines: the anchor at `:417` shadows 574 surface lines (raw 419..1574, 1,155 lines) and already holds four shipped occurrences. I moved `:436` 514 lines into header section 3 and then 1,129 lines across the machine-owned span into the import region; byte-identical key and 439 of 439 green both times, with the entry's stated reason (`A wrapped cell in the same ASCII table`) false in both new homes. Limit (5) at `:9090-9093` and the docblock at `:9343-9345` publish the residual as 234 lines — five times too small. The uniqueness census cannot reach it: it asserts ONE PRODUCER LINE, and `:417` is one line."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "CR-21 — BLOCKER, REPRODUCED IN TWO STEPS AT 434/434 GREEN EACH. `NO_PRECEDING_CONSTRUCT = \"!NO-PRECEDING-CONSTRUCT!\"` (`:9167`) is made of letters, so `nameableRemainder` scores it 20 and the `no exemption key's ANCHOR reduces to nothing` case at `:9971` — added in the SAME commit to forbid the empty-anchor shape — passes the sentinel key. Planted a sentinel-producing occurrence plus its exemption: green. Relocated it ~1,800 lines into an unrelated construct with the exemption unchanged: green. Separately, `grep -n NO_PRECEDING_CONSTRUCT` returns four hits — one declaration, two returns, and nothing that observes the value — so the docblock's claim at `:9163-9166` that it `may not be produced silently by the builder itself` names a mechanism that does not exist."
+        issue: "CR-23 — BLOCKER, REPRODUCED AT 439/439 GREEN. The two `.from` assertions at `:10131-10134` and `:10150-10153` compare `EXCLUSIONS[n].from` against a locator expression recomputed character-for-character from the expression `EXCLUSIONS` was built from (`:9983-9988` vs `:10080-10085`). They hold for every possible file, including one where the locator matches nothing (`-1 === -1`) — the silent success this same test's own non-vacuity paragraph thirty lines above says it is organised against, and which it correctly guards for `REGISTRY_CLOSE` and each list entry. One planted decoy line 104 lines above the registry slid exclusion three's `from` and removed 104 gate-file lines from the scanned surface (SURFACE_LINES 8846 -> 8742, measured from inside the suite), at 439 of 439 green, including the assertion whose message claims `Both endpoints are pinned`. The closing claim at `:9963-9967` that `each locator proved to match exactly ONE line before it is used` is true of three of five locators."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "WR-54 (NEW THIS PASS, FOUND BY MY OWN EXECUTION, AND IT SHARPENS THE REVIEWER'S WR-50 RATHER THAN REPEATING IT). WR-48's corrected recogniser is pinned by NOTHING. I reverted `CLOSES_FROZEN_ARRAY` at `:9762` to its pre-fix form `/^\\]\\);$/`, re-introducing the exact 117-line over-walk WR-48 was filed about, and the suite stayed GREEN at 434 of 434. The reviewer's WR-50 is right that the `proof` assertion (`:9840`, `gateLines.slice(from-1, to).some(l => l.includes(proof))`) is monotone in range width and cannot detect an over-walk, and right that exclusion three's `[500, 3000]` band already failed on WR-48's 1750 — but WR-50 names the clause-count equality as `what caught it, and what would catch the next one`, and MEASURED, it would not: the 117 lines carry zero phrasings and zero clauses, so nothing moves. The comment's closing claim at `:9758-9761` that the two exclusions are `pinned by their \\`proof\\` tokens and their bands against the day that difference matters` is false in the over-walk direction, and there is no third mechanism to name in its place. Warning: it errs safe today, because the lines it wrongly excludes raise no obligations."
+        issue: "WR-55 — WARNING, CONFIRMED EXHAUSTIVELY BY ME. The occurrence-side sentinel case at `:10306-10341` can only be non-empty for an occurrence on line 1 of the file. I evaluated the shipped `constructAnchorFor` at all 11,079 lines: exactly ONE line resolves to `NO_PRECEDING_CONSTRUCT`, line 1. So the case is green by construction over 8,845 of the 8,846 surface lines while `:9229-9232` and `:10295-10300` both state its reach as the whole scanned surface. This is a coverage overclaim on a case added this round, not a vacuity: the case is real for line 1 and the hand-written-key half of CR-21 is genuinely closed."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "WR-51 — CONFIRMED BY MUTATION OF THE REAL FILE. I replaced the body of `preAnchoringExemptionKeyForFixtureOnly` (`:9304-9315`) with `return \"CONSTANT\";` and ran the gate suite: 434 passed (434). The counter-probe at `:10126-10152` is satisfied by any constant function, so the docblock's structural claim at `:9297-9303` — that it is `exemptionKeyFor` with the construct half removed — is asserted nowhere and nothing keeps the two builders in step."
+        issue: "WR-58 — WARNING, CONFIRMED BY INSPECTION. `constructHalf` in the census case (`:10399-10400`) is `k.slice(0, k.indexOf(EXEMPTION_ANCHOR_SEP))` with no `-1` guard, so a key missing the separator silently yields the key minus its last character rather than failing. The prefix case at `:10348-10354` asserts the separator is present for every DECLARED key first, and `surfaceExemptionKeys` output carries it by construction, so the exposure is narrow today — but the census reads both sides and guards neither itself."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "WR-52 — PARTIALLY REFUTED AND PARTIALLY CONFIRMED, BY EXECUTION. REFUTED: the reviewer's claim that the fixture would be green under `constructAnchorFor` reduced to a line copy is FALSE — I applied that reduction and ran the fixture by name; it failed with `the anchored key did NOT change when the occurrence moved from one construct to another` (1 failed, 433 skipped). The probe side is real. CONFIRMED: the fixture's own comment at `:10019-10021` states it deliberately picks an occurrence that `is not its own construct header`, which is precisely the shape CR-20(a) breaks, so its coverage sentence at `:9998-10001` (`This fixture proves the CROSS-CONSTRUCT case`) overclaims. Restate the coverage; add the own-header shape."
+        issue: "WR-60 — WARNING, CONFIRMED BY GREP. The same measured relocation is stated as `58 lines apart` at `:10383` and as `57 lines` at `:10795`, 412 lines apart in the same wave's work. One of the two is wrong and neither is derived."
       - path: "packages/backend/src/outbound-prohibition.spec.ts"
-        issue: "WINDOWS 41 / P38-D2 — ROUND 8's OWN DISCLOSURE, REPRODUCED EXACTLY AND WEIGHED AS A DISCLOSURE. Criterion (3)(d)'s re-run came back NON-CLEAN and said so. `:803` reads `CORE-11's box stays \\`[ ]\\`; wave 28 owns the flip` and `:901` reads `CORE-11's box stays \\`[ ]\\``, both unmarked, both present-tense, both attributing a flip to a wave 28 that never owned it. `:911` — TEN LINES BELOW `:901` — asserts `THE BOX'S STATE IS NOW STATED IN EXACTLY TWO PLACES`. I counted the sites that state it: `:803`, `:901`, `CORE11_BOX_EXPECTED` at `:10311`, and `REQUIREMENTS.md:46`'s checkbox. FOUR, all agreeing on `[ ]`. No contradiction of FACT, so this is not what keeps the box at `[ ]` — but `:911` is itself a false standing statement on a reader surface, which is the class criterion (3) is about. Recorded rather than repaired because the gate file was closed after 01-37 and 01-38 was prohibited from editing it; that is the right call and it was disclosed before I looked."
+        issue: "WR-56, WR-57, WR-59, IN-41 … IN-44 — REPORTED BY THE REVIEWER, NOT INDEPENDENTLY RE-EXECUTED BY ME, AND RECORDED AS SUCH. They are warnings and info about disclosure precision (the prefix case reading only the declared map; the key split written three times; the recogniser list describing `DECLARATION` more widely than the regex matches; limit (5)'s heading; `CORE11_BOX_EXPECTED` pinning a 17-byte prefix while the header says `BY BYTES`; nine colliding `it.each([` producers that are not in use). None of them changes the verdict, and I did not spend execution budget on them while two blockers were open."
+      - path: "packages/backend/src/outbound-prohibition.spec.ts"
+        issue: "`:981` — ROUND 9's OWN DISCLOSURE, WEIGHED AS ONE AND NOT AS SOMETHING I CAUGHT. Wave 41 ran its `wave 28` census case-INSENSITIVELY as well as case-sensitively, found `Wave 28 changed no rule, no fixture, no resolver and no registry row; its entire diff in this file is this comment.` at `:981` — invisible to every case-sensitive grep in the plan, in the review and in pass 9 — and left it standing DELIBERATELY with the reason in its own bytes, reporting it as a finding. I confirm the sentence is there, that it is present-tense about a wave thirteen waves in the past (the reviewer's IN-43), and that it states NO box state, which is the property WINDOWS 41 was sweeping for. Verify-block counts were left case-sensitive on purpose so they still cross-check the precondition-captured value. Also disclosed by round 9: `01-40-PLAN.md:174`/`:636` say `both return sites` where WR-53's extension left ONE — I confirm one `return NO_PRECEDING_CONSTRUCT` at `:9419` — and WR-49/WR-53 are handled as no-overclaim consequences and explicitly NOT claimed closed. A round that finds a defect its own grep could not see, reports it, and declines to launder the count is doing the thing this phase asks for."
     missing:
-      - "CORE-11 STAYS `[ ]`. A SEVENTH ROUND, AND — UNLIKE PASS 8 — NOT A FOURTH REVERT: the box is ALREADY `[ ]` at `4105fd0`, the pin at `:10311` already agrees, and round 8 did not flip it. Plan 01-38's P38-D3 deliberately left `requirements mark-complete` unrun and handed the determination here. That is the correct handoff and I am making the determination: the box may NOT move. Criterion (3) is unmet on its MECHANISM leg. Two of the three criteria are discharged, the document leg of the third is now discharged too, and what remains is one seam."
-      - "CR-20: MAKE THE ANCHOR IDENTIFY A SITE. Two changes, both small, and the file's own reviewer wrote both. (1) Open the backward scan STRICTLY ABOVE the occurrence — `for (let i = lineNumber - 1; i >= 1; i--)` — so an occurrence sitting ON a title or docblock line resolves to the `describe`/`const` that encloses THAT, which is what `the construct it sits under` means. (2) Make an ambiguous token LOUD: census every line's token and assert that each anchor in use is produced by exactly ONE line of the file. Then restate limit (5) to what executes. My two relocations — `:1838` -> `:7102` and `:305` -> under the `:361` table — should both land as failing-path fixtures, because a guard against relocation that has never been watched failing is the same unwatched assertion this file has spent ten waves removing, and round 8 built one such fixture while excluding the shape that breaks it."
-      - "CR-21: EXCLUDE THE SENTINEL FROM `nameableRemainder`'s NOTION OF NAMING SOMETHING, and assert the sentinel is never produced by an occurrence on the scanned surface. Both are green on arrival — I measured zero shipped occurrences resolving to it today — so this costs nothing now and is a real guard from the next sentence someone writes. Also correct the constant's docblock on two counts: it does not describe the `:9251` return (which fires when a construct DID resolve but named nothing), and it claims an observability the code does not have."
-      - "WR-54 + WR-50: PIN THE RECOGNISER ITSELF, and stop naming mechanisms that do not hold. I re-introduced WR-48's over-walk and the suite stayed green, so exclusion three's WIDTH is currently pinned by nothing at all. Assert the resolved range directly — `expect(closingBracketAfter(registryStart)).toBe(lineOf(l => l.startsWith('] as readonly ResolverRecord[]);')))`, or pin the size — and rewrite the closing sentence at `:9758-9761`: the `proof` token is monotone in width and cannot catch an over-walk, the band did not catch 1750, and the clause-count equality would not have caught this one either because the swallowed lines carry no clauses."
-      - "WR-51: PIN THE COUNTER-PROBE TO THE LIVE BUILDER'S LINE HALF, so the contrast is against the format CR-17 was actually measured in rather than against any constant."
-      - "WR-52: ADD THE OWN-HEADER SHAPE AS A SECOND ARRAY IN THE SAME CASE and restate the coverage sentence to name the 26/3 split. Note when doing so that the fixture's probe side IS real — I falsified the reviewer's stronger reading of this finding — so this is a widening, not a rebuild."
-      - "WINDOWS 41: SWEEP `:803-804` AND `:901`, AND CORRECT `:911`. The gate file is open again now that the round is closed. Either mark the two occurrences as history in their own bytes, per P38-D1's line-granularity rule, or delete them under wave 33's own pointer-not-a-bound disposition — and change `EXACTLY TWO PLACES` to the measured count or to a form that does not state a count."
-      - "DO NOT RE-OPEN THE RE-SCOPE. Pass 8 tested it for a quietly-lowered bar and found none; I did not re-test it and I am not reporting it as a defect. The `[x]` is unearned because criterion (3)'s mechanism is bypassable, not because the bar is wrong. What I will add is that round 8 is EVIDENCE FOR the re-scope rather than against it: the two document legs closed in one round, and they closed against my measurement and not merely against a summary."
+      - "CORE-11 STAYS `[ ]`. AN EIGHTH ROUND, AND NOT A FOURTH REVERT: the box is already `[ ]` at `4105fd0`, `CORE11_BOX_EXPECTED` at `:10983` already agrees, round 9 did not flip it, and plan 01-41 did not run `requirements mark-complete`. That is the correct handoff and I am making the determination: THE BOX MAY NOT MOVE. Criterion (3) is unmet on its MECHANISM leg. Two of the three criteria are discharged, the document leg of the third has been discharged for two rounds running, and what remains is one seam."
+      - "CR-22 (which is CR-20's real residual, and it must be BOTH parts). (1) REPLACE THE SENTENCE WITH THE MEASURED QUANTITY at `:9090-9093` and `:9343-9345`. The interchangeability residual is the ANCHOR'S SHADOW, not the occurrence-to-anchor distance: measured with the live builder over all 8,846 surface lines, the widest shadow is `:417`'s at 574 surface lines / 1,155 raw (419..1574), already holding four shipped occurrences; then 283, 202, 115, 98. 234 is the largest distance any shipped sentence happens to sit from its anchor and it bounds nothing. (2) PIN THE SHADOW so the next widening is loud — group SURFACE_LINES by resolved anchor and assert the maximum against a pinned value, in the shape this file already uses for every other measured residual. DO NOT close this by folding line numbers into the key; the census case's own message forbids it and is right to."
+      - "CR-23: MAKE THE TWO `.from` ASSERTIONS ASSERT. Pin each opening endpoint against a locator derived INDEPENDENTLY of the expression under test — a full-line literal, proved to match exactly one line first, exactly the treatment `REGISTRY_CLOSE` already gets at `:10092-10100` — and correct `:9963-9967`, which claims all five locators are proved unique when three are. Do not delete the assertions."
+      - "WR-55: RESTATE THE SENTINEL CASE'S REACH TO WHAT IT EXECUTES. Measured over all 11,079 lines, exactly one line — line 1 — can resolve to the sentinel, so `bounds it over the occurrences quantifierOccurrences finds across SURFACE_LINES and over nothing wider` (`:9229-9232`, `:10295-10300`) overstates a case that is green by construction over 8,845 of 8,846 surface lines. Say that, in the bytes. The DECLARED-KEY half of CR-21 needs no change: I drove the exact CR-17 key through it and it fired."
+      - "WR-58, WR-60: add the `indexOf === -1` guard to the census's `constructHalf`, and derive the one relocation distance rather than writing it twice at two different values."
+      - "DO NOT RE-OPEN THE 2026-08-25 RE-SCOPE. Pass 8 tested it for a quietly-lowered bar and found none; pass 9 added that round 8 is evidence FOR it; I did not re-test it and I am not reporting it as a defect. The `[x]` is unearned because criterion (3)'s mechanism is bypassable, not because the bar is wrong. What I add is stated as a finding below: nothing in the re-scoped bar — DERIVED, DRIFT-DETECTABLE, SOLE BOUND — actually requires the anchor to identify a SITE. It requires the disclosure to be accurate and contradicted nowhere. That distinction is the cheapest route out of this seam and it belongs to the operator, not to me."
+      - "THE MECHANISM JUDGEMENT, STATED BECAUSE IT WAS ASKED FOR AND BECAUSE THE OPERATOR WILL ACT ON IT. See `## The mechanism judgement` in the body. Short form: I do NOT believe the line-text approach can be made to identify a site, and the next round should change either the mechanism or the claim."
 deferred: []
 behavior_unverified_items: []
 coincidental_reliance_items:
   - truth: "URL userinfo does not reach `observations.url`"
     reason: undeclared-precondition
-    harden: "Carried forward from rounds 3-7 unchanged and still correct. The `://` precondition is DECLARED at `schema.spec.ts:115-123` rather than assumed, but the guarantee still rests on `consumer.ts` handing over an absolute `rr.request.getUrl()`. Advisory, no score effect."
+    harden: "Carried forward from rounds 3-9 unchanged and still correct. The `://` precondition is DECLARED at `schema.spec.ts:115-123` rather than assumed, but the guarantee still rests on `consumer.ts` handing over an absolute `rr.request.getUrl()`. Advisory, no score effect."
   - truth: "The derived residual states the whole bound on CORE-11"
     reason: undeclared-precondition
-    harden: "REOPENED ONE LEVEL FURTHER IN FOR THE FOURTH CONSECUTIVE ROUND, and the pattern is now the finding. Round 5: nothing bound a `clause` to its branch — closed by wave 29. Round 6: the guards scanned only `RESOLVER_REGISTRY[].clause` while 3,464 hand-written lines stated bounds — closed by wave 33 deleting them. Round 7: the whole-file guard reached those lines but its EXEMPTION MAP was unanchored — addressed by wave 36's `constructAnchorFor`. Round 8: the anchor is a masked LINE, not a site, so 7 of 29 entries still relocate invisibly and the sentinel added beside it re-opens the original shape verbatim. Each round the undeclared precondition moves one layer down the SAME mechanism, and each round the layer is thinner: 29 of 29 relocatable, then 7 of 29. Harden by making the anchor a site — a strictly-above scan plus a uniqueness census — and note that this is now a two-line change rather than a new mechanism."
+    harden: "REOPENED ONE LEVEL FURTHER IN FOR THE FIFTH CONSECUTIVE ROUND, and the pattern is now more informative than any single instance. Round 5: nothing bound a `clause` to its branch — closed by wave 29. Round 6: the guards scanned only `RESOLVER_REGISTRY[].clause` while 3,464 hand-written lines stated bounds — closed by wave 33. Round 7: the whole-file guard reached those lines but its EXEMPTION MAP was unanchored — addressed by wave 36's `constructAnchorFor`. Round 8: the anchor was a masked LINE, not a site — 7 of 29 entries relocatable. Round 9: self-anchoring and ambiguous tokens are both GONE and measured gone (0 of 29, 0 of 29), and the residual moved to the ANCHOR'S SHADOW — 574 surface lines under one header, four shipped occurrences inside it, a 1,129-line relocation green. The layer is no longer getting thinner: 29 of 29 relocatable, then 7 of 29, and now 4 of 29 in one shadow plus 4 more in the next and 3 in the next. Hardening by narrowing the line-text shape has reached its floor; the shadow is a property of recogniser DENSITY over this file's prose, not of the key format, and no key format fixes it."
   - truth: "The head-side truncation residual is disclosed accurately"
     reason: fixture-only
     harden: "WR-39, carried from round 6. Plan 01-34 reports the ten-character coincidence removed from all three surfaces and the discriminator re-derived across four parameter-name lengths; I did not re-execute that sweep this pass and it is not on the critical path for truth 9. Advisory, no score effect — the REDACTION itself is unaffected and STORE-03's sweep evidence stands."
@@ -70,41 +73,41 @@ prohibitions:
     declared_status: unresolved
     status: unverified
     flagged: true
-    evidence: "FAIL-CLOSED for the eighth consecutive round, but this round THE LEDGER AND I AGREE — the row says `[ ]`, the pin says `[ ]`, and I find criterion (3) unmet. THE MUST-NOT ITSELF HOLDS AND I RE-ESTABLISHED IT INDEPENDENTLY: `pnpm test` 31 files / 1374 tests exit 0; `tsc --build` exit 0; `pnpm check:bundle` -> ONE specifier, `crypto`; the walk covers 23 shipped non-spec modules across both SOURCE_ROOTS at ZERO violations; and `git diff --name-only 9b3ff46..HEAD -- packages/ scripts/` filtered of `.spec.ts` is EMPTY, so no shipped byte moved this round. RE-CONFIRMED BY MY OWN PROBES THROUGH THE SHIPPED `auditSource`: all six operator-around-a-global shapes report; `fetch.call(null, url)` and `const f = fetch; f.call(null, url)` -> [\"outbound-fetch\"]; `const m = \"send\"+\"Beacon\"; navigator[m](u,d)` -> [\"outbound-unanalysable\"]. STILL SILENT AND STILL PROPERLY DISCLOSED: `WebSocket.call(null, u)` -> `[]`, carried as the named row `silence-outbound-ctor-receiver-position` with an executed probe and counter-probe, one of 26 `measured-silence` rows in a 61-row registry. WHY THIS IS STILL `unverified`: the re-scoped bar admits an `[x]` ONLY when the residual is DERIVED, DRIFT-DETECTABLE and THE SOLE BOUND. (1) and (2) hold. (3)'s DOCUMENT leg is now discharged — CR-18 and CR-19 both closed against my own measurement. (3)'s MECHANISM leg is not: I planted a shipped sentence into an unrelated construct 5,264 lines away for a byte-identical key (434/434 green), relocated a shipped table cell between two identically-headed tables for a byte-identical key (434/434 green), and drove the `!NO-PRECEDING-CONSTRUCT!` sentinel — CR-17's `\"{q2} :: q2\"` shape with twenty letters bolted on — through the very case added in the same wave to forbid it (434/434 green, twice). A `verification: gate` prohibition whose own acceptance criterion is unmet is not verified, and the box correctly reads `[ ]`."
+    evidence: "FAIL-CLOSED for the ninth consecutive round, and for the second round running THE LEDGER AND I AGREE — the row says `[ ]`, the pin says `[ ]`, and I find criterion (3) unmet. THE MUST-NOT ITSELF HOLDS AND I RE-ESTABLISHED IT INDEPENDENTLY: `pnpm test` 31 files / 1379 tests exit 0; `tsc --build` exit 0; `pnpm check:bundle` -> ONE specifier, `crypto`; the walk covers 23 shipped non-spec modules across both SOURCE_ROOTS at ZERO violations; `git diff --name-only 9b3ff46..HEAD -- packages/ scripts/` filtered of `.spec.ts` is EMPTY and `git log --stat bc0f4c2..HEAD -- packages/` touches one file. RE-EXECUTED THROUGH THE SHIPPED `auditSource` THIS SESSION: `(ok && globalThis).fetch(url)`, `(globalThis ?? self).fetch(url)`, `fetch.call(null,url)` and `const f = fetch; f.call(null,url)` all -> [\"outbound-fetch\"]; `(ok && navigator).sendBeacon(u,d)` -> [\"outbound-beacon\"]; `sdk.requests.send(req)` -> [\"outbound-send\"]; `const m=\"send\"+\"Beacon\"; navigator[m](u,d)` -> [\"outbound-unanalysable\"]; clean source -> []. STILL SILENT AND STILL PROPERLY DISCLOSED: `WebSocket.call(null,u)` -> `[]`, carried as the named row `silence-outbound-ctor-receiver-position` at `:5696`, one of 26 `measured-silence` rows in a 61-row registry, with the removed `silence-operator-around-global-receiver` still absent. WHY THIS IS STILL `unverified`: the re-scoped bar admits an `[x]` ONLY when the residual is DERIVED, DRIFT-DETECTABLE and THE SOLE BOUND. (1) and (2) hold. (3)'s DOCUMENT leg stays discharged. (3)'s MECHANISM leg is not: I relocated a shipped occurrence 514 lines and then 1,129 lines for a byte-identical key at 439/439 green, with its exemption reason false in both new homes; the residual the file publishes as 234 lines measures 574 surface lines; and one planted decoy line removed 104 lines from the scanned surface at 439/439 green through two assertions that cannot fail. A `verification: gate` prohibition whose own acceptance criterion is unmet is not verified, and the box correctly reads `[ ]`."
   - requirement_id: STORE-03
     statement: "MUST NOT persist a query-string VALUE from a target-controlled URL into observations.url. Parameter names, path, scheme and host are retained; every value is replaced before the row is written."
     verification: gate
     declared_status: resolved
     status: verified
     flagged: false
-    evidence: "HOLDS. Carried forward from rounds 6-7. `packages/backend/src/store/observations.ts` has been byte-identical in its non-comment lines since wave 26 and no shipped source changed this round, so round 6's 3,612-input sweep (four parameter-name lengths x 301 offsets x three grammars, zero occurrences of the secret in 7,224 outputs, zero outputs over `URL_MAX`), round 5's 16,160-input sweep and wave 35's 19,772-input re-measurement all apply unchanged. Regression-checked this round inside the green 1,374-test suite. WR-39 remains a DISCLOSURE defect about which offsets are unstable, not a failure of the prohibition."
+    evidence: "HOLDS. Carried forward from rounds 6-9. `packages/backend/src/store/observations.ts` has been byte-identical in its non-comment lines since wave 26 and no shipped source changed this round, so round 6's 3,612-input sweep (four parameter-name lengths x 301 offsets x three grammars, zero occurrences of the secret in 7,224 outputs, zero outputs over `URL_MAX`), round 5's 16,160-input sweep and wave 35's 19,772-input re-measurement all apply unchanged. Regression-checked this round inside the green 1,379-test suite. WR-39 remains a DISCLOSURE defect about which offsets are unstable, not a failure of the prohibition."
   - requirement_id: STORE-07
     statement: "MUST NOT render a caught exception into a persisted or logged string without passing it through describeError first."
     verification: gate
     declared_status: resolved
     status: verified
     flagged: false
-    evidence: "Carried forward from rounds 4-7, where the gate's own `auditSource` was executed in both directions: `flag ? e.message : \"none\"`, `e.message ?? \"none\"`, `e.message || \"none\"` and `flag && e.message` all report `unredacted-concat`, and every `describeError` twin stays quiet. No shipped source changed this round. Regression-checked inside the green 1,374-test suite."
+    evidence: "Carried forward from rounds 4-9, where the gate's own `auditSource` was executed in both directions: `flag ? e.message : \"none\"`, `e.message ?? \"none\"`, `e.message || \"none\"` and `flag && e.message` all report `unredacted-concat`, and every `describeError` twin stays quiet. No shipped source changed this round. Regression-checked inside the green 1,379-test suite."
   - requirement_id: CORE-10
     statement: "MUST NOT present partial passive coverage as complete."
     verification: judgment
     status: unverified
     flagged: true
-    evidence: "Carried forward unchanged and previously accepted by the operator at UAT test 3. Nothing changed this round. Counter identifiers remain honest — `proxiedResponsesObserved`, and the cap-drop counter at `telemetry.ts:100` is labelled `CORE-03 visible overflow`. Judgment-tier, autonomous run: NON-AUTHORITATIVE LLM-judge verdict, human review recommended."
+    evidence: "Carried forward unchanged and previously accepted by the operator at UAT test 3. Nothing changed this round. Counter identifiers remain honest — `proxiedResponsesObserved`, and the cap-drop counter at `telemetry.ts:100` is labelled `CORE-03 visible overflow`, which I re-read this session. Judgment-tier, autonomous run: NON-AUTHORITATIVE LLM-judge verdict, human review recommended."
   - requirement_id: STORE-01
     statement: "MUST NOT retain operator browsing evidence beyond what the analysis needs — no body bytes, headers, cookies, or column capable of holding a secret."
     verification: judgment
     status: unverified
     flagged: true
-    evidence: "Carried forward from rounds 3-7 substantially unchanged; nothing changed this round. The column-shape half is gated (PRAGMA-read allowlist + forbidden-name check). The 'capable of holding a secret' half is honestly bounded rather than contradicted: `observations.url` can still hold a path-embedded token and a retained parameter NAME, both named in the OPEN list, both pinned, the second kept BY POLICY under the operator's 2026-08-21 UAT decision. Judgment-tier: NON-AUTHORITATIVE, human review recommended."
+    evidence: "Carried forward from rounds 3-9 substantially unchanged; nothing changed this round. The column-shape half is gated (PRAGMA-read allowlist + forbidden-name check). The 'capable of holding a secret' half is honestly bounded rather than contradicted: `observations.url` can still hold a path-embedded token and a retained parameter NAME, both named in the OPEN list, both pinned, the second kept BY POLICY under the operator's 2026-08-21 UAT decision. Judgment-tier: NON-AUTHORITATIVE, human review recommended."
 ---
 
-# Phase 1: Skeleton, Persistence, Compatibility — Verification Report
+# Phase 1: Skeleton, Persistence & Compatibility — Verification Report
 
 **Phase Goal:** A plugin that installs, observes every proxied response without stalling, and durably remembers what it saw — with nothing analysed yet beyond a hash.
-**Verified:** 2026-08-26T14:40:00Z
+**Verified:** 2026-08-26T17:50:00Z
 **Status:** gaps_found
-**Re-verification:** Yes — verification pass 9, after gap-closure ROUND 8 (waves 36, 37, 38), commits `6c2c5ce..e0d17b8`
+**Re-verification:** Yes — verification pass 10, after gap-closure ROUND 9 (waves 39, 40, 41), commits `bc0f4c2..HEAD`
 
 ---
 
@@ -112,276 +115,304 @@ prohibitions:
 
 **CORE-11's box may NOT move. It reads `[ ]`, and it stays `[ ]`.**
 
-This is the seventh consecutive round at **8/9**, and the same truth every time. But it is
-**not a fourth revert** — round 8 did not flip the box, `4105fd0` had already reverted it,
-`CORE11_BOX_EXPECTED` at `:10311` already agrees, and plan 01-38's P38-D3 deliberately left
-`requirements mark-complete` unrun and handed the determination here. That is the correct
-handoff, and this is the determination.
+Eighth consecutive round at **8/9**, and the same truth every time. Round 9 built exactly
+what pass 9 asked for, every published number it states about its own work is true, and
+**four of pass 9's six items are genuinely closed against my own mutations**. The fifth —
+CR-20 — closed both *shapes* it was written about and did not close the *class*. The sixth,
+WR-54, closed one of its two endpoints.
 
-**Criterion (3) THE SOLE BOUND is unmet on its MECHANISM leg. The DOCUMENT leg is closed.**
+**Criterion (3) THE SOLE BOUND is unmet on its MECHANISM leg, for the third consecutive round.**
 
-That split is the whole practical content of this report, and it is new:
+| Criterion 3 leg | Pass 8 | Pass 9 | Pass 10 |
+| --- | --- | --- | --- |
+| Document surfaces | ✗ both failed | ✓ both CLOSED | ✓ still closed, and WINDOWS 41 swept the last three sites |
+| The exemption-anchoring mechanism | ✗ 29 of 29 relocatable | ✗ 7 of 29 relocatable | ✗ **0 of 29 self-anchoring, 0 ambiguous — and a 1,129-line relocation still green** |
 
-| Criterion 3 leg | Pass 8 | Pass 9 |
+The hole is not the same hole and it is not smaller in the way the last two rounds were
+smaller. It moved from the *key format* to the *file's recogniser density*, and that is a
+different kind of thing. See **The mechanism judgement** below, which the brief asked for
+explicitly.
+
+---
+
+## Everything below is a command I ran this session, on the real tree
+
+**Baseline, established BEFORE any mutation and re-established AFTER every restore:**
+
+```
+$ pnpm test                → Test Files 31 passed (31) · Tests 1379 passed (1379) · exit 0
+$ pnpm exec tsc --build    → exit 0
+$ pnpm check:bundle        → packages/backend/dist/index.js: 1 import specifier(s): crypto
+$ pnpm exec vitest run packages/backend/src/outbound-prohibition.spec.ts
+                           → Test Files 1 passed (1) · Tests 439 passed (439)
+$ find packages/*/src -name '*.ts' ! -name '*.spec.ts' | wc -l        → 23
+$ git diff --name-only 9b3ff46..HEAD -- packages/ scripts/ | grep -v '\.spec\.ts$'   → EMPTY
+```
+
+`git log --stat bc0f4c2..HEAD -- packages/` touches exactly one file: the gate spec,
+seven commits, no shipped source byte.
+
+---
+
+## The reviewer's two BLOCKERs — reproduced, both of them
+
+The reviewer used an out-of-tree harness that lifted the round-9 helpers. I was asked to
+reproduce or refute against the real tree, so **every result below is a mutation planted in
+`packages/backend/src/outbound-prohibition.spec.ts` and the real gate suite run over it,
+restored between every run.**
+
+### CR-20 is NOT CLOSED / CR-22 — CONFIRMED. Two relocations, both green.
+
+The occurrence at `:436` is the wrapped ASCII-table cell
+
+```
+//                                                                       any depth
+```
+
+whose entire normalized content is a declared phrasing, so its line half masks away and its
+key is `SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ {q2} :: q2` — the one key of
+which the file itself says, at `:10281-10283`, *"the construct half is what names it."* Its
+exemption reason at `:9117-9118` reads *"HEADER. A wrapped cell in the same ASCII table,
+labelling what the keyReceiver row already carries."*
+
+| relocation | distance | result |
 | --- | --- | --- |
-| Document surfaces — `REQUIREMENTS.md:46` (CR-18), `STATE.md:366` (CR-19) | ✗ both failed | **✓ both CLOSED, against my own measurement** |
-| The exemption-anchoring mechanism (CR-17) | ✗ failed, 29 of 29 relocatable | ✗ **still failed, 7 of 29 relocatable** (CR-20, CR-21) |
+| out of the table, into header section 3, under *"the named non-vacuity assertion is the real protection against a walk that shrinks"* | **514 lines** | `Tests 439 passed (439)` |
+| out of the table, **across the entire machine-owned derived-residual span** (`/*` at `:952` … `*/` at `:1565`), to the top level beside the imports | **1,129 lines** | `Tests 439 passed (439)` |
 
-Round 8 closed two of the three things pass 8 asked for, and its correction of the third
-narrowed the hole from twenty-nine entries to seven. It did not close it.
+The key is byte-identical in both — proved by the green run itself, since the stale-entry
+check and the one-entry-per-occurrence equality both fail on any key change. The stated
+reason is false in both new homes. Nothing reported.
+
+**The cause, measured with the LIVE builder rather than argued.** I inserted a temporary case
+inside the gate's own `describe` — so it reads the shipped `constructAnchorFor` and the
+shipped `SURFACE_LINES` — grouped all 8,846 surface lines by resolved anchor, and threw the
+result out through an assertion message:
+
+```
+anchor token                                            surface lines   raw span      shipped occurrences
+SPELLING (operator, by POSITION) RESOLVED BY REPORTS          574         419..1574            4
+packages/backend/src/outbound-prohibition.spec.ts — …         283           2..284             4
+it.each([                                                     202        7012..8947            —
+WHY THIS EXISTS, AND WHAT IT IS NOT.                          115        8986..9100            —
+THE LITERAL DESCENT OVER AN OPERATOR INITIALIZER — …           98        2540..2637            —
+```
+
+Limit (5) at `:9090-9093` and the `constructAnchorFor` docblock at `:9343-9345` both close on:
+
+> *"RE-MEASURED AT WAVE 39 AFTER BOTH CHANGES, the maximum distance from an occurrence to its
+> anchor is 234 LINES … so `the same construct` can span a couple of hundred lines and **the
+> interchangeability residual is that wide**."*
+
+**The 234 is right — I re-measured it at 234.** The inference is wrong, and the reviewer's
+diagnosis of why is exactly right: occurrence-to-anchor distance is a fact about where 29
+sentences happen to sit; the residual is the width of the anchor's **shadow**. Measured, the
+residual is **574 surface lines / 1,155 raw**, five times the published figure, and my
+1,129-line relocation never left it.
+
+**Why round 9's mechanism cannot reach this.** Both of its changes are real, and I proved each
+by watching it fail:
+
+```
+$ # revert BOTH wave-39 scan bounds (i = lineNumber, k <= lineNumber)
+  → Tests 2 failed | 437 passed (439)
+    "an occurrence sitting ON its own construct header (an `it(` TITLE line) kept the SAME
+     anchored key when its enclosing construct changed"
+
+$ # duplicate line 417's header text 533 lines below it
+  → Tests 1 failed | 438 passed (439)
+    "1 anchor(s) IN USE are not produced by exactly one line of …"
+```
+
+Both fire. Neither is relevant: the census asserts the anchor has **one producer LINE**, and
+`:417` *is* one line. Self-anchoring and token ambiguity were the two ways an anchor could
+name *nothing*; the shadow is the way an anchor names *too much*, and no key format fixes it.
+
+**This is the phase's signature defect at its tenth recorded instance, and for the second
+consecutive round it sits inside the paragraph written to state the reach of the fix for the
+ninth.**
+
+### CR-23 — CONFIRMED. One planted line, 104 lines off the surface, green.
+
+`EXCLUSIONS` derives its opening anchors at `:9983-9988`; the WR-54 case recomputes **the same
+two expressions, character for character, over the same `gateLines`, through the same
+`lineOf`** at `:10080-10085`, then asserts `EXCLUSIONS[n].from` against them at `:10131-10134`
+and `:10150-10153`. Tautologies — true of every possible file, including one where the locator
+matches nothing and `-1 === -1`.
+
+```
+$ # plant  export const RESOLVER_REGISTRY_DECOY: readonly number[] = Object.freeze([1]);
+$ #        104 lines above the real registry (4057 vs 4161)
+  → Tests 439 passed (439)
+```
+
+including the assertion whose own message reads *"Both endpoints are pinned because a width is
+two numbers, and pinning only the end leaves the other half free to move."*
+
+I then measured the damage **from inside the suite**, by instrumenting the surface non-vacuity
+assertion so it printed its own number:
+
+```
+without decoy:  expected 8846 to be -1
+with decoy:     expected 8742 to be -1
+```
+
+**104 pre-existing gate-file lines silently left the scanned surface** (105 counting the decoy
+line itself). The coarse band still passed, the `proof` token was still in range, the `to` pin
+still passed. My arithmetic differs from the reviewer's by one line — they report 8848 → 8743
+— and the difference is immaterial to the finding. Any declared phrasing living in those 104
+lines is now unguarded and nothing says so.
+
+`:9963-9967` claims *"each locator proved to match exactly ONE line before it is used."*
+Three of the five are.
 
 ---
 
-## The two Critical findings, adjudicated by MY OWN EXECUTION against the real file
+## Pass 9's six items — closed or not, each by execution
 
-The reviewer used an out-of-tree scratch harness that lifted the round-8 helpers verbatim.
-I was asked to reproduce or refute against the real tree, so **every result below comes from
-a mutation planted in `packages/backend/src/outbound-prohibition.spec.ts` and the real gate
-suite run over it.** All mutations were restored; `git diff --exit-code -- packages/ scripts/ tests/`
-returns 0 at the end of this session.
+### 1. CR-20 — **NOT CLOSED.** Both prescribed changes shipped and both are real; the finding is not closed.
 
-**Baseline, established before any mutation:** `pnpm test` → 31 files / **1374 tests**, exit 0.
-`pnpm exec tsc --build` → exit 0. `pnpm check:bundle` → `packages/backend/dist/index.js: 1 import specifier(s): crypto`.
-Gate suite alone → **434 passed (434)**.
+Delivered and verified real: strict-above backward scan (`:9388`), forward walk bounded
+strictly above (`:9408`), the uniqueness census, the prefix case, and **both** of pass 9's
+relocations landed as permanent fixtures that I watched go RED. Published counts, re-measured
+by me with the live builder: `{"occurrences":29,"keys":29,"declared":29,"ownHeader":0,
+"notOwn":29,"sentinel":0,"maxDist":234}` — 3 → 0 self-anchoring, every number true.
+**And the residual moved rather than closed. See CR-22 above.**
 
-### CR-20 — CONFIRMED. Both legs, both executed, both green.
+### 2. CR-21 — **CLOSED.**
 
-#### (a) Self-anchoring — a shipped sentence moved 5,264 lines into a different construct, invisibly
-
-I deleted the shipped occurrence at `:1838`:
-
-```
- * Every non-spec module the plugin SHIPS, under either source root, at any depth.
-```
-
-from the docblock at `:1837` that describes the **FILE WALK's directory recursion**, and
-planted it verbatim at `:7102`, immediately above an `it(` about `receiverAliases`' logical-assignment
-branch, inside `describe("an outbound receiver, however it was bound")`:
+The sentinel is stripped **by reference** at `:9256` (`.split(NO_PRECEDING_CONSTRUCT).join("")`),
+never by re-spelling, so renaming the constant cannot silently un-fix it. I planted the exact
+key pass 9 drove through at 434/434 green:
 
 ```
-  // Every non-spec module the plugin SHIPS, under either source root, at any depth.
+$ # add  "!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"  to HEADER_QUANTIFIER_EXEMPTIONS
+  → Tests 3 failed | 436 passed (439)
+    "exemption key "!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2" carries an ANCHOR that reduces to
+     NOTHING once its {qN} tokens, whitespace and punctuation are removed … expected 0 to be
+     greater than 0"
 ```
 
-**Result: `Tests 434 passed (434)`. Zero failures.** Restored; 434 passed.
+Pass 9 measured that remainder at 20 and the case passing. It now scores 0 and the case fires.
+**Caveat, and it is mine rather than the reviewer's to sharpen: the *other* half — the
+occurrence-side sentinel case — is nearly vacuous.** See WR-55 below.
 
-That exemption's entire reason is construct-dependent — it reads *"Not a claim about the
-OUTBOUND WALK's resolution reach at all: it describes the FILE WALK's directory recursion"*.
-Relocated, the sentence becomes a false universal about the outbound walk, sitting in the
-outbound walk's own describe block. **The reason is now false and the key did not move.**
-
-**The cause, read off the code rather than guessed.** `constructAnchorFor` opens its backward
-scan **at** the occurrence, and its forward walk is bounded **by** the occurrence:
-
-```ts
-for (let i = lineNumber; i >= 1; i--) {        // :9226 — starts AT the occurrence
-  ...
-  for (let k = head; k <= lineNumber; k++) {   // :9245 — bounded BY the occurrence
-```
-
-For a docblock's first content line, or for an `it(` title, that forward walk lands on the
-occurrence's **own line**, and the construct half becomes a 64-character prefix of the line
-half. Three shipped keys are visibly of this shape on the face of the map — you can read the
-duplication without running anything:
+### 3. WR-51 — **CLOSED.**
 
 ```
-"Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2"
+$ # preAnchoringExemptionKeyForFixtureOnly → return "CONSTANT";
+  → Tests 1 failed | 438 passed (439)
 ```
 
-#### (b) Ambiguous anchor tokens — a table cell moved between two identically-headed tables, invisibly
+Pass 9 ran that identical mutation at **434 of 434 green**. The counter-probe is now pinned to
+the live builder's line half over both array pairs.
 
-The anchor is a line of text, and lines repeat. Measured against the real file:
-
-```
-$ grep -c '^\s*it\.each(\[$'  →  10
-```
-
-and `SPELLING (in receiver-key position) RESOLVED BY REPORTS` is produced by three table
-headers at `:283`, `:299` and `:361`.
-
-I moved the shipped occurrence at `:305` — the `var` twin cell
-``//        k = "requests"; sdk[k]                   ANY-BINDING-WINS`` — out of the CR-10
-table headed at `:299` and into the **wave-34 logical-assignment table** headed at `:361`,
-which is about `??=` spellings. Its exemption reason reads *"The same table cell one row
-down, for the `var` spelling"* — false in its new home.
-
-**Result: `Tests 434 passed (434)`.**
-
-#### (c) The disclosure is wrong, not merely incomplete — and that is what makes this a blocker
-
-Limit (5) at `:9029-9036` says, flatly:
-
-> an exemption written for one construct is **NOT** discharged by an occurrence sitting under
-> a DIFFERENT one. IT DOES NOT FOLLOW THAT AN EXEMPTION CANNOT BE DISCHARGED BY A DIFFERENT
-> OCCURRENCE: TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN INTERCHANGEABLE
-
-I executed two cross-construct relocations that the first sentence forbids and the second
-does not describe. **This is a stated reach exceeding an executed reach, inside the paragraph
-written to state the reach of the fix for that exact defect.** Two levels deep now.
-
-### CR-21 — CONFIRMED. Two steps, both green, plus the grep.
-
-**The arithmetic, run rather than read:**
+### 4. WR-54 + WR-50 — **CLOSED for the `to` endpoints, NOT for the `from` endpoints.**
 
 ```
-anchor    = "!NO-PRECEDING-CONSTRUCT! §§ {q2}"
-remainder = "NOPRECEDINGCONSTRUCT"   len 20
-passes toBeGreaterThan(0)?  true
+$ # CLOSES_FROZEN_ARRAY → /^\]\);$/   (re-introducing WR-48's 117-line over-walk)
+  → Tests 1 failed | 438 passed (439)   ·   expected 5910 to be 5793
 ```
 
-So the case at `:9971` — *"no exemption key's ANCHOR reduces to nothing"*, added in the **same
-commit** as the sentinel, to forbid exactly this shape — passes it.
+Pass 9 ran that identical revert at **434 of 434 green**. The closing sentence was also
+replaced against three measured refutations, which I read at `:9950-9975` and which is honest
+about what the `proof` token, the band and the clause-count equality each cannot do. **The
+`from` half is CR-23 and it is a blocker.**
 
-**Step 1.** Planted a bare docblock whose occurrence line masks away entirely, so the forward
-walk finds nothing nameable and the builder returns the sentinel, plus the matching exemption
-entry `"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"`:
+### 5. WR-52 — **CLOSED.**
 
-```
-  /**
-   * any depth
-   */
-```
+Own-header shape added as a second array pair; coverage restated at `:10462-10470` to the
+measured 26/3 split; pass 9's refutation of the reviewer's stronger reading carried into the
+bytes at `:10472-10480`. The new pair is watched failing — it is one of the two cases that go
+RED when I revert the scan bounds.
 
-**Result: 434 passed (434).**
+### 6. WINDOWS 41 — **CLOSED, all three sites.**
 
-**Step 2.** With the exemption entry **unchanged**, moved that docblock ~1,800 lines away into
-the middle of an `it.each` parameter table — a completely unrelated construct.
-
-**Result: 434 passed (434).**
-
-`"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"` is precisely CR-17's `"{q2} :: q2"` with twenty
-letters of decoration bolted on. It names no construct and no line, and it is laundered
-through the one case that exists to catch it.
-
-**And nothing observes the sentinel.** `grep -n "NO_PRECEDING_CONSTRUCT"` returns **four**
-hits: the declaration at `:9167` and the two `return` sites at `:9251` and `:9253`. No
-`expect`, no assertion. The docblock's claim that an empty anchor *"may not be produced
-silently by the builder itself"* names a mechanism that does not exist.
+`:803-811` and `:910-917` are now marked, dated history brackets that point at the two
+authoritative surfaces and assert nothing. `:925-943` replaces the false *"EXACTLY TWO
+PLACES"* with a form that states **no count at all** and names what the file cannot see
+instead of silently counting it. Measured after the sweep: the only site in this file stating
+the box's state is `CORE11_BOX_EXPECTED` at `:10983` (`"- [ ] **CORE-11**"`), and
+`.planning/REQUIREMENTS.md:46` reads `- [ ] **CORE-11**`. Four sites → two, one of them here.
 
 ---
 
-## Where I DISAGREE with the reviewer, stated plainly
+## Round 9's own disclosures — weighed as disclosures
 
-I was asked to adjudicate, not inherit, and one finding does not survive execution.
+**Wave 41 ran its `wave 28` census case-INSENSITIVELY as well**, found `:981` —
+*"**W**ave 28 changed no rule, no fixture, no resolver and no registry row…"* — invisible to
+every case-sensitive grep in the plan, in the review and in pass 9, left it standing
+deliberately with the reason in its own bytes, and reported it as a finding. I confirm the
+sentence is there, that it is present-tense about a wave thirteen waves past, and that **it
+states no box state**, which is the property the sweep was for. Verify-block counts were left
+case-sensitive on purpose so they still cross-check the precondition-captured value. That is a
+round finding a defect its own grep could not see and declining to launder the count.
 
-**WR-52's sharper claim is FALSE as written.** The reviewer says the new fixture *"would be
-green with `constructAnchorFor` reduced to `(lines, n) => maskQuantifiers(normalizeGateLine(lines[n - 1] ?? ""))`"*.
-I applied exactly that reduction to the real file and ran the fixture by name:
+Also disclosed and confirmed: `01-40-PLAN.md:174`/`:636` say *"both return sites"* where
+WR-53's extension left **one** — `grep -n NO_PRECEDING_CONSTRUCT` gives a single
+`return NO_PRECEDING_CONSTRUCT` at `:9419` — and WR-49/WR-53 are handled as no-overclaim
+consequences, explicitly **not** claimed closed.
 
-```
-× a CROSS-CONSTRUCT relocation yields a DIFFERENT anchored key … 6ms
-AssertionError: the anchored key did NOT change when the occurrence moved from one construct to another.
-Tests  1 failed | 433 skipped (434)
-```
-
-**The fixture's probe side is real and it catches a line-copying anchor.** What survives of
-WR-52 is the narrower charge, and it is a fair one: the fixture deliberately picks an
-occurrence that *"is not its own construct header"*, so it is structurally blind to the three
-shipped occurrences that are — and its coverage sentence *"This fixture proves the
-CROSS-CONSTRUCT case"* overclaims. **Coverage overclaim, not vacuity.** Round 8 built a real
-fixture and then described it as covering more than it does.
+**Both land in round 9's favour.** For the first time in this phase, the verifier found
+nothing the reviewer had missed.
 
 ---
 
-## One finding neither pass 8 nor the reviewer has: WR-54
+## The mechanism judgement
 
-WR-50 says the `proof` token and the bands do not pin exclusion three, and names the
-**clause-count equality** as *"what caught it, and what would catch the next one"*. I tested
-that by reverting `CLOSES_FROZEN_ARRAY` at `:9762` to its pre-fix form `/^\]\);$/` —
-re-introducing the **exact** 117-line over-walk WR-48 was filed about.
+**Asked for explicitly, stated as a finding, not as an instruction.**
 
-**Result: 434 passed (434).**
+CR-17 → CR-20 → CR-22 has moved one layer down three times: anchored to **nothing** (round 7),
+to **non-unique masked text** (round 8), to a **unique line whose shadow is unbounded**
+(round 9). It is tempting to read that as convergence. Measured, it is not:
 
-So the clause-count equality would **not** catch it either, for the same reason round 8's own
-measurement gives: the 117 lines carry **zero** phrasings and zero clauses, so nothing moves.
-WR-48's correction is right, honest, and **pinned by nothing at all** — it can silently
-revert. The closing sentence at `:9758-9761` naming `proof` tokens and bands as the backstop
-is false in the over-walk direction, and there is no third mechanism to substitute.
+- Round 8 → 9 removed two *shapes* and the relocatable set went 29 → 7 → **0 of the two named
+  shapes**. But the interchangeability class did not go to zero; it went to the shadow, and the
+  shadow holds **4 shipped occurrences in one class, 4 in the next, 3 in the next**.
+- The shadow is not a property of the key format. It is a property of **recogniser density over
+  this file's prose**. `:417` shadows 1,155 raw lines because between the rule at `:418` and
+  the imports at `:1567` — a 1,148-line stretch that is mostly one machine-owned block comment
+  — **no line at all is accepted by any of the five recognisers**. No amount of key
+  engineering changes that number; only changing what counts as a construct does.
+- The one key-format change that *would* make every key unique is folding the line number in,
+  and the file's own census message forbids it at `:10434` — *"the tempting one and the
+  worst"* — for the right reason: it would make the case green having measured nothing.
 
-Warning, not blocker: it errs safe, because the wrongly-excluded lines raise no obligations.
+**So: I do not believe the line-text approach can be made to identify a site.** It can be made
+to identify *a region*, and the size of that region is set by the file's comment layout rather
+than by the gate. Making the regions small would mean re-authoring 11,000 lines of prose to
+suit the anchor, which inverts the dependency and is a worse outcome than the defect.
 
----
+**Two honest exits, and the choice is the operator's:**
 
-## Pass 8's four findings — closed or not
+1. **Change the mechanism to a containment rather than a proximity.** This file already imports
+   the TypeScript compiler — `import ts from "typescript"` at `:1570`, used by `auditSource` —
+   so an enclosing-node identity (the nearest enclosing `describe`/`it`/declaration/comment
+   *range*, by position, from the AST the file already builds) is available at **zero new
+   dependency cost**. That gives containment, which is the word limit (5) currently disclaims
+   having. It is real work, and the operator already rejected an AST/frame-derived rebuild
+   before round 9 in favour of pass 9's two small changes. I record that the rejection was made
+   when the remaining gap looked like two small changes, and that this estimate has now been
+   falsified **twice** — pass 9's estimate produced round 9, and round 9's own closing
+   paragraph produced CR-22.
+2. **Stop claiming a site, and re-scope criterion (3)'s mechanism leg to what the re-scope
+   actually demands.** Nothing in DERIVED / DRIFT-DETECTABLE / SOLE BOUND requires the anchor
+   to identify a site. SOLE BOUND requires the disclosure to be **accurate and contradicted
+   nowhere**. Under that reading, CR-22's fix *is* the close: replace the 234 sentence with the
+   measured shadow, **pin the shadow width** so the next widening is loud, fix CR-23's two
+   `.from` assertions, and restate WR-55's reach. That is four bounded edits in one file, all
+   green on arrival, and it converts an overclaim into a named, measured, drift-detectable
+   residual — which is exactly the artifact kind waves 27-29 established for everything else in
+   this gate.
 
-### CR-18 — **CLOSED.** Measured on the row, not read from the summary.
+**My reading, offered and not acted on:** exit 2 is what the re-scoped bar asks for and exit 1
+is what the file's prose currently promises. Three rounds of narrowing have produced, each
+time, a new instance of the signature defect *inside the paragraph stating the reach of the
+previous fix*. That pattern is now better evidence about the mechanism than about the
+discipline, and continuing to narrow line-text shapes for a fourth round is the option I would
+expect to reproduce it a fourth time.
 
-`.planning/REQUIREMENTS.md:46` is now 23,966 bytes and its checkbox reads `- [ ] **CORE-11**`.
-The three passages still appear **once each** as strings, which looks damning until you read
-the surrounding bytes — I extracted 260 chars before and 420 after each, and all three land
-inside **one enumeration sentence that names them as removed**:
-
-> THREE PASSAGES LEFT THIS ROW IN THIS CORRECTION and NONE was deleted: the passage opening
-> `WHY THE BOX IS`, the passage opening `THE BOX IS DELIBERATELY STILL`, and the sentence
-> opening `When this box is eventually` …
-
-That is **mention, not use**. The passages themselves live at `:190`, `:192` and `:194` as
-`PASSAGE ONE / TWO / THREE` in a dated block attributed to plan 01-38. The row states no box
-state of its own — which is the cheaper of the two dispositions pass 8 prescribed, and the
-one taken.
-
-### CR-19 — **CLOSED.** I re-executed all six probes rather than accepting the report of them.
-
-| Shape | Old `STATE.md:366` claimed | I measured, this session |
-| --- | --- | --- |
-| `(ok && globalThis).fetch(url)` | reports NOTHING | `["outbound-fetch"]` |
-| `(globalThis ?? self).fetch(url)` | reports NOTHING | `["outbound-fetch"]` |
-| `(globalThis \|\| self).fetch(url)` | reports NOTHING | `["outbound-fetch"]` |
-| `(b ? globalThis : self).fetch(url)` | reports NOTHING | `["outbound-fetch"]` |
-| `(ok && window).fetch(url)` | reports NOTHING | `["outbound-fetch"]` |
-| `(ok && navigator).sendBeacon(u,d)` | reports NOTHING | `["outbound-beacon"]` |
-
-Six of six report — which is what the corrected line now says. I also re-counted the registry
-rather than trusting it: **61 rows, 26 of `kind: "measured-silence"`**, and
-`grep -n 'id: "silence-operator-around-global-receiver"'` returns **nothing**. The one
-in-range hit at `:5751` is a tombstone comment recording the removal. The corrected line
-explicitly does *not* instruct anyone to restore the row.
-
-### WR-48 — **CLOSED, and its correction survived measurement.**
-
-`CLOSES_FROZEN_ARRAY = /^\]( as [^)]*)?\);$/` matches `] as readonly ResolverRecord[]);` at
-`:5767`. Exclusion three resolves **4135..5767 = 1633 lines**, matching limit (4)'s restated
-figure to the line. I sliced the 117 returned lines and counted all nine declared phrasings
-across them:
-
-```
-anywhere in the file 0 · everywhere in the file 0 · any depth 0 · every literal 0 · ANY of them 0
-every spelling 0 · every reachable spelling 0 · ANY string literal 0 · ANY-BINDING-WINS 0
-TOTAL 0
-```
-
-The docblock's *"MEASURED AFTER THE CHANGE rather than predicted before it: ZERO"* is
-accurate. **Rounds 5 through 7 could not say that** — the correction was usually the next
-defect. See WR-54 for the one thing still missing: the corrected recogniser is unpinned.
-
-### CR-17 — **NOT CLOSED.** Narrowed from 29 of 29 to 7 of 29. See CR-20 and CR-21.
-
----
-
-## Round 8's two disclosures against itself — weighed as disclosures
-
-**1. Criterion (3)(d)'s re-run came back NON-CLEAN and said so.** I reproduced it exactly.
-`:803` reads ``CORE-11's box stays `[ ]`; wave 28 owns the flip`` and `:901` reads
-``CORE-11's box stays `[ ]``` — both unmarked, both present-tense, both attributing a flip to
-a wave 28 that never owned it. Ten lines below `:901`, `:911` asserts **"THE BOX'S STATE IS
-NOW STATED IN EXACTLY TWO PLACES"**. I counted: `:803`, `:901`, `CORE11_BOX_EXPECTED` at
-`:10311`, and `REQUIREMENTS.md:46`'s checkbox. **Four, all agreeing on `[ ]`.**
-
-No contradiction of fact — so this is not what keeps the box at `[ ]`. But `:911` is itself a
-false standing statement on a reader surface, which is the class criterion (3) is about. The
-gate file was closed after 01-37 and 01-38 was prohibited from editing it, so this was
-**recorded rather than repaired** (WINDOWS 41, P38-D2). That is the right call, it was
-disclosed before I looked, and repairing it silently would have made the re-run
-indistinguishable from one that overlooked it — the defect the re-run exists to correct.
-
-**2. The ledger enumeration exceeded its floor by two** and was reported as findings rather
-than absorbed. The floor had already been falsified twice during planning. Reporting your own
-overshoot is the behaviour this phase has been trying to build.
-
-**Both disclosures land in round 8's favour.** A round that measures its own handoff RED
-before building on it (01-36 found HEAD `4105fd0` at 2 failed of 1372), watches a fixture
-fail before shipping it (01-37, `1 failed | 433 passed`), and reports a non-clean re-run of
-its own success criterion is a round doing the thing this phase asked for. It simply did not
-finish the mechanism.
+**I have not moved CORE-11's checkbox and I am not instructing anyone to. It is `[ ]`.**
 
 ---
 
@@ -389,55 +420,58 @@ finish the mechanism.
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | `onInterceptResponse` non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `hooks/passive.ts:117` — *"The registered `onInterceptResponse` callback. NOT async"*; `index.ts:31` documents registration last, after `init()`. Unchanged this round; green in 1374 tests. |
+| 1 | `onInterceptResponse` non-async, gates cheaply, enqueues, returns — analysis never inline | ✓ VERIFIED | `hooks/passive.ts:117` — *"The registered `onInterceptResponse` callback. NOT async — it returns `undefined`, never a Promise"*; wired at `index.ts:322` `sdk.events.onInterceptResponse(...)`, registered last per `index.ts:31`. Green in 1379 tests. |
 | 2 | Work queue bounded, overflow count visible, never unbounded | ✓ VERIFIED | `hooks/passive.ts:40` — *"BOUNDED. The queue drops the oldest entry at cap"*; `telemetry.ts:100` — *"Entries the queue dropped because it was at cap (CORE-03 visible overflow)"*. |
 | 3 | 200-chunk SPA leaves plugin UI and RPC responsive; max synchronous slice recorded, under the Phase 0 threshold | ✓ VERIFIED | Live measurement committed at `results/spa-load.json` (6,185 bytes), taken from **outside** the process by an external REST prober (decision P5-D3), against `caido-cli 0.57.1` with a pinned sha256. |
-| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | `store/analyses.ts:3` — *"One row per (project_id, sha256, detector_set_hash)"*; `:111` `INSERT INTO analyses (project_id, sha256, detector_set_hash, …)`. |
+| 4 | Artifacts persist across restart, keyed by `project_id`, identical content stored and hashed once | ✓ VERIFIED | `store/analyses.ts:3` — *"One row per (project_id, sha256, detector_set_hash)"*; the claim SQL is `INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, started_at) … ON CONFLICT (project_id, sha256, detector_set_hash) DO NOTHING`. |
 | 5 | Offsets and hashes derive from `toRaw()` bytes; non-UTF-8 fixture round-trips | ✓ VERIFIED | `ingest/consumer.ts:189` `const raw = body.toRaw();`. |
-| 6 | CI gate fails the build if the backend bundle imports a specifier outside the Phase 0 allowlist | ✓ VERIFIED | `package.json:13` wires `check:bundle`. **Executed this session:** `1 import specifier(s): crypto`. |
-| 7 | Below-minimum Caido produces a clear message, not an obscure failure | ✓ VERIFIED | `compat.ts:43` `export const MIN_CAIDO = "0.57.1";`, with the user-facing message at `:332`. |
+| 6 | CI gate fails the build if the backend bundle imports a specifier outside the Phase 0 allowlist | ✓ VERIFIED | `package.json` wires `check:bundle`. **Executed this session:** `packages/backend/dist/index.js: 1 import specifier(s): crypto`. |
+| 7 | Below-minimum Caido produces a clear message, not an obscure failure | ✓ VERIFIED | `compat.ts:43` `export const MIN_CAIDO = "0.57.1";`, user-facing messages at `:332` and `:352`. |
 | 8 | Redaction: no query-string value from a target-controlled URL reaches `observations.url` | ✓ VERIFIED | STORE-03. `observations.ts` non-comment-byte-identical since wave 26 and untouched this round; sweep evidence from rounds 5-7 applies unchanged. |
-| 9 | **No shipped code can introduce outbound traffic without failing a gate (CORE-11 / UAT gap 2)** | **✗ FAILED (partial)** | **The one that does not hold.** The must-NOT holds and I re-established it. Criterion (3)'s **mechanism** does not — three relocations at 434/434 green. |
+| 9 | **No shipped code can introduce outbound traffic without failing a gate (CORE-11 / UAT gap 2)** | **✗ FAILED (partial)** | **The one that does not hold.** The must-NOT holds and I re-executed it through `auditSource`. Criterion (3)'s **mechanism** does not — a 514-line and a 1,129-line relocation, and a 104-line surface amputation, all at 439/439 green. |
 
-**Score: 8/9 truths verified.** Seventh consecutive round at 8/9, the same truth each time.
+**Score: 8/9 truths verified.** Eighth consecutive round at 8/9, the same truth each time.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `packages/backend/src/hooks/passive.ts` | Non-async hook, cheap gates, bounded enqueue | ✓ VERIFIED | Wired from `index.ts`; cap consulted. Untouched this round. |
+| `packages/backend/src/hooks/passive.ts` | Non-async hook, cheap gates, bounded enqueue | ✓ VERIFIED | Wired from `index.ts:322`; cap consulted. Untouched this round. |
 | `packages/backend/src/ingest/consumer.ts` | `toRaw()` byte path | ✓ VERIFIED | Wired; feeds the digest. Untouched. |
-| `packages/backend/src/store/analyses.ts` | `project_id`-keyed persistence, hash-once | ✓ VERIFIED | Wired; insert carries the key. Untouched. |
+| `packages/backend/src/store/analyses.ts` | `project_id`-keyed persistence, hash-once | ✓ VERIFIED | Wired; the composite key is the conflict target. Untouched. |
 | `packages/backend/src/store/observations.ts` | URL redaction before write | ✓ VERIFIED | Wired; non-comment bytes unchanged since wave 26. |
 | `packages/backend/src/compat.ts` | Minimum-version gate with a clear message | ✓ VERIFIED | Wired. Untouched. |
 | `scripts/ci/check-bundle-imports.mjs` | Allowlist gate | ✓ VERIFIED | Executed: 1 specifier, `crypto`. |
-| `packages/backend/src/outbound-prohibition.spec.ts` | CORE-11 enforcement + derived, drift-detectable, singular disclosure | ⚠️ **PARTIAL** | Enforcement runs green over 23 real modules, 0 violations. Criteria (1) and (2) hold. **Criterion (3)'s mechanism is bypassable in 7 of 29 entries (CR-20, executed twice) and via the sentinel added to guard it (CR-21, executed twice).** |
-| `.planning/REQUIREMENTS.md:46` | The ledger row for CORE-11 | ✓ **REPAIRED** | Now a pointer. `[ ]`, no standing statement of the box's state; three passages relocated to `:190/:192/:194`. |
-| `.planning/STATE.md` `### Blockers` | Live blockers | ✓ **REPAIRED** | Six probes re-executed by me: six of six report. Registry re-counted: 61 rows, 26 measured-silence, named row absent. |
+| `packages/backend/src/outbound-prohibition.spec.ts` | CORE-11 enforcement + derived, drift-detectable, singular disclosure | ⚠️ **PARTIAL** | Enforcement runs green over 23 real modules, 0 violations, and every must-NOT probe reports. Criteria (1) and (2) hold. **Criterion (3)'s mechanism: the anchor names a region of up to 574 surface lines, the file publishes that region as 234, and exclusion three's opening endpoint is pinned by two tautologies.** |
+| `.planning/REQUIREMENTS.md:46` | The ledger row for CORE-11 | ✓ VERIFIED | `- [ ] **CORE-11**`. Row states no box state of its own (round 8's repair, re-checked). |
+| `.planning/STATE.md` `### Blockers` | Live blockers | ✓ VERIFIED | Round 8's correction stands; the six operator-around-global shapes all report, re-executed this session. |
 
 ### Behavioural Spot-Checks — every row is a command I ran this session
 
 | Behaviour | Command | Result | Status |
 | --- | --- | --- | --- |
-| Full suite green | `pnpm test` | 31 files / **1374 tests** exit 0 | ✓ PASS |
+| Full suite green | `pnpm test` | 31 files / **1379 tests** exit 0 | ✓ PASS |
 | Types sound | `pnpm exec tsc --build` | exit 0 | ✓ PASS |
 | Bundle allowlist | `pnpm check:bundle` | `1 import specifier(s): crypto` | ✓ PASS |
-| Gate suite alone | `pnpm exec vitest run …/outbound-prohibition.spec.ts` | **434 passed (434)** | ✓ PASS |
+| Gate suite alone | `pnpm exec vitest run …/outbound-prohibition.spec.ts` | **439 passed (439)** | ✓ PASS |
 | Shipped modules walked | `find packages/*/src -name '*.ts' ! -name '*.spec.ts'` | **23** across both roots | ✓ PASS |
-| No shipped code changed | `git diff --name-only 9b3ff46..HEAD -- packages/ scripts/ \| grep -v '\.spec\.ts$'` | EMPTY | ✓ PASS |
-| **CR-20(a)** `:1838` relocated 5,264 lines into an unrelated construct | gate suite | **434 passed (434)** | ✗ **FAIL — should have gone red** |
-| **CR-20(b)** `:305` relocated between two identically-headed tables | gate suite | **434 passed (434)** | ✗ **FAIL — should have gone red** |
-| **CR-21** sentinel occurrence + matching exemption planted | gate suite | **434 passed (434)** | ✗ **FAIL — the null-anchor case should have caught it** |
-| **CR-21** same occurrence relocated ~1,800 lines, exemption unchanged | gate suite | **434 passed (434)** | ✗ **FAIL — should have gone red** |
-| **WR-54** `CLOSES_FROZEN_ARRAY` reverted to `/^\]\);$/` (re-introducing WR-48) | gate suite | **434 passed (434)** | ✗ **FAIL — the correction is unpinned** |
-| **WR-51** `preAnchoringExemptionKeyForFixtureOnly` → `() => "CONSTANT"` | gate suite | **434 passed (434)** | ✗ **FAIL — counter-probe pins nothing** |
-| **WR-52** `constructAnchorFor` reduced to a line copy | fixture by name | **1 failed \| 433 skipped** | ✓ PASS — **reviewer's stronger claim REFUTED** |
-| WR-48 arithmetic | 9 phrasings × 117 restored lines | **0 obligations**; exclusion three = 1633 | ✓ PASS |
-| CR-19 falsification, re-run | six operator-around-global shapes | all six report | ✓ PASS — STATE.md now correct |
-| CR-15 closure | `fetch.call(null,url)` / `const f = fetch; f.call(null,url)` | both `["outbound-fetch"]` | ✓ PASS |
-| CR-16 closure | `const m="send"+"Beacon"; navigator[m](u,d)` | `["outbound-unanalysable"]` | ✓ PASS |
-| Disclosed residual still silent | `WebSocket.call(null,u)` | `[]` — named row + probe + counter-probe | ✓ PASS (disclosed) |
-| Removed row still absent | `grep 'id: "silence-operator-around-global-receiver"'` | zero hits; `:5751` is a tombstone comment | ✓ PASS |
+| No shipped code changed | `git log --stat bc0f4c2..HEAD -- packages/` | one file, the gate spec | ✓ PASS |
+| CORE-11 must-NOT, 9 probes through shipped `auditSource` | in-tree spec importing `auditSource` | 8 report as expected, clean source `[]` | ✓ PASS |
+| Disclosed residual still silent | `WebSocket.call(null,u)` | `[]` — named row `:5696` + probe + counter-probe | ✓ PASS (disclosed) |
+| Registry census | `grep -c 'kind: "measured-silence"'` / `grep -c '^    id: "'` | **26 of 61**; removed row absent | ✓ PASS |
+| **CR-20/CR-22** `:436` relocated **514 lines** into header section 3 | gate suite | **439 passed (439)** | ✗ **FAIL — should have gone red** |
+| **CR-20/CR-22** `:436` relocated **1,129 lines** across the machine-owned span | gate suite | **439 passed (439)** | ✗ **FAIL — should have gone red** |
+| **CR-22** anchor shadow, live builder over 8,846 surface lines | temporary in-tree case | widest **574 surface / 1,155 raw**, 4 occurrences | ✗ **FAIL — published as 234** |
+| **CR-23** decoy `RESOLVER_REGISTRY_DECOY` 104 lines above the registry | gate suite | **439 passed (439)** | ✗ **FAIL — both `.from` pins are tautologies** |
+| **CR-23** surface amputation, measured from inside the suite | instrumented non-vacuity assertion | **8846 → 8742** | ✗ **FAIL — 104 lines lost silently** |
+| **WR-55** lines resolving to the sentinel | shipped builder at all 11,079 lines | **exactly `[1]`** | ✗ **FAIL — reach overstated** |
+| CR-21 closure | hand-written `"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"` in the map | **3 failed \| 436 passed** | ✓ PASS — **CLOSED** (was green at 434/434) |
+| WR-51 closure | `preAnchoringExemptionKeyForFixtureOnly → () => "CONSTANT"` | **1 failed \| 438 passed** | ✓ PASS — **CLOSED** (was green at 434/434) |
+| WR-54 `to` closure | `CLOSES_FROZEN_ARRAY → /^\]\);$/` | **1 failed \| 438 passed**, `expected 5910 to be 5793` | ✓ PASS — **CLOSED** (was green at 434/434) |
+| CR-20 scan bounds are real | revert `i = lineNumber` and `k <= lineNumber` | **2 failed \| 437 passed** | ✓ PASS — both changes watched failing |
+| Census is real | duplicate `:417`'s header text 533 lines below | **1 failed \| 438 passed** | ✓ PASS |
+| Published counts | live-builder probe inside the gate's `describe` | 29/29/29, ownHeader **0**, sentinel **0**, maxDist **234** | ✓ PASS — every wave-39 number true |
+| WINDOWS 41 sweep | read `:803-811`, `:910-917`, `:925-943`, `:10983`, `REQUIREMENTS.md:46` | 4 box-state sites → 2, one in this file | ✓ PASS |
 
 ### Requirements Coverage
 
@@ -446,90 +480,99 @@ least one plan. **No orphans, no unclaimed ids.**
 
 | Requirement | Box | Status |
 | --- | --- | --- |
-| CORE-01 … CORE-10 (`:36-45`) | `[x]` | ✓ SATISFIED |
+| CORE-01 … CORE-10 | `[x]` | ✓ SATISFIED (CORE-10 judgment-tier, flagged) |
 | **CORE-11** (`:46`) | **`[ ]`** | ✗ **BLOCKED — criterion (3) mechanism leg** |
-| STORE-01 … STORE-07 (`:783-789`) | `[x]` | ✓ SATISFIED (STORE-01 judgment-tier, flagged) |
-| COMPAT-01, COMPAT-02 (`:907-908`) | `[x]` | ✓ SATISFIED |
-| ENC-01 (`:912`) | `[x]` | ✓ SATISFIED |
-| DIST-05, DIST-06 (`:954-955`) | `[x]` | ✓ SATISFIED |
+| STORE-01 … STORE-07 | `[x]` | ✓ SATISFIED (STORE-01 judgment-tier, flagged) |
+| COMPAT-01, COMPAT-02 | `[x]` | ✓ SATISFIED |
+| ENC-01 | `[x]` | ✓ SATISFIED |
+| DIST-05, DIST-06 | `[x]` | ✓ SATISFIED |
 
-**22 of 23 boxes read `[x]`, and CORE-11's correctly reads `[ ]`.** The ledger and this report
-agree for the first time in three passes.
+**22 of 23 boxes read `[x]`, and CORE-11's correctly reads `[ ]`.** The ledger, the pin and
+this report agree, for the second consecutive pass.
+
+The `01-PROBE.md` no-silent-drop equality — 38 applicable items == 27 authored into
+`must_haves` + 11 surfaced as flagged assumptions — is stated in the file's own opening and
+its 11 unclassified rows were confirmed still-acceptable at UAT test 4. Unchanged this round.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | --- | --- | --- | --- | --- |
-| `outbound-prohibition.spec.ts` | 9226, 9245 | Backward scan opens **at** the occurrence; forward walk bounded **by** it — anchor collapses to the occurrence's own line | 🛑 Blocker | 3 of 29 keys carry no positional information; relocation invisible (CR-20a, executed) |
-| `outbound-prohibition.spec.ts` | 9210-9254 | Anchor token is a line of text; `it.each([` produced by 10 lines, one table header by 3 | 🛑 Blocker | 4 more keys relocatable across constructs (CR-20b, executed) |
-| `outbound-prohibition.spec.ts` | 9029-9036 | Limit (5) states the residual as same-construct only | 🛑 Blocker | Falsified by both executed relocations |
-| `outbound-prohibition.spec.ts` | 9167, 9971 | `!NO-PRECEDING-CONSTRUCT!` sentinel scores 20 on `nameableRemainder`, defeating the case added beside it | 🛑 Blocker | CR-17's key shape re-opened verbatim (CR-21, executed twice) |
-| `outbound-prohibition.spec.ts` | 9163-9166 | Docblock claims the sentinel "may not be produced silently"; four grep hits, none an assertion | ⚠️ Warning | Names a mechanism that does not exist |
-| `outbound-prohibition.spec.ts` | 9758-9761 | Names `proof` tokens and bands as pinning exclusion three | ⚠️ Warning | Neither can catch an over-walk; nor can the equality (WR-54, executed) |
-| `outbound-prohibition.spec.ts` | 9297-9315, 10126-10152 | Counter-probe satisfied by any constant function | ⚠️ Warning | WR-51, executed |
-| `outbound-prohibition.spec.ts` | 9998-10001 | Fixture coverage sentence overclaims (excludes the own-header shape) | ⚠️ Warning | WR-52, partially refuted |
-| `outbound-prohibition.spec.ts` | 803, 901, 911 | Two unmarked standing statements; "EXACTLY TWO PLACES" measures four | ⚠️ Warning | Disclosed by round 8 as WINDOWS 41 / P38-D2; all four agree on `[ ]` |
+| `outbound-prohibition.spec.ts` | 9090-9093, 9343-9345 | Residual published as the occurrence-to-anchor distance (234) when it is the anchor's shadow (574 surface / 1,155 raw) | 🛑 Blocker | CR-22, executed twice — 514- and 1,129-line relocations green |
+| `outbound-prohibition.spec.ts` | 10131-10134, 10150-10153 | `.from` assertions compare an expression against itself | 🛑 Blocker | CR-23, executed — 104 lines off the scanned surface at 439/439 green |
+| `outbound-prohibition.spec.ts` | 9963-9967 | Claims all five locators proved unique; three are | ⚠️ Warning | The other half of CR-23 |
+| `outbound-prohibition.spec.ts` | 9229-9232, 10295-10300 | Sentinel case states its reach as the whole scanned surface | ⚠️ Warning | WR-55, measured — exactly 1 of 11,079 lines can trip it |
+| `outbound-prohibition.spec.ts` | 10399-10400 | Census `constructHalf` has no `indexOf === -1` guard | ⚠️ Warning | WR-58 |
+| `outbound-prohibition.spec.ts` | 10383 vs 10795 | The same relocation stated as `58 lines apart` and `57 lines` | ⚠️ Warning | WR-60 |
+| `outbound-prohibition.spec.ts` | 981 | Present-tense clause about wave 28, left standing deliberately | ℹ️ Info | Round 9's own disclosure; states no box state |
+| `outbound-prohibition.spec.ts` | various | WR-56, WR-57, WR-59, IN-41 … IN-44 | ⚠️ Warning / ℹ️ Info | Reviewer-reported; **not** independently re-executed by me, and recorded as such |
 
 **No debt markers** — `grep -rn -E "\bTBD\b|\bFIXME\b|\bXXX\b"` over `packages/*/src` and
 `scripts/` returns nothing, as do `TODO`/`HACK`/`PLACEHOLDER` and `.skip(`/`.only(`/`.todo(`.
 
 ### Working tree
 
-`git diff --exit-code -- packages/ scripts/ tests/` returns **0**. Six mutations were planted
-and all six restored. `.planning/config.json` carries the pre-existing uncommitted harness
-setting noted in the brief — not mine, not touched. `01-REVIEW.md` carries the reviewer's
-just-filed round-8 section, also not mine.
+`git diff --exit-code -- packages/ scripts/ tests/` returns **0**. Nine mutations were planted
+and all nine restored; the temporary probe spec was deleted. `.planning/config.json` carries
+the pre-existing uncommitted harness setting noted in the brief — not mine, not touched.
+`01-REVIEW.md` carries the reviewer's just-filed round-9 section, also not mine.
 
 ---
 
 ## On severity — a defect in the enforcement of a claim, not a live vulnerability
 
 **Nothing leaks, and I re-established that this session rather than carrying it forward.**
-31 files / 1374 tests exit 0 with the gate walking 23 shipped modules across both
-`SOURCE_ROOTS` at zero violations; `tsc --build` exit 0; the shipped bundle's entire import
-set is one specifier, `crypto`; and **no shipped source byte changed this round** — round 8's
-entire code delta is `+467/-43` in one test file.
+31 files / 1379 tests exit 0 with the gate walking 23 shipped modules across both
+`SOURCE_ROOTS` at zero violations; `tsc --build` exit 0; the shipped bundle's entire import set
+is one specifier, `crypto`; every outbound shape I probed through the shipped `auditSource`
+reports; and **no shipped source byte changed this round** — the entire round-9 delta is one
+test file, seven commits.
 
 Every finding in this report is a defect in a **test-only gate's enforcement of its own
-description**. CR-20 and CR-21 are blockers because they falsify the central claim of the work
-under review and re-open the finding it was written to close, not because anything reaches a
-network.
+description**. CR-22 and CR-23 are blockers because they falsify the central claim of the work
+under review and, in CR-23's case, silently shrink the surface that work is measured over —
+not because anything reaches a network.
 
 ## Human Verification Required
 
 None newly raised. The judgment-tier prohibitions (CORE-10, STORE-01) remain flagged
 `unverified` with NON-AUTHORITATIVE LLM-judge verdicts, carried forward and previously
-accepted by the operator at UAT; nothing about them changed this round.
+accepted by the operator at UAT test 3; nothing about them changed this round.
+
+The one thing that **does** want an operator decision is not a verification item — it is the
+mechanism choice recorded above. I have stated it and taken no action on it.
 
 ## Gaps Summary
 
-One gap, the same truth for the seventh consecutive round — and for the first time **half of
-it closed**.
+One gap, the same truth for the eighth consecutive round.
 
-Round 8 was a good round and the evidence says so under adversarial pressure. It measured its
-own handoff RED before building on it. It watched a fixture fail before shipping it. It
-reported a non-clean re-run of its own success criterion instead of quietly overlooking it,
-and reported its own enumeration overshoot as findings. **CR-18, CR-19 and WR-48 are all
-genuinely closed and all three survived my re-measurement** — the CR-19 probes I re-executed
-myself, the WR-48 arithmetic I recounted phrasing by phrasing across all 117 lines.
+**Round 9 was a good round, and the evidence says so under adversarial pressure.** It shipped
+every change pass 9 prescribed. Every number it published about its own work is true and I
+re-measured all of them with the live builder. Four of the six items are closed and I proved
+each by running the exact mutation that was green last round and watching it go red this
+round. It found a defect its own case-sensitive grep could not see, reported it rather than
+absorbing it, and declined to launder a count. For the first time in this phase, the verifier
+found nothing the reviewer had missed.
 
-What did not close is the mechanism. `constructAnchorFor` resolves a **masked line of text**,
-not a site, and the two shapes that follow — an occurrence that is its own anchor, and an
-anchor token produced by more than one line — leave **7 of 29 entries** relocatable across
-constructs. I drove two shipped occurrences through that hole and the sentinel added in the
-same wave through a third, four runs, **434 of 434 green every time**. Limit (5) says the
-opposite of what executes.
+**What did not close is the mechanism, and it did not close because it cannot close this way.**
+`constructAnchorFor` no longer anchors to nothing and no longer anchors to an ambiguous token —
+both measured at zero. It anchors to a unique line whose **shadow** spans up to 574 surface
+lines, and four shipped occurrences already live inside the widest one. I moved a shipped
+sentence 1,129 lines across the entire machine-owned span for a byte-identical key at 439 of
+439 green, with its exemption's stated reason false where it landed. The file publishes that
+residual as 234 lines. And exclusion three's opening endpoint, newly "pinned" this round, is
+pinned by an expression compared against itself: one decoy line took 104 lines off the scanned
+surface, green.
 
-**The fix is smaller than the last one.** Open the backward scan one line higher; assert every
-anchor in use names exactly one line of the file; exclude the sentinel from `nameableRemainder`
-and assert it is never produced. Three changes, all green on arrival, all in one file that is
-now open again. Then re-run.
+**The fix for the disclosure is four bounded edits and all four are green on arrival.** The fix
+for the *claim* is a decision about mechanism that belongs to the operator, and I have stated
+my reading of it rather than acting on it.
 
-**CORE-11's box stays `[ ]`.** Not a fourth revert — it is already `[ ]`, the pin agrees, and
-plan 01-38 correctly declined to move it and handed the determination here. The determination
-is: **criterion (3)'s mechanism leg is unmet, so the box may not move.**
+**CORE-11's box stays `[ ]`.** Not a fourth revert — it is already `[ ]`, the pin agrees, the
+ledger row agrees, and round 9 correctly declined to move it. The determination is:
+**criterion (3)'s mechanism leg is unmet, so the box may not move.**
 
 ---
 
-_Verified: 2026-08-26T14:40:00Z_
-_Verifier: Claude (gsd-verifier), verification pass 9_
+_Verified: 2026-08-26T17:50:00Z_
+_Verifier: Claude (gsd-verifier), verification pass 10_

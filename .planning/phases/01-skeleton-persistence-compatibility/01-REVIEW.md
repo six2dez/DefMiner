@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-26T14:05:00Z
+reviewed: 2026-08-26T17:20:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -134,6 +134,34 @@ reviews:
       file, and passes green. Limit (5) discloses neither shape. The signature
       defect for the ninth consecutive round, and this time it is inside the
       mechanism written to end it.
+  - pass: gap-closure-round-9
+    reviewed: 2026-08-26T17:20:00Z
+    scope: 1 source file changed by plans 01-39, 01-40, 01-41 (packages/backend/src/outbound-prohibition.spec.ts)
+    findings: CR-22, CR-23, WR-55...WR-60, IN-41...IN-44
+    verdict: >-
+      WR-51 and WR-54 are CLOSED and BOTH pins are real: a constant
+      `preAnchoringExemptionKeyForFixtureOnly` and a reverted
+      `CLOSES_FROZEN_ARRAY` each turn the suite RED where pass 9 measured both
+      green at 434/434. CR-21's first half is CLOSED. Every count wave 39
+      published re-measures correctly — 29 occurrences, 26/3 own-header split,
+      0 sentinel, max occurrence-to-anchor distance 234. CR-20 is NOT closed.
+      The mechanism removes self-anchoring and ambiguous tokens and does not
+      touch the residual, because the residual is the anchor's SHADOW and not
+      the occurrence-to-anchor distance the paragraph publishes. Measured: the
+      anchor at `:417` shadows 419..1574 — 1,155 raw lines, 574 surface lines,
+      five times the stated 234 — and already holds four shipped occurrences.
+      EXECUTED TWICE on the real tree: the shipped occurrence at `:436` moved
+      514 lines into an unrelated header section, and 1,130 lines across the
+      whole machine-owned span into the import region, for a BYTE-IDENTICAL key
+      at 439 of 439 green each time, while its exemption reason still reads "a
+      wrapped cell in the same ASCII table". The signature defect for the tenth
+      consecutive round, in the sentence written to bound the ninth. SECOND
+      BLOCKER: wave 41's two `.from` assertions compare an expression against
+      itself — a decoy locator planted 104 lines above the registry slid
+      exclusion three's opening 105 lines off the scanned surface at 439/439
+      green, under a comment claiming both endpoints are pinned. Test-only gate:
+      nothing leaks, the shipped bundle's import set is one specifier and the
+      walk is at 23 modules / zero violations.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -197,10 +225,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 21
-  warning: 53
-  info: 40
-  total: 114
+  critical: 23
+  warning: 59
+  info: 44
+  total: 126
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -5486,3 +5514,580 @@ most one of `.each`/`.skip`/`.only`/`.todo`, opened with `(` or `<`."*
 _Reviewed: 2026-08-26T14:05:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard — all measurements re-executed against the live file via an out-of-tree harness; repository unmodified_
+
+---
+
+# ROUND 9 — gap closure, commits `bc0f4c2..HEAD`
+
+**Reviewed:** 2026-08-26T17:20:00Z
+**Depth:** standard, with every claim below re-executed against the live file
+**Scope:** `git diff bc0f4c2..HEAD -- packages/` — one file,
+`packages/backend/src/outbound-prohibition.spec.ts` (+742/−70). Planning
+documents are out of scope.
+**Status:** issues_found
+
+## Summary (pass 9, round 9)
+
+**How this was reviewed.** The round-9 helpers (`normalizeGateLine`,
+`maskQuantifiers`, `nameableRemainder`, `constructTokenOf`, `anchorTokenCensus`,
+`constructAnchorFor`, `exemptionKeyFor`, `preAnchoringExemptionKeyForFixtureOnly`,
+`quantifierOccurrences`, `surfaceExemptionKeys` and the `EXCLUSIONS` derivation)
+were lifted verbatim into an out-of-tree harness reading the real file, and every
+number below was measured rather than argued. Five mutations were then planted in
+the working tree, run, and reverted; `git diff --exit-code -- packages/` is clean
+and the tree is as committed. Baselines re-established at the start and the end:
+`pnpm exec vitest run` → 31 files / **1379 tests** / exit 0; the gate file alone →
+**439**; `tsc --build` → 0; `eslint` on the gate file → clean.
+
+**What round 9 got right, verified by execution, not by summary.**
+
+- **WR-51 is CLOSED and the pin is real.** Replacing
+  `preAnchoringExemptionKeyForFixtureOnly`'s body with a constant now turns the
+  cross-construct fixture RED (1 failed / 438 passed). Before wave 40 that same
+  mutation was green at 434/434.
+- **WR-54 is CLOSED for the `to` endpoints and the pin is real.** Reverting
+  `CLOSES_FROZEN_ARRAY` to `/^\]\);$/` turns the new width case RED (1 failed /
+  438 passed), naming the gap. Pass 9 measured that same revert green at 434/434.
+- **CR-21's first half is CLOSED.** `nameableRemainder` strips the sentinel by
+  reference; `nameableRemainder(NO_PRECEDING_CONSTRUCT)` is now `""`, and the
+  declaration move is safe (the reference is inside an arrow body, so there was
+  no TDZ hazard either way).
+- **The scan-bound corrections work.** Reverting BOTH wave-39 bounds
+  (`i = lineNumber`, `k <= lineNumber`) turns two cases RED. Measured on the live
+  file: 29 occurrences, **26** not on their own construct header and **3** that
+  are — `:1864` a docblock's first content line, `:7538` and `:7766` `it(` titles
+  — exactly the split limit (5) states. Sentinel-resolving occurrences: **0**.
+  Maximum occurrence-to-anchor distance: **234**, at the occurrence on line 235.
+  Every count wave 39 published checks out.
+- **The census counts.** `it.each([` is produced by 9 lines today and was
+  produced by 10 before wave 39 disambiguated `:7383`; the `rebind` table header
+  has exactly 1 producer. The synthetic two-producer fixture is real.
+
+**And then the tenth instance.** This phase's signature defect — a stated reach
+exceeding an executed reach — survives round 9 in the one paragraph round 9 wrote
+to end it. Limit (5) and the `constructAnchorFor` docblock both close on the
+sentence *"the maximum distance from an occurrence to its anchor is 234 LINES …
+so `the same construct` can span a couple of hundred lines and the
+interchangeability residual is that wide."* **The residual is not that wide.** The
+max occurrence-to-anchor distance is a property of where the 29 sentences happen
+to sit; the residual is the width of the anchor's SHADOW — every line that
+resolves to the same anchor. Measured: the anchor four shipped occurrences
+already sit under (`:417`) shadows lines **419..1574 — 1,155 raw lines, 574
+surface lines**, five times the published figure and the widest of any anchor in
+the file. Executed twice on the real tree, restoring between runs:
+
+| relocation | distance | key | suite |
+|---|---|---|---|
+| `:436` → into header section 3 (*"the FILE WALK below duplicates `sql-discipline.spec.ts`'s private walk"*) | **514 lines** | byte-identical | **439/439 green** |
+| `:436` → across the whole machine-owned derived-residual span, into the import region | **1,130 lines** | byte-identical | **439/439 green** |
+
+`:436` is the one shipped occurrence whose LINE half masks away entirely — the
+key is `SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ {q2} :: q2` — and
+the file says of exactly this key, at `:10272-10275`, *"its construct half is what
+names it."* Its construct half names 574 surface lines. Its exemption reason still
+reads *"A wrapped cell in the same ASCII table"* after the sentence has been moved
+out of every table in the file. **CR-20 is NOT closed.** Neither the uniqueness
+census, the prefix case, the sentinel case nor the four range pins reaches this:
+the census asserts one producer LINE and `:417` is one line.
+
+**And a pin that passes by construction.** Wave 41's two `.from` assertions
+(`:10131-10134` and `:10150-10153`) compare `EXCLUSIONS[n].from` against a
+locator expression that is character-for-character the expression `EXCLUSIONS` itself was built from. They
+cannot fail on their own terms, and the comment beside them claims the opposite:
+*"Both endpoints are pinned because a width is two numbers, and pinning only the
+end leaves the other half free to move."* Executed: a decoy
+`export const RESOLVER_REGISTRY_DECOY` planted 104 lines above the registry slid
+exclusion three's `from` from 4163 to 4058, removed **105 lines** of gate-file
+source from the scanned surface, and left the suite at **439/439 green** —
+including the assertion whose message names exactly that condition.
+
+**Severity, stated honestly.** This is a **test-only gate**. Nothing leaks. The
+shipped bundle's entire import set is one specifier, `crypto`; the walk covers 23
+modules at zero violations; `tsc --build` and `eslint` are clean. Every finding
+below is a defect in **the enforcement of a claim about the gate's own reach**,
+not a live vulnerability and not a path to an outbound call. They are graded
+BLOCKER against this phase's own standard — that a sentence in this file may not
+claim more than the code beneath it executes — and against nothing else.
+
+**Already-known items, confirmed rather than re-reported.** `:981`'s capital-`W`
+`Wave 28 changed no rule…` is present and its reason is in the bytes; I confirm
+the WINDOWS-41 sweep otherwise left no unmarked present-tense box-state statement
+in this file. `01-40-PLAN.md:174`/`:636`'s "both return sites" (F-1) is a planning
+artifact and out of scope here. WR-49 and WR-53 are correctly handled as
+no-overclaim consequences and are not re-raised.
+
+## Critical Issues (pass 9, round 9)
+
+### CR-22: The construct anchor's relocation residual is published as 234 lines and executes at 1,155 — a shipped occurrence relocated 1,130 lines keeps a byte-identical key at 439/439 green
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9090-9093` (limit (5)),
+`:9343-9345` (the `constructAnchorFor` docblock), `:10271-10275` (the null-anchor
+case's supporting claim)
+
+**Issue.** Both surfaces close their disclosure of the anchoring's residual with
+the same sentence:
+
+> *"RE-MEASURED AT WAVE 39 AFTER BOTH CHANGES, the maximum distance from an
+> occurrence to its anchor is 234 LINES — the occurrence on line 235 takes this
+> file's own title line — so `the same construct` can span a couple of hundred
+> lines and **the interchangeability residual is that wide**."*
+
+The 234 is correct and I re-measured it. The inference from it is not. *Distance
+from an occurrence to its anchor* is a fact about where the 29 shipped sentences
+happen to sit. *The interchangeability residual* is the width of the anchor's
+**shadow** — the set of lines that resolve to the same anchor — which is a
+property of the file's recogniser geometry and is much larger. Measured over all
+8,846 surface lines with the round-9 builder:
+
+```
+anchor line  shadow (surface lines)   raw width   surface lines   shipped occurrences in it
+    1          2 ..  284                 282           283          133, 134, 178, 235
+  299        301 ..  362                  61            62          303, 305, 309
+  417        419 .. 1574                1155           574          436, 468, 523, 600
+ 3022       3023 .. 3077                  54            55          3068, 3069
+```
+
+`:417` is `SPELLING (operator, by POSITION) RESOLVED BY REPORTS` — the header row
+above a rule of dashes, reached by recogniser (4). Every one of the 574 surface
+lines from 419 to 1574 resolves to it, because between the rule at `:418` and the
+imports at `:1567` this file contains no other line any of the five recognisers
+accepts. The published residual is off by a factor of five, and the file's own
+widest shadow already contains four shipped occurrences.
+
+**Executed, on the real tree, restored between runs.** The occurrence at `:436`
+is the wrapped ASCII-table cell whose entire normalized content is a declared
+phrasing, so its key is `SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§
+{q2} :: q2` and, in the words of `:10272-10274`, *"its construct half is what
+names it."* Its exemption reason is *"HEADER. A wrapped cell in the same ASCII
+table, labelling what the keyReceiver row already carries."*
+
+1. **Moved 514 lines**, out of the table and into header section 3 — the
+   paragraph about the FILE WALK duplicating `store/sql-discipline.spec.ts`,
+   landing under *"the named non-vacuity assertion is the real protection against
+   a walk that shrinks."* Key byte-identical. **439 of 439 green.**
+2. **Moved 1,130 lines**, out of the table, across the entire machine-owned
+   derived-residual span, to the top level beside the imports. Anchor still
+   resolved to `:417`, 1,148 lines above. Key byte-identical. **439 of 439
+   green.** Occurrence count unchanged at 29; the exemption still discharged.
+
+After either move the entry's stated reason is false of where the sentence now
+sits, and none of the three discharge checks, the uniqueness census, the prefix
+case, the sentinel case or the four range pins reports anything. The census
+cannot: it asserts the anchor has exactly **one producer line**, and `:417` *is*
+one line. CR-20's mechanism removes self-anchoring (verified) and ambiguous
+tokens (verified); it does not touch shadow width, and shadow width is the
+residual.
+
+This is the phase's signature defect at its **tenth** recorded instance, and for
+the second consecutive round it is inside the paragraph written to state the
+reach of the fix for the ninth.
+
+**Fix.** Two parts, and the first is not optional.
+
+1. **Replace the sentence with the measured quantity.** Delete *"the maximum
+   distance from an occurrence to its anchor is 234 LINES … and the
+   interchangeability residual is that wide"* from both `:9090-9093` and
+   `:9343-9345` and state the shadow instead:
+
+   > *"THE RESIDUAL IS THE ANCHOR'S SHADOW, WHICH IS NOT THE OCCURRENCE-TO-ANCHOR
+   > DISTANCE AND IS MUCH LARGER THAN IT. Every line resolving to the same anchor
+   > is interchangeable with every other. Measured at wave 42 over all 8,846
+   > surface lines: the widest shadow is the header row at `:417`, which claims
+   > lines 419..1574 — 1,155 raw lines, 574 surface lines — and already contains
+   > four shipped occurrences. An occurrence inside it can be moved anywhere else
+   > inside it for a byte-identical key. That is the size of the residual; 234 is
+   > the largest distance any shipped sentence happens to sit from its anchor,
+   > which bounds nothing."*
+
+2. **Pin the number so the next widening is loud**, in the shape this file
+   already uses for every other measured residual — a case that computes each
+   in-use anchor's shadow and asserts the maximum against a pinned value, with a
+   message saying that a shadow which grew is a residual which grew:
+
+   ```ts
+   it("no anchor IN USE shadows more than the pinned number of surface lines", () => {
+     const shadow = new Map<number, number[]>();
+     for (const n of SURFACE_LINES) { /* group SURFACE_LINES by resolved anchor line */ }
+     const widest = Math.max(...[...shadow.values()].map((s) => s.length));
+     expect(widest, "...an anchor's shadow IS the interchangeability residual...").toBe(574);
+   });
+   ```
+
+   Do **not** close this by folding line numbers into the key — the census case's
+   own message already forbids that, and for the right reason.
+
+---
+
+### CR-23: Wave 41's two `.from` assertions compare an expression against itself — a decoy locator slides exclusion three's opening 105 lines off the scanned surface at 439/439 green
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10131-10134` and
+`:10150-10153` (the assertions), `:10079-10085` (the test's locators),
+`:9983-9988` (`EXCLUSIONS`' locators), `:9963-9967` (the closing claim)
+
+**Issue.** `EXCLUSIONS` computes its two opening anchors as
+
+```ts
+const listStart     = lineOf((l) => l.startsWith("export const UNBOUNDED_QUANTIFIERS"));
+const registryStart = lineOf((l) => l.startsWith("export const RESOLVER_REGISTRY"));
+```
+
+and the WR-54 case opens by recomputing **the same two expressions, character for
+character, over the same `gateLines`, through the same `lineOf`** — and then
+asserts them against the values `EXCLUSIONS` derived from them:
+
+```ts
+expect(EXCLUSIONS[2].from, "...while RESOLVER_REGISTRY opens at ...").toBe(registryStart);
+expect(EXCLUSIONS[1].from, "...while UNBOUNDED_QUANTIFIERS opens at ...").toBe(listStart);
+```
+
+These are tautologies. They hold for every possible file, including a file where
+the locator matches the wrong line and a file where it matches nothing (`-1 ===
+-1`) — the exact silent success the same test's own non-vacuity comment, thirty
+lines above, says it is organised against, and which it correctly guards for
+`REGISTRY_CLOSE` and for each `UNBOUNDED_QUANTIFIERS` entry. The comment beside
+them claims the opposite of what they do:
+
+> *"Both endpoints are pinned because a width is two numbers, and pinning only the
+> end leaves the other half free to move."*
+
+Only the `to` endpoints are pinned. The `from` endpoints are exactly as free as
+before, and the sentence asserting otherwise is itself the eleventh instance of
+the signature defect.
+
+**Executed, on the real tree, restored afterwards.** Planting one line —
+`export const RESOLVER_REGISTRY_DECOY: readonly number[] = Object.freeze([1]);` —
+104 lines above the real registry:
+
+- exclusion three's realized `from` moves from **4163 to 4058**;
+- **105 lines** of gate-file source silently leave the scanned surface
+  (8,848 → 8,743);
+- the coarse band (500..3000) still passes, the `proof` token `id: "constStrings"`
+  is still inside the range, and the `to` pin still passes;
+- **439 of 439 green**, including both `.from` assertions.
+
+Any declared phrasing living in those 105 lines is now unguarded and nothing
+says so. Related: `:9963-9967` states *"each locator proved to match exactly ONE
+line before it is used."* Three of the five locators are —
+`REGISTRY_CLOSE` and each entry literal. `listStart` and `registryStart` are not
+proved unique and are not proved non-empty in this case at all (`e.from > 0` is
+asserted, but in a different case).
+
+**Fix.** Pin the `from` endpoints against something derived independently of the
+expression under test, and prove both locators unique first — the same treatment
+`REGISTRY_CLOSE` already gets:
+
+```ts
+const REGISTRY_OPEN = "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
+const registryOpenHits = gateLines.filter((l) => l === REGISTRY_OPEN).length;
+expect(registryOpenHits, `the locator ${JSON.stringify(REGISTRY_OPEN)} matches ${registryOpenHits} line(s), not exactly one...`).toBe(1);
+expect(EXCLUSIONS[2].from, "...").toBe(lineOf((l) => l === REGISTRY_OPEN));
+```
+
+(and the equivalent full-line locator for `UNBOUNDED_QUANTIFIERS`). Then correct
+`:9963-9967` to *"the locators for the two CLOSING lines, and each list entry, are
+proved to match exactly one line"* — or make the sentence true by proving all
+five. Do **not** delete the `.from` assertions; make them assert.
+
+## Warnings (pass 9, round 9)
+
+### WR-55: The sentinel case cannot fail for any occurrence except one on line 1 of the file, and states its reach as the whole scanned surface
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10306-10341` (the
+case), `:9228-9233` (the docblock stating its reach), `:10295-10300` (the case's
+own reach paragraph)
+
+**Issue.** `constructAnchorFor` reaches `return NO_PRECEDING_CONSTRUCT` only by
+running the backward scan off the top of the file having accepted no line. Line 1
+of this file is `// packages/backend/src/outbound-prohibition.spec.ts — CORE-11's
+wired gate.` — a `//` comment with nothing above it, so recogniser (5) accepts it
+unconditionally, and `constructTokenOf` returns a non-null token for it. The
+forward walk from `head = 1` therefore returns on its first iteration for every
+`lineNumber >= 2`. Measured by evaluating `constructAnchorFor` at **every one of
+the file's 11,072 lines**: the set of lines resolving to the sentinel is exactly
+`[1]`.
+
+So the case reads 29 occurrences and can only ever be non-empty for an occurrence
+on line 1 — the file's own path line. It is green by construction over 8,845 of
+the 8,846 surface lines. Both surfaces state a wider reach than that:
+
+> `:9229-9232` — *"bounds it over the occurrences `quantifierOccurrences` finds
+> across `SURFACE_LINES` on the scanned surface and over nothing wider"*
+>
+> `:10295-10300` — *"ITS REACH, STATED RATHER THAN IMPLIED … It bounds the
+> sentinel over the occurrences `quantifierOccurrences` finds across
+> `SURFACE_LINES` and over nothing wider."*
+
+The paragraph headed "STATING A WIDER REACH THAN THE ONE EXECUTED IS THE DEFECT
+THIS WHOLE FILE IS ABOUT" states a reach of 29 and executes a reach of 1. The case
+is worth keeping — it is cheap and it is the right shape — but its disclosure is
+wrong. (Confirmed dependent on line 1's shape and not on the builder: blanking
+line 1 in the harness makes lines 1, 2 and 3 resolve to the sentinel.)
+
+**Fix.** Add the executed bound to both paragraphs:
+
+> *"WHAT CAN ACTUALLY MAKE IT RED, MEASURED RATHER THAN IMPLIED. The sentinel is
+> returned only when the backward scan exhausts the file, and line 1 of this file
+> is a `//` comment that names something — recogniser (5) accepts it
+> unconditionally — so for every line from 2 down the walk returns on its first
+> iteration. Evaluated at all 11,072 lines, exactly ONE resolves to the sentinel:
+> line 1. This case is therefore GREEN BY CONSTRUCTION unless a declared phrasing
+> lands on line 1, or line 1 stops being a nameable `//` comment. It is kept
+> because both of those are edits a person can make; it is not evidence about the
+> other 8,845 surface lines."*
+
+---
+
+### WR-56: The prefix case reads only the declared map, in the same wave whose census case argues at length that reading only one side is a defect
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10340` (the
+key set), `:10386-10391` (the census case's contrary argument)
+
+**Issue.** `no exemption key's CONSTRUCT half is a PREFIX of its LINE half` opens
+with `const keys = Object.keys(HEADER_QUANTIFIER_EXEMPTIONS);` and never reads
+`surfaceExemptionKeys`. The census case, added in the same round for the sibling
+half of the same finding, reads both and says why in its own bytes:
+
+> *"THE CENSUS IS ASSERTED FROM BOTH SIDES ON PURPOSE. … asserting only one of
+> them would let the other drift: an occurrence whose anchor is ambiguous must be
+> caught the moment it appears, BEFORE anyone writes an exemption for it."*
+
+The identical argument applies to self-anchoring and is not made. Measured
+consequence: reverting BOTH wave-39 scan bounds (`i = lineNumber`,
+`k <= lineNumber`) turns two cases red — the exemption-obligation case and the
+cross-construct fixture — and leaves the prefix case **green**, because the
+declared map's bytes did not change. The case's header calls the shape "FORBIDDEN
+OUTRIGHT"; what is forbidden outright is a hand-written key, and only after
+someone regenerates.
+
+**Fix.** Read both sides, as the census does:
+
+```ts
+const keys = [
+  ...new Set([
+    ...Object.keys(HEADER_QUANTIFIER_EXEMPTIONS),
+    ...surfaceExemptionKeys(gateLines, SURFACE_LINES).map((f) => f.key),
+  ]),
+];
+```
+
+and adjust the header from "FORBIDDEN OUTRIGHT" to name the two sides, or state
+in the comment why the surface side is deliberately left to the fixture.
+
+---
+
+### WR-57: The key split is written three times and the ellipsis twice — one of them hardcoded — against the rationale `CONSTRUCT_TOKEN_ELLIPSIS` was introduced to state
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9268-9273` (the
+rationale), `:10350-10358` and `:10363` (the third implementation and the
+hardcoded ellipsis), `:10399-10400` and `:10568-10571` (the two identical
+`constructHalf` declarations)
+
+**Issue.** Round 9 introduced `CONSTRUCT_TOKEN_WIDTH` / `CONSTRUCT_TOKEN_ELLIPSIS`
+with an explicit reason:
+
+> *"The two used to be separate: the builder truncated inline and anything else
+> that wanted the same token had to repeat the width and the ellipsis character. A
+> census that computed the token in a slightly different form would measure a
+> DIFFERENT thing and pass having compared nothing, so the form is derived from
+> here on both sides rather than written twice."*
+
+In the same round:
+
+- `constructHalf` is declared twice with byte-identical bodies, at `:10399-10400`
+  (census case) and `:10568-10571` (cross-construct fixture);
+- the permanent prefix case re-implements the split a third time inline at
+  `:10350-10358`;
+- and at `:10363` the permanent prefix case strips the ellipsis with a hardcoded
+  `"…"` while its synthetic twin at `:10723`, thirty lines of diff away, uses
+  `CONSTRUCT_TOKEN_ELLIPSIS`.
+
+Nothing is wrong today — `"…"` and `"…"` are the same character. The defect
+is that the exact drift the new constants were introduced to prevent was
+reintroduced in the commit that introduced them, and the hardcoded copy is in the
+**permanent** case while the named copy is in the **synthetic** one.
+
+**Fix.** Hoist `constructHalf` / `lineHalf` to module scope beside
+`EXEMPTION_ANCHOR_SEP`, use them in all three places, and replace `"…"` at
+`:10363` with `CONSTRUCT_TOKEN_ELLIPSIS`.
+
+---
+
+### WR-58: `constructHalf` has no `indexOf === -1` guard in the census case, which reads the same keys the prefix case guards
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10399-10400`,
+`:10568-10571`
+
+**Issue.** `k.slice(0, k.indexOf(EXEMPTION_ANCHOR_SEP))` returns
+`k.slice(0, -1)` — the whole key minus its last character — for a key carrying no
+separator. The prefix case guards exactly this at `:10351-10354`
+(`expect(at, "...carries no ... separator...").toBeGreaterThan(0)`); the census
+case, which runs independently over the same `Object.keys(HEADER_QUANTIFIER_
+EXEMPTIONS)`, does not. A separator-less hand-written key would enter the census's
+`inUse` set as a near-complete key, find zero producers, and fail with a message
+about ambiguity rather than about malformation — a correct red for the wrong
+reason, and it is the census's own message that tells the reader "the key was
+hand-written against a header that is not in the file."
+
+**Fix.** Give the shared `constructHalf` (see WR-57) an explicit guard:
+
+```ts
+const constructHalf = (k: string): string => {
+  const at = k.indexOf(EXEMPTION_ANCHOR_SEP);
+  if (at <= 0) throw new Error(`exemption key ${JSON.stringify(k)} carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator, so it has no construct half.`);
+  return k.slice(0, at);
+};
+```
+
+---
+
+### WR-59: The rewritten recogniser list still describes `DECLARATION` more widely than the regex matches — IN-40 was not carried across the rewrite of the paragraph it was written about
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9330-9337` (the
+prose), `:9377-9378` (the regex)
+
+**Issue.** Round 9 rewrote this paragraph in full, opening it *"THE DERIVATION,
+STATED AS IT EXECUTES … this list is the code's list"*, and IN-40 (round 8) is not
+reflected in it. The prose says:
+
+> *"(1) a declaration — `const`, `let`, `var`, `function`, `class`, `type`,
+> `interface`, `enum`, optionally behind `export`, `default` and `async`"*
+
+The regex is
+`/^\s*(export\s+)?(default\s+)?(async\s+)?(const|let|var|function|class|type|interface|enum)\s+[A-Za-z_$]/`.
+The trailing `\s+[A-Za-z_$]` means a **destructuring declaration is not a
+recognised construct**: `const { a } = …` and `const [a] = …` are both skipped,
+and an occurrence sitting under one anchors to whatever is above it instead.
+"a declaration — `const`, `let`, `var`, …" implies all of them. A paragraph whose
+own heading is "STATED AS IT EXECUTES" is the wrong place to leave this. (The
+optional groups are also ordered rather than free, so the prose's "optionally
+behind `export`, `default` and `async`" describes a set where the code has a
+sequence; harmless in JavaScript but the same looseness.)
+
+**Fix.** *"(1) a declaration whose first token after the keyword is an
+identifier — `const`, `let`, `var`, `function`, `class`, `type`, `interface`,
+`enum`, optionally behind `export`, then `default`, then `async`, in that order.
+A DESTRUCTURING declaration (`const { a } = …`, `const [a] = …`) is NOT
+recognised, and an occurrence under one anchors above it."*
+
+---
+
+### WR-60: The same measured relocation is stated as "58 lines apart" and as "57 lines away", 412 lines apart, in the same wave
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10383` and
+`:10795-10796`
+
+**Issue.** Both sentences describe the single pass-9 relocation of a shipped table
+cell between two identically-headed tables:
+
+- `:10383` — *"verification pass 9 moved a shipped table cell between two
+  identically-headed tables, **58 lines apart** and about a different operator,
+  for a byte-identical key at 434 of 434 green."*
+- `:10795-10796` — *"it moved a table cell out of one identically-headed table and
+  into another, **57 lines away** and about a different operator, for a
+  byte-identical key."*
+
+One of them is wrong; nothing in the file can say which. In a file whose entire
+discipline is that a number be measured rather than remembered, two numbers for
+one measurement is a defect in the discipline itself, and it is the kind that
+propagates into the next summary.
+
+**Fix.** Re-measure the distance once, write the result in both places, and cite
+the two line numbers it was measured between.
+
+## Info (pass 9, round 9)
+
+### IN-41: Limit (5)'s heading is wrong in both directions, and the paragraph beneath it says so
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9054-9055`
+
+**Issue.** *"THE CONSTRUCT ANCHOR REACHES THE NEAREST PRECEDING ACCEPTED LINE AND
+NO FURTHER."* Measured, it reaches neither exactly:
+
+- **Nearer.** For an occurrence under a ruled table the nearest preceding accepted
+  line is the RULE, and the anchor is the row ABOVE it — for `:436` the accepted
+  line is `:418` and the anchor is `:417`.
+- **Further.** When a header names nothing strictly above the occurrence the
+  backward scan CONTINUES (the WR-53 extension), so the anchor can be an
+  arbitrary distance above the nearest accepted line — measured at `:1574`, whose
+  nearest accepted line is the `/**` at `:1573` and whose anchor is `:417`,
+  1,157 lines higher.
+- **Below it.** A bare `/**` at line *h* with content at *h+1* anchors an
+  occurrence at *h+5* to *h+1*, which is below the accepted line.
+
+The body of the paragraph gets all three right; only the heading — the part a
+scanner reads — does not.
+
+**Fix.** *"THE CONSTRUCT ANCHOR IS THE FIRST NAMEABLE LINE FOUND BY A BOUNDED
+BACKWARD SCAN AND FORWARD WALK, WHICH IS NEITHER THE NEAREST ACCEPTED LINE NOR
+THE ENCLOSING CONSTRUCT."*
+
+---
+
+### IN-42: `CORE11_BOX_EXPECTED` pins a 17-byte prefix; the header says it pins the row "BY BYTES"
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:933-934`,
+`:10983`, `:11057`
+
+**Issue.** `CORE11_BOX_EXPECTED = "- [ ] **CORE-11**"` and the case asserts
+`row.startsWith(CORE11_BOX_EXPECTED)`. That pins the checkbox and the identifier
+and nothing after them, which is the right scope — the row's prose is allowed to
+change. The header at `:933-934` describes it as *"`CORE11_BOX_EXPECTED` below,
+which pins that row BY BYTES."* It pins that row's **first 17 bytes**. The
+intended contrast is with the `[ x]` character class that stayed green through two
+flips, which is a real and important distinction — but "the row" is wider than
+what is pinned.
+
+**Fix.** *"…`CORE11_BOX_EXPECTED` below, which pins that row's CHECKBOX AND
+IDENTIFIER by an exact byte prefix rather than by a character class."*
+
+---
+
+### IN-43: The clause WINDOWS 41 deliberately left standing is present-tense about a wave thirteen waves in the past
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:906-910`
+
+**Issue.** Wave 41 removed the box-state clause from this sentence and recorded
+why it kept the rest: *"The ledger-reconciliation clause is LEFT STANDING: it is
+the same dated record of intent the wave-27 block already carries, it names no box
+state, and reconciling the two ledgers is a thing that wave did."* The clause it
+left reads *"wave 27 derives the replacement text and **wave 28 reconciles** both
+requirement-tier ledgers to it in ONE move"* — present tense, describing a wave
+thirteen waves behind the head. The reasoning for keeping it is sound; the tense
+makes it read as a live plan rather than a record, which is the same reader hazard
+the pointer-not-a-bound rule exists for.
+
+**Fix.** Past-tense it: *"wave 27 DERIVED the replacement text and wave 28
+RECONCILED both requirement-tier ledgers to it in one move."*
+
+---
+
+### IN-44: The census disambiguation ties an exemption anchor to a TypeScript type annotation, and nine colliding `it.each([` producers remain
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:7383`
+
+**Issue.** Wave 39 disambiguated the ten-producer `it.each([` anchor by widening
+one line to `it.each<[label: string, binding: string]>([`. Measured today: that
+form has 1 producer, and `it.each([` still has **9** — at `:7011, :7239, :8405,
+:8466, :8499, :8604, :8613, :8649, :8907`. Correct, and the census's own remedy
+(i) prescribes exactly this. Two consequences worth recording rather than
+rediscovering:
+
+- The anchor now depends on a **type annotation**, which carries no runtime
+  meaning and which a type-only refactor, a generic-inference cleanup or a
+  formatter that re-wraps the line would change silently — regenerating a shipped
+  exemption key as a side effect.
+- The nine remaining collisions are safe only because no anchor in use points at
+  them. The first declared phrasing to land under any of them turns the census
+  red, which is the designed behaviour — but the disambiguation debt is nine
+  lines, not zero, and nothing in the file says so.
+
+**Fix.** Add one sentence beside the census case: *"Nine `it.each([` lines still
+share a token. They are not in use, so the census does not flag them; the first
+occurrence to land under one of them will. Remedy (i) is owed nine times, not
+once."*
+
+---
+
+_Reviewed: 2026-08-26T17:20:00Z_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard — every measurement re-executed against the live file via an out-of-tree harness; five mutations planted, run and reverted; `git diff --exit-code -- packages/` clean, `pnpm exec vitest run` 31 files / 1379 tests, gate suite 439, `tsc --build` 0, `eslint` clean_
