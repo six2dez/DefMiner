@@ -9003,71 +9003,84 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     below pins the count inside that range against the count inside the live
  *     `clause` strings, so a phrasing written into a between-rows comment breaks
  *     an equality instead of vanishing. Measured at wave 33: 12 and 12.
+ *
+ * (5) THE CONSTRUCT ANCHOR REACHES THE NEAREST PRECEDING CONSTRUCT AND NO
+ *     FURTHER. Added at wave 36 for CR-17. A key now carries the masked
+ *     construct its occurrence sits under, so an exemption written for one
+ *     construct is NOT discharged by an occurrence sitting under a DIFFERENT
+ *     one. IT DOES NOT FOLLOW THAT AN EXEMPTION CANNOT BE DISCHARGED BY A
+ *     DIFFERENT OCCURRENCE: TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN
+ *     INTERCHANGEABLE, separated only by the positional `#N` ordinal, which is
+ *     assigned by scan order rather than by line. THAT RESIDUAL IS UNGUARDED,
+ *     and it is stated as a limit here rather than as a satisfied check. The
+ *     anchoring removes ONE relocation shape. It does not close the class, it
+ *     does not widen limit (1)'s phrase list, it does not change limit (2)'s
+ *     normalization, and it reaches none of the surfaces limit (3) leaves out.
  */
 const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
   Object.freeze({
     // --- HEADER (1..956) ---
-    "CR-10 `constStrings` holds {q3} a name is bound to at ANY OF :: q3":
+    "packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi… §§ CR-10 `constStrings` holds {q3} a name is bound to at ANY OF :: q3":
       "HEADER. The universal is bounded IN THE SAME SENTENCE by the clause that follows it, which names the collecting branches by name. Removing the phrasing would remove the thing the bound is stated about. The reach OF RECORD is the generated span.",
-    "ITS COLLECTING BRANCHES and reports if {q4} names a receiver, :: q4":
+    "packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi… §§ ITS COLLECTING BRANCHES and reports if {q4} names a receiver, :: q4":
       "HEADER. The predicate half of the sentence above, bounded by the same clause naming the collecting branches. Exempt as one thought with the entry above it, not as a second claim.",
-    "`{q0}` was REMOVED from the one before it, for the same :: q0":
+    "packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi… §§ `{q0}` was REMOVED from the one before it, for the same :: q0":
       "HEADER. A QUOTATION of a phrase recorded as REMOVED from a clause on 2026-08-24 (CR-13). Quoting a deleted bound in order to record that it was deleted is not asserting one.",
-    "AND `+=` WAS NEVER READ AT ALL, in a paragraph claiming every :: q5":
+    "packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi… §§ AND `+=` WAS NEVER READ AT ALL, in a paragraph claiming every :: q5":
       "HEADER. Quotes the FALSE claim a superseded paragraph made, in order to record that it was false. WRAPPED across two comment lines: a line-based scan does not see this occurrence at all, which is why the scan is not line-based.",
-    'k = "requests"; sdk[k] {q8} :: q8':
+    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8':
       "HEADER. A cell in an ASCII table naming the RULE LABEL that fires for the row beside it. A label names a mechanism; it states no reach.",
-    'k = "requests"; sdk[k] {q8} :: q8 #2':
+    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8 #2':
       "HEADER. The same table cell one row down, for the `var` spelling. Distinct occurrence, identical reasoning, listed separately because the guard counts occurrences rather than lines.",
-    'k = "harmless"; sdk[k] {q8} — THE MIRROR, and it :: q8':
+    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "harmless"; sdk[k] {q8} — THE MIRROR, and it :: q8':
       "HEADER. The same table cell for the MIRROR row, where the over-approximation is the point being shown.",
-    "{q2} :: q2":
+    "SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ {q2} :: q2":
       "HEADER. A wrapped cell in the same ASCII table, labelling what the keyReceiver row already carries. What bounds it is QUANTIFIED_CLAUSES.keyReceiver - the four RECEIVER_OPERATORS - and not this cell.",
-    "is inside for a literal binding, for an assembled binding in every :: q5":
+    "SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ is inside for a literal binding, for an assembled binding in every :: q5":
       "HEADER. Bounded IN THE SAME SENTENCE by the four positions it enumerates and by the sentence after it, `Two hops is out`. WRAPPED across two comment lines.",
-    "a binding {q0} is seen. It is deleted, not softened. :: q0":
+    "SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ a binding {q0} is seen. It is deleted, not softened. :: q0":
       "HEADER. Records WHY a former exemption was DELETED, quoting the reach that falsified it. The sentence is about a deletion; it makes no claim of its own.",
-    "chains to {q2}. Executed: `const a = navigator; const b = a; :: q2":
+    "SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ chains to {q2}. Executed: `const a = navigator; const b = a; :: q2":
       "HEADER. Records a hop clause that was DELETED and pastes the probe executed against it. It points at (a) and at the generated span for the answer rather than answering.",
 
     // --- CODE ABOVE THE REGISTRY ---
-    "Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
+    "Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
       "CODE. Not a claim about the OUTBOUND WALK's resolution reach at all: it describes the FILE WALK's directory recursion, which really is unbounded in depth and is pinned by the 23-file non-vacuity assertion over both SOURCE_ROOTS. Two different walks, and only one of them has a residual.",
-    "ITS COLLECTING BRANCHES, and step 1 asks whether {q4} names a receiver. :: q4":
+    "WHAT A READABLE KEY IS — DEFINED EXACTLY ONCE, CALLED FROM EVERY… §§ ITS COLLECTING BRANCHES, and step 1 asks whether {q4} names a receiver. :: q4":
       "CODE. Bounded IN THE SAME SENTENCE by the clause immediately before it, which names the collecting branches. The `anywhere` half of this sentence was REWRITTEN OUT in wave 33; what remains is the predicate that clause governs.",
-    "WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: {q8} :: q8":
+    "WHAT A READABLE KEY IS — DEFINED EXACTLY ONCE, CALLED FROM EVERY… §§ WHICH DIRECTION THAT ERRS IN, SAID PLAINLY: {q8} :: q8":
       "CODE. A one-line RULE LABEL, defined by the table in the header and used here to name the direction the mechanism errs in. It states no reach; the sentence it labels states the direction.",
-    "collected set of literals `constStrings` recorded for a name — which is every :: q3":
+    "EVERY string an expression can denote: the literal itself, or th… §§ collected set of literals `constStrings` recorded for a name — which is every :: q3":
       "CODE. Bounded IN THE SAME SENTENCE by the four branches enumerated immediately after it - a declaration, an assignment, a logical assignment and an operator initializer. The redundant `anywhere` clause that sat between them was REWRITTEN OUT in wave 33.",
 
     // --- BELOW THE REGISTRY ---
-    "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q0":
+    "THE DECLARED QUANTIFIER PHRASINGS. §§ green, and were FALSE: `{q7} the name is bound to anywhere in the :: q0":
       "BELOW REGISTRY, and one of THREE occurrences forming a single QUOTATION. This is the docblock of the list itself, quoting the two universals round 6 executed and DISPROVED. The quotation is the evidence for why the list exists; deleting it would leave the list without its reason.",
-    "green, and were FALSE: `{q7} the name is bound to anywhere in the :: q7":
+    "THE DECLARED QUANTIFIER PHRASINGS. §§ green, and were FALSE: `{q7} the name is bound to anywhere in the :: q7":
       "BELOW REGISTRY, and one of THREE occurrences forming a single QUOTATION. This is the docblock of the list itself, quoting the two universals round 6 executed and DISPROVED. The quotation is the evidence for why the list exists; deleting it would leave the list without its reason.",
-    "file` and `silent in {q5}`. A universal a reviewer cannot execute and :: q5":
+    "THE DECLARED QUANTIFIER PHRASINGS. §§ file` and `silent in {q5}`. A universal a reviewer cannot execute and :: q5":
       "BELOW REGISTRY. The third occurrence of the same quotation begun on the line above - the second falsified universal, quoted for the same reason.",
-    '"Bounded by DECLARATION ORDER inside the single collect pass, and by the branches that write the… :: q1':
+    'export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>… §§ "Bounded by DECLARATION ORDER inside the single collect pass, and by the branches that write the… :: q1':
       "BELOW REGISTRY, and a member of the QUANTIFIED_CLAUSES NAMED CLASS. Every value in that map exists to state what MEASURABLY BOUNDS a clause's universal, so it necessarily quotes the universal it bounds. The class cannot grow silently: it is bounded by QUANTIFIED_CLAUSES' own key set, which the coverage guard already pins one row at a time.",
-    "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2":
+    "export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>… §§ 'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2":
       "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
-    "'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2 #2":
+    "export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>… §§ 'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2 #2":
       "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
-    '"through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
+    'it.each([ §§ "through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
       "BELOW REGISTRY. A PARAMETERISED test title. The spellings it names are the case's own parameter table, sitting directly beneath it, so the title's universal is enumerated by data rather than claimed by prose.",
-    "BRANCHES and `keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
+    "CR-10, shape 1, and the mechanism named in the title is the whol… §§ BRANCHES and `keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
       "BELOW REGISTRY. Bounded IN THE SAME SENTENCE by the clause on the line above naming the collecting branches; the `anywhere` half was REWRITTEN OUT in wave 33.",
-    "it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
+    "it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRRO… §§ it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
       "BELOW REGISTRY. A test TITLE naming the rule label under test. The title's job is to say which mechanism the case exercises, and the case beneath it is the assertion.",
-    "{q8} (implemented) reports here — an OVER-approximation, :: q8":
+    "THE MIRROR OF THE WIDENING, ASSERTED RATHER THAN LEFT FOR NEXT R… §§ {q8} (implemented) reports here — an OVER-approximation, :: q8":
       "BELOW REGISTRY. Names the rule label and states, in the same breath, the direction it errs in - an OVER-approximation. A label plus its direction is a description, not a reach.",
-    'was read "in {q5}" and through "either a declaration or an :: q5':
+    'CR-10, shape 4, and the sharpest of the five because the lesson … §§ was read "in {q5}" and through "either a declaration or an :: q5':
       "BELOW REGISTRY. A QUOTATION, in quotation marks, of a claim this file's own header used to make and which the sentence after it records as FALSE. Quoting a claim in order to falsify it is not making it.",
-    'it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
+    'it("through {q8} and literalOf together: THE WIDENING CREATED NO… §§ it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
       "BELOW REGISTRY. A test TITLE naming the rule label under test, in the same shape as the case above it.",
-    "universal — `silent in {q5}` — and that ROW WAS REMOVED when its :: q5":
+    "THE LIST IS CHECKED AGAINST THE UNIVERSALS THIS ROUND FALSIFIED,… §§ universal — `silent in {q5}` — and that ROW WAS REMOVED when its :: q5":
       "BELOW REGISTRY. A QUOTATION, in backticks, of the universal carried by the registry row that was REMOVED on 2026-08-24 (CR-11). It records why the row went; it asserts nothing about what the walk reaches now.",
-    '"row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-0… :: q5':
+    'const row = RESOLVER_REGISTRY.find((r) => r.id === id); §§ "row `silence-operator-around-global-receiver` is BACK in the registry. It was removed on 2026-0… :: q5':
       "BELOW REGISTRY. An ASSERTION MESSAGE that fires only if the removed row comes back. It quotes the row's own named set - the spellings THAT ROW named - and is bounded by that set. A message complaining about a phrasing is not asserting it.",
   });
 
@@ -9117,17 +9130,136 @@ const maskQuantifiers = (text: string): string => {
 };
 
 /**
- * THE KEY AN EXEMPTION IS WRITTEN UNDER. The normalized line the occurrence
- * STARTS on, with the phrasings masked to `{qN}` tokens, truncated, plus the
- * phrasing's own index. THE MASKING IS LOAD-BEARING, not cosmetic: an unmasked
- * key would carry a declared phrasing verbatim, the scan would find it inside
- * this very map, and the map would generate the obligations it exists to
- * discharge. `no exemption KEY carries a declared phrasing` pins that below.
+ * WHAT REMAINS OF A TOKEN ONCE ITS MASKS AND PUNCTUATION ARE GONE. The letters
+ * and digits, and nothing else. A token whose remainder is empty NAMES NOTHING:
+ * it is `{qN}` tokens, spaces and punctuation, and it matches wherever the same
+ * masked shape occurs.
  */
-const exemptionKeyFor = (line: string, quantifierIndex: number): string => {
-  const masked = maskQuantifiers(normalizeGateLine(line));
+const nameableRemainder = (text: string): string =>
+  text.replace(/\{q\d+\}/g, "").replace(/[^A-Za-z0-9]/g, "");
+
+/**
+ * The token an occurrence carries when NO preceding construct resolves. NAMED
+ * rather than empty on purpose: an empty anchor is the shape this mechanism
+ * exists to forbid, so it may not be produced silently by the builder itself.
+ */
+const NO_PRECEDING_CONSTRUCT = "!NO-PRECEDING-CONSTRUCT!";
+
+/**
+ * The join between a key's two halves. Absent from this file's bytes apart from
+ * this declaration and the keys built with it, so neither half can contain it.
+ */
+const EXEMPTION_ANCHOR_SEP = " §§ ";
+
+/**
+ * THE CONSTRUCT AN OCCURRENCE SITS UNDER, AS A TOKEN A KEY CAN CARRY.
+ *
+ * CR-17, 2026-08-26, wave 36. Each of the three EXCLUSIONS further down carries
+ * a `proof` token pinning it to the construct it excludes, so an exclusion that
+ * slides onto a different construct fails loudly. The EXEMPTION MAP one layer
+ * down carried no equivalent: its keys were flat strings, not one of the three
+ * discharge checks consults an occurrence's line, and so an exemption written
+ * for one line was discharged just as well by an occurrence 9,001 lines away.
+ * The verifier deleted the table cell one exemption was written for, planted a
+ * fabricated hand-written bound outside all three exclusions, and measured the
+ * suite green at 432 of 432.
+ *
+ * THE DERIVATION. Scan BACKWARD from the occurrence's own line for the nearest
+ * preceding CONSTRUCT HEADER and return a masked token derived from it. The
+ * recognisers were chosen by reading the constructs the shipped occurrences
+ * actually sit under, not guessed: a declaration (`const`, `let`, `var`,
+ * `function`, `class`, `type`, `interface`, `enum`, with or without `export`),
+ * a `describe(` / `it(` / `test(` fixture title, the opening `/**` of a
+ * docblock, the header row above the rule of a ruled ASCII table or banner, and
+ * the opening line of a contiguous `//` comment block. Whichever comes first
+ * wins, so the anchor is the FINEST construct enclosing the occurrence.
+ *
+ * A header that names nothing on its own line — a bare `/**`, a rule of dashes
+ * — is walked FORWARD to the first line of that same construct which does name
+ * it, so an anchor THIS BUILDER resolves is never empty. A key WRITTEN BY HAND
+ * still can be, and that shape is forbidden outright by a separate case rather
+ * than left to this derivation.
+ *
+ * THE MASKING IS LOAD-BEARING HERE FOR THE SAME REASON IT IS IN THE LINE
+ * ANCHOR. Several fixture titles in this file contain a declared phrasing. An
+ * unmasked construct token would put one verbatim into a key, the scan would
+ * find it inside the map, and the map would generate the obligations it exists
+ * to discharge. `no exemption KEY carries a declared phrasing` pins that.
+ */
+const constructAnchorFor = (
+  lines: readonly string[],
+  lineNumber: number,
+): string => {
+  const DECLARATION =
+    /^\s*(export\s+)?(default\s+)?(async\s+)?(const|let|var|function|class|type|interface|enum)\s+[A-Za-z_$]/;
+  const FIXTURE_TITLE =
+    /^\s*(describe|it|test)(\.each|\.skip|\.only|\.todo)?\s*[(<]/;
+  const DOCBLOCK_OPEN = /^\s*\/\*\*/;
+  const isRule = (raw: string): boolean => {
+    const n = normalizeGateLine(raw);
+    return n.length >= 4 && /^[-\s]+$/.test(n);
+  };
+  const isLineComment = (raw: string): boolean => /^\s*\/\//.test(raw);
+
+  for (let i = lineNumber; i >= 1; i--) {
+    const raw = lines[i - 1] ?? "";
+    let head = -1;
+    if (isRule(raw)) {
+      // The rule itself names nothing; the row ABOVE it is the header.
+      for (let j = i - 1; j >= 1; j--) {
+        const above = lines[j - 1] ?? "";
+        if (normalizeGateLine(above).length === 0 || isRule(above)) continue;
+        head = j;
+        break;
+      }
+    } else if (
+      DECLARATION.test(raw) ||
+      FIXTURE_TITLE.test(raw) ||
+      DOCBLOCK_OPEN.test(raw) ||
+      (isLineComment(raw) && !isLineComment(lines[i - 2] ?? ""))
+    ) {
+      head = i;
+    }
+    if (head < 0) continue;
+    for (let k = head; k <= lineNumber; k++) {
+      const token = maskQuantifiers(normalizeGateLine(lines[k - 1] ?? ""));
+      if (nameableRemainder(token).length > 0) {
+        return token.length > 64 ? `${token.slice(0, 64)}…` : token;
+      }
+    }
+    return NO_PRECEDING_CONSTRUCT;
+  }
+  return NO_PRECEDING_CONSTRUCT;
+};
+
+/**
+ * THE KEY AN EXEMPTION IS WRITTEN UNDER. The masked CONSTRUCT the occurrence
+ * sits under, then the normalized line the occurrence STARTS on with the
+ * phrasings masked and truncated, then the phrasing's own index.
+ *
+ * THE MASKING IS LOAD-BEARING, not cosmetic: an unmasked key would carry a
+ * declared phrasing verbatim, the scan would find it inside this very map, and
+ * the map would generate the obligations it exists to discharge. `no exemption
+ * KEY carries a declared phrasing` pins that below.
+ *
+ * THE CONSTRUCT ANCHOR IS FOLDED INTO THE KEY RATHER THAN CHECKED BESIDE IT.
+ * The three discharge checks match keys as flat strings, so a key that carries
+ * its construct makes all three anchor-sensitive with NO change to their logic,
+ * and the count equality still balances at exactly one entry per occurrence. A
+ * fourth check reading the line separately would be a second mechanism for the
+ * same fact.
+ */
+const exemptionKeyFor = (
+  lines: readonly string[],
+  lineNumber: number,
+  quantifierIndex: number,
+): string => {
+  const masked = maskQuantifiers(
+    normalizeGateLine(lines[lineNumber - 1] ?? ""),
+  );
   const anchor = masked.length > 96 ? `${masked.slice(0, 96)}…` : masked;
-  return `${anchor} :: q${quantifierIndex}`;
+  const construct = constructAnchorFor(lines, lineNumber);
+  return `${construct}${EXEMPTION_ANCHOR_SEP}${anchor} :: q${quantifierIndex}`;
 };
 
 /** Every occurrence of a declared phrasing in the joined form of a line set. */
@@ -9163,7 +9295,7 @@ const surfaceExemptionKeys = (
 ): readonly { key: string; line: number; endLine: number }[] => {
   const seen = new Map<string, number>();
   return quantifierOccurrences(lines, lineNumbers).map((o) => {
-    const base = exemptionKeyFor(lines[o.line - 1] ?? "", o.quantifierIndex);
+    const base = exemptionKeyFor(lines, o.line, o.quantifierIndex);
     const n = (seen.get(base) ?? 0) + 1;
     seen.set(base, n);
     return {
@@ -9725,6 +9857,29 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
         reason.trim().length,
         `exemption ${JSON.stringify(key)} carries an empty or near-empty reason. The entry has to say WHY the occurrence is not a claim about reach, in words a reviewer can disagree with. "it is fine" is not a reason.`,
       ).toBeGreaterThan(40);
+    }
+  });
+
+  // CR-17's SECOND MECHANISM, TAKEN IN ADDITION TO THE CONSTRUCT ANCHORING AND
+  // NOT INSTEAD OF IT. Two independent mechanisms fail independently; one
+  // mechanism wearing two names fails once. The anchoring makes the three
+  // discharge checks above construct-sensitive. THIS case forbids, outright,
+  // the one key shape that names nothing at all and can therefore be satisfied
+  // wherever the same masked form occurs.
+  //
+  // WHAT IS CHECKED IS THE ANCHOR AS A WHOLE, AND THAT IS NARROWER THAN
+  // CHECKING EACH HALF. One shipped occurrence — the wrapped ASCII-table cell
+  // whose entire normalized content IS a declared phrasing — has a line half
+  // that legitimately reduces to nothing, and its construct half is what names
+  // it. A key whose WHOLE anchor reduces to nothing names neither, and that is
+  // the shape a fabricated bound was driven through at 432 of 432 green.
+  it("no exemption key's ANCHOR reduces to nothing — a fully-masked anchor names no construct and no line", () => {
+    for (const key of Object.keys(HEADER_QUANTIFIER_EXEMPTIONS)) {
+      const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
+      expect(
+        nameableRemainder(anchor).length,
+        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half is what names it — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
+      ).toBeGreaterThan(0);
     }
   });
 
