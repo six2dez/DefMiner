@@ -9092,8 +9092,8 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     surface lines that resolve to the SAME anchor — AND NOT THE DISTANCE
  *     FROM AN OCCURRENCE TO ITS ANCHOR, which is a fact about where the 29
  *     shipped sentences happen to sit. Measured at wave 42 with the shipped
- *     builder from inside this file's own describe over all 8,846 surface
- *     lines, the widest shadow belongs to the header row at `:417`,
+ *     builder from inside this file's own describe, the widest shadow belongs
+ *     to the header row at `:417`,
  *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`: 574 SURFACE
  *     LINES, raw span 419..1574 — 1,156 raw lines, of which exactly the 582
  *     the machine-owned span covers are removed by exclusion one — and it
@@ -9267,9 +9267,7 @@ const maskQuantifiers = (text: string): string => {
  * line from 2 downward. MEASURED IN THIS SESSION by evaluating the SHIPPED
  * builder at each line of the file in turn — a temporary case inside the gate's
  * own `describe`, run and then removed — the set of lines resolving to this
- * value is exactly `[1]`, out of 11,417 elements of `gateLines` (a `wc -l` of
- * 11,416 over a file ending in a newline; both figures are live and move with
- * every edit, so they are dated here rather than pinned). THE DEPENDENCE WAS
+ * value is exactly `[1]`. THE DEPENDENCE WAS
  * WATCHED, NOT ASSUMED: blanking line 1 and re-running the same sweep grew that
  * set from `[1]` to `[1, 2, 3]`, which is what makes the result a property of
  * LINE 1's SHAPE rather than of the builder. So the two cases below are GREEN
@@ -10174,9 +10172,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // THIS CASE'S REACH, STATED NARROWLY AND IN ITS OWN BYTES.
   //   (1) It bounds the MAXIMUM shadow over SURFACE_LINES under the grouping
   //       named above, and nothing wider.
-  //   (2) IT DOES NOT BOUND A NON-MAXIMAL SHADOW. The second-widest measured at
-  //       283 surface lines at wave 42, and it may grow to 573 without this case
-  //       reporting a thing.
+  //   (2) IT DOES NOT BOUND A NON-MAXIMAL SHADOW.
   //   (3) IT REACHES NO LINE INSIDE THE THREE EXCLUSIONS. SURFACE_LINES is the
   //       scanned surface and the excluded spans are not in it.
   //   (4) IT DOES NOT PREVENT A RELOCATION INSIDE A SHADOW. It makes the SIZE of
@@ -10196,8 +10192,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // reading. So the maximum is pinned here and the distribution is recorded as
   // evidence in `01-42-SUMMARY.md` instead.
   //
-  // MEASURED AT WAVE 42 with the shipped builder from inside this describe over
-  // all 8,846 surface lines. The widest shadow is the header row at `:417`,
+  // MEASURED AT WAVE 42 with the shipped builder from inside this describe. The
+  // widest shadow is the header row at `:417`,
   // `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`, reached by
   // recogniser (4). It claims raw lines 419..1574 — 1,156 raw lines — of which
   // exactly the 582 lines the machine-owned span covers (its BEGIN sentinel to
@@ -10629,18 +10625,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // bytes, rather than deleted quietly. The decision to withdraw it rather than
   // to build a containment is recorded in `01-VERIFICATION.md`'s
   // `## The mechanism judgement`, which put both exits to the operator; exit 2
-  // is the one taken. NOTHING WAS DELETED SILENTLY. The bounded enumeration
-  // behind this retirement is in `01-42-SUMMARY.md`; within the
-  // exemption-anchoring region it found ONE positive site claim, written in TWO
-  // places — this paragraph and the failure message below — and FIVE negative
-  // ones, and it is five rather than the four the round-10 plan listed as its
-  // floor. All five are untouched and byte-identical: an anchor that travelled
-  // with the sentence and named no site; an anchor that names no site at all;
-  // an anchor that is the sentinel and names no construct and no line; a
-  // self-anchoring key that names no site; and a key whose halves were both
-  // read off the occurrence's own line and so names no site. Each survives
-  // because each is a true statement about a DEFECT SHAPE, and none of them
-  // claims that a well-formed anchor identifies anything.
+  // is the one taken.
   it("no exemption key's ANCHOR reduces to nothing — a fully-masked anchor names no construct and no line", () => {
     for (const key of Object.keys(HEADER_QUANTIFIER_EXEMPTIONS)) {
       const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
@@ -10675,9 +10660,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // first iteration. MEASURED IN THIS SESSION with the SHIPPED builder at each
   // line of the file, by a temporary case inside this same `describe` that was
   // run and then removed: exactly ONE line resolves to the sentinel, and it is
-  // LINE 1, out of 11,417 `gateLines` elements (`wc -l` 11,416; both live
-  // figures, dated rather than pinned, because each edit moves them). The
-  // dependence was WATCHED rather than cited — blanking line 1 grew the
+  // LINE 1. The dependence was WATCHED rather than cited — blanking line 1 grew
+  // the
   // resolving set to `[1, 2, 3]`. THIS CASE IS THEREFORE GREEN BY CONSTRUCTION
   // over each surface line except line 1, and it is KEPT because a declared
   // phrasing landing on line 1, or line 1 ceasing to be a nameable `//`
@@ -10772,10 +10756,6 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // named because the same move measures 57 in the delete-first frame and both
   // figures are correct; see the note beside the 57 further down, and
   // `01-39-SUMMARY.md:531` and `:931`, which record the pair and its cause.
-  // Located by text TODAY, 2026-08-26 wave 43: the source table's header sits
-  // at line 299 and the destination table's at line 361, with the moved cell at
-  // 304..305 — a HISTORICAL measurement re-checked against a live file, not a
-  // live one, and it is written with its date so a reader can tell which.
   //
   // THE CENSUS IS ASSERTED FROM BOTH SIDES ON PURPOSE. The DECLARED map and
   // what the SURFACE produces are the same set today, and asserting only one
@@ -10980,7 +10960,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     const afterKey = afterKeys[0] ?? "";
     expect(
       afterKey,
-      `the anchored key did NOT change when the occurrence moved from one construct to another.\n  under the declaration : ${JSON.stringify(beforeKey)}\n  under the title       : ${JSON.stringify(afterKey)}\nThat is the CR-17 shape: an exemption written for one construct discharged by an occurrence sitting under a different one. \`constructAnchorFor\` has stopped resolving the enclosing construct — check its recognisers before checking anything else.`,
+      `the anchored key did NOT change when the occurrence moved from one construct to another.\n  under the declaration : ${JSON.stringify(beforeKey)}\n  under the title       : ${JSON.stringify(afterKey)}\nThat is the CR-17 shape: an exemption written for one construct discharged by an occurrence sitting under a different one.`,
     ).not.toBe(beforeKey);
     // And the difference is in the CONSTRUCT half specifically, not in the line
     // half, which is byte-identical by construction.
@@ -10994,7 +10974,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     ).toBe(lineHalf(beforeKey));
     expect(
       constructHalf(afterKey),
-      "the CONSTRUCT halves of the two keys are the same, so the anchor is not resolving the enclosing construct.",
+      "the CONSTRUCT halves of the two keys are the same.",
     ).not.toBe(constructHalf(beforeKey));
 
     // THE OUTCOME, WHICH IS WHAT ACTUALLY MATTERS. A different key is only the
@@ -11131,7 +11111,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       ).toBe(lineHalf(bKey));
       expect(
         constructHalf(aKey),
-        `the CONSTRUCT halves are the same for ${shape}, so the anchor is not resolving the ENCLOSING construct for an occurrence that is its own header.`,
+        `the CONSTRUCT halves are the same for ${shape}.`,
       ).not.toBe(constructHalf(bKey));
       // AND THE SELF-ANCHORING SHAPE ITSELF, FORBIDDEN OVER SYNTHETIC LINES —
       // the same predicate the permanent case applies to the shipped map.
@@ -11221,8 +11201,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // statement of it further up; NEITHER NUMBER IS WRONG, they are one move
     // counted in two frames, and the frame is what each site was missing.
     // Recorded in `01-39-SUMMARY.md:531` and in its discrepancy row `D-1` at
-    // `:931`. Both are HISTORICAL measurements; today, 2026-08-26 wave 43, the
-    // two identically-headed table headers sit at lines 299 and 361.
+    // `:931`.
     const header = 'describe("the same header, twice", () => {';
     const cell = `  cell: "${phrasing}",`;
     const twice: readonly string[] = [header, cell, "});", header, cell, "});"];
