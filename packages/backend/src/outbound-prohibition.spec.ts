@@ -9065,7 +9065,7 @@ const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
       "HEADER. Records a hop clause that was DELETED and pastes the probe executed against it. It points at (a) and at the generated span for the answer rather than answering.",
 
     // --- CODE ABOVE THE REGISTRY ---
-    "Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
+    "type Violation = { file: string; rule: string; detail: string }; §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2":
       "CODE. Not a claim about the OUTBOUND WALK's resolution reach at all: it describes the FILE WALK's directory recursion, which really is unbounded in depth and is pinned by the 23-file non-vacuity assertion over both SOURCE_ROOTS. Two different walks, and only one of them has a residual.",
     "WHAT A READABLE KEY IS — DEFINED EXACTLY ONCE, CALLED FROM EVERY… §§ ITS COLLECTING BRANCHES, and step 1 asks whether {q4} names a receiver. :: q4":
       "CODE. Bounded IN THE SAME SENTENCE by the clause immediately before it, which names the collecting branches. The `anywhere` half of this sentence was REWRITTEN OUT in wave 33; what remains is the predicate that clause governs.",
@@ -9091,13 +9091,13 @@ const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
       "BELOW REGISTRY. A PARAMETERISED test title. The spellings it names are the case's own parameter table, sitting directly beneath it, so the title's universal is enumerated by data rather than claimed by prose.",
     "CR-10, shape 1, and the mechanism named in the title is the whol… §§ BRANCHES and `keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
       "BELOW REGISTRY. Bounded IN THE SAME SENTENCE by the clause on the line above naming the collecting branches; the `anywhere` half was REWRITTEN OUT in wave 33.",
-    "it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRRO… §§ it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
+    "Same mechanism, different declaration keyword. It is asserted se… §§ it('through constStrings\\' WHOLE-FILE BINDINGS, {q8} — THE MIRROR, and it errs by OVER-approxima… :: q8":
       "BELOW REGISTRY. A test TITLE naming the rule label under test. The title's job is to say which mechanism the case exercises, and the case beneath it is the assertion.",
     "THE MIRROR OF THE WIDENING, ASSERTED RATHER THAN LEFT FOR NEXT R… §§ {q8} (implemented) reports here — an OVER-approximation, :: q8":
       "BELOW REGISTRY. Names the rule label and states, in the same breath, the direction it errs in - an OVER-approximation. A label plus its direction is a description, not a reach.",
     'CR-10, shape 4, and the sharpest of the five because the lesson … §§ was read "in {q5}" and through "either a declaration or an :: q5':
       "BELOW REGISTRY. A QUOTATION, in quotation marks, of a claim this file's own header used to make and which the sentence after it records as FALSE. Quoting a claim in order to falsify it is not making it.",
-    'it("through {q8} and literalOf together: THE WIDENING CREATED NO… §§ it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
+    'Two DIFFERENT allowlisted members is the honest opposite: the wa… §§ it("through {q8} and literalOf together: THE WIDENING CREATED NO NEW SILENCE — every mirror posi… :: q8':
       "BELOW REGISTRY. A test TITLE naming the rule label under test, in the same shape as the case above it.",
     "THE LIST IS CHECKED AGAINST THE UNIVERSALS THIS ROUND FALSIFIED,… §§ universal — `silent in {q5}` — and that ROW WAS REMOVED when its :: q5":
       "BELOW REGISTRY. A QUOTATION, in backticks, of the universal carried by the registry row that was REMOVED on 2026-08-24 (CR-11). It records why the row went; it asserts nothing about what the walk reaches now.",
@@ -9222,7 +9222,7 @@ const constructAnchorFor = (
   };
   const isLineComment = (raw: string): boolean => /^\s*\/\//.test(raw);
 
-  for (let i = lineNumber; i >= 1; i--) {
+  for (let i = lineNumber - 1; i >= 1; i--) {
     const raw = lines[i - 1] ?? "";
     let head = -1;
     if (isRule(raw)) {
@@ -9242,13 +9242,18 @@ const constructAnchorFor = (
       head = i;
     }
     if (head < 0) continue;
-    for (let k = head; k <= lineNumber; k++) {
+    for (let k = head; k < lineNumber; k++) {
       const token = maskQuantifiers(normalizeGateLine(lines[k - 1] ?? ""));
       if (nameableRemainder(token).length > 0) {
         return token.length > 64 ? `${token.slice(0, 64)}…` : token;
       }
     }
-    return NO_PRECEDING_CONSTRUCT;
+    // THE HEADER NAMED NOTHING STRICTLY ABOVE THE OCCURRENCE, SO THE SCAN
+    // CONTINUES RATHER THAN GIVING UP. Falling out of this walk resumes the
+    // backward scan one line higher, which resolves the NEXT enclosing
+    // construct. Returning the sentinel here instead would hand a bare `/**`
+    // an anchor that names no site at all, and CR-20(a) is the measurement
+    // that the two-line docblock is exactly where that happens.
   }
   return NO_PRECEDING_CONSTRUCT;
 };
@@ -9976,6 +9981,49 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
         `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half is what names it — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  // CR-20(a)'s SHAPE, FORBIDDEN OUTRIGHT AND SEPARATELY FROM THE CASE ABOVE.
+  // A fully-masked anchor names nothing; a SELF-ANCHORING one names something
+  // and still names no SITE, because both halves were copied off the SAME
+  // line. Two different defects, two cases, so they fail independently.
+  it("no exemption key's CONSTRUCT half is a PREFIX of its LINE half — a self-anchoring key names no site", () => {
+    const keys = Object.keys(HEADER_QUANTIFIER_EXEMPTIONS);
+    // NON-VACUITY BEFORE THE RULE. An empty map, or a key set whose separator
+    // stopped appearing, would make the loop below pass having compared
+    // nothing at all.
+    expect(
+      keys.length,
+      "HEADER_QUANTIFIER_EXEMPTIONS is EMPTY, so this case compared nothing. It is an assertion about the keys, and with no keys it is a silent success.",
+    ).toBeGreaterThan(0);
+    let compared = 0;
+    for (const key of keys) {
+      const at = key.indexOf(EXEMPTION_ANCHOR_SEP);
+      expect(
+        at,
+        `exemption key ${JSON.stringify(key)} carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator, so it has no construct half to check. Rebuild it with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
+      ).toBeGreaterThan(0);
+      const construct = key.slice(0, at);
+      const line = key
+        .slice(at + EXEMPTION_ANCHOR_SEP.length)
+        .replace(/ :: q\d+( #\d+)?$/, "");
+      // The two halves are truncated at DIFFERENT widths, so the comparison is
+      // made against the construct token minus its trailing ellipsis. Without
+      // that, a truncated construct half could never be a prefix of anything
+      // and this case would be green by arithmetic rather than by measurement.
+      const head = construct.endsWith("\u2026")
+        ? construct.slice(0, -1)
+        : construct;
+      compared++;
+      expect(
+        line.startsWith(head),
+        `exemption key ${JSON.stringify(key)} has a CONSTRUCT half that is a PREFIX of its LINE half. Both halves were read off the SAME line, so the key carries no positional information whatsoever: the entry is discharged by that masked text wherever in this file it sits, and the sentence the entry excuses can be moved into a construct its stated reason is FALSE of without any of the three discharge checks noticing. That is CR-20(a). It was measured at verification pass 9 by taking a shipped occurrence out of the docblock it belonged to and planting it 5,264 lines away inside an unrelated \`describe\`, for a byte-identical key, with the suite reporting 434 of 434 green. An occurrence sitting ON its own construct header — an \`it(\` title, or the first content line of a docblock — is the shape that produces it. Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key. If the REBUILT key still has this shape, the defect is in \`constructAnchorFor\`'s scan bounds and not in the entry: its backward scan must open STRICTLY ABOVE the occurrence, and its forward walk must stop STRICTLY ABOVE it too, continuing the backward scan to the next enclosing construct when a header names nothing above the occurrence.`,
+      ).toBe(false);
+    }
+    expect(
+      compared,
+      "the loop above compared no key, so this case is measuring nothing.",
+    ).toBe(keys.length);
   });
 
   // CR-17's FAILING PATH, EXECUTED — the relocation the anchoring was built for,
