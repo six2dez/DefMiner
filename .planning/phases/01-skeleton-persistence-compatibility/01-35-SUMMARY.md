@@ -254,4 +254,82 @@ Zero unmarked STANDING statements of a superseded bar on any of the four surface
 
 **AND BOTH CLASSES OF UNREACHED SURFACE, NAMED AS UNGUARDED LIMITS RATHER THAN AS SATISFIED CHECKS.** CLASS ONE, unguarded FILES: `.planning/STATE.md` and `.planning/WINDOWS.md` are reached by NO mechanical comparison at all — the two byte comparisons reach the gate header and the ledger and no further — so the pointer-not-a-bound rule remains a prohibition with no check for those two files, and this SUMMARY's own pointer amendments live under exactly that unguarded rule. CLASS TWO, undeclared SPELLINGS inside the guarded files: wave 33's guard is a phrase list over bytes under one named normalization and says so itself, so a hand-written bound spelled in words `UNBOUNDED_QUANTIFIERS` does not declare stands in the gate file and passes all four checks above unseen.
 
+## THE FIVE MUTATION PROOFS, AS ONE TABLE, WITH THE RUN ORDER STATED
+
+**RUN ORDER: M2, M1, M3, M4, M5.** Each was planted against a tree whose real work was already committed, restored immediately after, and separated from the next by a clean `git diff --exit-code`. `git log --oneline -1` was pasted before each; M2, M1, M3 and M4 all ran at `e47ffdd`, M5 at `f5652a1`. None was combined with another.
+
+| # | Order | Mutation | RED test title | Verdict of the run | Restored |
+| --- | --- | --- | --- | --- | --- |
+| M2 | 1st | Gate-header copy of the span, line 1010: `OVER-approximates` → `OVER-approximatez` | *the block shipped in the gate header equals deriveResidual(RESOLVER_REGISTRY), byte for byte* | `Tests 1 failed \| 431 passed (432)` — the gate-header comparison red, the LEDGER comparison **green** | yes, `git diff --exit-code` clean |
+| M1 | 2nd | `RESOLVER_REGISTRY[0].clause`, line 4140: same one character | *…equals deriveResidual(RESOLVER_REGISTRY), byte for byte* — **BOTH** cases, ledger and gate header | `Tests 2 failed \| 430 passed (432)` | yes, clean |
+| M3 | 3rd | A declared phrasing planted at line 4134, outside all three exclusions | *the gate file's own bytes carry NO declared phrasing outside the three exclusions except by NAMED exemption* | `Tests 1 failed \| 431 skipped (432)` | yes, clean; re-run green |
+| M4 | 4th | Ledger copy of the span, line 150: `OUTBOUND WALK` → `OUTBOUND WALX` | *the block shipped in .planning/REQUIREMENTS.md equals deriveResidual(RESOLVER_REGISTRY), byte for byte* | `Tests 1 failed \| 431 passed (432)` — the ledger comparison red, the GATE-HEADER comparison **green** | yes, clean; full spec re-run `432 passed` |
+| M5 | 5th | CORE-11's ledger row moved away from what the pin now expects: `- [x]` → `- [ ]` | *CORE-11's entry is present and well-formed, and ITS BOX IS THE STATE `CORE11_BOX_EXPECTED` PINS* | `Tests 1 failed \| 431 skipped (432)` | yes, clean; full spec re-run `432 passed` |
+
+### M1 — the derivation proof, and what makes it one
+
+Expected (the generated form) carried the mutation; Received (both shipped forms) did not:
+
+```
+- * constStrings - … so this collector OVER-approximatez. FALSIFIED 2026-08-24 (CR-13) …   ← Expected (generated)
++ * constStrings - … so this collector OVER-approximates. FALSIFIED 2026-08-24 (CR-13) …   ← Received (shipped)
+```
+
+Both messages opened identically apart from the file named:
+
+```
+AssertionError: the derived residual block in .planning/REQUIREMENTS.md DIVERGED from deriveResidual(RESOLVER_REGISTRY).
+AssertionError: the derived residual block in packages/backend/src/outbound-prohibition.spec.ts DIVERGED from deriveResidual(RESOLVER_REGISTRY).
+
+The GENERATED text is authoritative and the shipped text is the defect. Replace the span between the
+sentinels with exactly this:
+----- BEGIN EXPECTED ----- … ----- END EXPECTED -----
+```
+
+**A two-sided failure is what separates DERIVED from consistent.** Byte equality alone would be indistinguishable from a span hand-copied once and never regenerated. Only moving the REGISTRY and watching BOTH shipped spans fall behind shows the spans FOLLOW it.
+
+### M2 and M4 — one copy at a time, which is the whole reason there are two cases
+
+M2's message named the gate file; M4's named the ledger. The complementary result each time — one comparison red, the other green — is what proves each guard **individually**. A single mutation touching both copies would have proved neither.
+
+M4's diff, from the assertion output:
+
+```
+- THE RESIDUAL OF CORE-11's OUTBOUND WALK - DERIVED, NOT AUTHORED.   ← Expected (generated)
++ THE RESIDUAL OF CORE-11's OUTBOUND WALX - DERIVED, NOT AUTHORED.   ← Received (shipped ledger)
+```
+
+**AN ACCURACY NOTE ABOUT WHAT HAPPENED TO THIS MUTATION.** An earlier agent context planted this same `WALK` → `WALX` drift and stalled before recording it; the orchestrator restored it with `git checkout --` and verified the tree clean. That agent reported having captured the titles and messages, but its context did not survive. Task 1's own ledger-drift proof was therefore **re-executed here (M4) rather than cited**, so this SUMMARY carries titles and messages from a run that actually happened in the session that wrote them. A cited-but-unseen proof is precisely what this phase has rejected seven times, and it would have been rejected here too.
+
+### M5 — the box pin, MANDATORY in either outcome, watched failing
+
+The pin exists because this box was flipped early and reverted twice. Its full assertion message names both reverts:
+
+```
+AssertionError: CORE-11's checkbox in .planning/REQUIREMENTS.md is not the state this suite pins.
+  PINNED  : - [x] **CORE-11**
+  SHIPPED : - [ ] **CORE-11**: No co
+
+This box has been flipped early and REVERTED TWICE — at `e7cc4b6` after gap-closure round 3 and at
+`faca607` after round 4 — and until 2026-08-24 the one case named for it could not see it: its regex
+was the character class `[ x]`, which matches BOTH states, so it stayed green through both flips and
+both reverts.
+
+THE TERMINAL CONDITION WAS RE-SCOPED BY THE OPERATOR ON 2026-08-25 (plan 01-35, wave 35) AND WHAT
+FOLLOWS IS THE CURRENT ONE. The superseded condition is NOT restated beside it, because two terminal
+conditions standing side by side is the exact contradiction the third criterion forbids.
+`CORE11_BOX_EXPECTED` changes in the SAME COMMIT as the ledger row, and only after a discharge in
+which EACH of three criteria was verified BY EXECUTION in that session: (1) DERIVED …; (2)
+DRIFT-DETECTABLE …; (3) THE SOLE BOUND …. Editing this constant on its own is NOT a way out and never
+was. THIS BAR IS NARROWER THAN THE ONE IT REPLACES: it makes the gate's DESCRIPTION OF ITSELF derived,
+drift-detectable and singular, and it does NOT claim the walk catches everything — CR-15, CR-16 and
+the measured silences carried in the generated span are NAMED RESIDUALS under it, and the class stays
+open because the space of JavaScript spellings is open. If ANY criterion is unmet, the box stays `[ ]`,
+the blocking criterion is named in the ledger, and this constant says `[ ]`. `[ ]` IS A CORRECT
+OUTCOME; an unexamined `[x]` is not.: expected false to be true // Object.is equality
+ ❯ packages/backend/src/outbound-prohibition.spec.ts:9963:7
+```
+
+Note that the message quoted above is the one Task 1 **rewrote**: the superseded enumerated-surface promise was REPLACED by the three criteria rather than appended beside them, and both revert hashes, the WR-34 explanation, the same-commit rule and the `[ ]`-is-a-correct-outcome sentence all survived that rewrite. A pin nobody watched fail in this session is a pin this session may not rely on; this one was watched.
+
 <!-- gsd:write-continue -->
