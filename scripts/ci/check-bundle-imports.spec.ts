@@ -55,22 +55,6 @@ function fixture(name: string, source: string): string {
 }
 
 describe("DIST-05 — the shipped backend bundle passes the measured allowlist", () => {
-  it("builds the bundle if it is not there", () => {
-    const probe = runGate();
-    if (probe.status === 2) {
-      const build = spawnSync(
-        "pnpm",
-        ["exec", "caido-dev", "build", "packages"],
-        { cwd: REPO_ROOT, encoding: "utf8" },
-      );
-      expect(
-        build.status,
-        `could not build the backend bundle; ${BUILD} by hand and read its output.\n${build.stderr}`,
-      ).toBe(0);
-    }
-    expect(true).toBe(true);
-  });
-
   it("exits 0 against the real bundle", () => {
     const r = runGate();
     expect(

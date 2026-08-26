@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "DefMiner — passive JavaScript analysis for Caido",
   "scripts": {
+    "pretest": "pnpm build:backend",
     "test": "vitest run --reporter=dot",
     "test:watch": "vitest",
     "typecheck": "tsc --build",

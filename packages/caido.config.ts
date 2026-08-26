@@ -26,7 +26,7 @@ import { defineConfig } from "@caido-community/dev";
 export default defineConfig({
   id: "defminer",
   name: "DefMiner",
-  description: "Passive JavaScript analysis for Caido — Phase 1 skeleton",
+  description: "Passive JavaScript artifact inventory for Caido",
   version: "0.1.0",
   author: { name: "DefMiner" },
   plugins: [
