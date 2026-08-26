@@ -70,4 +70,34 @@ status: complete
 3. **Task 2b: the box read off the table, with the pin, in ONE commit** — `f5652a1` (docs)
 4. **Task 2c: both append-only histories** — `996c077` (docs)
 
+## Accomplishments
+
+- **The re-scope is recorded as its OWNER's decision, not a planner's.** `.planning/REQUIREMENTS.md` carries a correction dated 2026-08-25, attributed to plan 01-35 and wave 35, naming THE OPERATOR as the decider, the unreachability of the old bar over an open language as the reason, six rounds of flat find-rate as the evidence, and the STORE-01 -> STORE-08 precedent by id as the route.
+- **The three criteria are stated on both surfaces a mechanism or a future session reads** — the ledger correction and `CORE11_BOX_EXPECTED`'s failure message — with the superseded promise REPLACED, never appended beside.
+- **CORE-11's discharge was re-executed against those three criteria**, one row per criterion, every row's evidence produced by running something in this session and proved live by a mutation.
+- **The box moved `[ ]` -> `[x]` with its pin in ONE commit** (`f5652a1`, 2 files / 2 lines), after the table said so — not before it.
+- **Both append-only histories point at the decision and restate no bound.**
+
+## THE DECISION, QUOTED VERBATIM FROM THE LEDGER
+
+Who decided:
+
+> THE DECIDER IS THE OPERATOR — the owner of this requirement — and this correction records that decision rather than making it; no planner, no executor and no verifier is entitled to move this bar and none of them did.
+
+Why:
+
+> THE REASON IS THAT THE OLD ACCEPTANCE BAR WAS UNREACHABLE OVER AN OPEN LANGUAGE, NOT MERELY UNMET. That old bar — that the gate can be driven red on every spelling of every clause this entry's first sentence enumerates — asks a static scanner to close a set that does not close: the space of JavaScript spellings for *invoke a function through a value* is open, so no widening ever arrives at it, and a bar no amount of correct work can reach is a defect in the bar rather than in the work.
+
+By what route:
+
+> THE ROUTE IS THE ONE THIS PROJECT HAS ALWAYS USED FOR A REQUIREMENT RE-SCOPE — the STORE-01 → STORE-08 precedent, named here by id: STORE-01 carries the parenthetical recording what was re-scoped, on what date and in what forum, and STORE-08 is where that route ends.
+
+The three criteria, numbered:
+
+> This box's `[x]` may now mean, and may ONLY mean, that this requirement's residual is: (1) DERIVED — the gate's reach is derived from the code, generated from `RESOLVER_REGISTRY` rather than authored beside it, delivered in wave 27; (2) DRIFT-DETECTABLE — drift between text and code is mechanically detectable, so a divergence between either shipped span and the generated form turns this suite red, delivered in waves 27 and 29; and (3) THE SOLE BOUND — the disclosure is the only bound stated on every surface a reader touches, contradicted nowhere, delivered in wave 33 by deleting the gate file's hand-written bounds rather than by guarding them.
+
+The narrowness, in the same passage:
+
+> It does not claim the gate catches everything; it claims the gate's DESCRIPTION OF ITSELF is derived, drift-detectable and singular, which is the only promise a static gate over an open language can actually keep. CR-15 ... CR-16 ... and the twenty-six measured silences that span now carries are NAMED RESIDUALS UNDER THIS NEW BAR: disclosed and unclosed, not defects it waves away and not shapes it has closed. The class stays open because the space of JavaScript spellings is open.
+
 <!-- gsd:write-continue -->
