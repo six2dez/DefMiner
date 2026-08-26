@@ -208,7 +208,7 @@ Plans:
 
 **Wave 35** *(blocked on 01-34)*
 
-- [ ] 01-35-PLAN.md — **the operator's re-scope, then CORE-11's discharge against the reachable bar**: six rounds each closed ~2 blindnesses and each surfaced ~2 more, because the old bar — the gate goes red on every spelling of every enumerated clause — is unreachable over an open language, not merely unmet. The operator re-scoped CORE-11's `[x]` to mean the residual is DERIVED, DRIFT-DETECTABLE, and THE SOLE BOUND stated on every surface a reader touches; the decision is written into `REQUIREMENTS.md` dated and attributed by the STORE-01 → STORE-08 route, and the discharge is re-executed as one row per criterion with a mutation proving each evidence live rather than cited. The re-scope narrows the CHECKBOX's meaning, not the PROHIBITION's, and `[ ]` stays a reachable honest outcome — *wave 35*
+- [x] 01-35-PLAN.md — **the operator's re-scope, then CORE-11's discharge against the reachable bar**: six rounds each closed ~2 blindnesses and each surfaced ~2 more, because the old bar — the gate goes red on every spelling of every enumerated clause — is unreachable over an open language, not merely unmet. The operator re-scoped CORE-11's `[x]` to mean the residual is DERIVED, DRIFT-DETECTABLE, and THE SOLE BOUND stated on every surface a reader touches; the decision is written into `REQUIREMENTS.md` dated and attributed by the STORE-01 → STORE-08 route, and the discharge is re-executed as one row per criterion with a mutation proving each evidence live rather than cited. The re-scope narrows the CHECKBOX's meaning, not the PROHIBITION's, and `[ ]` stays a reachable honest outcome — *wave 35*
 
 ### Phase 2: Error Containment & Observability
 
