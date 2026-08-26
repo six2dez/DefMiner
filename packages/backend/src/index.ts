@@ -116,7 +116,6 @@ function status(): Record<string, unknown> {
     compatible,
     reason: compatReason,
     minCaido: MIN_CAIDO,
-    caidoVersion: null as string | null,
     sqliteVersion,
     schemaVersion,
     // NULL, not "". An empty string is a project id that happens to be blank,

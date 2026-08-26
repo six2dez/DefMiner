@@ -494,59 +494,6 @@ export function recordError(e: unknown): void {
   }
 }
 
-/** The monotonic clock, mirroring `ingest/consumer.ts`. Boot-relative, so no
- *  timestamp is ever computed from it. */
-function monotonic(): number {
-  const p = (globalThis as { performance?: { now?: () => number } })
-    .performance;
-  return p !== undefined && typeof p.now === "function" ? p.now() : Date.now();
-}
-
-/** One measured span. Carries BOTH clocks at both ends — see the header. */
-export type Mark<T> = {
-  label: string;
-  elapsedMs: number;
-  startedAt: number;
-  finishedAt: number;
-  ok: boolean;
-  err: string | null;
-  out: T | null;
-};
-
-/**
- * Run `fn` and measure it, never letting it throw past.
- *
- * The swallow is the point rather than a convenience: HANDLER_ERROR_SURFACED is
- * "neither" — Phase 0 searched 22,876 host-log lines plus stdout and stderr for
- * an error thrown from a handler and found ZERO traces — so an escaping throw is
- * not "loud", it is INVISIBLE. Capturing it with its class name is the only
- * record that will exist.
- */
-export function measured<T>(label: string, fn: () => T): Mark<T> {
-  const startedAt = Date.now();
-  const t0 = monotonic();
-  let ok = true;
-  let err: string | null = null;
-  let out: T | null = null;
-  try {
-    out = fn();
-  } catch (e) {
-    ok = false;
-    err = describeError(e);
-    lastError = err;
-  }
-  const elapsedMs = monotonic() - t0;
-  return {
-    label,
-    elapsedMs,
-    startedAt,
-    finishedAt: Date.now(),
-    ok,
-    err,
-    out,
-  };
-}
-
 /** What {@link slimStatus} returns. Numbers and one truncated string. */
 export type SlimStatus = {
   counters: Counters;

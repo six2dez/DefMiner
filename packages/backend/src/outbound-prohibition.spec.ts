@@ -6541,7 +6541,7 @@ describe(`CORE-11 — no outbound surface is reachable from ${SOURCE_ROOTS.join(
     expect(auditSource(file, source)).toEqual([]);
   });
 
-  it("telemetry.ts reaches globalThis the way this codebase reaches globals, and still reports clean", () => {
+  it("consumer.ts reaches globalThis the way this codebase reaches globals, and still reports clean", () => {
     // THE false positive that decides whether the fetch rule is usable, asserted
     // LIVE against the real file rather than only as an inline fixture. The
     // codebase's established idiom for reaching a global is
@@ -6552,11 +6552,11 @@ describe(`CORE-11 — no outbound surface is reachable from ${SOURCE_ROOTS.join(
     // `performance` on the same receiver stays quiet. If this file ever stops
     // using the idiom, the containment assertion fails rather than leaving a case
     // that proves nothing.
-    const file = posix.join(BACKEND_SRC, "telemetry.ts");
+    const file = posix.join(BACKEND_SRC, "ingest", "consumer.ts");
     const source = readFileSync(file, "utf8");
     expect(
       source,
-      "telemetry.ts no longer reaches globalThis, so the global-receiver false-positive case is vacuous",
+      "consumer.ts no longer reaches globalThis, so the global-receiver false-positive case is vacuous",
     ).toContain("(globalThis as { performance?");
     expect(auditSource(file, source)).toEqual([]);
   });

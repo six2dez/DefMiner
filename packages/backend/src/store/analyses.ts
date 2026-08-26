@@ -142,10 +142,12 @@ export type AnalysisClaim =
  * row's state.
  *
  * Ownership is decided by `started_at` matching the value this caller passed,
- * rather than by the insert's `changes` count. `changes` would probably work, but
- * "probably" is not a property this codebase spends: the read is authoritative
- * regardless of how the pool reports affected rows, and it costs one indexed
- * lookup on a key the caller already holds.
+ * rather than by the insert's `changes` count. This is sound under the CURRENT
+ * execution model: `startConsumer` maintains exactly one consumer and its drain
+ * loop awaits one entry at a time, so two live callers cannot claim the same key
+ * in the same millisecond. It is NOT a concurrency token. Any future parallel
+ * consumer must add an explicit unique claim id (or prove statement-local
+ * `changes`) before it may reuse this function concurrently.
  */
 export async function claimAnalysis(
   db: Database,

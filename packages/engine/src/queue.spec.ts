@@ -74,11 +74,6 @@ describe("an empty queue", () => {
     // single-call assertion.
     expect(q.take()).toBeUndefined();
   });
-
-  it("returns an empty array from drain()", () => {
-    const q = new BoundedQueue(CAP);
-    expect(q.drain(10)).toEqual([]);
-  });
 });
 
 describe("the bound holds at the boundary", () => {
@@ -133,7 +128,7 @@ describe("FIFO order, and drop-OLDEST on overflow (decision P3-D1)", () => {
     // stale backlog inverts the value of the queue.
     const q = new BoundedQueue(CAP);
     fill(q, 3000);
-    const drained = q.drain(CAP);
+    const drained = Array.from({ length: CAP }, () => q.take() as Entry);
     expect(drained.length).toBe(CAP);
     expect(drained[0].id).toBe(String(3000 - CAP));
     expect(drained[drained.length - 1].id).toBe("2999");
@@ -142,15 +137,6 @@ describe("FIFO order, and drop-OLDEST on overflow (decision P3-D1)", () => {
       expect(Number(drained[i].id) - Number(drained[i - 1].id)).toBe(1);
     }
     expect(q.depth).toBe(0);
-  });
-
-  it("a drain does not change overflowCount", () => {
-    const q = new BoundedQueue(CAP);
-    fill(q, 3000);
-    const before = q.overflowCount;
-    q.drain(CAP);
-    expect(q.overflowCount).toBe(before);
-    expect(q.overflowCount).toBe(952);
   });
 });
 
@@ -178,31 +164,6 @@ describe("overflowCount is monotonic", () => {
     // ...and the next one does.
     q.offer(entry(20_003));
     expect(q.overflowCount).toBe(8);
-  });
-});
-
-describe("drain(n)", () => {
-  it("returns at most n, FIFO", () => {
-    const q = new BoundedQueue(CAP);
-    fill(q, 10);
-    expect(q.drain(3).map((e) => e.id)).toEqual(["0", "1", "2"]);
-    expect(q.depth).toBe(7);
-    expect(q.take()?.id).toBe("3");
-  });
-
-  it("returns fewer than n when the queue holds fewer", () => {
-    const q = new BoundedQueue(CAP);
-    fill(q, 2);
-    expect(q.drain(50).length).toBe(2);
-    expect(q.depth).toBe(0);
-  });
-
-  it("treats a non-positive n as zero rather than as 'everything'", () => {
-    const q = new BoundedQueue(CAP);
-    fill(q, 5);
-    expect(q.drain(0)).toEqual([]);
-    expect(q.drain(-1)).toEqual([]);
-    expect(q.depth).toBe(5);
   });
 });
 

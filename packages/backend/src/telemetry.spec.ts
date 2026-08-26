@@ -31,7 +31,6 @@ import {
   describeError,
   ERROR_TEXT_LIMIT,
   FORBIDDEN_COMPLETENESS_WORDS,
-  measured,
   PATH_REDACTION,
   recordError,
   recordSlice,
@@ -350,65 +349,6 @@ describe("no identifier in the projection claims completeness", () => {
 
   it("names the primary counter for what the hook was HANDED", () => {
     expect(Object.keys(counters)).toContain("proxiedResponsesObserved");
-  });
-});
-
-// ===========================================================================
-// 5. ERRORS KEEP THEIR CLASS NAME
-// ===========================================================================
-
-describe("measured", () => {
-  it("returns the value and reports ok on the happy path", () => {
-    const m = measured("ok", () => 41 + 1);
-    expect(m.ok).toBe(true);
-    expect(m.out).toBe(42);
-    expect(m.err).toBeNull();
-    expect(m.elapsedMs).toBeGreaterThanOrEqual(0);
-  });
-
-  it("never lets fn throw past, and keeps the error's CONSTRUCTOR NAME", () => {
-    const m = measured("boom", () => {
-      throw new RangeError("out of range");
-    });
-    expect(m.ok).toBe(false);
-    expect(m.out).toBeNull();
-    expect(
-      m.err,
-      "a bare String(e) loses the constructor name, and the class name is " +
-        "usually the whole diagnosis — a TypeError and a RangeError from the " +
-        "same line mean completely different things.",
-    ).toMatch(/^RangeError/);
-    expect(slimStatus().lastError).toMatch(/^RangeError/);
-  });
-
-  it("truncates the captured error", () => {
-    const m = measured("long", () => {
-      throw new Error("y".repeat(9_000));
-    });
-    expect(m.err?.length).toBe(ERROR_TEXT_LIMIT);
-  });
-
-  it("renders a thrown non-Error without inventing a class name", () => {
-    const m = measured("string-throw", () => {
-      // A bare string throw is DELIBERATE here. Plugin code cannot control what
-      // the SDK or a driver throws, and `describeError` has to render a
-      // non-Error without inventing a class name for it. The rule is right
-      // about production code and wrong about this fixture.
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
-      throw "just a string";
-    });
-    expect(m.err).toBe("just a string");
-  });
-
-  it("carries BOTH clocks — elapsed monotonic, timestamps wall-clock", () => {
-    const before = Date.now();
-    const m = measured("clocks", () => 1);
-    const after = Date.now();
-    expect(m.startedAt).toBeGreaterThanOrEqual(before);
-    expect(m.finishedAt).toBeLessThanOrEqual(after);
-    // `performance.timeOrigin` is not a Unix epoch on this build, so an elapsed
-    // figure must never be usable as a timestamp.
-    expect(m.elapsedMs).toBeLessThan(m.startedAt);
   });
 });
 
