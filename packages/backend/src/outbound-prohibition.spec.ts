@@ -8996,13 +8996,34 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     using a declared phrasing is invisible to it. It cannot read a claim; it
  *     can only find a string.
  *
- * (4) EXCLUSION THREE IS COARSER THAN ITS NAME. It excludes the registry's whole
- *     LINE RANGE, which is wider than the clause strings themselves and would
+ * (4) EXCLUSION THREE IS A LINE RANGE, WHICH IS WIDER THAN THE CLAUSE STRINGS
+ *     IT STANDS FOR. It excludes the registry declaration's whole LINE RANGE —
+ *     4135..5767, 1633 lines, re-measured at wave 37 — and a line range would
  *     also swallow a docblock sitting between two rows. That coarseness is
  *     NARROWED rather than merely disclosed: `exclusionThreeCarriesOnlyClauses`
  *     below pins the count inside that range against the count inside the live
  *     `clause` strings, so a phrasing written into a between-rows comment breaks
- *     an equality instead of vanishing. Measured at wave 33: 12 and 12.
+ *     an equality instead of vanishing. Measured at wave 33 and re-measured at
+ *     wave 37 against the corrected range: 12 and 12, both times.
+ *
+ *     WR-48, 2026-08-26, WAVE 37: THE RANGE USED TO BE WIDER STILL, AND THE
+ *     EXCLUSION'S NAME WAS FALSE OF THE EXTRA LINES. `closingBracketAfter`
+ *     matched the exact line `"]);"`, so it walked past the registry's own
+ *     closing line at 5767 and landed at 5884 on the close of
+ *     `BRANCH_VOCABULARY`. The exclusion therefore ran 4135..5884 and swallowed
+ *     117 lines of a DIFFERENT construct, for which its `name` and its `why`
+ *     were both false, and its band of 500..3000 did not catch it because 1750
+ *     lines sits inside that band. Correcting the recogniser returned those 117
+ *     lines to the guarded surface, and the number of obligations they raised
+ *     was MEASURED AFTER THE CHANGE rather than predicted before it: ZERO. The
+ *     enforcement had erred safe the whole time — verification pass 8 planted a
+ *     declared phrasing at 5800, inside the swallowed lines, and the suite went
+ *     red through the clause-count equality — so nothing was laundered through
+ *     the defect and nothing leaked. THAT IS WHY IT WAS A WARNING AND NOT A
+ *     BLOCKER, AND IT WAS NEVER A REASON TO LEAVE A FALSE DESCRIPTION STANDING.
+ *     One false description is now corrected. It does not follow that the other
+ *     two exclusions are exact, and limits (1), (2), (3) and (5) are untouched
+ *     by it.
  *
  * (5) THE CONSTRUCT ANCHOR REACHES THE NEAREST PRECEDING CONSTRUCT AND NO
  *     FURTHER. Added at wave 36 for CR-17. A key now carries the masked
@@ -9703,8 +9724,44 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     }
     return -1;
   };
+  // WR-48, 2026-08-26, wave 37. THIS MATCHED THE EXACT LINE `"]);"`, WHICH IS
+  // NOT THE FORM A FROZEN ARRAY LITERAL NECESSARILY CLOSES WITH.
+  // `RESOLVER_REGISTRY` closes with `] as readonly ResolverRecord[]);`, which
+  // did not match, so the scan walked past its real closing line at 5767 and
+  // landed 117 lines later on the close of `BRANCH_VOCABULARY` at 5884 — a
+  // DIFFERENT construct. Exclusion three therefore resolved to 4135..5884 and
+  // swallowed that construct's docblock and declaration, for which the
+  // exclusion's own `name` and `why` were both false. Its band of 500..3000 did
+  // not catch it, because 1750 lines is inside the band.
+  //
+  // THE ENFORCEMENT ERRED SAFE THROUGHOUT AND THAT IS WHY THIS WAS A WARNING
+  // RATHER THAN A BLOCKER. Verification pass 8 planted a declared phrasing at
+  // 5800, inside the swallowed lines, and the suite went RED through the
+  // clause-count equality below, which covers the range at the same reach as
+  // the main guard. Nothing was laundered through the defect. That is not a
+  // reason to leave a false `name` and a false `why` standing on an exclusion
+  // in a file whose whole discipline is that a description match what it
+  // describes.
+  //
+  // WHAT CHANGED IS THE RECOGNISER, NOT THE SEARCH. It still returns the FIRST
+  // matching line after `start`. The route was chosen over bracket-matching
+  // because it can be MEASURED to leave exclusion TWO resolving to exactly the
+  // pair it resolved to before, and because a depth counter over these bytes
+  // would have to reason about the brackets inside the registry's own clause
+  // strings.
+  //
+  // THE RECOGNISER'S OWN REACH, STATED RATHER THAN IMPLIED, BECAUSE STATING A
+  // WIDER REACH THAN THE ONE EXECUTED IS THE DEFECT THIS WHOLE FILE IS ABOUT.
+  // It matches a bare `]);` and it matches a close carrying a trailing `as`
+  // assertion that contains no closing parenthesis. A frozen array closed in
+  // some third form is STILL unrecognised and the scan would STILL walk past
+  // it, exactly as it walked past 5767. This is a narrower recogniser than "the
+  // closing line of the construct", and the two exclusions that use it are
+  // pinned by their `proof` tokens and their bands against the day that
+  // difference matters.
+  const CLOSES_FROZEN_ARRAY = /^\]( as [^)]*)?\);$/;
   const closingBracketAfter = (start: number): number =>
-    lineOf((l) => l === "]);", start);
+    lineOf((l) => CLOSES_FROZEN_ARRAY.test(l), start);
 
   const EXCLUSIONS = (() => {
     const spanStart = lineOf((l) => l.startsWith("BEGIN DERIVED RESIDUAL"));
@@ -9796,6 +9853,14 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // the two counts are pinned against each other. Measured at wave 33: 12 inside
   // the line range and 12 inside the live clause strings. A phrasing written
   // into a between-rows comment makes those two numbers differ.
+  //
+  // RE-MEASURED AT WAVE 37 AGAINST THE CORRECTED RANGE (WR-48), because
+  // narrowing the range changes both what this counts and what it means. The
+  // range went from 4135..5884 to 4135..5767 and the pair held at 12 and 12
+  // across the change. THE PIN WAS NOT WIDENED TO ACCOMMODATE THE NARROWING;
+  // the two numbers agreed on their own, and had they disagreed the failure
+  // message below states what to do instead, which is to move or delete the
+  // offending sentence.
   it("exclusion three carries ONLY clause strings — the registry line range and the live clauses agree, occurrence for occurrence", () => {
     const registry = EXCLUSIONS[2];
     const registryLines: number[] = [];
