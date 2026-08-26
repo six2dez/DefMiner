@@ -10164,10 +10164,10 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // not because two lines produce the anchor but because 574 lines FIND it, and
   // that is a different measurement needing a different case.
   //
-  // WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. An upper bound hides a
-  // shadow that SHRANK, and a shadow that shrank is information about this
-  // file's recogniser geometry that this gate should not discard in silence; an
-  // exact equality makes both directions loud.
+  // WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. The equality makes
+  // both directions of THE MAXIMUM loud; the identity pin makes a change in WHICH
+  // anchor owns that maximum loud; every other non-maximal shadow remains unseen —
+  // pass 11 measured the named shadow falling from 574 to 284 at 441 of 441 green.
   //
   // THIS CASE'S REACH, STATED NARROWLY AND IN ITS OWN BYTES.
   //   (1) It bounds the MAXIMUM shadow over SURFACE_LINES under the grouping
@@ -10185,11 +10185,11 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   //       or anywhere in wave 42's diff.
   //
   // AND WHY ONLY THE MAXIMUM IS PINNED, WHICH IS A DISCLOSURE AND NOT AN EXCUSE.
-  // Pinning the whole distribution would put a number under every one of the top
-  // shadows, and each of those numbers would have to move on ordinary prose
-  // edits inside a region hundreds of lines wide. A pin that must be re-derived
-  // on routine edits is a pin nobody trusts and everybody re-derives without
-  // reading. So the maximum is pinned here and the distribution is recorded as
+  // Pinning the whole distribution would put a number under every top shadow, and
+  // each would move on ordinary prose edits inside a region hundreds of lines wide.
+  // A bump to the pinned value attributable line by line to lines the same commit added
+  // inside the anchor's raw span is authorised, needs no finding, and requires that
+  // attribution in the commit; an unattributable bump is not authorised. So the maximum is pinned here and the distribution is recorded as
   // evidence in `01-42-SUMMARY.md` instead.
   //
   // MEASURED AT WAVE 42 with the shipped builder from inside this describe. The
@@ -10198,10 +10198,12 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // recogniser (4). It claims raw lines 419..1574 — 1,156 raw lines — of which
   // exactly the 582 lines the machine-owned span covers (its BEGIN sentinel to
   // its END sentinel) are removed by exclusion one, leaving 1156 - 582 = 574
-  // surface lines. EVERY surface line in that range resolves to it, because
-  // between the rule at `:418` and the imports no line at all is accepted by any
-  // of the five recognisers. It already holds FOUR shipped occurrences.
+  // surface lines. Across raw 419..1574, this session's evaluation of all five
+  // recognisers accepts only the `/**` docblock opener at 1573; its null token makes
+  // WR-53's forward walk fall through and the backward scan continue, so every surface line in that range resolves to the header. It already holds FOUR shipped occurrences.
   const WIDEST_ANCHOR_SHADOW = 574;
+  const WIDEST_ANCHOR_TOKEN =
+    "SPELLING (operator, by POSITION) RESOLVED BY REPORTS";
 
   it("the WIDEST ANCHOR SHADOW over the scanned surface is PINNED — an anchor's shadow is the set of lines interchangeable under it, so the shadow's width IS the residual and the occurrence-to-anchor distance is not", () => {
     // EXHAUSTIVE BY CONSTRUCTION. Every element of SURFACE_LINES is read. There
@@ -10251,7 +10253,13 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       widestSize,
       `THE WIDEST ANCHOR SHADOW IS NOW ${widestSize} SURFACE LINES AND THIS GATE PINS IT AT ${WIDEST_ANCHOR_SHADOW}. The anchor that owns it is ${JSON.stringify(widest)}, spanning raw lines ${lo}..${hi}. A SHADOW THAT GREW IS A RESIDUAL THAT GREW: every one of those ${widestSize} lines now produces the same construct half, so an exemption written for any one of them is discharged just as well by an occurrence at any other, and the reach this file publishes for its anchoring is that wide. THE CORRECT RESPONSES ARE (a) re-site or rewrite whatever widened it, or (b) re-derive this pin ONLY against growth attributed LINE BY LINE to lines the same commit added, with the diff shown. Moving the pin to fit a number it cannot account for is decoration that reports green, and it is the exact defect this file has spent eleven waves removing. If the number FELL, that is equally reportable: the equality is exact so that a shadow which shrank is visible too, and the reason belongs in the commit that shrank it.`,
     ).toBe(WIDEST_ANCHOR_SHADOW);
+    expect(
+      widest,
+      `THE WIDEST ANCHOR SHADOW EXPECTED OWNER ${JSON.stringify(WIDEST_ANCHOR_TOKEN)} BUT FOUND ${JSON.stringify(widest)}; THE ANCHOR OWNING THE MAXIMUM HAS CHANGED IDENTITY, WHICH IS THE SHAPE THAT COLLAPSED THE NAMED SHADOW BY 290 LINES WHILE THE MAXIMUM HELD.`,
+    ).toBe(WIDEST_ANCHOR_TOKEN);
   });
+  // The identity pin watches one shadow — the expected owner of the maximum — and
+  // every other non-maximal shadow remains unwatched in both directions.
   // WHAT THE PIN ABOVE DOES NOT DO, EXECUTED AT WAVE 42 RATHER THAN ARGUED.
   // Verification pass 10 relocated the shipped occurrence in the wrapped table
   // cell twice and got 439 of 439 green both times (`01-VERIFICATION.md`,
