@@ -403,4 +403,51 @@ Wave 33's guard was run after every edit and after every commit in this task, gr
 
 `.planning/WINDOWS.md` was amended **through `gsd-tools windows`**, never by hand-editing the table: entry 39 marked fixed, entry 40 appended. Resulting ledger state: `open_count 19 / fixed_count 21 / total_count 40`.
 
-<!-- gsd:write-continue -->
+## PRESERVED AS HISTORY — THE SUPERSEDED BAR, IN ITS ORIGINAL WORDING
+
+This SUMMARY is the one place that is not itself a bound, so the superseded claim is preserved here in full rather than erased, and the six rounds that worked toward it are not written out of the record. The bar CORE-11's `[x]` was held to before 2026-08-25, as `.planning/REQUIREMENTS.md` still states it verbatim under its scoped supersession marker:
+
+> **THE LIMITS, RESTATED, BECAUSE THE LEDGER IS WHERE AN OVERCLAIM DOES ITS DAMAGE.** When this box is eventually `[x]` it will mean the must-NOT holds, the enforcement covers every surface this entry's first sentence enumerates with a fixture that has been watched failing, and the residual is disclosed in a form that cannot silently drift and whose named branches carry probes.
+
+That sentence is superseded, not deleted. Its bytes stand where they always stood, with a marker above them naming exactly which sentence it reaches:
+
+> **SUPERSEDED IN PART BY THE OPERATOR DECISION OF 2026-08-25 (PLAN 01-35, WAVE 35) — AND THE MARKER IS SCOPED TO ONE SENTENCE ON PURPOSE.** … THE REST OF THE PARAGRAPH BELOW STANDS AND IS NOT TOUCHED BY THIS MARKER: its limits list remains true in every clause, and its closing sentence recording that STORE-03's and STORE-07's collisions remain DEFERRED WITH AN OWNER remains true and remains the current state of those two entries.
+
+The scoping is load-bearing. That single paragraph carries **three** things: a statement of the old bar, a limits list that remains true, and the STORE-03 / STORE-07 deferral that remains true. A marker falsifying the whole paragraph would have deleted a true deferral record in the very act of correcting a superseded bar.
+
+The two-valued disposition rule was applied across four reader surfaces and the counts are unchanged where they should be: `grep -c 'When this box is eventually' .planning/REQUIREMENTS.md` still returns **2** — one occurrence dated and plan-attributed (HISTORY, byte-identical), one standing (SUPERSEDED IN PLACE, marker above, bytes intact). `grep -c 'probes every surface' packages/backend/src/outbound-prohibition.spec.ts` returns **0**, down from 1: the constant's superseded promise was REPLACED, and the replacement prose was written not to contain the superseded literal in any form, because `grep -c` cannot tell a quotation from an assertion.
+
+## Deviations from Plan
+
+### [Rule 1 — measurement corrected] The first registry mutation landed in the shipped span, not the registry
+
+- **Found during:** Task 2, ROW 1
+- **Issue:** A slurping substitution replaced the first occurrence of the clause text in the file, which is the generated span at line 1010, not `RESOLVER_REGISTRY[0].clause` at line 4140.
+- **Detection:** The measurement, not inspection — one red comparison where a registry mutation requires two.
+- **Fix:** Re-planted with a line-scoped substitution (M1). The mis-targeted mutation was **kept and relabelled M2**, because a one-character change inside the gate header's span is exactly ROW 2's header-copy proof.
+- **Verification:** M1 → both comparisons red; M2 → gate header red, ledger green.
+- **Recorded as:** prediction P4 above, as the finding rather than as an absorbed correction.
+
+### [Rule 3 — blocker] Task 1's ledger-drift proof text did not survive its agent's context
+
+- **Found during:** Task 2, ROW 2
+- **Issue:** The plan directs Task 2 to CITE Task 1's ledger-copy drift proof by its pasted title and message. An earlier agent context planted that mutation, stalled before recording it, and the orchestrator restored it with `git checkout --`; the titles and messages were lost with that context.
+- **Fix:** Re-executed the mutation here as **M4** rather than citing evidence nobody in this session watched.
+- **Verification:** M4's title, message and complementary green recorded above.
+
+---
+
+**Total deviations:** 2 (1 measurement correction, 1 blocker).
+**Impact on plan:** Both increased the evidence rather than reducing it. No scope creep, no widening of any guard, no criterion discharged by citation.
+
+## Issues Encountered
+
+The executing machine slept repeatedly mid-response, which the orchestrator diagnosed after several watchdog trips. It cost no work: every unit was committed the moment it was done, so each interruption lost at most one step. No mutation was ever left planted — the orchestrator verified a clean tree after each stall, and each restore was re-confirmed here by `git diff --exit-code` before the next mutation.
+
+## Next Phase Readiness
+
+CORE-11 is `[x]` against a bar that is stated, reachable and discharged by execution, and its two statements — the ledger row and `CORE11_BOX_EXPECTED` — agree and move together by construction. The residuals that remain are named and open, not silent: CR-15, CR-16 and the twenty-six measured silences in the generated span, plus the two unguarded reader surfaces (`.planning/STATE.md`, `.planning/WINDOWS.md`) and the undeclared-spelling class inside the guarded files. STORE-03 and STORE-07 are still queued on the operator's next requirements pass. One flipped box is not a clean ledger.
+
+---
+*Phase: 01-skeleton-persistence-compatibility*
+*Completed: 2026-08-26*
