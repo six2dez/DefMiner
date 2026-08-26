@@ -5,14 +5,14 @@ current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
 stopped_at: Completed 01-35-PLAN.md
-last_updated: "2026-08-26T05:18:04.571Z"
+last_updated: "2026-08-26T09:21:59.679Z"
 last_activity: 2026-08-24
 last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
-state_head: f2e7d4006c92542be3d0b86c1670966a3a06eb66
+state_head: 9fbd89693525c70ed32742fcb3b2aa46ae7a36bb
 progress:
   total_phases: 11
   completed_phases: 0
-  total_plans: 35
+  total_plans: 38
   completed_plans: 35
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
+Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
 Plan: 32 of 32
 Status: Gap-closure round 6 in progress — 31 of 32 plans summarised
 Last activity: 2026-08-24 — Completed 01-31 (CR-12: `collect`'s alias-growing branch reads a named frozen `ASSIGNING_OPERATORS` set instead of an inline `EqualsToken` comparison, so `let r; r ??= sdk.requests; r.send(req)` reports `outbound-send` like its two-character-different twin; nine shapes fixtured per collector, four controls pinned, eight clauses rewritten from their branches with 24 per-operator probes, two falsified handoffs observed RED then discharged in the same commit as the code)
