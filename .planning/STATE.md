@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-40-PLAN.md
-last_updated: "2026-08-26T14:29:20.195Z"
+stopped_at: Completed 01-41-PLAN.md (gap-closure round 9 complete — awaiting verification pass 10)
+last_updated: "2026-08-26T14:59:16.867Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: e1a34fdcb66eb7d058b078489f5af5e5a363acf9
+state_head: e459be64a57f6587e14e6f20dabb6a4bfef2377c
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 41
-  completed_plans: 40
+  completed_plans: 41
 ---
 
 # Project State
@@ -212,6 +212,7 @@ Progress: [█████████░] 95% of phase 01 (39 of 41 plans)
 | Phase 01 P38 | 21 min | 3 tasks | 4 files |
 | Phase 01 P39 | 33 min | 3 tasks | 1 files |
 | Phase 01 P40 | 19 min | 2 tasks | 1 files |
+| Phase 01 P41 | 15 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -378,6 +379,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The corrected sentinel docblock describes ONE return, because wave 39's WR-53 extension deleted the second, and states that removal by name — the only truthful form of pass 9's 'describe both returns'.
 - [Phase 01]: WR-51's prescribed snippet doubles the ':: qN' suffix (lineHalf already carries it); measured false before writing, so the pin is toBe(lineHalf(live)).
 - [Phase 01]: Two mutations were ADDED beyond the three prescribed: a top-of-file sentinel producer, because neither of pass 9's steps still reaches the surface case under WR-53; and an isolating constant body, because the verifier's version masks the own-header pair's message.
+- [Phase 01]: Wave 41 pinned both closingBracketAfter resolutions to their constructs' own closing lines in the verifier's DIRECT form rather than by size, because a size pin goes green again the day a construct legitimately grows — and the defect being closed is a width that moved with nothing noticing.
+- [Phase 01]: The quantifier list is located by its own LIVE ENTRIES, not by its closing text: a bare ']);' matches 14 lines of the gate file, measured, so a text locator there would have been ambiguous rather than unique.
+- [Phase 01]: BRANCH A (wave-33 pointer-not-a-bound deletion) taken for both unmarked box-state statements; P38-D1 was read as FORBIDDING alteration of marked bytes, which makes Branch B unavailable for these two.
+- [Phase 01]: The replaced count claim states NO number at all and names the two surfaces the gate file cannot see — a count stated wider than the grep that produced it is the defect being corrected.
+- [Phase 01]: FINDING: the 'wave 28' enumeration instrument is case-sensitive across the plan, the review and the verification report, and ':955' (capital W) is invisible to all three. Censuses that decide a sweep's completeness must be run case-insensitively.
 
 ### Known Risks Carried Forward
 
@@ -420,8 +426,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T14:29:04.668Z
-**Stopped at:** Completed 01-40-PLAN.md
+**Last session:** 2026-08-26T14:58:59.781Z
+**Stopped at:** Completed 01-41-PLAN.md (gap-closure round 9 complete — awaiting verification pass 10)
 **Resume file:** None
 
 ### Blockers
