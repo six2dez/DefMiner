@@ -139,4 +139,119 @@ In `01-32-SUMMARY.md`'s column shape — one row per CRITERION, not one per enum
 
 The scope is part of the pass, not a footnote to it. An unqualified `✓` on row 3 would have flipped this box on evidence strictly narrower than the criterion it discharges — a stated reach exceeding an executed reach, which is this phase's signature defect arriving inside the fix for exactly that defect.
 
+## ROW 3's FOUR CHECKS, EACH EXECUTED
+
+### (a) Wave 33's guard RUN and observed green
+
+All three of its cases, run by name against the gate file:
+
+```
+"the three quantifier-surface exclusions are ANCHOR-DERIVED, NON-EMPTY, WITHIN A PINNED BAND and POSITIVELY IDENTIFIED — asserted BEFORE the rule"
+      Tests  1 passed | 431 skipped (432)
+"exclusion three carries ONLY clause strings — the registry line range and the live clauses agree, occurrence for occurrence"
+      Tests  1 passed | 431 skipped (432)
+"the gate file's own bytes carry NO declared phrasing outside the three exclusions except by NAMED exemption"
+      Tests  1 passed | 431 skipped (432)
+```
+
+### (b) Its counts INDEPENDENTLY re-measured, in both normalizations
+
+Re-measured over the file's own bytes by a probe that **re-implements** `normalizeGateLine`, `joinGateLines` and the anchor resolution from the guard's own named convention rather than importing the guard's code — otherwise the "independent" measurement would be the guard measuring itself. Only `UNBOUNDED_QUANTIFIERS` and `RESOLVER_REGISTRY` were imported, as data.
+
+```
+GATE=packages/backend/src/outbound-prohibition.spec.ts totalLines=9976
+UNBOUNDED_QUANTIFIERS declared phrases: 9
+NORMALIZATION A (line-based, per raw line): 58
+NORMALIZATION B (joined, prefix-stripped):  62
+registry clause-string occurrences (live data): 12
+
+SURFACE (outside all three exclusions): 7633 lines, 29 declared-phrasing occurrence(s)
+```
+
+Reconciled against wave 33's post-triage pinned table (`01-33-SUMMARY.md`), which totals **9+12+3+12+22 = 58 line-based** and **11+12+4+12+23 = 62 joined**, and which records `surface occurrences outside all three exclusions : 29` against `HEADER_QUANTIFIER_EXEMPTIONS entries : 29`.
+
+| Quantity | Wave 33 pinned | Re-measured here | Agrees |
+| --- | --- | --- | --- |
+| line-based, whole file | 58 | 58 | yes |
+| joined, prefix-stripped, whole file | 62 | 62 | yes |
+| surface occurrences outside all exclusions | 29 | 29 | yes |
+| machine-owned span | 12 / 12 | 12 / 12 | yes |
+| registry range | 12 / 12 | 12 / 12 | yes |
+| `UNBOUNDED_QUANTIFIERS` declaration | 9 | 9 | yes |
+
+**No disagreement.** Had there been one it would have been a finding and would have blocked the row.
+
+### (c) Each exclusion measured for OVER-BREADTH — a different property from non-vacuity
+
+Wave 33 asserts its exclusions are non-vacuous (they swallow something) and within a pinned band. This wave measured whether they are also **not over-broad**: every declared-phrasing occurrence falling inside each exclusion was enumerated and classified. An exclusion swallowing a single hand-written universal would have converted a guarded surface into an unguarded one while every wave-33 assertion stayed green — and that would have made row 3 `✗`.
+
+```
+E1 machine-owned span:            lines 957..1538  (size 582)  -> 12 occurrence(s)
+    12 x machine-owned span
+E2 UNBOUNDED_QUANTIFIERS decl:    lines 5959..5969 (size 11)   ->  9 occurrence(s)
+    9 x the UNBOUNDED_QUANTIFIERS declaration itself
+E3 RESOLVER_REGISTRY decl:        lines 4135..5884 (size 1750) -> 12 occurrence(s)
+```
+
+E3's twelve occurrences sit on six carrier lines — 4140, 4288, 4626, 4666, 4720, 4853 — and every one of those six was verified to sit directly under a `clause:` key:
+
+```
+4140: clause: at line 4139     4666: clause: at line 4665
+4288: clause: at line 4287     4720: clause: at line 4719
+4626: clause: at line 4625     4853: clause: at line 4852
+```
+
+Independently, the live `clause` strings carry **12** occurrences — the same number the line range carries. **Zero residue in any of the three exclusions:** every excluded occurrence is machine-owned span, the declaration itself, or a `RESOLVER_REGISTRY[].clause`. None is over-broad.
+
+### (d) A declared phrasing re-planted outside all three exclusions — the keeper watched working
+
+Planted at line 4134, outside the span (957..1538), outside the `UNBOUNDED_QUANTIFIERS` declaration (5959..5969) and outside the registry (4135..5884):
+
+```
+ * WAVE-35 ROW 3 CHECK (d): the walk reports every spelling of an outbound call.
+```
+
+RED test title:
+
+> the residual is DERIVED — the registry is bound to the walk, and the shipped text to the registry > **the gate file's own bytes carry NO declared phrasing outside the three exclusions except by NAMED exemption**
+
+Assertion message:
+
+```
+AssertionError: 1 declared-phrasing occurrence(s) in packages/backend/src/outbound-prohibition.spec.ts
+sit outside all three exclusions and carry NO exemption entry:
+  line 4134: "WAVE-35 ROW 3 CHECK (d): the walk reports {q5} of an outbound call. :: q5"
+YOU HAVE THREE CHOICES AND THE FIRST TWO ARE PREFERRED. (1) DELETE the sentence, if it states a bound
+on the walk's reach — the reach OF RECORD is the generated span between the sentinels and nothing
+hand-written beside it may restate it. (2) REWRITE it to say what the branch does WITHOUT the
+universal, naming the branches; do NOT swap the phrasing for a synonym, which turns this guard green
+while keeping the bound. (3) If the occurrence is not a claim about reach at all — a quotation, a test
+title, an assertion message complaining about the phrasing, a table label, or a QUANTIFIED_CLAUSES
+value stating what bounds a universal — add the key above to HEADER_QUANTIFIER_EXEMPTIONS with one
+clause saying WHICH of those it is. An exemption is a sentence a later author must keep true, so it is
+a cost; spend it deliberately.: expected [ Array(1) ] to deeply equal []
+ ❯ packages/backend/src/outbound-prohibition.spec.ts:9704:7
+      Tests  1 failed | 431 skipped (432)
+```
+
+Restored; `git diff --exit-code` clean; re-run green (`Tests 1 passed | 431 skipped (432)`).
+
+### Row 3's cross-surface contradiction check
+
+`SOLE` means sole everywhere a reader looks, so Task 1's four-surface enumeration was re-run:
+
+```
+== S1 .planning/REQUIREMENTS.md 'When this box is eventually' ==  2   (unchanged; 1 HISTORY, 1 STANDING-and-marked)
+== S2 gate file 'probes every surface'                       ==  0   (was 1 pre-wave; REPLACED, not appended to)
+== S3 .planning/STATE.md                                     ==  0
+== S4 .planning/WINDOWS.md                                   ==  0
+== box asserted where ==
+  .planning/REQUIREMENTS.md  grep -cE '^- \[[ x]\] \*\*CORE-11\*\*'  ->  1
+  packages/backend/src/outbound-prohibition.spec.ts:9887  const CORE11_BOX_EXPECTED = "- [x] **CORE-11**";
+```
+
+Zero unmarked STANDING statements of a superseded bar on any of the four surfaces. The box's state is asserted in exactly two places and they agree.
+
+**AND BOTH CLASSES OF UNREACHED SURFACE, NAMED AS UNGUARDED LIMITS RATHER THAN AS SATISFIED CHECKS.** CLASS ONE, unguarded FILES: `.planning/STATE.md` and `.planning/WINDOWS.md` are reached by NO mechanical comparison at all — the two byte comparisons reach the gate header and the ledger and no further — so the pointer-not-a-bound rule remains a prohibition with no check for those two files, and this SUMMARY's own pointer amendments live under exactly that unguarded rule. CLASS TWO, undeclared SPELLINGS inside the guarded files: wave 33's guard is a phrase list over bytes under one named normalization and says so itself, so a hand-written bound spelled in words `UNBOUNDED_QUANTIFIERS` does not declare stands in the gate file and passes all four checks above unseen.
+
 <!-- gsd:write-continue -->
