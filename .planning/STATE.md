@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-41-PLAN.md (gap-closure round 9 complete — awaiting verification pass 10)
-last_updated: "2026-08-26T18:42:58.913Z"
+stopped_at: Completed 01-42-PLAN.md (gap-closure round 10 — CR-22 both parts; 01-43 outstanding)
+last_updated: "2026-08-26T19:10:25.708Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: 2940ceb736e760abc5e0690a3a1b55e241c61471
+state_head: 9980ea857b09965379315bd2422fa75f92f7116d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 43
-  completed_plans: 41
+  completed_plans: 42
 ---
 
 # Project State
@@ -28,20 +28,24 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 1 of 43
-Status: Executing Phase 01
-Last activity: 2026-08-26 — Phase 01 execution started
+Plan: 42 of 43 (42 of 43 plans summarized on disk)
+Status: Executing — 01-43 is the one outstanding plan
+Last activity: 2026-08-26 — 01-42 complete: CR-22's two parts, the anchor shadow measured and pinned
 
-Progress: [█████████░] 95% of phase 01 (39 of 41 plans)
+Progress: [█████████░] 97% of phase 01 (42 of 43 plans)
 
-> WAVE 39, THE SAME DRIFT AS WAVE 37 AND CORRECTED THE SAME WAY. `state.advance-plan`
-> moved the prose counter 1 -> 2 and both numbers were wrong, so the line above is
-> corrected FROM THE FILE COUNT ON DISK and the correction is recorded rather than
-> made quietly. The handler's frontmatter recompute was RIGHT — `completed_plans: 39`,
-> `total_plans: 41` — while the prose counter it increments had been left at `1 of 41`
-> by the execute-phase orchestrator's own pre-dispatch write and simply advanced from
-> there. The truth on disk is 41 PLAN files and 39 SUMMARY files, with 01-40 and 01-41
-> outstanding; that is the only number that cannot drift.
+> WAVE 42, THE SAME DRIFT AS WAVES 37 AND 39, CORRECTED THE SAME WAY AND FOR THE
+> THIRD TIME. `state.advance-plan` moved the prose counter 1 -> 2 and both numbers
+> were wrong, so the two lines above are corrected FROM THE FILE COUNT ON DISK and
+> the correction is recorded rather than made quietly. The handler's frontmatter
+> recompute was RIGHT — `completed_plans: 42`, `total_plans: 43` — while the prose
+> counter it increments had been left at `1 of 43` by the execute-phase
+> orchestrator's own pre-dispatch write and simply advanced from there. The truth on
+> disk is 43 PLAN files and 42 SUMMARY files, with 01-43 outstanding; that is the
+> only number that cannot drift. THAT ORCHESTRATOR WRITE IS ALSO FINDING F-0 OF
+> `01-42-SUMMARY.md`: it left `.planning/` dirty at arrival, which every `<automated>`
+> block in plan 01-42 asserts EMPTY numerically, so it was committed as its own
+> housekeeping commit before the round's first edit.
 
 > WAVE 37. `state.advance-plan` MOVED THE BODY COUNTER 2 -> 3 AND BOTH NUMBERS
 > WERE WRONG, so the line above is corrected FROM THE FILE COUNT ON DISK and the
@@ -213,6 +217,7 @@ Progress: [█████████░] 95% of phase 01 (39 of 41 plans)
 | Phase 01 P39 | 33 min | 3 tasks | 1 files |
 | Phase 01 P40 | 19 min | 2 tasks | 1 files |
 | Phase 01 P41 | 15 min | 2 tasks | 1 files |
+| Phase 01 P42 | 22 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -384,6 +389,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: BRANCH A (wave-33 pointer-not-a-bound deletion) taken for both unmarked box-state statements; P38-D1 was read as FORBIDDING alteration of marked bytes, which makes Branch B unavailable for these two.
 - [Phase 01]: The replaced count claim states NO number at all and names the two surfaces the gate file cannot see — a count stated wider than the grep that produced it is the defect being corrected.
 - [Phase 01]: FINDING: the 'wave 28' enumeration instrument is case-sensitive across the plan, the review and the verification report, and ':955' (capital W) is invisible to all three. Censuses that decide a sweep's completeness must be run case-insensitively.
+- [Phase 01]: Verification pass 10's exit 2 taken for CORE-11's anchoring: stop claiming a site, correct the disclosure. No AST, no parser, no compiler-API identity, no hand-rolled containment and no fourth narrowing — all asserted by body-scoped byte-identity diff rather than promised. — Nothing in the 2026-08-25 re-scoped bar (DERIVED, DRIFT-DETECTABLE, SOLE BOUND) requires the anchor to identify a site; SOLE BOUND requires a disclosure accurate and contradicted nowhere. Three rounds of narrowing each produced a new instance of the signature defect inside the paragraph stating the previous fix's reach.
+- [Phase 01]: The interchangeability residual is republished as the measured width of the anchor's SHADOW — 574 surface lines at the header row :417, raw 419..1574 — and pinned by EXACT EQUALITY rather than an upper bound, so a shadow that shrank is as loud as one that grew. — An upper bound would hide a shrinking shadow, which is information about the file's recogniser geometry. Only the MAXIMUM is pinned: pinning the whole distribution would force a re-derivation on every ordinary prose edit inside a region hundreds of lines wide, and a pin re-derived without reading is not a pin.
+- [Phase 01]: The pin is shipped beside an EXECUTED counter-observation of what it does not catch: pass 10's own 514-line relocation was re-run at wave 42 and stayed GREEN at 440 of 440 with a byte-identical key, so the relocation class is disclosed as OPEN in the bytes rather than argued closed. — The prescribed ~1,130-line relocation went RED against prediction, but on a SHRINK (574->567) caused by the destination inserting a recogniser-(5)-accepted line that split the shadow — not by detecting a relocation. Diagnosed to the exact 7 lines before being described, per the plan's pre-commitment.
 
 ### Known Risks Carried Forward
 
@@ -426,8 +434,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T14:58:59.781Z
-**Stopped at:** Completed 01-41-PLAN.md (gap-closure round 9 complete — awaiting verification pass 10)
+**Last session:** 2026-08-26T19:10:16.391Z
+**Stopped at:** Completed 01-42-PLAN.md (gap-closure round 10 — CR-22 both parts; 01-43 outstanding)
 **Resume file:** None
 
 ### Blockers
