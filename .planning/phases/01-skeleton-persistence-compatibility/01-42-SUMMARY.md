@@ -798,3 +798,19 @@ None - no external service configuration required.
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+- `packages/backend/src/outbound-prohibition.spec.ts` — FOUND
+- `.planning/phases/01-skeleton-persistence-compatibility/01-42-SUMMARY.md` — FOUND
+- Commits `868c3ff`, `5a60ec2`, `6ad8a81`, `013ea74`, `216ede3`, `9980ea8`, `bebc3e2` — all FOUND
+- `pnpm test` — Test Files 31 passed (31), Tests 1380 passed (1380), rc=0
+- `pnpm exec tsc --build` — rc=0
+- gate file alone — Tests 440 passed (440)
+- `git diff --exit-code -- <spec>` — SPEC CLEAN
+- `.planning/` — clean
+
+**One untracked entry left deliberately:** `.gsd/dispatch-isolation-sentinel.json`, created by the
+execute-phase orchestrator as harness runtime state. It is out of this plan's scope (`packages/`,
+`scripts/`, `.planning/`), is asserted by no gate in this plan, and was not created by either task,
+so it was neither committed nor gitignored — logged here rather than acted on.
