@@ -9904,9 +9904,49 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // assertion that contains no closing parenthesis. A frozen array closed in
   // some third form is STILL unrecognised and the scan would STILL walk past
   // it, exactly as it walked past 5767. This is a narrower recogniser than "the
-  // closing line of the construct", and the two exclusions that use it are
-  // pinned by their `proof` tokens and their bands against the day that
-  // difference matters.
+  // closing line of the construct", and IN-38 named the two constraints that
+  // sentence still leaves out: the match is anchored to column 0 of the RAW,
+  // un-normalized line, and it requires single spaces around `as`. Concretely
+  // unmatched, then: `] as readonly (string | number)[]);` — an `as` type
+  // containing a `)` — and any close that is indented, or spelled `]as const);`
+  // without the space. Both anchored constructs are top level and
+  // prettier-formatted today, so this is a stated reach and not a live defect.
+  //
+  // WHAT HOLDS THESE TWO RESOLUTIONS, AND WHAT DOES NOT — CORRECTED AT WAVE 41
+  // (WR-54, WR-50). THE SENTENCE THAT STOOD HERE NAMED THE `proof` TOKENS AND
+  // THE BANDS AS THE PIN. MEASUREMENT REFUTES ALL THREE CANDIDATES:
+  //  (1) The `proof` check asks only whether the token occurs somewhere inside
+  //      the RESOLVED RANGE. That predicate is MONOTONE IN RANGE WIDTH — a wider
+  //      range still contains the token — so it cannot detect an over-walk BY
+  //      CONSTRUCTION, not by accident. It was green across all 1750 wrong lines
+  //      of WR-48.
+  //  (2) The band did not catch WR-48 either. The over-walk resolved 1750 lines
+  //      and exclusion three's band is 500..3000, so 1750 sat inside it. This
+  //      paragraph says so itself, eleven lines up, and then used to name that
+  //      same band as the pin.
+  //  (3) The clause-count equality below would NOT have caught this one, which
+  //      is the correction to WR-50 rather than a restatement of it.
+  //      Verification pass 9 counted all nine declared phrasings across all 117
+  //      swallowed lines and got ZERO, so `inRange` and `inClauses` both stayed
+  //      at 12 and neither side of the equality moved. It WOULD catch an
+  //      over-walk that swallowed declared phrasings — a shape change reaching
+  //      the quantifier list, say — and that is the whole of what it holds.
+  // Pass 9 established this by reverting this regex to its pre-fix form and
+  // watching the suite stay GREEN at 434 of 434.
+  //
+  // WHAT HOLDS THEM NOW is the case titled "both `closingBracketAfter`
+  // resolutions land on their OWN construct's closing line", which asserts each
+  // resolution EQUAL to the line its construct actually closes on — the registry
+  // located by its own closing text, the quantifier list by its own live
+  // entries, each locator proved to match exactly ONE line before it is used.
+  // THAT REACH AND NO WIDER. It pins WHERE THE SCAN LANDS FOR THESE TWO
+  // CONSTRUCTS and says nothing about any other. It does not widen what this
+  // recogniser matches: a frozen array closed in some third form is STILL
+  // unrecognised and the scan would STILL walk past it. What changed is that
+  // for these two constructs a walk-past now turns this suite RED instead of
+  // passing silently. It does not make exclusion three exact either — that
+  // exclusion is still a LINE RANGE wider than the clause strings it stands
+  // for, narrowed only by the equality below.
   const CLOSES_FROZEN_ARRAY = /^\]( as [^)]*)?\);$/;
   const closingBracketAfter = (start: number): number =>
     lineOf((l) => CLOSES_FROZEN_ARRAY.test(l), start);
@@ -9993,6 +10033,98 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       SURFACE_LINES.length,
       "the scanned surface is EMPTY: the three exclusions between them cover the whole file. The rule below would pass having read nothing.",
     ).toBeGreaterThan(1000);
+  });
+
+  // WR-54, 2026-08-26, wave 41. THE WIDTH ITSELF, PINNED. Everything above this
+  // point checks that each exclusion resolves to SOMETHING, that the something
+  // is inside a coarse band, and that the range still contains a token its
+  // construct carries. Verification pass 9 showed that set is not enough: it
+  // reverted `CLOSES_FROZEN_ARRAY` to its pre-fix form, re-introducing WR-48's
+  // exact 117-line over-walk, and the suite stayed GREEN at 434 of 434. The two
+  // resolutions are asserted DIRECTLY here, each against the line its own
+  // construct actually closes on.
+  //
+  // NOT A SIZE PIN, DELIBERATELY. The verifier offered pinning the size as an
+  // alternative. A size pin goes green again the day a construct legitimately
+  // grows, and a width that moved with nothing noticing is the defect being
+  // closed — so the endpoint is pinned to a LOCATED LINE instead, which stays
+  // true as the file grows and fails the moment the resolution lands elsewhere.
+  // The bands are left exactly as they are: coarse sanity checks, not the pin.
+  it("both `closingBracketAfter` resolutions land on their OWN construct's closing line — the WIDTH is pinned, not merely banded", () => {
+    const listStart = lineOf((l) =>
+      l.startsWith("export const UNBOUNDED_QUANTIFIERS"),
+    );
+    const registryStart = lineOf((l) =>
+      l.startsWith("export const RESOLVER_REGISTRY"),
+    );
+
+    // NON-VACUITY BEFORE THE RULE. A locator matching ZERO lines makes `lineOf`
+    // answer -1, and a pin that compares -1 with -1 PASSES HAVING COMPARED
+    // NOTHING — the silent success this whole file is organised against. A
+    // locator matching MORE than one line pins to whichever line came first,
+    // which is the same green wearing a different defect.
+    const REGISTRY_CLOSE = "] as readonly ResolverRecord[]);";
+    const registryCloseHits = gateLines.filter(
+      (l) => l === REGISTRY_CLOSE,
+    ).length;
+    expect(
+      registryCloseHits,
+      `the locator ${JSON.stringify(REGISTRY_CLOSE)} matches ${registryCloseHits} line(s) of ${GATE_FILE}, not exactly one. At ZERO the pin below would compare -1 against -1 and pass having compared nothing; ABOVE ONE it would pin to whichever line came first. Re-point the locator at the registry's real closing line — do not delete the pin.`,
+    ).toBe(1);
+    const registryClose = lineOf((l) => l === REGISTRY_CLOSE);
+
+    // The quantifier list closes with a BARE `]);`, which is not unique in this
+    // file, so it cannot be located by its own closing text the way the registry
+    // can. It is located by its own LIVE CONTENTS instead: each entry of
+    // UNBOUNDED_QUANTIFIERS occupies exactly one line, and the list closes on
+    // the line after the last of them. The literals are rebuilt with
+    // JSON.stringify AT RUNTIME so that no declared phrasing is written into
+    // this file's scanned surface by the pin that measures it.
+    const entryLines = UNBOUNDED_QUANTIFIERS.map((phrase, index) => {
+      const literal = `${JSON.stringify(phrase)},`;
+      const hits = gateLines.filter((l) => l.trim() === literal).length;
+      expect(
+        hits,
+        `the locator for UNBOUNDED_QUANTIFIERS entry ${index} matches ${hits} line(s) of ${GATE_FILE}, not exactly one. At ZERO the closing line below is derived from a -1 and the pin passes having compared nothing; ABOVE ONE it is derived from whichever line came first. The list must ship one entry per line, unindented duplicates included, for this pin to mean anything.`,
+      ).toBe(1);
+      return lineOf((l) => l.trim() === literal);
+    });
+    const listLastEntry = Math.max(...entryLines);
+    const listClose = listLastEntry + 1;
+
+    // THE PIN, FOR EXCLUSION THREE. This is the one that was unheld.
+    const registryResolved = closingBracketAfter(registryStart);
+    expect(
+      registryResolved,
+      `\`closingBracketAfter(registryStart)\` resolved to line ${registryResolved}, but RESOLVER_REGISTRY's own closing line is ${registryClose} — a gap of ${registryResolved - registryClose} line(s). The scan walked PAST the construct this exclusion is named for and stopped on a different one, so exclusion three's \`name\` and \`why\` are false of the lines it removes from the scanned surface. THIS IS WR-48 EXACTLY: before the recogniser was corrected the scan landed 117 lines late, on the close of a different frozen array. Correct CLOSES_FROZEN_ARRAY so it recognises this construct's closing form. Do NOT widen the band, do NOT change the \`proof\` token, and do NOT adjust this pin — a pin moved to fit the number it exists to catch is decoration that reports green.`,
+    ).toBe(registryClose);
+    expect(
+      EXCLUSIONS[2].to,
+      `exclusion three's realized \`to\` is ${EXCLUSIONS[2].to} while RESOLVER_REGISTRY closes at ${registryClose}. The assertion above pins the helper; this one pins the value the exclusion actually carries, because the exclusion — not the helper — is what removes lines from the scanned surface.`,
+    ).toBe(registryClose);
+    expect(
+      EXCLUSIONS[2].from,
+      `exclusion three's realized \`from\` is ${EXCLUSIONS[2].from} while RESOLVER_REGISTRY opens at ${registryStart}. Both endpoints are pinned because a width is two numbers, and pinning only the end leaves the other half free to move.`,
+    ).toBe(registryStart);
+
+    // THE SAME PIN FOR EXCLUSION TWO. The recogniser serves both, and correcting
+    // one construct while leaving the other unpinned is the identical defect one
+    // construct over. This resolution did NOT move across WR-48's correction —
+    // measured then and re-measured here — which is why it is pinned rather than
+    // assumed.
+    const listResolved = closingBracketAfter(listStart);
+    expect(
+      listResolved,
+      `\`closingBracketAfter(listStart)\` resolved to line ${listResolved}, but UNBOUNDED_QUANTIFIERS' last entry sits at line ${listLastEntry}, so the list closes at ${listClose} — a gap of ${listResolved - listClose} line(s). Either the scan walked past this list's closing line onto another construct's, or the list stopped shipping one entry per line. Correct whichever it is; do not widen the band and do not adjust this pin.`,
+    ).toBe(listClose);
+    expect(
+      EXCLUSIONS[1].to,
+      `exclusion two's realized \`to\` is ${EXCLUSIONS[1].to} while UNBOUNDED_QUANTIFIERS closes at ${listClose}. Same reason as exclusion three: the exclusion's own value is what shapes the scanned surface.`,
+    ).toBe(listClose);
+    expect(
+      EXCLUSIONS[1].from,
+      `exclusion two's realized \`from\` is ${EXCLUSIONS[1].from} while UNBOUNDED_QUANTIFIERS opens at ${listStart}.`,
+    ).toBe(listStart);
   });
 
   // EXCLUSION THREE, NARROWED. Excluding the registry's whole LINE RANGE is
