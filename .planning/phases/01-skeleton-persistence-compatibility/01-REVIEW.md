@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-24T21:10:00Z
+reviewed: 2026-08-26T06:40:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -88,6 +88,30 @@ reviews:
       twin and `navigator.sendBeacon.call` report. And an unreadable member on a
       positively identified `navigator` receiver is silent while the identical
       shape on `requests`, `net` and `globalThis` reports `outbound-unanalysable`.
+  - pass: gap-closure-round-7
+    reviewed: 2026-08-26T06:40:00Z
+    scope: 5 files changed by plans 01-33 … 01-35
+    findings: CR-17, CR-18, CR-19, WR-44...WR-48, IN-34...IN-36
+    verdict: >-
+      CR-14, CR-15, CR-16, WR-38...WR-43 and IN-31...IN-33 are all CLOSED or
+      DISCLOSED-by-row, verified by execution. CORE-11's `[x]` IS earned under
+      the operator's re-scoped bar: I re-ran all three criteria as mutations and
+      all three held — a one-character divergence in a registry clause turns BOTH
+      byte comparisons red at once, each shipped copy drives its OWN comparison
+      red ALONE, and a declared phrasing planted outside all three exclusions
+      turns the whole-file guard red naming the line. Nothing in the code, the
+      generated span or the ledger claims the gate is complete; the narrow bar is
+      stated correctly and repeatedly. THREE NEW BLOCKERS, and all three are the
+      signature defect in the one place the new mechanism does not look — at the
+      IDENTITY of what it excuses, and on the two surfaces it declares unguarded.
+      A named exemption whose key is `{q2} :: q2` RELOCATED, under execution, off
+      the ASCII-table cell its reason describes and onto a fabricated hand-written
+      BOUND planted 9,000 lines away: 432/432 still green. The ledger row whose
+      box is `[x]` ends with an unmarked, present-tense `THE BOX IS DELIBERATELY
+      STILL [ ], AND THE BLOCKING ROW IS NAMED`. And `STATE.md`'s live Blockers
+      section still carries CR-14's exact false paragraph — the row
+      `silence-operator-around-global-receiver` and its six now-reporting
+      exemplars — one surface over from where wave 33 deleted it.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -151,10 +175,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 16
-  warning: 43
-  info: 33
-  total: 92
+  critical: 19
+  warning: 48
+  info: 36
+  total: 103
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -257,6 +281,17 @@ resolution:
       IN-31,
       IN-32,
       IN-33,
+      CR-17,
+      CR-18,
+      CR-19,
+      WR-44,
+      WR-45,
+      WR-46,
+      WR-47,
+      WR-48,
+      IN-34,
+      IN-35,
+      IN-36,
     ]
 fix_commits:
   CR-01: 910c382
@@ -323,10 +358,10 @@ tests_after: 31 files / 1345 tests
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files), 2026-08-24T10:05:00Z (gap closure round 4, 7 files), 2026-08-24T16:30:00Z (gap closure round 5, 6 files) and 2026-08-24T21:10:00Z (gap closure round 6, 5 files)
+**Reviewed:** 2026-08-21T00:30:00Z (initial, 54 files), 2026-08-21T11:21:31Z (gap closure, 13 files), 2026-08-21T15:23:01Z (gap closure round 2, 9 files), 2026-08-22T10:20:00Z (gap closure round 3, 9 files), 2026-08-24T10:05:00Z (gap closure round 4, 7 files), 2026-08-24T16:30:00Z (gap closure round 5, 6 files) 2026-08-24T21:10:00Z (gap closure round 6, 5 files) and 2026-08-26T06:40:00Z (gap closure round 7, 5 files)
 **Depth:** standard
-**Files Reviewed:** 59 (union of all seven passes)
-**Status:** issues_found — three new BLOCKERs from round 6 (`CR-14`, `CR-15`, `CR-16`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-11`, `CR-12`, `CR-13`, `WR-32…WR-37` and `IN-27…IN-30` are all CLOSED, verified by execution
+**Files Reviewed:** 59 (union of all eight passes)
+**Status:** issues_found — three new BLOCKERs from round 7 (`CR-17`, `CR-18`, `CR-19`), on top of `WR-07` (deferred) and `IN-01…IN-07`/`IN-09` (open). `CR-14`, `CR-15`, `CR-16`, `WR-38…WR-43` and `IN-31…IN-33` are all CLOSED or disclosed-by-row, verified by execution. **CORE-11's `[x]` is EARNED under the operator's re-scoped bar** — all three criteria re-verified by independent mutation in this session
 
 > **Two passes, one file.** Everything above the `--- PASS 2 ---` marker is the
 > 2026-08-21T00:30Z review of plans 01-01…01-06 and its resolution ledger, kept
@@ -4145,5 +4180,715 @@ _Pass 4 reviewed: 2026-08-22T10:20:00Z_
 _Pass 5 reviewed: 2026-08-24T10:05:00Z_
 _Pass 6 reviewed: 2026-08-24T16:30:00Z_
 _Pass 7 reviewed: 2026-08-24T21:10:00Z_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard_
+
+---
+---
+
+# --- PASS 8 --- Gap-Closure ROUND 7 Review (plans 01-33, 01-34, 01-35)
+
+**Reviewed:** 2026-08-26T06:40:00Z
+**Depth:** standard
+**Files Reviewed:** 5 — the files plans 01-33 … 01-35 changed, confirmed against
+`git diff --name-only 516ce1d^..HEAD -- packages/` rather than taken from the summaries
+**Status:** issues_found — 3 BLOCKER, 5 WARNING, 3 INFO
+
+## Summary (pass 8)
+
+**CORE-11's `[x]` is earned under the bar the operator actually adopted, and I
+checked that by mutation rather than by reading the discharge table.** All three
+criteria were re-executed independently in this session, each mutation planted,
+watched, and reverted:
+
+```
+M1  RESOLVER_REGISTRY unwrap.clause  "strips parentheses, " -> "strips parenthesesXX, "
+    × the block shipped in .planning/REQUIREMENTS.md equals deriveResidual(...), byte for byte
+    × the block shipped in the gate header equals deriveResidual(...), byte for byte
+    Tests  2 failed | 430 passed (432)
+
+M2  one character inside the GATE HEADER's copy of the span
+    × the block shipped in the gate header equals deriveResidual(...), byte for byte
+    Tests  1 failed | 431 passed        (the ledger comparison stayed GREEN)
+
+M3  one character inside .planning/REQUIREMENTS.md's copy of the span
+    × the block shipped in .planning/REQUIREMENTS.md equals deriveResidual(...), byte for byte
+    Tests  1 failed | 431 passed        (the gate-header comparison stayed GREEN)
+
+M4  a declared phrasing planted at line 9797, outside all three exclusions
+    × the gate file's own bytes carry NO declared phrasing outside the three
+      exclusions except by NAMED exemption
+    Tests  1 failed | 431 passed (432)
+```
+
+That is (1) DERIVED — a divergence in the generator's *input* moves both shipped
+copies at once, which is what separates derived from merely-consistent; (2)
+DRIFT-DETECTABLE — each copy carries its own guard and each was driven red alone;
+(3) THE SOLE BOUND — a hand-written bound in a declared phrasing cannot re-enter
+the gate file unnoticed. The suite is green at 4 files / 717 tests over the
+reviewed set (`outbound-prohibition` 432, `observations` 185, `error-redaction`
+91, `schema` 9).
+
+**And nothing claims the gate is complete.** I went looking for that specifically,
+because it is the shape this phase's signature defect would take here. It is not
+there. `CORE11_BOX_EXPECTED`'s failure message states the narrow bar and states
+what it is *not* ("it does NOT claim the walk catches everything"); the ledger's
+`WHAT THIS [x] MEANS AND WHAT IT DOES NOT` paragraph says the same and names
+CR-15, CR-16 and the twenty-six measured silences as *named residuals* under it;
+the wave-34 correction says `THIS WAVE ENDED NO CLASS` in the same paragraph as
+its widenings so the two cannot be read apart. Row 3 of the discharge table is
+`✓ (scoped:` with both unreached classes named. Wave 33's deletion is real: the
+first 956 lines of the gate file now contain zero occurrences of `OPEN AND
+UNOWNED`, `STILL SILENT`, `every spelling` or a completion claim. **The mechanism
+genuinely reduces the class, and it should be said plainly: this is the first
+round in eight where the bound a reader meets first is not authored.**
+
+**All three new BLOCKERs are the signature defect in the one place the new
+mechanism does not look — at the IDENTITY of what it excuses, and on the two
+surfaces it declares unguarded.**
+
+The whole-file guard protects its three *exclusions* against silently relocating
+onto a different construct — each carries a `proof` token and the failure message
+says why: *"This is the direction where an exclusion silently relocates onto a
+different construct and keeps passing."* The `HEADER_QUANTIFIER_EXEMPTIONS` map
+one layer down has no such protection, and one of its keys is the bare string
+`"{q2} :: q2"`. Executed: I deleted the ASCII-table cell that key was written for
+and planted a fabricated hand-written **bound** — `A receiver alias chain in this
+walk resolves at / any depth` — nine thousand lines away, outside all three
+exclusions. **432/432 passed.** The exemption whose reason reads *"HEADER. A
+wrapped cell in the same ASCII table, labelling what the keyReceiver row already
+carries"* now excuses a standing claim about the walk's reach, and every count
+the guard pins still balances. That is prose laundered into machine-looking text,
+which is the one thing this round was asked not to do (`CR-17`).
+
+And the two surfaces the discharge itself names as unguarded are not merely
+unguarded — they are **wrong right now**, and check (d) of row 3 says they were
+checked and found clean. `.planning/REQUIREMENTS.md`'s CORE-11 row is a single
+line beginning `- [x] **CORE-11**` and ending, unmarked and in the present tense,
+`THE BOX IS DELIBERATELY STILL [ ], AND THE BLOCKING ROW IS NAMED` — while (d)
+claims *"this box's state asserted in exactly two places — this ledger row and
+`CORE11_BOX_EXPECTED` — which agree"* (`CR-18`). And `.planning/STATE.md`'s live
+`### Blockers` section still carries **CR-14's paragraph, verbatim in substance**:
+`CORE-11 blocked by silence-operator-around-global-receiver:` with the same six
+exemplars, a registry row this suite now positively asserts must not exist
+(`CR-19`). Wave 33 deleted that claim from the gate header. It is still standing
+one surface over, in a section whose heading says it is current.
+
+**On the persistence side the WR-39 correction is right about the mechanism and
+missed its own fourth surface.** The ledger says *"All three disclosure sites
+moved in one commit."* There were four. The one that did not move is in
+`observations.spec.ts` itself, twenty-five lines above the sweep that disproves
+it: *"the CR-07 padding branch redacts it whole: **one byte shorter**"*
+(`WR-44`) — the exact sentence, attributing the delta to the branch, that the
+same commit rewrote out of `observations.ts` and `schema.spec.ts`. The equality
+that encodes the coincidence, `expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1)`,
+survives at `:1114` (`WR-45`). And the replacement for the assertion removed *for
+being a duplicate* is itself three assertions, one of which duplicates an
+assertion twenty-one lines above it and one of which is a tautology of the other
+two (`WR-46`).
+
+Three things are right and worth recording so nobody re-litigates them. The
+wrap-tolerant normalization is not ceremony — the four wrapped occurrences a
+line-based scan misses are real, and `joinGateLines`' char-to-line index still
+names a line in the failure message. The `inRange == inClauses` equality on
+exclusion three is the correct narrowing and errs in the safe direction: a
+phrasing written into a `branches[]`, `probe` or `why` field inside the registry's
+line range counts in `inRange` and not in `inClauses`, so it breaks the equality
+rather than vanishing. And the varied-length sweep in `observations.spec.ts`
+really does read every band and every delta out of its own run — I checked the
+four profiles are not hard-coded and that `deltaSignatures.size > 1` is the
+finding stated as an assertion rather than as a sentence.
+
+---
+
+## Critical Issues (pass 8)
+
+### CR-17: A named exemption RELOCATES onto a different sentence — the `{q2}` key excuses a fabricated hand-written BOUND nine thousand lines from the table cell its reason describes
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9024` (the entry), `:9159-9174` (`surfaceExemptionKeys`), `:9126-9131` (`exemptionKeyFor`), `:9667-9727` (the rule)
+**Severity:** BLOCKER
+
+**Issue:** The whole-file guard's rule is: *every declared-phrasing occurrence
+outside the three exclusions is GONE or carries a named, reasoned entry a
+reviewer can execute and disagree with.* The entry is looked up by a key derived
+from the occurrence's line:
+
+```ts
+const exemptionKeyFor = (line: string, quantifierIndex: number): string => {
+  const masked = maskQuantifiers(normalizeGateLine(line));
+  const anchor = masked.length > 96 ? `${masked.slice(0, 96)}…` : masked;
+  return `${anchor} :: q${quantifierIndex}`;
+};
+```
+
+For a comment line that contains *only* a declared phrasing, `masked` is the
+token alone and the key degenerates to `"{q2} :: q2"` — ten bytes, carrying no
+identifying content whatsoever. That is a real, shipped key. It was written for
+line 436, a wrapped cell of the ASCII table in the header:
+
+```
+//                                                 recursing on itself   ITSELF as the resolver,
+//                                                                       so nesting resolves at
+//                                                                       any depth
+```
+
+and its reason says so: *"HEADER. A wrapped cell in the same ASCII table,
+labelling what the keyReceiver row already carries. What bounds it is
+QUANTIFIED_CLAUSES.keyReceiver — the four RECEIVER_OPERATORS — and not this
+cell."*
+
+**Executed, not argued.** I deleted line 436 and planted, at line 9797 — outside
+all three exclusions, in the middle of the guard's own describe block — a
+fabricated hand-written **bound**, split so the phrasing starts on a line of its
+own exactly as the table cell does:
+
+```ts
+  // A receiver alias chain in this walk resolves at
+  // any depth
+```
+
+```
+$ pnpm vitest run packages/backend/src/outbound-prohibition.spec.ts
+ Test Files  1 passed (1)
+      Tests  432 passed (432)
+```
+
+Green. Not one of the guard's five checks moved: `missing` is empty because the
+new occurrence produces the same key; `stale` is empty because the key still
+matches something; `foundKeys.length === declared.length` still balances because
+one occurrence left and one arrived; the exclusion bands are untouched; the
+`reason.trim().length > 40` check passes on a reason that is now false of the
+sentence it excuses.
+
+This is exactly the failure mode the guard defends against **one layer up** and
+not here. Each of the three exclusions carries a `proof` token and a failure
+message that names the direction:
+
+> `exclusion \`${e.name}\` resolved to lines ${e.from}..${e.to}, but that range
+> does NOT contain ${JSON.stringify(e.proof)} — a token only that construct
+> carries. The anchors matched something else. **This is the direction where an
+> exclusion silently relocates onto a different construct and keeps passing.**
+
+The exemption map has 29 entries and no equivalent. `"{q2} :: q2"` is the extreme
+case, but the mechanism is general: any two lines whose first 96 masked,
+normalized bytes agree are interchangeable to this guard, and the reason string —
+the thing a reviewer is supposed to execute and disagree with — is bound to
+neither.
+
+The guard's four stated limits do not disclose this. (1) is the phrase list, (2)
+is normalization, (3) is bytes-not-meaning, (4) is exclusion three's coarseness.
+None of them says an exemption can move. And criterion (3) of the discharge —
+*THE SOLE BOUND on every surface a reader touches* — is what this defeats: a
+hand-written bound re-entered the gate file, in a **declared** phrasing, inside a
+**guarded** file, and the guard passed.
+
+**Fix:** bind each exemption to its occurrence the same way an exclusion is bound
+to its construct — with a `proof` token the guard checks. Make the map's values
+structured rather than bare strings:
+
+```ts
+const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<
+  Record<string, { readonly proof: string; readonly why: string }>
+> = Object.freeze({
+  "{q2} :: q2": {
+    // A token only THAT construct carries, checked against the lines the
+    // occurrence actually spans. An exclusion is pinned this way; an exemption
+    // is the same act one layer down and must be pinned the same way.
+    proof: "recursing on itself",
+    why: "HEADER. A wrapped cell in the same ASCII table, labelling …",
+  },
+  // …
+});
+```
+
+and in the rule, for every found occurrence, assert that the `proof` of its
+matched entry occurs within a small window around `o.line`/`o.endLine` — say the
+occurrence's own lines plus three above:
+
+```ts
+for (const f of found) {
+  const entry = HEADER_QUANTIFIER_EXEMPTIONS[f.key];
+  const window = gateLines.slice(Math.max(0, f.line - 4), f.endLine).join("\n");
+  expect(
+    window.includes(entry.proof),
+    `exemption ${JSON.stringify(f.key)} matched an occurrence at line ${f.line}, but that occurrence does NOT carry ${JSON.stringify(entry.proof)} — the token its reason was written about. The entry has RELOCATED onto a different sentence and is now excusing something nobody read. This is the same direction the three exclusions are pinned against by their own \`proof\` tokens.`,
+  ).toBe(true);
+}
+```
+
+Then re-run the mutation above and watch it go red. Separately, refuse a
+degenerate key outright — an anchor shorter than, say, twenty bytes after masking
+identifies nothing and should fail with "widen the anchor" rather than ship.
+
+---
+
+### CR-18: The ledger row whose box is `[x]` ends, unmarked and in the present tense, with `THE BOX IS DELIBERATELY STILL [ ]` — and criterion (3)(d) cites that row as one of two places that AGREE
+
+**File:** `.planning/REQUIREMENTS.md:46` (the row), `:149-160` (the discharge table), with `packages/backend/src/outbound-prohibition.spec.ts:9887, 9947-9962`
+**Severity:** BLOCKER
+
+**Issue:** CORE-11's requirement row is one physical line. It begins:
+
+```
+- [x] **CORE-11**: No code that ships in the plugin issues an outbound network request …
+```
+
+and it carries, inside its own parenthetical history, **three** present-tense
+statements of the box's state:
+
+```
+… THE BOX STAYS `[ ]` DELIBERATELY, AND THIS IS THE REASON …          (plan 01-18)
+… CORRECTION 2026-08-24, plan 01-19: THIS BOX IS NOW `[x]` …          (plan 01-19)
+… CORRECTION 2026-08-24, plan 01-28: THE BOX IS DELIBERATELY STILL `[ ]`,
+  AND THE BLOCKING ROW IS NAMED …                                      (plan 01-28)
+```
+
+The last of the three is the chronologically latest correction inside the line,
+it is in the present tense, and it is **unmarked**. There is no `SUPERSEDED`
+marker, no `2026-08-25` and no `2026-08-26` anywhere in line 46 — verified by
+`grep`. The re-scope and the discharge live in separate paragraphs 90+ lines
+below, and a reader who reads the requirement row itself — which is what a
+requirement row is *for* — reads `[x]` at its start and "the box is deliberately
+still `[ ]`, and the blocking row is named" at its end.
+
+The file's own convention makes this a defect rather than a judgement call. Line
+110 carries `**SUPERSEDED IN PART BY THE OPERATOR DECISION OF 2026-08-25 … AND
+THE MARKER IS SCOPED TO ONE SENTENCE ON PURPOSE.**` — exactly the treatment this
+sentence needs and did not get. And line 118 records that wave 33 deleted, as
+`WR-38`, *"a paragraph asserting CORE-11 was marked complete in this file,
+contradicting the row roughly 8,100 lines below it."* This is the same defect
+inverted — a paragraph asserting CORE-11 is **not** complete, contradicting the
+box at the head of its own line — surviving on the surface WR-38 was found on.
+
+What makes it a BLOCKER rather than a documentation nit is that the discharge
+this `[x]` was flipped against **asserts the opposite as executed evidence**.
+Criterion (3)'s check (d) reads:
+
+> (d) The cross-surface check: zero unmarked STANDING statements of a superseded
+> bar on any of the four reader surfaces, and **this box's state asserted in
+> exactly two places — this ledger row and `CORE11_BOX_EXPECTED` — which agree.**
+
+The box's state is asserted in **four** places on that row alone, and they do not
+agree. A discharge row whose stated reach exceeds its executed reach is this
+phase's signature defect, and here it is inside the evidence that flipped the box.
+
+**Fix:** two edits, one commit.
+
+1. Mark the plan 01-28 correction in line 46 the way line 110 marks its
+   predecessor, scoped to the sentence:
+
+   ```
+   … — CORRECTION 2026-08-24, plan 01-28 (gap-closure round 5, wave 28):
+   **SUPERSEDED 2026-08-26 BY THE DISCHARGE OF THE RE-SCOPED BAR — the box is now
+   `[x]`; the bytes below are preserved as the record of what was believed and
+   the blocking row they name was REMOVED from the registry on 2026-08-24 (CR-11).**
+   THE BOX IS DELIBERATELY STILL `[ ]` …
+   ```
+
+   Do the same for the plan 01-18 sentence, or state once at the head of the
+   parenthetical that every box-state sentence inside it is historical and the
+   authoritative state is the checkbox.
+
+2. Correct check (d) in the discharge table to what was measured, or re-run it.
+   If it stays as "exactly two places which agree", it needs a mechanism: the
+   `CORE11_BOX_EXPECTED` case already reads the row — extend it to assert that
+   the row's own body contains no *unmarked* `` `[ ]` ``/`` `[x]` `` box-state
+   sentence, so a future correction that contradicts the checkbox goes red.
+
+---
+
+### CR-19: `STATE.md`'s live `### Blockers` section still carries CR-14's paragraph — the removed row and its six now-reporting exemplars — one surface over from where wave 33 deleted it
+
+**File:** `.planning/STATE.md:365, 366, 367` (with `packages/backend/src/outbound-prohibition.spec.ts:9520-9530`)
+**Severity:** BLOCKER
+
+**Issue:** `STATE.md`'s `### Blockers` heading declares the section current. Under
+it, unmarked and in the present tense:
+
+```
+- CORE-11's residual class is still open: six consecutive rounds of bounds authored
+  rather than derived. Wave 27 owns the derivation; wave 28 owns the CORE-11
+  checkbox flip, and only against the derived text.                        (:365)
+
+- [Phase 01] CORE-11 blocked by silence-operator-around-global-receiver:
+  `(ok && globalThis).fetch(url)`, `(globalThis ?? self)`, `(globalThis || self)`,
+  `(b ? globalThis : self)`, `(ok && window)` and `(ok && navigator).sendBeacon(u,d)`
+  all report NOTHING. Blocks TWO enumerated CORE-11 clauses. Scoped fix: reach
+  operatorReceiver from the GLOBAL receiver path …                         (:366)
+
+- CORE-11 blocked by FIVE named rows (plan 01-32): an array element position, an
+  object-literal property, a class field, a parameter default and a for-of
+  binding …                                                                (:367)
+```
+
+Line 366 is **CR-14's content, on a different surface**. CR-14 was round 7's
+BLOCKER for exactly this paragraph in the gate header: a claim that an operator
+around a global receiver is silent, naming six exemplars, all six of which
+report. Wave 33 deleted the gate-header copy. The row it names,
+`silence-operator-around-global-receiver`, was removed from the registry on
+2026-08-24, and this suite now asserts its **absence** positively, with a message
+that says the six spellings report:
+
+```ts
+expect(
+  RESOLVER_REGISTRY.some((r) => r.id === "silence-operator-around-global-receiver"),
+  "row `silence-operator-around-global-receiver` is BACK in the registry. It was
+   removed on 2026-08-24 (CR-11) because the silence it measured stopped existing
+   — every spelling it named now reports through `operatorOperandMatching` …",
+).toBe(false);
+```
+
+So the project's live blocker list names, as a current blocker on a requirement
+that is now `[x]`, a mechanism the suite proves does not exist. Line 365 states
+the *superseded* bar's routing ("wave 28 owns the CORE-11 checkbox flip, and only
+against the derived text") as current. Line 367 names five rows as blocking a box
+that is checked.
+
+Discharge check (3)(d) claims *"zero unmarked STANDING statements of a superseded
+bar on any of the four reader surfaces."* There are three on this surface, in the
+section that most reads as current. The row's own scope note says `STATE.md` is
+`CLASS ONE, UNGUARDED FILES: … reached by NO mechanical comparison at all` — that
+correctly discloses there is no *mechanism*, and (d) separately claims the manual
+check was performed and came back clean. It did not.
+
+**Fix:** these three entries are resolved, not open. Move them out of `### Blockers`
+into the phase's decision/history log the way the wave-34 and wave-35 pointer
+amendments were appended (`:368`, `:369`), each with a dated resolution line:
+
+```
+- RESOLVED 2026-08-26 (wave 32 closed the mechanism, wave 35 discharged the bar):
+  CORE-11 was blocked by `silence-operator-around-global-receiver`. That row was
+  REMOVED from RESOLVER_REGISTRY on 2026-08-24 and its absence is now asserted by
+  `outbound-prohibition.spec.ts`; all six exemplars report through
+  `operatorOperandMatching`. Preserved here because the six probes are evidence.
+```
+
+And give (d) something mechanical to stand on, since it is now the only criterion
+whose evidence is a person reading four files: the cheapest version is to extend
+the existing `readPlanningLedger` seam to `STATE.md` and `WINDOWS.md` and assert
+that no line under a `### Blockers` heading contains `CORE-11 blocked by` while
+`CORE11_BOX_EXPECTED` is `- [x]`. That is one string comparison and it makes the
+`[x]` and the blocker list move together.
+
+---
+
+## Warnings (pass 8)
+
+### WR-44: WR-39's correction moved three disclosure sites and there were four — the fourth is in the file the correction edited, twenty-five lines above the sweep that disproves it
+
+**File:** `packages/backend/src/store/observations.spec.ts:1103-1106` (claim: `.planning/REQUIREMENTS.md:135`)
+
+**Issue:** WR-39 found that "shape (2) SHRINKS by a byte and shape (3) does not"
+is an artifact of `jsessionid` being ten characters — the same length as
+`<redacted>` — and not a property of the CR-07 padding branch. The correction
+rewrote that sentence out of `observations.ts` and out of `schema.spec.ts`, and
+the ledger records the result as:
+
+> All three disclosure sites moved in one commit.
+
+`grep` over the three files finds exactly one surviving instance of the falsified
+sentence, and it is in `observations.spec.ts` itself:
+
+```
+packages/backend/src/store/observations.ts        0
+packages/backend/src/store/schema.spec.ts         0
+packages/backend/src/store/observations.spec.ts   1
+```
+
+```ts
+// past the `=`, the second pass sees a `;` segment with an empty value half,
+// and the CR-07 padding branch redacts it whole: one byte shorter. A variable
+// named for a mechanism its own assertions do not exhibit is how a reader
+// learns the wrong mechanism from a green test.
+```
+
+"the CR-07 padding branch redacts it whole: **one byte shorter**" attributes the
+delta to the branch, which is precisely the attribution WR-39 falsified. It sits
+twenty-five lines above the varied-length sweep whose whole purpose is to show
+that a one-character name moves by zero, a 29-character name by up to twenty and
+a 44-character name by up to thirty-five. And the paragraph it closes is itself
+about a variable named for a mechanism its assertions do not exhibit — the same
+class, one comment down.
+
+The count in the ledger ("three sites") is also the number a future reader will
+audit against, so the miscount is load-bearing.
+
+**Fix:** delete the four words and point at the sweep, exactly as the other three
+sites now do:
+
+```ts
+// past the `=`, the second pass sees a `;` segment with an empty value half,
+// and the CR-07 padding branch redacts it whole — replacing the retained tail
+// with the marker. THE LENGTH CHANGE IS NAME-LENGTH DEPENDENT and is measured
+// by the four-length sweep below, never stated here (WR-39).
+```
+
+and correct `.planning/REQUIREMENTS.md:135` to say four sites, in the same commit.
+
+### WR-45: The hard-coded `-1` equality WR-39 was written about survives at `:1114`, as an equality, with no statement that it is fixture-specific
+
+**File:** `packages/backend/src/store/observations.spec.ts:1114`
+
+**Issue:**
+
+```ts
+const emptyValueCutTwice = normaliseObservedUrl(emptyValueCut);
+expect(emptyValueCutTwice).not.toBe(emptyValueCut);
+expect(emptyValueCutTwice.length).toBe(emptyValueCut.length - 1);   // :1114
+expect(emptyValueCutTwice.slice(-11)).toBe(";<redacted>");
+```
+
+The assertion WR-39 *removed* was, by its own replacement comment, "BYTE-IDENTICAL
+to the assertion fourteen lines above it". The assertion fourteen lines above it
+is this one, and it is the encoding of the coincidence: `-1` is
+`"<redacted>".length + 1 - "jsessionid".length - 1`, true only because the fixture
+uses a ten-character parameter name. It is not wrong — it is true of this
+fixture — but it is a magic number with no derivation, in the file whose own
+correction three lines of comment away says no delta may be authored here, and it
+will go red for a reason unrelated to the property the day somebody renames the
+parameter.
+
+**Fix:** derive it, so it cannot be a coincidence:
+
+```ts
+const JSESSIONID = "jsessionid";
+expect(
+  emptyValueCutTwice.length - emptyValueCut.length,
+  "the second pass swaps the retained tail for the marker; the delta is the difference between the two lengths and NOTHING here may be authored.",
+).toBe(QUERY_VALUE_REDACTION.length - (JSESSIONID.length + 1));
+```
+
+or drop the length assertion entirely and keep `slice(-11)`, which already pins
+the observable fact without pinning an arithmetic accident.
+
+### WR-46: The replacement for the assertion removed *for being a duplicate* contains a duplicate and a tautology
+
+**File:** `packages/backend/src/store/observations.spec.ts:1126-1130` vs `:1142-1155`
+
+**Issue:** WR-39's stated grievance was that the old discriminator "re-asserted a
+fact already asserted and could not detect the disagreement its own comment
+claimed to watch for". The replacement is three assertions, and two of them have
+the same problem:
+
+```ts
+// :1127 — inline, on nameCut
+expect(
+  /;[^;]*=/.test(nameCut.slice(nameCut.lastIndexOf(";"))),
+  "the LAST offset … leaving a final `;` segment with no `=`. It has one, so …",
+).toBe(false);
+
+// :1148 — the same fact, twenty-one lines later, through the new helper
+expect(
+  finalSegmentHasEquals(nameCut),
+  "the LAST offset of the head-side band was expected to leave a final `;` segment with NO `=` …",
+).toBe(false);
+
+// :1152 — a tautology of the two assertions above it
+expect(
+  finalSegmentHasEquals(emptyValueCut) === finalSegmentHasEquals(nameCut),
+  "both ends of the head-side band now take the SAME branch, so the band is one mechanism rather than two …",
+).toBe(false);
+```
+
+`:1148` is `:1127` with the predicate factored into a lambda; if either can fail
+the other already has. `:1152` compares two values the two preceding assertions
+have just pinned to `true` and `false`, so it can only fail in a run where one of
+them has already failed — its message describes a condition it can never uniquely
+detect, which is the definition of the defect the finding was raised about.
+
+**Fix:** keep the helper, delete the inline copy at `:1127`, and replace `:1152`
+with the assertion it was reaching for — a check that the band's two *ends* are
+the only thing being claimed, e.g. that the branch selector actually flips
+somewhere inside the band rather than that its endpoints differ:
+
+```ts
+const selectors = headUnstable.map((n) =>
+  finalSegmentHasEquals(
+    normaliseObservedUrl(`https://cdn.test/${"p".repeat(n)};jsessionid=SECRETSESSION`),
+  ),
+);
+expect(
+  new Set(selectors).size,
+  `every offset in the head-side band takes the SAME branch (${selectors.join(",")}), so the band is one mechanism rather than two and the disclosures naming both shapes are stale.`,
+).toBe(2);
+```
+
+That version fails for the reason its message states, and it reads the whole band
+rather than its endpoints.
+
+### WR-47: `finalSegmentHasEquals` answers `false` for a string containing no `;` — `slice(lastIndexOf(";"))` becomes `slice(-1)`
+
+**File:** `packages/backend/src/store/observations.spec.ts:1142-1143`
+
+**Issue:**
+
+```ts
+const finalSegmentHasEquals = (u: string): boolean =>
+  /;[^;]*=/.test(u.slice(u.lastIndexOf(";")));
+```
+
+With no `;` present, `lastIndexOf` returns `-1` and `String.prototype.slice(-1)`
+returns the **last character**, not the whole string. The predicate then tests one
+byte and answers `false` — "this took P10-D1's whole-segment branch" — for an
+input it never examined. Every current caller passes a head-side string that does
+contain a `;`, so nothing is wrong today. But this helper is now the file's
+*stated* discriminator between the two truncation branches, the query-side band a
+few dozen lines away is delimited by `&` and not `;`, and a later author reusing
+it there gets a confident wrong answer with no assertion able to notice.
+
+**Fix:** make the no-delimiter case explicit and fail loudly rather than answer:
+
+```ts
+const finalSegmentHasEquals = (u: string, delimiter = ";"): boolean => {
+  const at = u.lastIndexOf(delimiter);
+  if (at === -1) {
+    throw new Error(
+      `finalSegmentHasEquals was handed a string with no \`${delimiter}\` — there is no final delimited segment to read, and answering false would report P10-D1's branch for an input never examined: ${JSON.stringify(u.slice(-40))}`,
+    );
+  }
+  return new RegExp(`\\${delimiter}[^\\${delimiter}]*=`).test(u.slice(at));
+};
+```
+
+### WR-48: Exclusion three resolves 117 lines past the construct it names — `closingBracketAfter` skips the registry's real closer and lands on `BRANCH_VOCABULARY`'s
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9545-9546, 9573-9580` (with `:5767`, `:5884`)
+
+**Issue:** The exclusion is resolved by anchor:
+
+```ts
+const closingBracketAfter = (start: number): number =>
+  lineOf((l) => l === "]);", start);
+// …
+{ name: "the RESOLVER_REGISTRY declaration",
+  from: registryStart, to: closingBracketAfter(registryStart), band: [500, 3000] }
+```
+
+`RESOLVER_REGISTRY` does not close with `]);`. It closes at line 5767 with
+
+```ts
+] as readonly ResolverRecord[]);
+```
+
+so the scan runs past it and stops at the next bare `]);` in the file — line
+5884, which is **`BRANCH_VOCABULARY`'s** closer. Measured:
+
+```
+span   957..1538   582 lines   (band 100..1500)
+list  5959..5969    11 lines   (band 5..40)
+reg   4135..5884  1750 lines   (band 500..3000)   <-- registry really ends at 5767
+excluded 2343 / 9976 ; surface 7633
+```
+
+117 lines — the `BRANCH_VOCABULARY` docblock and the entire `BRANCH_VOCABULARY`
+declaration — are excluded from the whole-file guard by an exclusion named "the
+RESOLVER_REGISTRY declaration", and every check the guard runs on it passes: the
+`proof` token `id: "constStrings"` is inside the range, and 1750 is inside the
+band.
+
+This is currently caught in the safe direction by `exclusionThreeCarriesOnlyClauses`
+— a declared phrasing written into those 117 lines makes `inRange` exceed
+`inClauses` and turns that case red — which is exactly why limit (4) exists and
+is the right design. Two things are still wrong. First, the discharge's check (c)
+states the result as *"exclusion three's line range swallows 12 and the live
+`clause` strings carry 12 … **zero residue in any exclusion**"*: the residue is
+117 lines, they merely carry no phrasing today, and "zero residue" is the
+stronger claim. Second, the anchor is fragile in a way the band cannot see — a
+band of 500..3000 around a construct that is really 1633 lines would not notice
+the exclusion growing by another thousand, and a nested `Object.freeze([…])`
+closing with `]);` anywhere inside a registry row would silently *shrink* it.
+
+**Fix:** anchor the close on the construct rather than on a generic bracket, and
+tighten the band to what was measured:
+
+```ts
+const closingOf = (start: number, closer: string): number =>
+  lineOf((l) => l === closer, start);
+// …
+{ name: "the RESOLVER_REGISTRY declaration",
+  from: registryStart,
+  to: closingOf(registryStart, "] as readonly ResolverRecord[]);"),
+  band: [1500, 2000] as const,
+  proof: 'id: "constStrings"', … }
+```
+
+and correct check (c) in `.planning/REQUIREMENTS.md` to say what it measured —
+"zero *declared-phrasing* residue", not "zero residue".
+
+---
+
+## Info (pass 8)
+
+### IN-34: The synonym evasion is real, is correctly disclosed, and is worth pinning as a measured residual rather than only as prose
+
+Executed. Planted at line 9796, outside all three exclusions:
+
+```ts
+  // An operator wrapping a global receiver is still silent in all spellings, at any nesting level whatsoever.
+```
+
+```
+Tests  432 passed (432)
+```
+
+A false universal — the same claim CR-14 was raised about — re-enters the gate
+file untouched when it is spelled `in all spellings` instead of `in every
+spelling`. This is exactly what limits (1) and (3) of the guard's docblock say,
+and what the discharge's row-3 scope note calls `CLASS TWO, UNDECLARED SPELLINGS
+INSIDE THE GUARDED FILES`. So the disclosure is accurate and this is not a
+finding against it. It is recorded because the disclosure is currently prose in
+three places and no executed artifact: a case that plants a synonym, asserts the
+guard stays green and says *that is the limit* would make the limit measurable
+the way `FALSIFIED_HANDOFFS` made a falsified phrase measurable — and it would go
+red the day somebody widens the list, which is the only event that would make the
+sentence stale.
+
+### IN-35: The residual-list title counts `bare-callee` as a mechanism added on 2026-08-24 when it is already item 1 of the same list
+
+**File:** `packages/backend/src/store/error-redaction.spec.ts:1495`
+
+```
+"RESIDUAL, STILL OPEN AFTER IN-25 AND AFTER WR-36's SCOPING — a bare-identifier
+ callee, a comma expression, an `await`, an ARRAY literal, and (2026-08-24) the
+ object-literal, unwalked-argument and bare-callee mechanisms"
+```
+
+`a bare-identifier callee` opens the list and `bare-callee` closes it, so the
+title names the same mechanism twice and reads as though three mechanisms were
+added on 2026-08-24 when two were. The body gets this right — mechanism (iii)
+says *"which is ALREADY the first item of this very list, twenty lines above, so
+a shape whose silence comes from it is CROSS-REFERENCED there rather than
+restated"* — and the loop below it carries shapes for (i) and (ii) only. Drop
+`and bare-callee` from the title; the body's cross-reference is the correct
+treatment and the title contradicts it.
+
+### IN-36: `enumerateResolverPopulations` bounds `auditSource` by scanning for a bare `}` and reads `importAt`/`describeAt` without checking for `-1`
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:6359-6392`
+
+```ts
+let close = open + 1;
+while (close < lines.length && lines[close] !== "}") close += 1;
+
+const importAt = lines.findIndex((l) => l.startsWith("import "));
+const describeAt = lines.findIndex((l) => l.startsWith("describe("));
+```
+
+The opening anchor throws a named `SentinelMissingError` when it is not found —
+good, and the reason is stated. The three anchors beside it do not. `close` falls
+through to `lines.length` if the closing brace is ever emitted as anything but a
+bare `}` at column zero, silently widening population 1 over the rest of the
+file; `importAt` or `describeAt` returning `-1` makes the second loop either scan
+from index `-1` or not run at all, silently emptying population 2. Both failures
+land on the non-vacuity assertions rather than on a message that says what moved,
+which is a worse failure than the one the file already refuses to ship for the
+opening anchor. Give the other three the same treatment — a `SentinelMissingError`
+naming the anchor it looked for. (Same class as WR-48: the guard's anchors are
+its weakest surface, and this is the one place the file's own convention of
+failing loudly on a lost anchor is applied to one anchor out of four.)
+
+---
+
+_Reviewed: 2026-08-26T06:40:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
