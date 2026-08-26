@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-37-PLAN.md
-last_updated: "2026-08-26T10:48:54.848Z"
+stopped_at: Completed 01-38-PLAN.md
+last_updated: "2026-08-26T11:20:28.612Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: 1330e99631b722689bcdda3857c7729f2a1f610b
+state_head: aebc50499b64dfc6fa913fa3c8346bbc94c7c4a8
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 38
-  completed_plans: 37
+  completed_plans: 38
 ---
 
 # Project State
@@ -200,6 +200,7 @@ Progress: [█████████░] 97% of phase 01 (37 of 38 plans)
 | Phase 01 P35 | 1h 5m | 2 tasks | 4 files |
 | Phase 01 P36 | 25 min | 2 tasks | 2 files |
 | Phase 01 P37 | 20 min | 2 tasks | 2 files |
+| Phase 01 P38 | 21 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -356,6 +357,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: WR-48 corrected: closingBracketAfter now recognises the construct's real closing form, exclusion three narrowed from 4135..5884 to 4135..5767, and exclusion two was measured before and after and shown unmoved at 5959..5969
 - [Phase 01]: The 117 lines returned to the guarded surface raised ZERO new obligations, and that number was MEASURED after the change rather than predicted before it — plan 01-37 named no expected count anywhere, per prohibition T-01-227
 - [Phase 01]: Exclusion three's name, why and proof all became TRUE under the corrected range and were deliberately left byte-unchanged, because rewriting a sentence that has become true is churn
+- [Phase 01]: P38-D1: wave 35's two-valued disposition rule is applied at LINE granularity, not BLOCK granularity — an occurrence is HISTORY only if a date AND a plan attribution sit in its own bytes — Decided on wave 35's own precedent rather than by preference: the existing scoped marker at REQUIREMENTS.md :110 supersedes :112, a paragraph sitting inside the dated 2026-08-24 plan-01-32 block headed at :86. A dated block header therefore does not confer HISTORY on its paragraphs. Recorded explicitly because the block-granularity reading was available, would have classified five of the ledger's standing statements as history needing no marker, and would have let criterion (3)(d)'s re-run report clean without doing anything.
+- [Phase 01]: P38-D2: criterion (3)(d)'s re-run found TWO surviving unmarked statements of CORE-11's box state in the gate file's own hand-written header, and they were RECORDED rather than repaired — packages/backend/src/outbound-prohibition.spec.ts:803-804 and :901 state the box's state and a flip ownership wave 28 never had, inside the undated wave-25 and wave-26 narrative blocks; :901 sits four lines above wave 33's WR-38 note asserting the box is stated in EXACTLY TWO PLACES, which those occurrences falsify. The gate file is closed after plan 01-37 and plan 01-38 is prohibited from editing it. Repairing it silently would also have made the re-run indistinguishable from one that quietly overlooked it — the defect the re-run exists to correct. Logged as WINDOWS entry 41 (open) for verification pass 9.
+- [Phase 01]: P38-D3: CORE-11 is NOT marked complete by this plan and requirements-completed is deliberately EMPTY, although CORE-11 is the plan's declared requirement — The checkbox is `[ ]` and stays `[ ]`, byte-unchanged and proved by an empty diff. Marking the requirement complete would flip it, which this plan's frontmatter prohibits as the fourth unearned flip. Whether criterion (3) is discharged and whether the box may move are verification pass 9's determinations on the whole round's evidence, so `requirements mark-complete` was deliberately NOT run.
 
 ### Known Risks Carried Forward
 
@@ -398,8 +402,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T10:48:13.027Z
-**Stopped at:** Completed 01-37-PLAN.md
+**Last session:** 2026-08-26T11:19:52.606Z
+**Stopped at:** Completed 01-38-PLAN.md
 **Resume file:** None
 
 ### Blockers
