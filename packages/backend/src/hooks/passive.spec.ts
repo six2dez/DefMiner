@@ -28,11 +28,7 @@ import {
 // THE counter object, imported rather than constructed. Plan 01-05 moved it to
 // telemetry.ts and REPLACED the local one; a spec that built its own would be
 // the second object `telemetry.spec.ts`'s AST scan exists to forbid.
-import {
-  counters,
-  resetTelemetryForTest,
-  URL_REDACTION,
-} from "../telemetry";
+import { counters, resetTelemetryForTest, URL_REDACTION } from "../telemetry";
 
 import { REJECT_REASONS } from "./admit";
 import {

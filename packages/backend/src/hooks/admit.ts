@@ -114,10 +114,7 @@ export function isScriptish(
   url: string | null,
 ): boolean {
   if (contentType) {
-    const essence = String(contentType)
-      .split(";", 1)[0]
-      .trim()
-      .toLowerCase();
+    const essence = String(contentType).split(";", 1)[0].trim().toLowerCase();
     for (const mediaType of SCRIPTISH_MEDIA_TYPES) {
       if (essence === mediaType) return true;
     }

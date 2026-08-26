@@ -19,9 +19,9 @@ import {
   REQUIRED_SURFACES,
   type SurfaceContext,
 } from "./compat";
+import { PATH_REDACTION, URL_REDACTION } from "./telemetry";
 
 import { init } from "./index";
-import { PATH_REDACTION, URL_REDACTION } from "./telemetry";
 
 // ---------------------------------------------------------------------------
 // cmpCaidoVersion
