@@ -9184,20 +9184,53 @@ const maskQuantifiers = (text: string): string => {
 };
 
 /**
- * WHAT REMAINS OF A TOKEN ONCE ITS MASKS AND PUNCTUATION ARE GONE. The letters
- * and digits, and nothing else. A token whose remainder is empty NAMES NOTHING:
- * it is `{qN}` tokens, spaces and punctuation, and it matches wherever the same
- * masked shape occurs.
- */
-const nameableRemainder = (text: string): string =>
-  text.replace(/\{q\d+\}/g, "").replace(/[^A-Za-z0-9]/g, "");
-
-/**
  * The token an occurrence carries when NO preceding construct resolves. NAMED
  * rather than empty on purpose: an empty anchor is the shape this mechanism
- * exists to forbid, so it may not be produced silently by the builder itself.
+ * exists to forbid, and a named token makes a produced empty anchor VISIBLE
+ * where an empty string would be silent.
+ *
+ * WHERE IT IS RETURNED, READ OFF THE CODE AS IT STANDS RATHER THAN OFF AN
+ * OLDER DESCRIPTION OF IT. `constructAnchorFor` returns it from ONE site: the
+ * fall-through below its backward scan, reached when the scan runs off the top
+ * of the file having accepted no line. The SECOND return verification pass 9
+ * named — a construct that DID resolve but named nothing strictly above the
+ * occurrence — no longer yields this token at all. Wave 39's WR-53 extension
+ * made that case CONTINUE the backward scan to the next enclosing construct,
+ * so exhausting the scan is now the only route here, and a bare `/**` above an
+ * occurrence resolves to the construct ABOVE IT instead of to this value.
+ *
+ * WHAT OBSERVES IT, AND HOW FAR THAT OBSERVATION REACHES. Two cases read this
+ * value, and each reaches less than this file: `no occurrence on the SCANNED
+ * SURFACE resolves to NO_PRECEDING_CONSTRUCT` bounds it over the occurrences
+ * `quantifierOccurrences` finds across `SURFACE_LINES` on the scanned surface
+ * and over nothing wider, and `no exemption key's ANCHOR reduces to nothing`
+ * bounds it over the keys PRESENT IN `HEADER_QUANTIFIER_EXEMPTIONS` and over
+ * nothing wider. A key written BY HAND and never added to that map is reached
+ * by neither, and a line inside one of the three exclusions is reached by
+ * neither. Until wave 40 this docblock said the shape `may not be produced
+ * silently by the builder itself` while NOTHING read the value — `grep` found
+ * the declaration, one docblock mention and the return, and not one `expect`
+ * (CR-21, verification pass 9).
  */
 const NO_PRECEDING_CONSTRUCT = "!NO-PRECEDING-CONSTRUCT!";
+
+/**
+ * WHAT REMAINS OF A TOKEN ONCE ITS MASKS AND PUNCTUATION ARE GONE. The letters
+ * and digits, less the sentinel, and nothing else. A token whose remainder is
+ * empty NAMES NOTHING: it is `{qN}` tokens, spaces and punctuation, and it
+ * matches wherever the same masked shape occurs.
+ */
+const nameableRemainder = (text: string): string =>
+  text
+    // THE SENTINEL IS THE TOKEN THE BUILDER EMITS WHEN NOTHING WAS NAMED, SO
+    // COUNTING ITS LETTERS AS NAMING SOMETHING IS THE ARITHMETIC THAT LET
+    // CR-17's SHAPE BACK IN (CR-21). Removed BY REFERENCE to the constant and
+    // never by re-spelling it, so renaming the constant cannot silently
+    // un-fix this.
+    .split(NO_PRECEDING_CONSTRUCT)
+    .join("")
+    .replace(/\{q\d+\}/g, "")
+    .replace(/[^A-Za-z0-9]/g, "");
 
 /**
  * The join between a key's two halves. Absent from this file's bytes apart from
@@ -10083,6 +10116,54 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
         `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half is what names it — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  // CR-21's SECOND HALF: THE VALUE NOTHING READ. At wave 40's arrival `grep`
+  // found three references to `NO_PRECEDING_CONSTRUCT` — the declaration, one
+  // mention inside `constructAnchorFor`'s docblock, and the single `return` —
+  // and not one of them was an `expect`. A named token whose production
+  // nothing checks is a comment with a type, and the docblock beside it
+  // claimed the shape could not be produced silently while nothing anywhere
+  // read the value (CR-21, verification pass 9). This case reads it.
+  //
+  // ITS REACH, STATED RATHER THAN IMPLIED, BECAUSE STATING A WIDER REACH THAN
+  // THE ONE EXECUTED IS THE DEFECT THIS WHOLE FILE IS ABOUT. It bounds the
+  // sentinel over the occurrences `quantifierOccurrences` finds across
+  // `SURFACE_LINES` and over nothing wider. A key written by hand and never
+  // produced by the surface is reached by the null-anchor case above instead;
+  // a line inside one of the three exclusions is reached by neither.
+  //
+  // GREEN ON ARRIVAL, AND THAT IS WHY IT WAS WATCHED FAILING. Re-measured at
+  // wave 40 over the scanned surface: 29 occurrences, 0 resolving to the
+  // sentinel. It guards the next sentence somebody writes rather than a defect
+  // standing now, so it was planted against twice before it was trusted.
+  it("no occurrence on the SCANNED SURFACE resolves to NO_PRECEDING_CONSTRUCT — a sentinel anchor names no construct and no line", () => {
+    const occurrences = quantifierOccurrences(gateLines, SURFACE_LINES);
+    // NON-VACUITY BEFORE THE RULE. An empty occurrence set would make the
+    // filter below produce nothing and this case pass having resolved not one
+    // line — the failure mode this whole file is organised against.
+    expect(
+      occurrences.length,
+      "the scanned surface carries NO declared-phrasing occurrence at all, so the rule below passed having resolved nothing. Either `SURFACE_LINES` collapsed, the three exclusions grew over the file, or the phrasing scan stopped matching. In all of those this case is a silent success and not a measurement.",
+    ).toBeGreaterThan(0);
+    const sentinelled = occurrences
+      .filter(
+        (o) => constructAnchorFor(gateLines, o.line) === NO_PRECEDING_CONSTRUCT,
+      )
+      .map(
+        (o) =>
+          `  line ${o.line}: ${JSON.stringify(
+            maskQuantifiers(normalizeGateLine(gateLines[o.line - 1] ?? "")),
+          )}`,
+      );
+    expect(
+      sentinelled,
+      sentinelled.length === 0
+        ? ""
+        : `${sentinelled.length} occurrence(s) on the scanned surface resolve to ${JSON.stringify(
+            NO_PRECEDING_CONSTRUCT,
+          )} — the builder found no construct above them:\n${sentinelled.join("\n")}\nAN ANCHOR THAT IS THE SENTINEL NAMES NO CONSTRUCT AND NO LINE. The exemption written for such an occurrence is discharged by ANY occurrence whose normalized form masks to the same shape, wherever in this file that occurrence sits — which is CR-17 verbatim. Verification pass 9 drove exactly that shape through twice, at 434 of 434 green each time: once with the occurrence and its matching entry planted together, and once with the same occurrence moved roughly 1,800 lines into an unrelated construct and the entry left untouched. YOU HAVE TWO CHOICES. (1) REWRITE the sentence so it says what it is about, which gives the line above it something to name. (2) RE-SITE it under a construct that names something. SOFTENING THIS ASSERTION IS NOT ONE OF THEM, and neither is exempting the occurrence nor special-casing the sentinel here: the sentinel is precisely what the builder emits when nothing was named, so an occurrence that produces it has no site an exemption could be written for.`,
+    ).toEqual([]);
   });
 
   // CR-20(a)'s SHAPE, FORBIDDEN OUTRIGHT AND SEPARATELY FROM THE CASE ABOVE.
