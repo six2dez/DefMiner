@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-36-PLAN.md
-last_updated: "2026-08-26T10:21:57.054Z"
+stopped_at: Completed 01-37-PLAN.md
+last_updated: "2026-08-26T10:48:54.848Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: 149ec63d13439d5cf0089fec1ca209284be8ceae
+state_head: 1330e99631b722689bcdda3857c7729f2a1f610b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 38
-  completed_plans: 36
+  completed_plans: 37
 ---
 
 # Project State
@@ -28,11 +28,37 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 2 of 38
-Status: Ready to execute
-Last activity: 2026-08-26 — Phase 01 execution started
+Plan: 38 of 38 (37 of 38 plans summarized on disk)
+Status: Executing — plan 01-38 is the last outstanding plan
+Last activity: 2026-08-26 — 01-37 complete: CR-17's failing-path fixture and WR-48
 
-Progress: [██████████] 97% of phase 01 (31 of 32 plans)
+Progress: [█████████░] 97% of phase 01 (37 of 38 plans)
+
+> WAVE 37. `state.advance-plan` MOVED THE BODY COUNTER 2 -> 3 AND BOTH NUMBERS
+> WERE WRONG, so the line above is corrected FROM THE FILE COUNT ON DISK and the
+> correction is recorded rather than made quietly, by the rule these notes have
+> followed since 01-17. The handler's own frontmatter recompute was RIGHT —
+> `completed_plans: 37` — while the prose counter it increments had been left at
+> `2 of 38` by an earlier wave and simply advanced from there. The truth on disk
+> is 38 PLAN files and 37 SUMMARY files, so plan 01-38 is the one outstanding
+> plan; that is the only number that cannot drift.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — which is now THIRTEEN consecutive plans (01-07 … 01-11, 01-14, 01-17, 01-23,
+> 01-24, 01-26, 01-29, 01-31 and 01-37). Steady handler behaviour on this repo,
+> not a transient. The bar above is the phase-local one, recomputed from the 38
+> PLAN / 37 SUMMARY files on disk and stated with its basis; it also read
+> `31 of 32` and was two rounds stale.
+>
+> WHAT THIS WAVE DELIBERATELY DID NOT TOUCH. Plan 01-37's prohibition assigns
+> every line of this file to plan 01-38, because CR-19 is the finding that this
+> file's live `### Blockers` section is FALSE. Only the close-out bookkeeping
+> above was written — the frontmatter counters, the position line, the metrics
+> row and the session line. **The `### Blockers` section and every
+> superseded-position statement in this file are byte-unchanged and remain
+> CR-19's, owned by plan 01-38.** Two waves editing one finding's surface is how
+> a correction loses its attribution.
 
 > WAVE 31. `state.advance-plan` MOVED CLEANLY THIS TIME — `{"advanced": true,
 > "previous_plan": 31, "current_plan": 32}` against a frontmatter that already
@@ -173,6 +199,7 @@ Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 | Phase 01 P34 | 41 min | 3 tasks | 8 files |
 | Phase 01 P35 | 1h 5m | 2 tasks | 4 files |
 | Phase 01 P36 | 25 min | 2 tasks | 2 files |
+| Phase 01 P37 | 20 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -316,6 +343,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: CORE11_BOX_EXPECTED moved to `- [ ] **CORE-11**` — a PIN brought into agreement with an adjudicated ledger row, explicitly NOT a fourth flip of the box; CORE-11's checkbox is byte-unchanged and stays `[ ]`
 - [Phase 01]: The construct anchor is FOLDED INTO the exemption key rather than checked beside it, so all three flat-string discharge checks become construct-sensitive with no change to their logic and the count equality still balances at one entry per occurrence
 - [Phase 01]: The fully-masked-anchor case checks the anchor AS A WHOLE, not each half — the `:436` ASCII-table cell legitimately masks its line half away and its construct half is what names it
+- [Phase 01]: CR-17 is closed: plan 01-36 anchored the exemption key, plan 01-37 made the relocation a PERMANENT fixture with a pre-anchoring counter-probe beside it and watched the verifier's own 432/432 swap go RED on the real tree before restoring the tree byte-clean
+- [Phase 01]: WR-48 corrected: closingBracketAfter now recognises the construct's real closing form, exclusion three narrowed from 4135..5884 to 4135..5767, and exclusion two was measured before and after and shown unmoved at 5959..5969
+- [Phase 01]: The 117 lines returned to the guarded surface raised ZERO new obligations, and that number was MEASURED after the change rather than predicted before it — plan 01-37 named no expected count anywhere, per prohibition T-01-227
+- [Phase 01]: Exclusion three's name, why and proof all became TRUE under the corrected range and were deliberately left byte-unchanged, because rewriting a sentence that has become true is churn
 
 ### Known Risks Carried Forward
 
@@ -358,8 +389,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T10:21:46.307Z
-**Stopped at:** Completed 01-36-PLAN.md
+**Last session:** 2026-08-26T10:48:13.027Z
+**Stopped at:** Completed 01-37-PLAN.md
 **Resume file:** None
 
 ### Blockers
