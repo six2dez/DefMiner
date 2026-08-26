@@ -594,3 +594,10 @@ None — no external service configuration required.
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+- Files claimed as modified exist on disk: `.planning/REQUIREMENTS.md`, `packages/backend/src/outbound-prohibition.spec.ts`, `.planning/phases/01-skeleton-persistence-compatibility/01-36-SUMMARY.md` — all FOUND.
+- Commits claimed exist in history: `6c2c5ce`, `3e00eb3`, `149ec63` — all FOUND.
+- Working tree clean over `packages/` and `.planning/REQUIREMENTS.md` after both planted-and-restored mutations.
+- Plan-level `<verification>` re-run at the end: outbound `433 passed (433)`, `pnpm test` `31 files / 1373 tests` exit 0, typecheck / lint / knip exit 0, bundle 1 specifier `crypto`, real tree 23 files / 0 violations, `grep -cE '^- \[[ x]\] \*\*CORE-11\*\*'` = 1.

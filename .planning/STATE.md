@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
-status: verifying
-stopped_at: Completed 01-35-PLAN.md
-last_updated: "2026-08-26T09:21:59.679Z"
-last_activity: 2026-08-24
-last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
-state_head: 9fbd89693525c70ed32742fcb3b2aa46ae7a36bb
+status: executing
+stopped_at: Completed 01-36-PLAN.md
+last_updated: "2026-08-26T10:21:57.054Z"
+last_activity: 2026-08-26
+last_activity_desc: Phase 01 execution started
+state_head: 149ec63d13439d5cf0089fec1ca209284be8ceae
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 38
-  completed_plans: 35
+  completed_plans: 36
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 32 of 32
-Status: Gap-closure round 6 in progress — 31 of 32 plans summarised
-Last activity: 2026-08-24 — Completed 01-31 (CR-12: `collect`'s alias-growing branch reads a named frozen `ASSIGNING_OPERATORS` set instead of an inline `EqualsToken` comparison, so `let r; r ??= sdk.requests; r.send(req)` reports `outbound-send` like its two-character-different twin; nine shapes fixtured per collector, four controls pinned, eight clauses rewritten from their branches with 24 per-operator probes, two falsified handoffs observed RED then discharged in the same commit as the code)
+Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
+Plan: 2 of 38
+Status: Ready to execute
+Last activity: 2026-08-26 — Phase 01 execution started
 
 Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 
@@ -172,6 +172,7 @@ Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 | Phase 01 P33 | 24 min | 3 tasks | 4 files |
 | Phase 01 P34 | 41 min | 3 tasks | 8 files |
 | Phase 01 P35 | 1h 5m | 2 tasks | 4 files |
+| Phase 01 P36 | 25 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -312,6 +313,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: CORE-11's [x] means, and may ONLY mean, three criteria the OPERATOR adopted on 2026-08-25: DERIVED, DRIFT-DETECTABLE, THE SOLE BOUND — each re-verified BY EXECUTION in wave 35 and each proved live by a mutation planted, watched red and restored. The box moved with CORE11_BOX_EXPECTED in ONE commit (f5652a1). The new bar is NARROWER than the old one and ends no class: CR-15, CR-16 and the 26 measured silences are NAMED RESIDUALS under it. — The old bar — the gate goes red on every spelling of every enumerated clause — is UNREACHABLE over an open language rather than merely unmet, because the space of JavaScript spellings for reaching a function through a value does not close. Six rounds of flat find-rate are the evidence; 01-VERIFICATION.md's answer section is the diagnosis; the route is the STORE-01 -> STORE-08 precedent.
 - [Phase 01]: A criterion verdict is stated with the REACH of the mechanism that produced it. Row 3's pass is the SCOPED form — met up to the guard's phrase-list reach under its named normalization, with both classes of unreached surface named: unguarded FILES (.planning/STATE.md, .planning/WINDOWS.md, reached by no mechanical comparison) and undeclared SPELLINGS inside the guarded files. — An unqualified tick would have flipped the box on evidence strictly narrower than the criterion it discharges — a stated reach exceeding an executed reach, this phase's signature defect arriving inside the fix for exactly that defect. The scope is part of the pass, not a footnote to it.
 - [Phase 01]: OVER-BREADTH is a different property from NON-VACUITY and was measured separately: every declared-phrasing occurrence inside each of wave 33's three exclusions was enumerated and classified — 12 machine-owned span, 9 the declaration itself, 12 live clause strings — with ZERO residue in any exclusion. — Wave 33 asserts its exclusions swallow something. An exclusion swallowing one hand-written universal would convert a guarded surface into an unguarded one while every wave-33 assertion stayed green; that is the property that could honestly have failed row 3.
+- [Phase 01]: CORE11_BOX_EXPECTED moved to `- [ ] **CORE-11**` — a PIN brought into agreement with an adjudicated ledger row, explicitly NOT a fourth flip of the box; CORE-11's checkbox is byte-unchanged and stays `[ ]`
+- [Phase 01]: The construct anchor is FOLDED INTO the exemption key rather than checked beside it, so all three flat-string discharge checks become construct-sensitive with no change to their logic and the count equality still balances at one entry per occurrence
+- [Phase 01]: The fully-masked-anchor case checks the anchor AS A WHOLE, not each half — the `:436` ASCII-table cell legitimately masks its line half away and its construct half is what names it
 
 ### Known Risks Carried Forward
 
@@ -354,8 +358,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T05:17:33.476Z
-**Stopped at:** Completed 01-35-PLAN.md
+**Last session:** 2026-08-26T10:21:46.307Z
+**Stopped at:** Completed 01-36-PLAN.md
 **Resume file:** None
 
 ### Blockers
