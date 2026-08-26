@@ -366,4 +366,41 @@ The ledger says so in its own words, in the same terms wave 28's correction used
 
 The task-level automated verify is `grep -cE '^- \[[ x]\] \*\*CORE-11\*\*'`, which matches BOTH states and returned exactly **1**. That is deliberate: `[ ]` had to remain a reachable honest outcome, and an acceptance criterion that punished an open box would have converted this wave's honest result into a failure it must engineer around. **This is NOT a repeat of WR-34.** WR-34 was a state-agnostic character class in the SUITE's own pin — the very defect that let the box stay green through two early flips and two reverts — and `CORE11_BOX_EXPECTED` exists because of it. The suite's pin stays state-sensitive; only this plan's task-level verify is agnostic, and M5 above is the proof the sensitive one still bites.
 
+## PREDICTION VERSUS MEASUREMENT
+
+Recorded in the shape `01-27-SUMMARY.md` uses: the prediction, the measurement, and — where they differ — the difference stated as the finding rather than absorbed into the conclusion.
+
+| # | Prediction | Measurement | Outcome |
+| --- | --- | --- | --- |
+| P1 | Criteria 1 and 2 re-verify green | Both spans and the generated form all at `15e86038…`; M1 turned both comparisons red, M2 and M4 turned one each | **Confirmed** |
+| P2 | Criterion 3 turns on wave 33's exclusions being non-vacuous AND not over-broad | All three non-vacuous (12 / 9 / 12) and all three with **zero residue** — every excluded occurrence is machine-owned span, the declaration itself, or a live `clause` | **Confirmed** |
+| P3 | Wave 33's counts reproduce | 58 line-based, 62 joined, surface 29 against 29 exemptions, span 12/12, registry 12/12, declaration 9 — every figure reproduced exactly | **Confirmed** |
+| P4 | The first registry mutation would turn **both** byte comparisons red | It turned **one** red — the gate header's — and left the ledger's green | **DISAGREED. The difference was the finding.** |
+
+**P4, WRITTEN OUT, BECAUSE IT IS THE ONE THAT DISAGREED.** The first mutation was intended to change `RESOLVER_REGISTRY[0].clause`. It was applied with a slurping substitution that replaced the FIRST occurrence in the file — and the first occurrence of that clause text is not the registry at line 4140 but the **shipped span** at line 1010, which the registry's text is generated into and which appears three thousand lines earlier. The measurement disclosed it immediately: a registry change must move the generated form and leave BOTH shipped copies behind, so exactly one red comparison was arithmetically impossible for the mutation that was believed to be planted. Chasing the number rather than accepting it located the mis-target on the first `git diff`.
+
+Two things follow, and both are better than the plan predicted. First, **the mis-targeted mutation was not discarded** — a one-character change inside the gate header's span is exactly ROW 2's header-copy drift proof, so it was relabelled M2 and kept, and the deliberate registry mutation was re-planted with a line-scoped substitution as M1. Second, **the pair discriminates more sharply than either alone**: M2 (span-only) → one comparison red; M1 (registry) → both red. That contrast is the evidence for DERIVED. Had the first attempt landed where it was aimed, this SUMMARY would have carried the two-sided failure without the one-sided control beside it.
+
+**No discrepancy was absorbed.** Wave 33 found its exemption map would generate obligations for its own text, and wave 34 found a third mechanism by re-measuring after its own widening — both by measuring first and believing the measurement. This wave did the same and got a mis-targeted mutation converted into a second proof.
+
+## THE FULL GATE SET
+
+This repo has **no active git hooks** — `.git/hooks` holds only samples and `core.hooksPath` is unset — so nothing runs the set at a commit boundary and it was run by hand at the task boundary.
+
+```
+pnpm test        exit 0     Test Files  31 passed (31)     Tests  1372 passed (1372)
+pnpm typecheck   exit 0
+pnpm lint        exit 0
+pnpm knip        exit 0
+pnpm build:backend  exit 0
+pnpm check:bundle   exit 0
+    packages/backend/dist/index.js: 1 import specifier(s): crypto
+```
+
+Neither figure is below the pre-wave baseline of 31 files / 1345 tests. The **final** confirming run of the set — after the box flip and both pointer amendments landed, at HEAD `996c077` — was executed **by the orchestrator rather than by this agent**, and is recorded here as its result rather than as this agent's: 31 files / 1372 tests, exit 0, working tree clean, both derived spans byte-identical. The runs listed above were executed by this agent at the same HEAD and agree with it.
+
+Wave 33's guard was run after every edit and after every commit in this task, green each time, and `git diff` over its three exclusions, its `HEADER_QUANTIFIER_EXEMPTIONS` map and both its pinned counts is EMPTY. **The guard was never widened to obtain green** — no exclusion was moved, no exemption entry was added, and the one sentence that tripped it (M3, planted deliberately) was deleted rather than exempted.
+
+`.planning/WINDOWS.md` was amended **through `gsd-tools windows`**, never by hand-editing the table: entry 39 marked fixed, entry 40 appended. Resulting ledger state: `open_count 19 / fixed_count 21 / total_count 40`.
+
 <!-- gsd:write-continue -->
