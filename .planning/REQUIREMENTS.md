@@ -159,6 +159,14 @@ Every one of those is a ONE-HOP binding of `sdk.requests`, and a one-hop binding
 
 **WHAT THIS `[x]` MEANS AND WHAT IT DOES NOT, STATED HERE BECAUSE THE LEDGER IS WHERE AN OVERCLAIM DOES ITS DAMAGE.** It means the three criteria above, verified by execution, and NOTHING ELSE. It does NOT mean the walk catches every spelling of every clause this entry's first sentence enumerates — that bar was re-scoped on 2026-08-25 precisely because it is unreachable over an open language. The new bar is NARROWER than the old one and ends no class: CR-15, CR-16 and the twenty-six measured silences carried in the generated span below remain NAMED RESIDUALS under it, disclosed and unclosed, and the class stays open because the space of JavaScript spellings is open. What narrowed is the meaning of THIS CHECKBOX; the prohibition in this entry's first sentence is byte-identical through this wave, shown by an empty diff, and still holds on the same measurements — 23 files across both `SOURCE_ROOTS` with ZERO violations, one import specifier in the shipped bundle, `observations.ts`'s redaction byte-identical since round 5 across 19,772 swept inputs. STORE-03 and STORE-07 are untouched by this and remain deferred with their owner; one flipped box is not a clean ledger.
 
+**CORE-11 — CORRECTION 2026-08-26, PLAN 01-36 (gap-closure round 8, wave 36). THE BOX READS `[ ]`, THE CRITERION THAT BLOCKS IT IS NAMED HERE BY NUMBER, AND THAT NAMING IS THE POINT — A `[ ]` WITHOUT A NAMED BLOCKER CANNOT BE TOLD FROM A DEFERRAL, AND THIS LEDGER HAS ALREADY CARRIED THREE FLIPS A READER HAD TO RECONSTRUCT FROM COMMIT MESSAGES.** This correction RECORDS what verification pass 8 (dated 2026-08-26, `01-VERIFICATION.md`) measured; it decides nothing, and it CITES THE OPERATOR DECISION OF 2026-08-25 (PLAN 01-35, WAVE 35, recorded above) rather than re-deriving, re-scoping or softening it. That decision states the terminal condition and this correction quotes it verbatim: this box's `[x]` may now mean, and may ONLY mean, that this requirement's residual is *"(1) DERIVED — the gate's reach is derived from the code, generated from `RESOLVER_REGISTRY` rather than authored beside it"*; *"(2) DRIFT-DETECTABLE — drift between text and code is mechanically detectable, so a divergence between either shipped span and the generated form turns this suite red"*; and *"(3) THE SOLE BOUND — the disclosure is the only bound stated on every surface a reader touches, contradicted nowhere"*. All three are necessary, by that decision's own words, and the verifier's verdict follows from them without needing a verifier's judgement.
+
+**CRITERIA (1) AND (2) WERE FOUND DISCHARGED, WITH NO EVIDENCE AGAINST EITHER, AND THAT IS RECORDED HERE AS A RESULT RATHER THAN LEFT IMPLIED BY THE ABSENCE OF A COMPLAINT.** Verification pass 8 looked for a quietly-lowered bar wearing a re-scope's clothes and did not find one, and it looked for evidence against criteria (1) DERIVED and (2) DRIFT-DETECTABLE and found none — its words are *"Criteria (1) and (2) are genuinely discharged. I found no evidence against either and I tried."* The ground of the third revert is therefore (a), a defect in the DISCHARGE, and it is different in kind from the two reverts before it: `e7cc4b6` reverted a box flipped over a gate that could not go red on an enumerated shape nobody had executed, and `faca607` reverted a box flipped against an AUTHORED residual whose sentences the next verifier falsified.
+
+**CRITERION (3) THE SOLE BOUND IS THE BLOCKING CRITERION, AND IT IS UNMET ON THREE LEGS, EACH NAMED BY ITS FINDING ID SO THAT CLOSING THEM IS AUDITABLE ONE AT A TIME.** Leg one is **CR-17**: criterion (3)'s delivered mechanism is bypassable in a DECLARED phrasing. `HEADER_QUANTIFIER_EXEMPTIONS` carries a key that is the bare string `"{q2} :: q2"` — fully masked, anchored to no construct — and the verifier deleted the ASCII-table cell it was written for, planted a fabricated hand-written bound 9,001 lines away outside all three exclusions, and measured `Tests 432 passed (432)`. Leg two is **CR-18**: criterion (3)'s cross-surface check reported zero unmarked standing statements of the superseded position on the four reader surfaces, and the count is two; the first is this ledger's own CORE-11 row, which carries unmarked present-tense statements of the superseded bar. Leg three is **CR-19**: the second of those two, `.planning/STATE.md`'s live `### Blockers` section, is not merely stale but FALSE — it names six shapes as reporting nothing that the verifier executed and measured as all six reporting, and it names as the live blocker a registry row this suite positively asserts must NOT exist. Recorded BESIDE those three, and deliberately not among them, is **WR-48**, a WARNING and not a blocker: `closingBracketAfter` matches the exact line `"]);"`, which `RESOLVER_REGISTRY`'s closing line does not, so exclusion three runs on and swallows 117 lines of a different construct — the verifier planted a declared phrasing inside those lines and the suite went RED, so the ENFORCEMENT ERRS SAFE while the DESCRIPTION of it is wrong.
+
+**THIS `[ ]` IS A MEASURED RESULT WITH A NAMED BLOCKING CRITERION, IN THE TERMS WAVES 19, 28 AND 32 USED, AND IT IS NOT A DEFERRAL.** The distinction is the one this ledger has drawn each time the box stayed down: a deferral says the work was not attempted, and this says the discharge WAS attempted, WAS re-executed by a verifier who planted his own mutations, and FAILED on criterion (3) — with the failure reproduced, the three legs enumerated, and the remaining work bounded to text-and-anchoring fixes rather than another round of resolver widening. Whether the box may move is verification pass 9's call once CR-17, CR-18 and CR-19 are closed and re-measured; no plan in round 8 flips it. **AND THE MUST-NOT DID NOT MOVE.** This requirement's first sentence is byte-identical; the walk runs over 23 files across both `SOURCE_ROOTS` at ZERO violations, re-measured this wave rather than carried forward; the shipped bundle's entire import set is one specifier, `crypto`. Every finding named in this correction is a defect in a TEST-ONLY gate's description of itself, or in a planning document — none of them is unenforced behaviour, and nothing leaks.
+
 <!-- BEGIN DERIVED RESIDUAL - generated by deriveResidual(RESOLVER_REGISTRY) in packages/backend/src/outbound-prohibition.spec.ts - MACHINE-OWNED, DO NOT HAND-EDIT -->
 THE RESIDUAL OF CORE-11's OUTBOUND WALK - DERIVED, NOT AUTHORED.
 This text is the output of deriveResidual(RESOLVER_REGISTRY) in
@@ -168,7 +176,6 @@ compares it to that output. If the two disagree the GENERATED text is
 authoritative and the shipped text is the defect.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
-
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
@@ -179,7 +186,6 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
    branch removed from the walk turned its entry red; it was FALSIFIED by
    mutation (WR-32) and is corrected rather than deleted, because the
    per-branch probes now support the narrower claim it makes.
-
 2. It does NOT prove the registry enumerates every mechanism the walk has. A
    coverage guard enumerates TWO populations out of this file's own source -
    collectors matching a declared naming convention, and resolver functions
@@ -190,13 +196,10 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
    shape - an inline branch in the walk, a differently-shaped binding, a
    resolver declared inside another function - is enumerated by neither half
    and is NOT caught.
-
 3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and
    do not cover that resolver's whole domain.
-
 4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody
    thought of is still silent and still unlisted here.
-
 5. WHAT CLAUSE-TO-BRANCH BINDING CANNOT PROVE - FOUR THINGS, STATED FLATLY.
    (a) It does NOT prove a clause NAMES every branch the code has. A branch
        the clause is silent about is bound to nothing, exactly as before.

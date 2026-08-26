@@ -9884,7 +9884,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
    * constant asserts WHICH STATE it is in. The two are complementary and neither
    * replaces the other.
    */
-  const CORE11_BOX_EXPECTED = "- [x] **CORE-11**";
+  const CORE11_BOX_EXPECTED = "- [ ] **CORE-11**";
 
   it("the planning ledger read is NON-EMPTY and carries BOTH sentinels — non-vacuity, asserted BEFORE the rule", () => {
     const text = readPlanningLedger(LEDGER);
