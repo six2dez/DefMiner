@@ -280,7 +280,7 @@
 //    a separate decision needing its own measurement, and this wave changes no
 //    rule.
 //
-//      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
+//      SPELLING (const, receiver-key position)  RESOLVED BY          REPORTS
 //      -------------------------------------    -----------------    ---------------------
 //      sdk["requests"]                          literalOf            outbound-send
 //      const r = "requests"; sdk[r]             constStrings         outbound-send
@@ -296,7 +296,7 @@
 //      exists to prevent, running one spelling out. One row per spelling this
 //      round closed, plus the mirror:
 //
-//      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
+//      SPELLING (rebind, receiver-key position) RESOLVED BY          REPORTS
 //      -------------------------------------    -----------------    ---------------------
 //      let k = "requests"; sdk[k]               constStrings         outbound-send
 //      let k = "harmless";                      constStrings,        outbound-send
@@ -358,7 +358,7 @@
 //      covering the receiver, the global and the key in the table's existing
 //      three-column shape:
 //
-//      SPELLING (in receiver-key position)      RESOLVED BY          REPORTS
+//      SPELLING (??=, receiver-key position)    RESOLVED BY          REPORTS
 //      -------------------------------------    -----------------    ---------------------
 //      let r; r ??= sdk.requests; r.send(req)   receiverAliases via  outbound-send
 //        (and the `||=` and `&&=` spellings)      ASSIGNING_OPERATORS
@@ -7354,7 +7354,7 @@ describe("a receiver the walk cannot read is REPORTED, not dropped", () => {
     ).toContain("outbound-unanalysable");
   });
 
-  it.each([
+  it.each<[label: string, binding: string]>([
     ["a `+` concatenation", 'const k = "req" + "uests";'],
     ["the ASSIGNMENT spelling", 'let k;\nk = "req" + "uests";'],
     ["a TEMPLATE interpolation", 'let k = `req${"uests"}`;'],
@@ -9049,11 +9049,11 @@ const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
       "HEADER. A QUOTATION of a phrase recorded as REMOVED from a clause on 2026-08-24 (CR-13). Quoting a deleted bound in order to record that it was deleted is not asserting one.",
     "packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi… §§ AND `+=` WAS NEVER READ AT ALL, in a paragraph claiming every :: q5":
       "HEADER. Quotes the FALSE claim a superseded paragraph made, in order to record that it was false. WRAPPED across two comment lines: a line-based scan does not see this occurrence at all, which is why the scan is not line-based.",
-    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8':
+    'SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8':
       "HEADER. A cell in an ASCII table naming the RULE LABEL that fires for the row beside it. A label names a mechanism; it states no reach.",
-    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8 #2':
+    'SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS §§ k = "requests"; sdk[k] {q8} :: q8 #2':
       "HEADER. The same table cell one row down, for the `var` spelling. Distinct occurrence, identical reasoning, listed separately because the guard counts occurrences rather than lines.",
-    'SPELLING (in receiver-key position) RESOLVED BY REPORTS §§ k = "harmless"; sdk[k] {q8} — THE MIRROR, and it :: q8':
+    'SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS §§ k = "harmless"; sdk[k] {q8} — THE MIRROR, and it :: q8':
       "HEADER. The same table cell for the MIRROR row, where the over-approximation is the point being shown.",
     "SPELLING (operator, by POSITION) RESOLVED BY REPORTS §§ {q2} :: q2":
       "HEADER. A wrapped cell in the same ASCII table, labelling what the keyReceiver row already carries. What bounds it is QUANTIFIED_CLAUSES.keyReceiver - the four RECEIVER_OPERATORS - and not this cell.",
@@ -9087,7 +9087,7 @@ const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
       "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
     "export const QUANTIFIED_CLAUSES: Readonly<Record<string, string>… §§ 'Bounded by operatorReceiver\\'s FOUR RECEIVER_OPERATORS and by keyReceiver passing ITSELF as the… :: q2 #2":
       "BELOW REGISTRY, QUANTIFIED_CLAUSES NAMED CLASS - see the entry above. Stating that a universal is unbounded only WITHIN four named operators is the act of bounding it, not of asserting it.",
-    'it.each([ §§ "through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
+    'it.each<[label: string, binding: string]>([ §§ "through assembledNames: {q5} of a bound assembly is unreadable — %s", :: q5':
       "BELOW REGISTRY. A PARAMETERISED test title. The spellings it names are the case's own parameter table, sitting directly beneath it, so the title's universal is enumerated by data rather than claimed by prose.",
     "CR-10, shape 1, and the mechanism named in the title is the whol… §§ BRANCHES and `keyReceiver` reports if {q4} names a receiver — which is exactly :: q4":
       "BELOW REGISTRY. Bounded IN THE SAME SENTENCE by the clause on the line above naming the collecting branches; the `anywhere` half was REWRITTEN OUT in wave 33.",
@@ -9173,6 +9173,53 @@ const NO_PRECEDING_CONSTRUCT = "!NO-PRECEDING-CONSTRUCT!";
 const EXEMPTION_ANCHOR_SEP = " §§ ";
 
 /**
+ * THE CONSTRUCT TOKEN'S TRUNCATION, NAMED ONCE AND READ BY BOTH THE BUILDER AND
+ * THE CENSUS. The two used to be separate: the builder truncated inline and
+ * anything else that wanted the same token had to repeat the width and the
+ * ellipsis character. A census that computed the token in a slightly different
+ * form would measure a DIFFERENT thing and pass having compared nothing, so the
+ * form is derived from here on both sides rather than written twice.
+ */
+const CONSTRUCT_TOKEN_WIDTH = 64;
+const CONSTRUCT_TOKEN_ELLIPSIS = "…";
+
+/**
+ * THE TOKEN ONE LINE WOULD CONTRIBUTE AS A CONSTRUCT ANCHOR, or `null` when it
+ * would contribute none. `null` is the SKIP RULE, and it is the builder's rule
+ * rather than a rule the census invented: a line whose masked normalized form
+ * has an empty `nameableRemainder` is one the forward walk steps over, so it
+ * can never BE an anchor and counting it as a producer would flag tokens no key
+ * can carry.
+ */
+const constructTokenOf = (raw: string): string | null => {
+  const token = maskQuantifiers(normalizeGateLine(raw));
+  if (nameableRemainder(token).length === 0) return null;
+  return token.length > CONSTRUCT_TOKEN_WIDTH
+    ? `${token.slice(0, CONSTRUCT_TOKEN_WIDTH)}${CONSTRUCT_TOKEN_ELLIPSIS}`
+    : token;
+};
+
+/**
+ * EVERY LINE'S WOULD-BE ANCHOR TOKEN, COUNTED. Maps each token to the 1-based
+ * lines that produce it. An anchor with more than one producer names NONE of
+ * them, which is CR-20(b): the exemption written for the occurrence under one
+ * producer is discharged just as well by an occurrence under another.
+ */
+const anchorTokenCensus = (
+  lines: readonly string[],
+): ReadonlyMap<string, readonly number[]> => {
+  const out = new Map<string, number[]>();
+  lines.forEach((raw, i) => {
+    const token = constructTokenOf(raw);
+    if (token === null) return;
+    const at = out.get(token);
+    if (at === undefined) out.set(token, [i + 1]);
+    else at.push(i + 1);
+  });
+  return out;
+};
+
+/**
  * THE CONSTRUCT AN OCCURRENCE SITS UNDER, AS A TOKEN A KEY CAN CARRY.
  *
  * CR-17, 2026-08-26, wave 36. Each of the three EXCLUSIONS further down carries
@@ -9243,10 +9290,8 @@ const constructAnchorFor = (
     }
     if (head < 0) continue;
     for (let k = head; k < lineNumber; k++) {
-      const token = maskQuantifiers(normalizeGateLine(lines[k - 1] ?? ""));
-      if (nameableRemainder(token).length > 0) {
-        return token.length > 64 ? `${token.slice(0, 64)}…` : token;
-      }
+      const token = constructTokenOf(lines[k - 1] ?? "");
+      if (token !== null) return token;
     }
     // THE HEADER NAMED NOTHING STRICTLY ABOVE THE OCCURRENCE, SO THE SCAN
     // CONTINUES RATHER THAN GIVING UP. Falling out of this walk resumes the
@@ -10024,6 +10069,66 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       compared,
       "the loop above compared no key, so this case is measuring nothing.",
     ).toBe(keys.length);
+  });
+
+  // CR-20(b)'s SHAPE, MADE LOUD. The anchor is a line of text and lines
+  // repeat. `it.each([` was produced by TEN lines of this file and the
+  // receiver-key table header by THREE, so an exemption written for the
+  // occurrence under one of them was discharged just as well by an occurrence
+  // under another — verification pass 9 moved a shipped table cell between two
+  // identically-headed tables, 58 lines apart and about a different operator,
+  // for a byte-identical key at 434 of 434 green.
+  //
+  // THE CENSUS IS ASSERTED FROM BOTH SIDES ON PURPOSE. The DECLARED map and
+  // what the SURFACE produces are the same set today, and asserting only one
+  // of them would let the other drift: an occurrence whose anchor is ambiguous
+  // must be caught the moment it appears, BEFORE anyone writes an exemption
+  // for it, and a declared entry whose anchor became ambiguous must be caught
+  // even if its occurrence was deleted in the same commit.
+  it("every anchor IN USE is produced by exactly ONE line of the file — an anchor with two producers names neither", () => {
+    const census = anchorTokenCensus(gateLines);
+    // NON-VACUITY BEFORE THE RULE, ON BOTH SIDES.
+    expect(
+      census.size,
+      "the anchor census is EMPTY, so the rule below compares every anchor against nothing and passes by having counted no line at all. Either the file was read as empty or `constructTokenOf` stopped returning tokens.",
+    ).toBeGreaterThan(0);
+    const constructHalf = (k: string): string =>
+      k.slice(0, k.indexOf(EXEMPTION_ANCHOR_SEP));
+    const inUse = [
+      ...new Set([
+        ...Object.keys(HEADER_QUANTIFIER_EXEMPTIONS).map(constructHalf),
+        ...surfaceExemptionKeys(gateLines, SURFACE_LINES).map((f) =>
+          constructHalf(f.key),
+        ),
+      ]),
+    ];
+    expect(
+      inUse.length,
+      "no anchor is in use at all, from the declared map OR from the surface, so this case asserts uniqueness of nothing. Both sides are read here precisely so one of them going empty is loud.",
+    ).toBeGreaterThan(0);
+
+    const ambiguous = inUse
+      .filter((token) => (census.get(token) ?? []).length !== 1)
+      .map((token) => ({
+        token,
+        producers: [...(census.get(token) ?? [])],
+        keys: Object.keys(HEADER_QUANTIFIER_EXEMPTIONS).filter(
+          (k) => constructHalf(k) === token,
+        ),
+      }));
+    expect(
+      ambiguous.map((a) => `${a.producers.length}x ${a.token}`),
+      ambiguous.length === 0
+        ? ""
+        : `${ambiguous.length} anchor(s) IN USE are not produced by exactly one line of ${GATE_FILE}:\n${ambiguous
+            .map(
+              (a) =>
+                `  ${JSON.stringify(a.token)}\n    produced by ${a.producers.length} line(s): ${a.producers.join(", ")}\n    keys hanging off it:\n${a.keys.map((k) => `      ${JSON.stringify(k)}`).join("\n")}`,
+            )
+            .join(
+              "\n",
+            )}\nAN ANCHOR WITH MORE THAN ONE PRODUCER NAMES NONE OF THEM. The exemption written for the occurrence under one producer is discharged just as well by an occurrence under another, so the sentence the entry excuses can be moved between them and its stated reason can become FALSE without any of the three discharge checks noticing. That is CR-20(b). YOU HAVE THREE CHOICES. (i) DISAMBIGUATE THE HEADER IN ITS OWN BYTES — give the producing line a clause that names which table of spellings it heads or which parameter set the case runs; \`normalizeGateLine\` strips only a LEADING comment marker, and the construct token is truncated at ${CONSTRUCT_TOKEN_WIDTH} characters, so the distinguishing clause has to fall inside that width. Then regenerate every key anchored to that header with \`exemptionKeyFor\` in the same commit, carrying each reason across byte-unchanged. (ii) RE-SITE OR REWRITE THE OCCURRENCE so it sits under a construct whose header is already unique — only where the sentence still says what it is about afterwards. (iii) DELETE the occurrence, if it states a bound it should not be stating at all. A ZERO PRODUCER COUNT IS THIS SAME FAILURE FROM THE OTHER SIDE: the key was hand-written against a header that is not in the file. FORBIDDEN, ALL FOUR: widening this case to permit more than one producer; exempting a token from the census; appending an ordinal to launder the ambiguity; and folding the LINE NUMBER into the key. The last is the tempting one and it is the worst — it would make every key unique by construction, turn this case green having measured nothing, and break on every unrelated edit below it.`,
+    ).toEqual([]);
   });
 
   // CR-17's FAILING PATH, EXECUTED — the relocation the anchoring was built for,
