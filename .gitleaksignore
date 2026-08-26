@@ -1,0 +1,29 @@
+# Historical findings verified as synthetic redaction-test payloads.
+# Keep these as exact fingerprints: never allowlist a path or a rule globally.
+05df01470c936c5fc5ac981b2db9d46cc87062d5:.planning/phases/01-skeleton-persistence-compatibility/01-07-PLAN.md:generic-api-key:271
+0cfc443854d2970fdff3f0024dae44f9f148dd46:packages/backend/src/store/observations.spec.ts:github-pat:708
+18c6f41beeff06c420da952cc185d159a1bcb61b:packages/backend/src/store/observations.spec.ts:generic-api-key:44
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:48
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:49
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:50
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:51
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:52
+22114e5f78f43258c559a62ed2ee55ce213284af:.planning/phases/01-skeleton-persistence-compatibility/results/offline/tracer-assertions-offline.md:generic-api-key:53
+4940ede0e5643e26721eeba9d8139c6713d0fab8:.planning/phases/01-skeleton-persistence-compatibility/01-07-SUMMARY.md:generic-api-key:280
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:github-pat:149
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:github-pat:150
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:github-pat:151
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:github-pat:188
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:github-pat:206
+4f6498bb8330d81c5d109a1505c1633bf9acf33c:.planning/phases/01-skeleton-persistence-compatibility/01-10-SUMMARY.md:stripe-access-token:156
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:github-pat:511
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:github-pat:512
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:github-pat:825
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:github-pat:826
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:stripe-access-token:827
+9e0ac61228665471d1b4f29f6d2ce16e62153b95:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:stripe-access-token:828
+a231bbd3ffe21b74c698f5b072d55205248427a0:packages/backend/src/store/observations.spec.ts:github-pat:70
+a231bbd3ffe21b74c698f5b072d55205248427a0:packages/backend/src/store/observations.spec.ts:stripe-access-token:75
+b88a423a851f0874be3d71de2969ad7b1d0da6f5:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:github-pat:1325
+bf6700e52aa63b9828e63a9cdde2d0740f374ff6:.planning/phases/01-skeleton-persistence-compatibility/01-REVIEW.md:generic-api-key:1740
+e3917451def41e2f3e44f7cad980c336ff96ffee:.planning/phases/01-skeleton-persistence-compatibility/01-VERIFICATION.md:generic-api-key:14
