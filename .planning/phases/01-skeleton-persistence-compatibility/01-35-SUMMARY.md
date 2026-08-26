@@ -332,4 +332,38 @@ OUTCOME; an unexamined `[x]` is not.: expected false to be true // Object.is equ
 
 Note that the message quoted above is the one Task 1 **rewrote**: the superseded enumerated-surface promise was REPLACED by the three criteria rather than appended beside them, and both revert hashes, the WR-34 explanation, the same-commit rule and the `[ ]`-is-a-correct-outcome sentence all survived that rewrite. A pin nobody watched fail in this session is a pin this session may not rely on; this one was watched.
 
+## WHAT THE BOX'S `[x]` MEANS, AND WHAT IT DOES NOT
+
+**It means the three criteria above, verified by execution, and nothing else.** It does NOT mean the walk catches every spelling of every clause CORE-11's first sentence enumerates. That bar was re-scoped by the operator on 2026-08-25 precisely because it is UNREACHABLE over an open language rather than merely unmet: the space of JavaScript spellings for reaching a function through a value does not close, so no widening ever arrives at it.
+
+**The new bar is NARROWER than the old one and it ends NO class.** CR-15 (a bare global in RECEIVER rather than CALLEE position), CR-16 (an unreadable computed member on a positively identified `navigator` receiver) and the **twenty-six measured silences** carried as rows in the generated span are NAMED RESIDUALS under this bar — disclosed and unclosed, not defects it waves away and not shapes it has closed. The class stays open because the space of spellings is open. A reader who takes this `[x]` for the end of the finding stream has been misled by it.
+
+**What narrowed is the meaning of the CHECKBOX, not the meaning of the PROHIBITION.** CORE-11's first sentence — the must-NOT — is byte-identical through this wave, shown rather than asserted: the sentence was hashed before and after the box flip, since flipping `- [ ]` to `- [x]` edits the same physical line the must-NOT lives on and a naive line diff would look like a change to both.
+
+```
+== must-NOT first sentence, BEFORE flip ==
+6c7b4b2d0db8d371fc80a76a33a024591c2b075a616eb6e5b06101257db9a04f  -
+== must-NOT first sentence, AFTER flip ==
+6c7b4b2d0db8d371fc80a76a33a024591c2b075a616eb6e5b06101257db9a04f  -
+```
+
+And it still holds on the measurements, unchanged by this wave: **23 files walked across both `SOURCE_ROOTS` with ZERO violations** and the four measured-exempt sites named — `compat.ts`'s `cur[key]` and `ctx[root]`, `observations.ts`'s `segments[i]` and `MIGRATIONS[MIGRATIONS.length - 1]`; the shipped bundle's entire import set is **ONE specifier, `crypto`**; and `observations.ts`'s redaction code has been byte-identical since gap-closure round 5 and survived **19,772 swept inputs with zero leaks**. Every finding this wave touched is a prospective blindness in a TEST-ONLY gate or a defect in a DISCLOSURE — never a live exposure. **Nothing leaks.**
+
+## STORE-03 AND STORE-07 — UNTOUCHED, AND THIS DECISION DOES NOT REACH THEM
+
+Both remain **LEDGER COLLISIONS deferred with their owner** — the operator, at the next requirements pass, by the STORE-01 → STORE-08 route, the same route this re-scope travelled. `git diff` over both entries across the whole wave is EMPTY:
+
+```
+git diff e47ffdd~1 -- .planning/REQUIREMENTS.md | grep -cE '^[+-].*\*\*STORE-0[37]\*\*'
+0
+```
+
+The ledger says so in its own words, in the same terms wave 28's correction used:
+
+> **ONE FLIPPED BOX IS NOT A CLEAN LEDGER, AND THIS DECISION DOES NOT REACH STORE-03 OR STORE-07.** Both of their text-versus-usage collisions remain DEFERRED WITH AN OWNER — the operator, at the next requirements pass, by the STORE-01 → STORE-08 route — untouched by this wave and byte-identical through it. Whatever this box's state becomes below, it is CORE-11's disposition alone and no reader may take it for the ledger's.
+
+## WHY THIS PLAN'S OWN VERIFY IS STATE-AGNOSTIC WHILE THE SUITE'S PIN IS NOT
+
+The task-level automated verify is `grep -cE '^- \[[ x]\] \*\*CORE-11\*\*'`, which matches BOTH states and returned exactly **1**. That is deliberate: `[ ]` had to remain a reachable honest outcome, and an acceptance criterion that punished an open box would have converted this wave's honest result into a failure it must engineer around. **This is NOT a repeat of WR-34.** WR-34 was a state-agnostic character class in the SUITE's own pin — the very defect that let the box stay green through two early flips and two reverts — and `CORE11_BOX_EXPECTED` exists because of it. The suite's pin stays state-sensitive; only this plan's task-level verify is agnostic, and M5 above is the proof the sensitive one still bites.
+
 <!-- gsd:write-continue -->
