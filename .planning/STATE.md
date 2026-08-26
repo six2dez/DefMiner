@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: verifying
-stopped_at: Completed 01-34-PLAN.md
-last_updated: "2026-08-25T10:54:32.260Z"
+stopped_at: Completed 01-35-PLAN.md
+last_updated: "2026-08-26T05:18:04.571Z"
 last_activity: 2026-08-24
 last_activity_desc: "Completed 01-31 (CR-12: a logical-assignment binding grows every collector a plain assignment grows)"
-state_head: 260d0427bae06915d79fe0332703bda1a20947d1
+state_head: f2e7d4006c92542be3d0b86c1670966a3a06eb66
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
 ---
 
 # Project State
@@ -171,6 +171,7 @@ Progress: [██████████] 97% of phase 01 (31 of 32 plans)
 | Phase 01 P32 | 31 min | 4 tasks | 8 files |
 | Phase 01 P33 | 24 min | 3 tasks | 4 files |
 | Phase 01 P34 | 41 min | 3 tasks | 8 files |
+| Phase 01 P35 | 1h 5m | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -308,6 +309,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: Three widenings taken as a bonus, each only after cheap / obviously correct / measured were answered in writing: a receiver-position arm for the fetch surface, a second arm for the dynamic-code globals, and one || admitting navigator to the unreadable-member arm.
 - [Phase 01]: WR-41 disposition is DISCLOSE, not widen, with the reason in the row's own clause: the module-loader surface is bounded from the other end by check:bundle, asserted at exactly one import specifier.
 - [Phase 01]: WR-39's head-side discriminator was an artifact of a ten-character parameter name matching the <redacted> marker; re-derived across four name lengths, with the branch SELECTOR asserted in place of a byte-identical duplicate assertion.
+- [Phase 01]: CORE-11's [x] means, and may ONLY mean, three criteria the OPERATOR adopted on 2026-08-25: DERIVED, DRIFT-DETECTABLE, THE SOLE BOUND — each re-verified BY EXECUTION in wave 35 and each proved live by a mutation planted, watched red and restored. The box moved with CORE11_BOX_EXPECTED in ONE commit (f5652a1). The new bar is NARROWER than the old one and ends no class: CR-15, CR-16 and the 26 measured silences are NAMED RESIDUALS under it. — The old bar — the gate goes red on every spelling of every enumerated clause — is UNREACHABLE over an open language rather than merely unmet, because the space of JavaScript spellings for reaching a function through a value does not close. Six rounds of flat find-rate are the evidence; 01-VERIFICATION.md's answer section is the diagnosis; the route is the STORE-01 -> STORE-08 precedent.
+- [Phase 01]: A criterion verdict is stated with the REACH of the mechanism that produced it. Row 3's pass is the SCOPED form — met up to the guard's phrase-list reach under its named normalization, with both classes of unreached surface named: unguarded FILES (.planning/STATE.md, .planning/WINDOWS.md, reached by no mechanical comparison) and undeclared SPELLINGS inside the guarded files. — An unqualified tick would have flipped the box on evidence strictly narrower than the criterion it discharges — a stated reach exceeding an executed reach, this phase's signature defect arriving inside the fix for exactly that defect. The scope is part of the pass, not a footnote to it.
+- [Phase 01]: OVER-BREADTH is a different property from NON-VACUITY and was measured separately: every declared-phrasing occurrence inside each of wave 33's three exclusions was enumerated and classified — 12 machine-owned span, 9 the declaration itself, 12 live clause strings — with ZERO residue in any exclusion. — Wave 33 asserts its exclusions swallow something. An exclusion swallowing one hand-written universal would convert a guarded surface into an unguarded one while every wave-33 assertion stayed green; that is the property that could honestly have failed row 3.
 
 ### Known Risks Carried Forward
 
@@ -350,8 +354,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-25T10:54:20.562Z
-**Stopped at:** Completed 01-34-PLAN.md
+**Last session:** 2026-08-26T05:17:33.476Z
+**Stopped at:** Completed 01-35-PLAN.md
 **Resume file:** None
 
 ### Blockers
