@@ -70,7 +70,22 @@ Six blocking, one non-blocking. All are `Repudiation`, all in `outbound-prohibit
 | T-01-263 | Repudiation | `enclosing`-construct claims the docblock disowns | high | mitigate | `:9396-9398` disowns the word ("would claim a containment this scan does not compute"), yet `:9242`, `:9411`, `:10999`, `:11136` still assert enclosing-construct resolution — and `:10999`/`:11136` sit inside shipped failure messages a reader sees while the suite is red | open |
 | T-01-286 | Repudiation | one bound published at two values | medium | mitigate | `:10174` says a non-maximal shadow may grow to **573**; `:9110` says up to the maximum (**574**) — 1,065 lines apart | open — below `high` threshold (non-blocking) |
 
-**These six are the same defects gap-closure round 11 is already scoped to close** (review findings CR-24 → T-01-289; CR-25 → T-01-286; CR-26 → T-01-280/T-01-264/T-01-239; CR-27 → T-01-263). The security audit and verification pass 11 converged on them independently.
+**The six blocking threats are the same defects gap-closure round 11 is scoped to close.** Re-derived from the `high` + `open` rows of the table above, not from memory:
+
+| Threat | Severity | Review finding | Round-11 owner |
+|---|---|---|---|
+| `T-01-289` | high | CR-24 (site 1) | 01-44 Task 2 (deletion) |
+| `T-01-283` | high | CR-24 (site 2) | 01-44 Task 2 (deletion) |
+| `T-01-263` | high | CR-27 | 01-44 Task 2 (deletion) |
+| `T-01-280` | high | CR-26 | 01-45 Task 1 |
+| `T-01-264` | high | CR-26 | 01-45 Task 1 |
+| `T-01-239` | high | CR-26 | 01-45 Task 1 |
+
+`T-01-286` (medium, **non-blocking**) is also closed by round 11 — CR-25's deletion — but it is **not** one of the six and does not count toward `threats_open`.
+
+**CORRECTION 2026-08-26:** an earlier revision of this line named `T-01-286` among the six and omitted `T-01-283`. Six names, the wrong six. Caught by the plan-checker after the error had already propagated into `01-44-PLAN.md` and `01-45-PLAN.md`, which cited this list rather than re-deriving it. Recorded rather than silently corrected: a stated completeness exceeding an executed one is the exact defect class round 11 exists to close, and this document authored an instance of it.
+
+The security audit and verification pass 11 converged on these six independently.
 
 ---
 
