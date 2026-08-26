@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-38-PLAN.md
-last_updated: "2026-08-26T13:10:21.153Z"
+stopped_at: Completed 01-39-PLAN.md
+last_updated: "2026-08-26T14:00:03.681Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: ccc3a1b1444fd372992a9c9c1d7052caf72ec14d
+state_head: 8d783290ea22b6b04203eeea382ad0a0fdebc4d7
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 41
-  completed_plans: 38
+  completed_plans: 39
 ---
 
 # Project State
@@ -27,12 +27,21 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 38 of 38 (37 of 38 plans summarized on disk)
-Status: Executing — plan 01-38 is the last outstanding plan
-Last activity: 2026-08-26 — 01-37 complete: CR-17's failing-path fixture and WR-48
+Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
+Plan: 40 of 41 (39 of 41 plans summarized on disk)
+Status: Executing — plans 01-40 and 01-41 are the two outstanding plans
+Last activity: 2026-08-26 — 01-39 complete: CR-20's two changes and WR-52's widening
 
-Progress: [█████████░] 97% of phase 01 (37 of 38 plans)
+Progress: [█████████░] 95% of phase 01 (39 of 41 plans)
+
+> WAVE 39, THE SAME DRIFT AS WAVE 37 AND CORRECTED THE SAME WAY. `state.advance-plan`
+> moved the prose counter 1 -> 2 and both numbers were wrong, so the line above is
+> corrected FROM THE FILE COUNT ON DISK and the correction is recorded rather than
+> made quietly. The handler's frontmatter recompute was RIGHT — `completed_plans: 39`,
+> `total_plans: 41` — while the prose counter it increments had been left at `1 of 41`
+> by the execute-phase orchestrator's own pre-dispatch write and simply advanced from
+> there. The truth on disk is 41 PLAN files and 39 SUMMARY files, with 01-40 and 01-41
+> outstanding; that is the only number that cannot drift.
 
 > WAVE 37. `state.advance-plan` MOVED THE BODY COUNTER 2 -> 3 AND BOTH NUMBERS
 > WERE WRONG, so the line above is corrected FROM THE FILE COUNT ON DISK and the
@@ -201,6 +210,7 @@ Progress: [█████████░] 97% of phase 01 (37 of 38 plans)
 | Phase 01 P36 | 25 min | 2 tasks | 2 files |
 | Phase 01 P37 | 20 min | 2 tasks | 2 files |
 | Phase 01 P38 | 21 min | 3 tasks | 4 files |
+| Phase 01 P39 | 33 min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -360,6 +370,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: P38-D1: wave 35's two-valued disposition rule is applied at LINE granularity, not BLOCK granularity — an occurrence is HISTORY only if a date AND a plan attribution sit in its own bytes — Decided on wave 35's own precedent rather than by preference: the existing scoped marker at REQUIREMENTS.md :110 supersedes :112, a paragraph sitting inside the dated 2026-08-24 plan-01-32 block headed at :86. A dated block header therefore does not confer HISTORY on its paragraphs. Recorded explicitly because the block-granularity reading was available, would have classified five of the ledger's standing statements as history needing no marker, and would have let criterion (3)(d)'s re-run report clean without doing anything.
 - [Phase 01]: P38-D2: criterion (3)(d)'s re-run found TWO surviving unmarked statements of CORE-11's box state in the gate file's own hand-written header, and they were RECORDED rather than repaired — packages/backend/src/outbound-prohibition.spec.ts:803-804 and :901 state the box's state and a flip ownership wave 28 never had, inside the undated wave-25 and wave-26 narrative blocks; :901 sits four lines above wave 33's WR-38 note asserting the box is stated in EXACTLY TWO PLACES, which those occurrences falsify. The gate file is closed after plan 01-37 and plan 01-38 is prohibited from editing it. Repairing it silently would also have made the re-run indistinguishable from one that quietly overlooked it — the defect the re-run exists to correct. Logged as WINDOWS entry 41 (open) for verification pass 9.
 - [Phase 01]: P38-D3: CORE-11 is NOT marked complete by this plan and requirements-completed is deliberately EMPTY, although CORE-11 is the plan's declared requirement — The checkbox is `[ ]` and stays `[ ]`, byte-unchanged and proved by an empty diff. Marking the requirement complete would flip it, which this plan's frontmatter prohibits as the fourth unearned flip. Whether criterion (3) is discharged and whether the box may move are verification pass 9's determinations on the whole round's evidence, so `requirements mark-complete` was deliberately NOT run.
+- [Phase 01]: WR-53's extension was TAKEN on the 29-key prefix measurement (3 -> 1 after change (1) alone, 0 after bounding the forward walk strictly above the occurrence and continuing the backward scan) rather than in advance — no parser, no AST, no it/describe frame derivation
+- [Phase 01]: Both census-flagged anchors disposed of by choice (i), disambiguating the header in its own bytes; the census was not widened, no token exempted, no ordinal minted, no line number folded into a key
+- [Phase 01]: The it.each disambiguation is a named tuple TYPE ARGUMENT, not a trailing comment, because prettier relocates a trailing // onto the next line where normalizeGateLine never sees it
 
 ### Known Risks Carried Forward
 
@@ -402,8 +415,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T11:19:52.606Z
-**Stopped at:** Completed 01-38-PLAN.md
+**Last session:** 2026-08-26T14:00:03.172Z
+**Stopped at:** Completed 01-39-PLAN.md
 **Resume file:** None
 
 ### Blockers
