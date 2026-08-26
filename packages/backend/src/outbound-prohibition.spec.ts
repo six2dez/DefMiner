@@ -9991,7 +9991,35 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // resolutions land on their OWN construct's closing line", which asserts each
   // resolution EQUAL to the line its construct actually closes on — the registry
   // located by its own closing text, the quantifier list by its own live
-  // entries, each locator proved to match exactly ONE line before it is used.
+  // entries, and — since wave 43 — each construct's OPENING line by its own
+  // full text as well.
+  //
+  // CR-23, 2026-08-26, wave 43. THIS PARAGRAPH USED TO READ "each locator
+  // proved to match exactly ONE line before it is used", and that was not true
+  // of each locator the case uses. ENUMERATED IN THIS SESSION, the case resolves
+  // lines through SEVEN locator expressions. FOUR are proved to match exactly
+  // one line before use, each behind its own hit count and its own failure
+  // message: the registry's full-line CLOSER, the nine live
+  // UNBOUNDED_QUANTIFIERS entry literals, the registry's full-line OPENER and
+  // the list's full-line OPENER. THREE ARE NOT PROVED, and are no longer
+  // claimed to be: `EXCLUSIONS`' own two opening locators, which are PREFIX
+  // matchers, and CLOSES_FROZEN_ARRAY, which is the scan under test rather than
+  // a locator over it. At wave 43's arrival the case used FIVE locator
+  // expressions of which TWO were proved.
+  //
+  // THE PREFIX MATCHERS ARE LEFT AS THEY ARE, ON PURPOSE. A prefix matcher is
+  // satisfied by a LONGER IDENTIFIER: a declaration named for the registry with
+  // something appended, written above the real one, answers it and slides
+  // exclusion three's opening endpoint up onto that line. Verification pass 10
+  // executed exactly that on the real tree and the suite stayed green at 439 of
+  // 439 with over a hundred pre-existing lines removed from the scanned
+  // surface. WHAT THE TWO OPENING PINS DO IS MAKE THAT SLIDE RED. THEY DO NOT
+  // PREVENT IT — the exclusion still resolves to whatever its own prefix
+  // matcher answers, and the pin is a comparison run afterwards. The two sides
+  // are deliberately DIFFERENT expressions, a prefix matcher on one and a
+  // full-line equality on the other, because a pin that recomputed the
+  // expression it pins would hold for any file at all, which is the defect this
+  // replaced.
   // THAT REACH AND NO WIDER. It pins WHERE THE SCAN LANDS FOR THESE TWO
   // CONSTRUCTS and says nothing about any other. It does not widen what this
   // recogniser matches: a frozen array closed in some third form is STILL
@@ -10280,6 +10308,44 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     ).toBe(1);
     const registryClose = lineOf((l) => l === REGISTRY_CLOSE);
 
+    // CR-23, 2026-08-26, wave 43. THE TWO OPENING ENDPOINTS, GIVEN THE SAME
+    // TREATMENT THE CLOSING ONE ALREADY HAD. Until this wave the two `.from`
+    // assertions at the foot of this case compared `EXCLUSIONS[n].from` against
+    // `registryStart` and `listStart` — recomputed just above, character for
+    // character, from the expressions `EXCLUSIONS` itself was built from. Those
+    // were tautologies: they held for any file at all, including one where the
+    // locator matched no line and -1 was compared with -1, which is the silent
+    // success the paragraph twelve lines up says this case is organised
+    // against. Verification pass 10 executed it on the real tree: one planted
+    // declaration whose name EXTENDED the registry's, 104 lines above the real
+    // one, slid exclusion three's `from`, took 104 pre-existing lines off the
+    // scanned surface, and this suite reported 439 of 439 green.
+    //
+    // THE TWO SIDES MUST STAY INDEPENDENT EXPRESSIONS. `EXCLUSIONS`' own
+    // openers are left as PREFIX matchers deliberately and the two locators
+    // below are FULL-LINE equalities. Do NOT "simplify" the duplication by
+    // making both sides the same expression: that restores the tautology in the
+    // same commit that claims to remove it.
+    const REGISTRY_OPEN =
+      "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
+    const registryOpenHits = gateLines.filter(
+      (l) => l === REGISTRY_OPEN,
+    ).length;
+    expect(
+      registryOpenHits,
+      `the locator ${JSON.stringify(REGISTRY_OPEN)} matches ${registryOpenHits} line(s) of ${GATE_FILE}, not exactly one. At ZERO the pin below would compare -1 against -1 and pass having compared nothing; ABOVE ONE it would pin to whichever line came first. Re-point the locator at the registry's real opening line — do not delete the pin.`,
+    ).toBe(1);
+    const registryOpen = lineOf((l) => l === REGISTRY_OPEN);
+
+    const LIST_OPEN =
+      "export const UNBOUNDED_QUANTIFIERS: readonly string[] = Object.freeze([";
+    const listOpenHits = gateLines.filter((l) => l === LIST_OPEN).length;
+    expect(
+      listOpenHits,
+      `the locator ${JSON.stringify(LIST_OPEN)} matches ${listOpenHits} line(s) of ${GATE_FILE}, not exactly one. At ZERO the pin below would compare -1 against -1 and pass having compared nothing; ABOVE ONE it would pin to whichever line came first. Re-point the locator at the quantifier list's real opening line — do not delete the pin.`,
+    ).toBe(1);
+    const listOpen = lineOf((l) => l === LIST_OPEN);
+
     // The quantifier list closes with a BARE `]);`, which is not unique in this
     // file, so it cannot be located by its own closing text the way the registry
     // can. It is located by its own LIVE CONTENTS instead: each entry of
@@ -10311,8 +10377,8 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     ).toBe(registryClose);
     expect(
       EXCLUSIONS[2].from,
-      `exclusion three's realized \`from\` is ${EXCLUSIONS[2].from} while RESOLVER_REGISTRY opens at ${registryStart}. Both endpoints are pinned because a width is two numbers, and pinning only the end leaves the other half free to move.`,
-    ).toBe(registryStart);
+      `exclusion three's realized \`from\` is ${EXCLUSIONS[2].from} while RESOLVER_REGISTRY's own opening line — located by its FULL TEXT, independently of the prefix matcher \`EXCLUSIONS\` uses — is ${registryOpen}, a gap of ${EXCLUSIONS[2].from - registryOpen} line(s). The exclusion's opening endpoint has slid onto a different line, so lines that were on the scanned surface are silently off it and any declared phrasing living in them is unguarded. The usual cause is a LONGER IDENTIFIER declared above the real one: the exclusion's prefix matcher answers it and the real opening line is never reached. Move or rename whatever sits above it. Both endpoints are pinned because a width is two numbers, and since wave 43 BOTH are pinned against locators independent of the expressions \`EXCLUSIONS\` derives them from — pinning only the end left this half compared against itself. Do NOT adjust this pin, and do NOT point the exclusion's own locator at the full-line form: the comparison asserts only while the two sides are independent expressions.`,
+    ).toBe(registryOpen);
 
     // THE SAME PIN FOR EXCLUSION TWO. The recogniser serves both, and correcting
     // one construct while leaving the other unpinned is the identical defect one
@@ -10330,8 +10396,72 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     ).toBe(listClose);
     expect(
       EXCLUSIONS[1].from,
-      `exclusion two's realized \`from\` is ${EXCLUSIONS[1].from} while UNBOUNDED_QUANTIFIERS opens at ${listStart}.`,
-    ).toBe(listStart);
+      `exclusion two's realized \`from\` is ${EXCLUSIONS[1].from} while UNBOUNDED_QUANTIFIERS' own opening line — located by its FULL TEXT, independently of the prefix matcher \`EXCLUSIONS\` uses — is ${listOpen}, a gap of ${EXCLUSIONS[1].from - listOpen} line(s). Same reading as exclusion three: the opening endpoint has slid, lines that were on the scanned surface are silently off it, and the usual cause is a longer identifier declared above the real one. Correcting one construct and leaving the other pinned against itself would be the identical defect one construct over. Do NOT adjust this pin and do NOT make the exclusion's own locator the same expression as this one.`,
+    ).toBe(listOpen);
+  });
+
+  // CR-23's SHAPE, KEPT AS A PERMANENT FIXTURE OVER SYNTHETIC LINES. The case
+  // above pins the two opening endpoints against full-line locators. This one
+  // keeps the REASON executable without touching this file's own bytes: over a
+  // synthetic array where an identifier that EXTENDS the real one is declared
+  // above the real opener, a prefix finder resolves to the extended identifier
+  // and a full-line finder resolves to the opener, and the two answers DIFFER.
+  // A future author who swaps either pin above back to a prefix matcher makes
+  // that case a tautology again; this one turns red instead of arguing.
+  //
+  // EVERY LINE OF THE SYNTHETIC ARRAY IS AN INDENTED, QUOTED STRING ELEMENT, so
+  // no line written here is a line the real full-line locators could match —
+  // which is what the two uniqueness assertions in the case above re-check
+  // against this file's real bytes.
+  it("a PREFIX locator and a FULL-LINE locator disagree once a longer identifier is declared above the real opener — CR-23's shape, over synthetic lines", () => {
+    const REAL_OPENER =
+      "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
+    const synthetic: readonly string[] = Object.freeze([
+      "// a file that happens to declare a longer name first",
+      "export const RESOLVER_REGISTRY_STANDIN: readonly number[] = Object.freeze([1]);",
+      "",
+      "type ResolverRecord = { readonly clause: string };",
+      REAL_OPENER,
+      '  { clause: "a row" },',
+      "] as readonly ResolverRecord[]);",
+    ]);
+
+    // NON-VACUITY BEFORE THE RULE. An empty array makes both finders answer -1,
+    // and two -1s agree by having found nothing — the silent success this
+    // fixture exists to rule out rather than reproduce.
+    expect(
+      synthetic.length,
+      "the synthetic array is EMPTY, so both finders below answer -1 and the rule compares nothing.",
+    ).toBeGreaterThan(0);
+
+    const prefixHit = synthetic.findIndex((l) =>
+      l.startsWith("export const RESOLVER_REGISTRY"),
+    );
+    const fullLineHit = synthetic.findIndex((l) => l === REAL_OPENER);
+
+    expect(
+      prefixHit,
+      "the PREFIX finder resolved to nothing over the synthetic array, so the rule below would compare a -1. Repair the fixture, not the rule.",
+    ).toBeGreaterThanOrEqual(0);
+    expect(
+      fullLineHit,
+      "the FULL-LINE finder resolved to nothing over the synthetic array, so the rule below would compare a -1. Repair the fixture, not the rule.",
+    ).toBeGreaterThanOrEqual(0);
+
+    expect(
+      prefixHit,
+      `over the synthetic array the prefix finder resolved to index ${prefixHit} and the full-line finder to index ${fullLineHit}. They are meant to DIFFER. A prefix matcher is satisfied by a longer identifier declared above the real one and its answer slides onto that line; a full-line equality is not satisfied by it. That difference IS CR-23: it is why the two opening-endpoint pins in the case above use full-line locators while \`EXCLUSIONS\` keeps its prefix ones, and why making both sides the same expression would restore the tautology those pins replaced.`,
+    ).not.toBe(fullLineHit);
+    expect(
+      synthetic[prefixHit],
+      "the line the prefix finder resolved to is not the extended identifier, so this fixture no longer encodes the shape it is named for. Restore the decoy line above the opener.",
+    ).toBe(
+      "export const RESOLVER_REGISTRY_STANDIN: readonly number[] = Object.freeze([1]);",
+    );
+    expect(
+      synthetic[fullLineHit],
+      "the full-line finder did not resolve to the real opener, so this fixture no longer encodes the shape it is named for.",
+    ).toBe(REAL_OPENER);
   });
 
   // EXCLUSION THREE, NARROWED. Excluding the registry's whole LINE RANGE is
