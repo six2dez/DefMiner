@@ -9087,10 +9087,28 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     order rather than by line. AND THE CONSTRUCT IS A PROXIMITY, NOT A
  *     CONTAINMENT: the anchor is the nearest preceding line five recognisers
  *     accept, and two of those recognisers climb to the top of a prose region.
- *     RE-MEASURED AT WAVE 39 AFTER BOTH CHANGES, the maximum distance from an
- *     occurrence to its anchor is 234 LINES — the occurrence on line 235 takes
- *     this file's own title line — so `the same construct` can span a couple
- *     of hundred lines and the interchangeability residual is that wide.
+ *     RE-MEASURED AT WAVE 42, AND THE PUBLISHED QUANTITY WAS THE WRONG ONE.
+ *     WHAT BOUNDS INTERCHANGEABILITY IS THE ANCHOR'S SHADOW — the set of
+ *     surface lines that resolve to the SAME anchor — AND NOT THE DISTANCE
+ *     FROM AN OCCURRENCE TO ITS ANCHOR, which is a fact about where the 29
+ *     shipped sentences happen to sit. Measured at wave 42 with the shipped
+ *     builder from inside this file's own describe over all 8,846 surface
+ *     lines, the widest shadow belongs to the header row at `:417`,
+ *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`: 574 SURFACE
+ *     LINES, raw span 419..1574 — 1,156 raw lines, of which exactly the 582
+ *     the machine-owned span covers are removed by exclusion one — and it
+ *     ALREADY HOLDS FOUR SHIPPED OCCURRENCES. Any occurrence inside a shadow
+ *     can be moved to another line inside that shadow and keep a
+ *     BYTE-IDENTICAL key: verification pass 10 moved one 514 lines and then
+ *     1,129 lines, at 439 of 439 green both times, with the entry's stated
+ *     reason false in both new homes (`01-VERIFICATION.md`). THE 234 IS
+ *     CORRECT AND IT IS NOT A BOUND — it is the largest distance any shipped
+ *     sentence HAPPENS to sit from its anchor, and it bounds nothing. The
+ *     shadow's width is what is now watched, by the case titled `the WIDEST
+ *     ANCHOR SHADOW over the scanned surface is PINNED`, WHICH PINS THE
+ *     MAXIMUM ONLY: a non-maximal shadow may grow up to that maximum with
+ *     nothing reporting, and the pin does not prevent a relocation inside a
+ *     shadow — pass 10's 514-line move was re-run at wave 42 and stayed green.
  *
  *     Removing two relocation shapes does not close the relocation class. The
  *     anchoring does not widen limit (1)'s phrase list, it does not change
@@ -9339,10 +9357,19 @@ const anchorTokenCensus = (
  * IT IS THE NEAREST PRECEDING ACCEPTED LINE, WHICH IS NOT THE SAME AS THE
  * FINEST ENCLOSING CONSTRUCT, AND THE DIFFERENCE IS MEASURED RATHER THAN
  * ESTIMATED. Recognisers (4) and (5) deliberately climb to the TOP of a prose
- * region, and in this file those regions are large: WR-49 measured four
- * occurrences taking the file's own title line as their anchor from up to 234
- * lines above them, and wave 39 re-measured the maximum after correcting the
- * scan bounds and got 234 again, at the occurrence on line 235. The word
+ * region, and in this file those regions are large. THE MEASURE OF THAT
+ * DIFFERENCE IS THE WIDTH OF THE REGION ONE ANCHOR COVERS — THE ANCHOR'S
+ * SHADOW, every surface line resolving to it — AND NOT THE DISTANCE FROM AN
+ * OCCURRENCE TO ITS ANCHOR. Stated here on the same basis and to the same
+ * figure as limit (5) above, which is where it is measured and where the
+ * measurement is described: the widest shadow is the header row at `:417` at
+ * 574 surface lines, raw 419..1574, already holding four shipped occurrences,
+ * and pass 10 relocated one of them 514 lines and then 1,129 lines for a
+ * byte-identical key at 439 of 439 green. WR-49's 234 — the largest distance a
+ * shipped sentence happens to sit from its anchor, and still 234 when wave 39
+ * re-measured it after correcting the scan bounds — is a fact about where
+ * those sentences were written and bounds nothing. The shadow's width is
+ * pinned by the case limit (5) names, WHICH PINS THE MAXIMUM ONLY. The word
  * `enclosing` would claim a containment this scan does not compute; what it
  * computes is proximity under those five recognisers.
  *
@@ -10426,14 +10453,40 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // CHECKING EACH HALF. One shipped occurrence — the wrapped ASCII-table cell
   // whose entire normalized content IS a declared phrasing — has a line half
   // that legitimately reduces to nothing, and its construct half is what names
-  // it. A key whose WHOLE anchor reduces to nothing names neither, and that is
-  // the shape a fabricated bound was driven through at 432 of 432 green.
+  // the REGION it sits in. A key whose WHOLE anchor reduces to nothing names
+  // neither, and that is the shape a fabricated bound was driven through at 432
+  // of 432 green.
+  //
+  // [SITE-IDENTITY CLAIM WITHDRAWN — 2026-08-26, wave 42, CR-22.] Until this
+  // date this paragraph and the failure message below both said the construct
+  // half NAMES the occurrence. IT DOES NOT, AND THE CLAIM WAS FALSIFIED BY
+  // EXECUTION RATHER THAN ARGUED AWAY: verification pass 10 relocated this very
+  // occurrence 514 lines and then 1,129 lines and the key was BYTE-IDENTICAL
+  // both times at 439 of 439 green, with the entry's stated reason false in
+  // both new homes (`01-VERIFICATION.md`, `### CR-20 is NOT CLOSED / CR-22`).
+  // What the construct half names is a REGION — the anchor's SHADOW, every
+  // surface line resolving to that anchor — whose width is measured and pinned
+  // by the case titled `the WIDEST ANCHOR SHADOW over the scanned surface is
+  // PINNED`, and which is 574 surface lines wide for THIS occurrence's anchor.
+  // WHY THE CLAIM IS RETIRED RATHER THAN REPAIRED: nothing in the 2026-08-25
+  // re-scoped bar ever required it. That bar asks for a residual that is
+  // DERIVED, that is DRIFT-DETECTABLE, and that is the SOLE BOUND — and SOLE
+  // BOUND asks for a disclosure that is ACCURATE AND CONTRADICTED NOWHERE, not
+  // for an anchor that identifies a site. The site-identity claim was prose
+  // this file volunteered on top of the bar; it is withdrawn here, in the
+  // bytes, rather than deleted quietly. The decision to withdraw it rather than
+  // to build a containment is recorded in `01-VERIFICATION.md`'s
+  // `## The mechanism judgement`, which put both exits to the operator; exit 2
+  // is the one taken. NOTHING WAS DELETED SILENTLY: the two negative
+  // statements about anchors naming no site, and the sentinel and prefix cases
+  // that assert them, are untouched and remain true — they are statements about
+  // a DEFECT SHAPE, not claims that a well-formed anchor identifies anything.
   it("no exemption key's ANCHOR reduces to nothing — a fully-masked anchor names no construct and no line", () => {
     for (const key of Object.keys(HEADER_QUANTIFIER_EXEMPTIONS)) {
       const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
       expect(
         nameableRemainder(anchor).length,
-        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half is what names it — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
+        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half then names the REGION the occurrence sits in, which is that anchor's SHADOW and is 574 surface lines wide for the one shipped occurrence in this position; it does NOT identify the occurrence's site, a claim withdrawn at wave 42 and recorded in the bracket above this case — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
   });
