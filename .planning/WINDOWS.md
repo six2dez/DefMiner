@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 20
+open_count: 22
 waived_count: 0
 fixed_count: 22
-total_count: 42
-last_updated: 2026-08-26T14:29:20.319Z
+total_count: 44
+last_updated: 2026-08-26T19:41:49.894Z
 ---
 
 # Broken Windows Ledger
@@ -78,6 +78,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 40 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | POINTER, NOT A BOUND (plan 01-35, gap-closure round 9). SUPERSEDES ENTRY 39, which recorded wave 34's CR-15/CR-16 rows. THE OPERATOR RE-SCOPED CORE-11's ACCEPTANCE BAR on 2026-08-25 by the STORE-01 -> STORE-08 route, because the old bar (the gate goes red on every spelling of every enumerated clause) is UNREACHABLE over an open language rather than merely unmet. The three criteria that replace it — DERIVED, DRIFT-DETECTABLE, THE SOLE BOUND — were each re-verified BY EXECUTION in wave 35 and each proved live by a mutation planted, watched red and restored; CORE-11's box is now [x], moved with CORE11_BOX_EXPECTED in ONE commit. CRITERION 3's verdict is SCOPED and the scope is part of it: met up to the guard's PHRASE-LIST REACH under its NAMED NORMALIZATION, with two classes of unreached surface named — unguarded FILES (.planning/STATE.md and .planning/WINDOWS.md, reached by no mechanical comparison, which includes this entry) and undeclared SPELLINGS inside the guarded files. THIS ENTRY RESTATES NO BOUND: the bound of record is the machine-owned generated span in .planning/REQUIREMENTS.md and in the gate file, byte-compared to deriveResidual(RESOLVER_REGISTRY) by the suite. THE NEW BAR IS NARROWER THAN THE OLD ONE AND ENDS NO CLASS — CR-15, CR-16 and the twenty-six measured silences are NAMED RESIDUALS under it, and the class stays open because the space of JavaScript spellings is open. What narrowed is the CHECKBOX's meaning, not the PROHIBITION's, which is byte-identical. STORE-03 and STORE-07 are untouched and remain deferred with their owner. | fixed |  | 2026-08-26T03:33:46.522Z | 2026-08-26T11:11:00.277Z |
 | 41 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | POINTER, NOT A BOUND (plan 01-38, gap-closure round 8, waves 36 through 38). SUPERSEDES ENTRY 40, whose description states "CORE-11's box is now [x], moved with CORE11_BOX_EXPECTED in ONE commit" — FALSIFIED by commit 4105fd0 of 2026-08-26, which reverted the box and the constant together seven minutes after verification pass 8 was written and adjudicated criterion (3) UNMET. Entry 40's remaining content stands and is not rewritten: the 2026-08-25 operator re-scope, the three criteria, the SCOPED criterion-3 verdict, the two named classes of unreached surface, the narrowness statement and the named residuals all remain the current position. THE ROUND'S FOUR FINDINGS AND THEIR DISPOSITION. CR-17: the exemption keys were positional and survived a cross-construct relocation unnoticed — anchored by constructAnchorFor in wave 37, watched failing first on a purpose-built relocation fixture. WR-48: quantifier exclusion three narrowed to 4135..5767 in wave 37, and the 117 restored lines MEASURED at ZERO new obligations. CR-18: CORE-11's ledger row reduced in wave 38 to the prohibition plus one pointer, with all three removed passages relocated BYTE-IDENTICAL into a dated 2026-08-26 history block — a row that carries no statement of the box's state cannot carry a stale one. CR-19: .planning/STATE.md's live blockers corrected in wave 38 against six probes RE-EXECUTED through auditSource in that session, all six reporting, and against a registry re-counted at 26 measured-silence rows of 61 with all five of plan 01-32's names present and silence-operator-around-global-receiver ABSENT — that row was not restored and the suite requires it to stay gone. NEW AND OPEN, FOUND BY THIS ROUND'S OWN RE-RUN OF CRITERION (3)(d) AND NOT REPAIRED HERE: the gate file's hand-written header still states CORE-11's box state and a stale flip ownership in TWO places, inside the undated wave-25 and wave-26 narrative blocks, and one of them sits four lines above wave 33's WR-38 note asserting the box is stated in EXACTLY TWO places. The gate file is closed after plan 01-37 and plan 01-38 is prohibited from editing it, so this is RECORDED rather than fixed. THIS ENTRY RESTATES NO BOUND AND IS A POINTER: the bound of record is the machine-owned generated span in .planning/REQUIREMENTS.md and in the gate file, byte-compared to deriveResidual(RESOLVER_REGISTRY) by the suite. CORE-11's box is [ ] as measured on 2026-08-26 and whether it may move belongs to a verifier on the whole round's evidence; this entry awards no verdict. | open |  | 2026-08-26T11:10:50.592Z |  |
 | 42 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | CR-21 closes one laundering route only: a hand-written key outside HEADER_QUANTIFIER_EXEMPTIONS, the same-construct residual, the phrase-list reach and both classes of unreached surface remain — criterion (3) not discharged. | open |  | 2026-08-26T14:29:20.319Z |  |
+| 43 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | FINDING F-10: the round-10 baseline variable BASE_FILES held a source-file count (46) while its only consumer compares it against vitest's test-file count (31) — two correct measurements of different quantities | open |  | 2026-08-26T19:41:49.796Z |  |
+| 44 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | FINDING F-11: plan 01-43 states the WR-54 case claims 'all five locators proved unique when THREE are'; enumerated this session the case used five locator expressions of which TWO were proved | open |  | 2026-08-26T19:41:49.894Z |  |
 
 ````json
 [
@@ -583,6 +585,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-26T14:29:20.319Z",
+    "resolved_at": null
+  },
+  {
+    "id": 43,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/outbound-prohibition.spec.ts",
+    "line": null,
+    "description": "FINDING F-10: the round-10 baseline variable BASE_FILES held a source-file count (46) while its only consumer compares it against vitest's test-file count (31) — two correct measurements of different quantities",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-26T19:41:49.796Z",
+    "resolved_at": null
+  },
+  {
+    "id": 44,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "packages/backend/src/outbound-prohibition.spec.ts",
+    "line": null,
+    "description": "FINDING F-11: plan 01-43 states the WR-54 case claims 'all five locators proved unique when THREE are'; enumerated this session the case used five locator expressions of which TWO were proved",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-26T19:41:49.894Z",
     "resolved_at": null
   }
 ]
