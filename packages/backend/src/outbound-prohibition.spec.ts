@@ -9025,18 +9025,51 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     two exclusions are exact, and limits (1), (2), (3) and (5) are untouched
  *     by it.
  *
- * (5) THE CONSTRUCT ANCHOR REACHES THE NEAREST PRECEDING CONSTRUCT AND NO
- *     FURTHER. Added at wave 36 for CR-17. A key now carries the masked
- *     construct its occurrence sits under, so an exemption written for one
- *     construct is NOT discharged by an occurrence sitting under a DIFFERENT
- *     one. IT DOES NOT FOLLOW THAT AN EXEMPTION CANNOT BE DISCHARGED BY A
- *     DIFFERENT OCCURRENCE: TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN
- *     INTERCHANGEABLE, separated only by the positional `#N` ordinal, which is
- *     assigned by scan order rather than by line. THAT RESIDUAL IS UNGUARDED,
- *     and it is stated as a limit here rather than as a satisfied check. The
- *     anchoring removes ONE relocation shape. It does not close the class, it
- *     does not widen limit (1)'s phrase list, it does not change limit (2)'s
- *     normalization, and it reaches none of the surfaces limit (3) leaves out.
+ * (5) THE CONSTRUCT ANCHOR REACHES THE NEAREST PRECEDING ACCEPTED LINE AND NO
+ *     FURTHER, AND THAT IS NARROWER THAN IT SOUNDS. Added at wave 36 for
+ *     CR-17; RESTATED AT WAVE 39, because what stood here was FALSE of the
+ *     code beneath it. A key carries the masked construct token its occurrence
+ *     sits under, so the three discharge checks are anchor-sensitive with no
+ *     change to their logic.
+ *
+ *     WHAT THE PREVIOUS TEXT CLAIMED AND WHAT WAS EXECUTED AGAINST IT. It said
+ *     flatly that an exemption written for one construct is NOT discharged by
+ *     an occurrence sitting under a DIFFERENT one, and stated the whole
+ *     residual as same-construct interchangeability. Verification pass 9
+ *     executed TWO cross-construct relocations that the first sentence forbids
+ *     and the second does not describe, both at 434 of 434 green: a shipped
+ *     sentence moved 5,264 lines out of a docblock into an unrelated
+ *     `describe`, and a shipped table cell moved between two identically
+ *     headed tables. Seven of the 29 keys were relocatable that way. A stated
+ *     reach exceeding an executed one, inside the paragraph written to state
+ *     the reach of the fix for that exact defect.
+ *
+ *     WHAT WAVE 39 REMOVES, MEASURED RATHER THAN ARGUED. (a) SELF-ANCHORING.
+ *     The backward scan now opens STRICTLY ABOVE the occurrence and the
+ *     forward walk stops STRICTLY ABOVE it, so an occurrence that IS its own
+ *     construct header no longer anchors to a prefix of its own line. Measured
+ *     across all 29 keys before and after: 3 carried that shape, and 0 do.
+ *     (b) AMBIGUOUS ANCHOR TOKENS. Every line's would-be token is censused and
+ *     every anchor in use is asserted to have exactly ONE producer. Measured
+ *     when the census first ran: 2 tokens with 4 keys between them — one
+ *     produced by 10 lines, one by 3 — both disambiguated in their own bytes,
+ *     and 0 remain.
+ *
+ *     WHAT REMAINS UNGUARDED, STATED AS A LIMIT AND NOT AS A SATISFIED CHECK.
+ *     TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN INTERCHANGEABLE,
+ *     separated only by the positional `#N` ordinal, which is assigned by scan
+ *     order rather than by line. AND THE CONSTRUCT IS A PROXIMITY, NOT A
+ *     CONTAINMENT: the anchor is the nearest preceding line five recognisers
+ *     accept, and two of those recognisers climb to the top of a prose region.
+ *     RE-MEASURED AT WAVE 39 AFTER BOTH CHANGES, the maximum distance from an
+ *     occurrence to its anchor is 234 LINES — the occurrence on line 235 takes
+ *     this file's own title line — so `the same construct` can span a couple
+ *     of hundred lines and the interchangeability residual is that wide.
+ *
+ *     Removing two relocation shapes does not close the relocation class. The
+ *     anchoring does not widen limit (1)'s phrase list, it does not change
+ *     limit (2)'s normalization, and it reaches none of the surfaces limit (3)
+ *     leaves out.
  */
 const HEADER_QUANTIFIER_EXEMPTIONS: Readonly<Record<string, string>> =
   Object.freeze({
@@ -9232,21 +9265,45 @@ const anchorTokenCensus = (
  * fabricated hand-written bound outside all three exclusions, and measured the
  * suite green at 432 of 432.
  *
- * THE DERIVATION. Scan BACKWARD from the occurrence's own line for the nearest
- * preceding CONSTRUCT HEADER and return a masked token derived from it. The
- * recognisers were chosen by reading the constructs the shipped occurrences
- * actually sit under, not guessed: a declaration (`const`, `let`, `var`,
- * `function`, `class`, `type`, `interface`, `enum`, with or without `export`),
- * a `describe(` / `it(` / `test(` fixture title, the opening `/**` of a
- * docblock, the header row above the rule of a ruled ASCII table or banner, and
- * the opening line of a contiguous `//` comment block. Whichever comes first
- * wins, so the anchor is the FINEST construct enclosing the occurrence.
+ * THE DERIVATION, STATED AS IT EXECUTES. Scan BACKWARD from the line STRICTLY
+ * ABOVE the occurrence for the nearest preceding line one of five recognisers
+ * accepts. They were chosen by reading the constructs the shipped occurrences
+ * actually sit under, not guessed, and this list is the code's list: (1) a
+ * declaration — `const`, `let`, `var`, `function`, `class`, `type`,
+ * `interface`, `enum`, optionally behind `export`, `default` and `async`; (2) a
+ * `describe` / `it` / `test` fixture title, with or without `.each`, `.skip`,
+ * `.only` or `.todo`, opened by `(` or by a type argument `<`; (3) the opening
+ * `/**` of a docblock; (4) the nearest non-blank, non-rule row ABOVE the rule
+ * of a ruled ASCII table or banner; and (5) the opening line of a contiguous
+ * `//` comment block.
  *
- * A header that names nothing on its own line — a bare `/**`, a rule of dashes
- * — is walked FORWARD to the first line of that same construct which does name
- * it, so an anchor THIS BUILDER resolves is never empty. A key WRITTEN BY HAND
- * still can be, and that shape is forbidden outright by a separate case rather
- * than left to this derivation.
+ * IT IS THE NEAREST PRECEDING ACCEPTED LINE, WHICH IS NOT THE SAME AS THE
+ * FINEST ENCLOSING CONSTRUCT, AND THE DIFFERENCE IS MEASURED RATHER THAN
+ * ESTIMATED. Recognisers (4) and (5) deliberately climb to the TOP of a prose
+ * region, and in this file those regions are large: WR-49 measured four
+ * occurrences taking the file's own title line as their anchor from up to 234
+ * lines above them, and wave 39 re-measured the maximum after correcting the
+ * scan bounds and got 234 again, at the occurrence on line 235. The word
+ * `enclosing` would claim a containment this scan does not compute; what it
+ * computes is proximity under those five recognisers.
+ *
+ * THE FORWARD WALK IS BOUNDED STRICTLY ABOVE THE OCCURRENCE, WHICH IS THE
+ * CORRECTION CR-20(a) FORCED. A header that names nothing on its own line — a
+ * bare `/**`, a rule of dashes — is walked FORWARD to the first line at or
+ * below it that names anything, and that walk STOPS one line short of the
+ * occurrence. Until wave 39 the bound was the occurrence itself, so an
+ * occurrence that WAS its own header, or that was the first content line of a
+ * docblock whose `/**` names nothing, resolved to a 64-character prefix of its
+ * own line: an anchor that travelled with the sentence and named no site.
+ * WR-53 measured that bound separately and independently.
+ *
+ * WHEN THE WALK NAMES NOTHING ABOVE THE OCCURRENCE THE BACKWARD SCAN CONTINUES
+ * rather than returning the sentinel, so the next enclosing construct is tried.
+ * Measured at wave 39 after both changes: ZERO of the 29 shipped occurrences
+ * resolve to `NO_PRECEDING_CONSTRUCT`. That is a measurement of THIS surface,
+ * not a property of the builder — a key WRITTEN BY HAND can still carry an
+ * anchor that names nothing, and that shape is forbidden outright by a separate
+ * case rather than left to this derivation.
  *
  * THE MASKING IS LOAD-BEARING HERE FOR THE SAME REASON IT IS IN THE LINE
  * ANCHOR. Several fixture titles in this file contain a declared phrasing. An
@@ -10155,6 +10212,26 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // phrase list, it does not change limit (2)'s normalization, and it reaches
   // none of the surfaces limit (3) leaves out.
   //
+  // THE COVERAGE, RESTATED TO THE SPLIT IT ACTUALLY COVERS (WR-52, wave 39).
+  // The sentence above used to stop at `the CROSS-CONSTRUCT case`, and that
+  // overclaimed: this case ran ONE pair, whose occurrence line is deliberately
+  // not its own construct header, and that excluded exactly the shape CR-20(a)
+  // broke. RE-MEASURED THIS WAVE over the scanned surface: 29 shipped
+  // occurrences, of which 26 do NOT sit on their own construct header and 3 do
+  // — one the first content line of a docblock, two `it(` title lines. The
+  // FIRST array pair below covers the 26. The SECOND pair, added this wave,
+  // covers the 3, in both of their shapes.
+  //
+  // WHAT WAS WRONG WAS THE COVERAGE CLAIM AND NOT THE FIXTURE, and that is a
+  // measured distinction rather than a charitable reading. The reviewer's
+  // stronger reading of WR-52 was that the probe side would be green with
+  // `constructAnchorFor` reduced to a masked normalized copy of the
+  // occurrence's own line. Verification pass 9 applied exactly that reduction
+  // to the real file and ran this case by name: it FAILED, with `the anchored
+  // key did NOT change when the occurrence moved from one construct to
+  // another`. The probe side catches a line-copying anchor. So this is a
+  // WIDENING of a real fixture, not the rebuild of a vacuous one.
+  //
   // EVERY SYNTHETIC PHRASING IS TAKEN FROM `UNBOUNDED_QUANTIFIERS` BY INDEX AND
   // NEVER SPELLED. This file's guard scans its own bytes, so a fixture that
   // wrote the phrasing out would raise the very obligation it exists to test.
@@ -10303,6 +10380,169 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       "the pre-anchoring builder left the original entry matching nothing. It did not when CR-17 was measured.",
     ).toEqual([]);
     expect(preRelocated.balances).toBe(true);
+
+    // ------------------------------------------------------------------
+    // THE SECOND PAIR: THE OCCURRENCE THAT IS ITS OWN CONSTRUCT HEADER.
+    // WR-52, 2026-08-26, wave 39. The pair above deliberately picks an
+    // occurrence that is NOT its own header, and says so — which is the one
+    // shape CR-20(a) broke. Three of the 29 shipped occurrences are of this
+    // shape, re-measured this wave, and for them the anchor used to be a
+    // 64-character prefix of the occurrence's own line: it travelled WITH the
+    // sentence, so relocation was invisible. Added HERE rather than as a new
+    // case because it is the same claim about the same builder over a second
+    // input, and the counter-probe below has to run against both.
+    // ------------------------------------------------------------------
+    const ownHeaderPairs = (
+      occurrence: string,
+    ): { readonly a: readonly string[]; readonly b: readonly string[] } => ({
+      a: ['describe("alpha", () => {', occurrence, "});", "});"],
+      b: ['describe("beta", () => {', occurrence, "});", "});"],
+    });
+
+    // SHAPE ONE: the occurrence IS an `it(` title line.
+    const titleLine = `  it("the case, ${phrasing}", () => {`;
+    // SHAPE TWO: the occurrence is the FIRST CONTENT LINE of a docblock, whose
+    // opening `/**` names nothing at all, so the forward walk used to land on
+    // the occurrence itself.
+    const docFirstLine = `   * The note, ${phrasing}.`;
+    const docBlock = (owner: string): readonly string[] => [
+      owner,
+      "  /**",
+      docFirstLine,
+      "   */",
+      "  const documented = 1;",
+      "});",
+    ];
+
+    for (const [shape, before, after] of [
+      [
+        "an `it(` TITLE line",
+        ownHeaderPairs(titleLine).a,
+        ownHeaderPairs(titleLine).b,
+      ],
+      [
+        "a docblock's FIRST CONTENT line",
+        docBlock('describe("alpha", () => {'),
+        docBlock('describe("beta", () => {'),
+      ],
+    ] as readonly (readonly [string, readonly string[], readonly string[]])[]) {
+      const bKeys = keysUnder(exemptionKeyFor, before);
+      const aKeys = keysUnder(exemptionKeyFor, after);
+      // NON-VACUITY BEFORE THE RULE, for this pair too.
+      expect(
+        [bKeys.length, aKeys.length],
+        `the own-header pair for ${shape} carries no declared-phrasing occurrence in one of its two synthetic arrays, so every assertion about it below would pass having read nothing.`,
+      ).toEqual([1, 1]);
+      const bKey = bKeys[0] ?? "";
+      const aKey = aKeys[0] ?? "";
+      expect(
+        aKey,
+        `an occurrence sitting ON its own construct header (${shape}) kept the SAME anchored key when its enclosing construct changed. It anchored to ITSELF, so the anchor travels with the sentence and the relocation is invisible to all three discharge checks — CR-20(a), which verification pass 9 executed on the real tree at 434 of 434 green. \`constructAnchorFor\`'s backward scan must open STRICTLY ABOVE the occurrence and its forward walk must stop STRICTLY ABOVE it.`,
+      ).not.toBe(bKey);
+      expect(
+        lineHalf(aKey),
+        `the LINE halves differ for ${shape}, so this pair is no longer isolating the construct anchor — the occurrence line is byte-identical in both arrays by construction.`,
+      ).toBe(lineHalf(bKey));
+      expect(
+        constructHalf(aKey),
+        `the CONSTRUCT halves are the same for ${shape}, so the anchor is not resolving the ENCLOSING construct for an occurrence that is its own header.`,
+      ).not.toBe(constructHalf(bKey));
+      // AND THE SELF-ANCHORING SHAPE ITSELF, FORBIDDEN OVER SYNTHETIC LINES —
+      // the same predicate the permanent case applies to the shipped map.
+      for (const [which, k] of [
+        ["before", bKey],
+        ["after", aKey],
+      ] as readonly (readonly [string, string])[]) {
+        const head = constructHalf(k).endsWith(CONSTRUCT_TOKEN_ELLIPSIS)
+          ? constructHalf(k).slice(0, -1)
+          : constructHalf(k);
+        expect(
+          lineHalf(k).startsWith(head),
+          `the ${which} key for ${shape} has a construct half that is a PREFIX of its line half: both halves were read off the occurrence's OWN line, so the key names no site.`,
+        ).toBe(false);
+      }
+      const own = discharge([bKey], aKeys);
+      expect(
+        own.missing,
+        `the relocated own-header occurrence (${shape}) was DISCHARGED by an exemption written for its original construct.`,
+      ).not.toEqual([]);
+      expect(
+        own.stale,
+        `the exemption written for the ORIGINAL construct still matches something after the own-header occurrence (${shape}) moved away from it.`,
+      ).not.toEqual([]);
+      expect(
+        own.balances,
+        `the count equality no longer balances across the own-header relocation (${shape}), so this pair is not reproducing the shape that bypassed the gate — the original bypass balanced.`,
+      ).toBe(true);
+      // THE COUNTER-PROBE, FOR THE SECOND PAIR TOO. Without it this pair shows
+      // only that the new builder catches something.
+      const preB = keysUnder(preAnchoringExemptionKeyForFixtureOnly, before);
+      const preA = keysUnder(preAnchoringExemptionKeyForFixtureOnly, after);
+      expect(
+        preA,
+        `the PRE-ANCHORING builder produced different keys across the own-header relocation (${shape}). It is retained precisely because it did NOT.`,
+      ).toEqual(preB);
+      const preOwn = discharge(preB, preA);
+      expect(
+        [preOwn.missing, preOwn.stale, preOwn.balances],
+        `the pre-anchoring builder caught the own-header relocation (${shape}). It did not when CR-20 was measured, and the contrast depends on that.`,
+      ).toEqual([[], [], true]);
+    }
+  });
+
+  // CR-20(b)'s FAILING PATH, OVER SYNTHETIC LINES. The census case above is
+  // green today, and a census that has only ever seen unique tokens is
+  // consistent with a census that cannot count. This is the other half: two
+  // constructs with a BYTE-IDENTICAL header, one occurrence under each, and
+  // the census asserted to report that anchor as having TWO producers.
+  //
+  // WHY IT IS A PAIR RATHER THAN ONE ASSERTION. The two occurrences sharing an
+  // anchor is the DEFECT; the census reporting two producers is the DETECTION.
+  // Asserting only the first would describe CR-20(b) without showing anything
+  // catches it, and asserting only the second would count lines without
+  // showing what the count is about.
+  //
+  // THE PHRASING IS TAKEN FROM `UNBOUNDED_QUANTIFIERS` BY INDEX AND NEVER
+  // SPELLED, for the same reason the case above gives.
+  it("TWO identically-headed constructs share ONE anchor, and the census reports that anchor as having TWO producers", () => {
+    const phrasing = UNBOUNDED_QUANTIFIERS[2] ?? "";
+    expect(
+      phrasing.length,
+      "UNBOUNDED_QUANTIFIERS has no entry at index 2, so this fixture would run against an empty phrasing and pass having measured nothing. Non-vacuity before the rule.",
+    ).toBeGreaterThan(0);
+
+    // Two constructs, byte-identical headers, the same occurrence line under
+    // each. This is the shipped shape verification pass 9 exploited: it moved a
+    // table cell out of one identically-headed table and into another, 57 lines
+    // away and about a different operator, for a byte-identical key.
+    const header = 'describe("the same header, twice", () => {';
+    const cell = `  cell: "${phrasing}",`;
+    const twice: readonly string[] = [header, cell, "});", header, cell, "});"];
+
+    const occurrences = quantifierOccurrences(
+      twice,
+      twice.map((_, i) => i + 1),
+    );
+    expect(
+      occurrences.map((o) => o.line),
+      "the synthetic array does not carry exactly two declared-phrasing occurrences, one under each header, so this fixture is measuring something other than the shape it was written for.",
+    ).toEqual([2, 5]);
+
+    // THE DEFECT. Two occurrences under two DIFFERENT constructs, and one
+    // anchor between them.
+    const anchors = occurrences.map((o) => constructAnchorFor(twice, o.line));
+    expect(
+      anchors[1],
+      "the two identically-headed constructs resolved to DIFFERENT anchors, so this fixture no longer reproduces the ambiguous-token shape and the detection asserted below is being demonstrated against nothing.",
+    ).toBe(anchors[0]);
+
+    // THE DETECTION. The census names both producing lines, which is what makes
+    // the ambiguity LOUD instead of silent.
+    const census = anchorTokenCensus(twice);
+    expect(
+      [...(census.get(anchors[0] ?? "") ?? [])],
+      `the census did not report the shared anchor ${JSON.stringify(anchors[0])} as having TWO producers. An anchor with more than one producer names none of them, and a census that cannot count that is consistent with every anchor in this file being ambiguous and the case above being green anyway.`,
+    ).toEqual([1, 4]);
   });
 
   it("every clause carrying a DECLARED quantifier phrasing names a MEASURED bound", () => {
