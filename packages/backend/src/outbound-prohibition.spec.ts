@@ -9262,6 +9262,36 @@ const exemptionKeyFor = (
   return `${construct}${EXEMPTION_ANCHOR_SEP}${anchor} :: q${quantifierIndex}`;
 };
 
+/**
+ * THE SUPERSEDED KEY FORMAT, RETAINED AS A FIXTURE'S COUNTER-PROBE AND FOR
+ * NOTHING ELSE. THIS MUST NEVER BE USED BY LIVE CODE — it is the format CR-17
+ * falsified, kept here only so a fixture can demonstrate WHAT IT MISSED.
+ *
+ * It is `exemptionKeyFor` with the construct half removed: the masked normalized
+ * line the occurrence starts on, then the phrasing's own index. Under it, an
+ * occurrence relocated from one construct to another keeps the SAME key, so the
+ * relocation is invisible to all three discharge checks. That is the shape the
+ * verifier drove a fabricated hand-written bound through at 432 of 432 green.
+ *
+ * WHY THE OLD BUILDER IS KEPT RATHER THAN DESCRIBED. A fixture that shows the
+ * new builder catching a relocation is equally consistent with a builder that
+ * catches everything and with one that catches nothing that matters. Only
+ * running the identical relocation through the OLD builder and watching it NOT
+ * be caught tells those apart. Wave 34 established that probe-and-counter-probe
+ * shape for measured silences; this is the same shape applied to a mechanism.
+ */
+const preAnchoringExemptionKeyForFixtureOnly = (
+  lines: readonly string[],
+  lineNumber: number,
+  quantifierIndex: number,
+): string => {
+  const masked = maskQuantifiers(
+    normalizeGateLine(lines[lineNumber - 1] ?? ""),
+  );
+  const anchor = masked.length > 96 ? `${masked.slice(0, 96)}…` : masked;
+  return `${anchor} :: q${quantifierIndex}`;
+};
+
 /** Every occurrence of a declared phrasing in the joined form of a line set. */
 const quantifierOccurrences = (
   lines: readonly string[],
@@ -9881,6 +9911,180 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
         `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half is what names it — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
+  });
+
+  // CR-17's FAILING PATH, EXECUTED — the relocation the anchoring was built for,
+  // watched being caught, with the pre-anchoring builder watched MISSING the
+  // identical relocation one line over.
+  //
+  // WHY THIS EXISTS AS A PERMANENT FIXTURE. Verification pass 8 deleted the
+  // ASCII-table cell one exemption was written for, planted a fabricated
+  // hand-written bound 9,001 lines away outside all three exclusions, and
+  // measured 432 of 432 GREEN. Wave 36 folded a construct anchor into the key
+  // so that relocation would fail. A guard against relocation that has never
+  // been watched failing is the same species of unwatched assertion this file
+  // has spent nine waves removing — the verifier's own words — so the mutation
+  // is reproduced here over SYNTHETIC lines, in the shape the
+  // `extractDerivedBlock` case below already uses for failing paths: executed
+  // against a constructed array rather than by mutating the real file, so the
+  // assertion is permanent and the tree stays clean.
+  //
+  // WHAT IT PROVES AND WHAT IT DOES NOT, restating limit (5) verbatim: TWO
+  // OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN INTERCHANGEABLE, separated only
+  // by the positional `#N` ordinal, which is assigned by scan order rather than
+  // by line. This fixture proves the CROSS-CONSTRUCT case and NOT the general
+  // one. It does not close the relocation class, it does not widen limit (1)'s
+  // phrase list, it does not change limit (2)'s normalization, and it reaches
+  // none of the surfaces limit (3) leaves out.
+  //
+  // EVERY SYNTHETIC PHRASING IS TAKEN FROM `UNBOUNDED_QUANTIFIERS` BY INDEX AND
+  // NEVER SPELLED. This file's guard scans its own bytes, so a fixture that
+  // wrote the phrasing out would raise the very obligation it exists to test.
+  it("a CROSS-CONSTRUCT relocation yields a DIFFERENT anchored key and was INVISIBLE to the pre-anchoring one — the SAME-construct case is not covered here", () => {
+    // Index 2 is the phrasing the verifier's own mutation used. Interpolated,
+    // never written out, for the reason stated above.
+    const phrasing = UNBOUNDED_QUANTIFIERS[2] ?? "";
+    expect(
+      phrasing.length,
+      "UNBOUNDED_QUANTIFIERS has no entry at index 2, so this fixture would run against an empty phrasing and pass having measured nothing. Non-vacuity before the rule.",
+    ).toBeGreaterThan(0);
+
+    // ONE occurrence line, byte-identical in both arrays. What differs between
+    // them is only the CONSTRUCT it sits under: a declaration in the first, a
+    // fixture title in the second. The occurrence line is deliberately neither
+    // a comment nor a declaration nor a title, so it is not its own construct
+    // header and the backward scan has to leave it to find one.
+    const cell = `  cell: "${phrasing}",`;
+    const underDeclaration: readonly string[] = [
+      "const alphaTable = {",
+      cell,
+      "};",
+    ];
+    const underFixtureTitle: readonly string[] = [
+      'it("the beta case", () => {',
+      cell,
+      "});",
+    ];
+
+    // `surfaceExemptionKeys` in miniature, parameterised by the key builder so
+    // the probe and the counter-probe run the SAME computation and differ in
+    // exactly one thing. The ordinal logic is reproduced because a relocation
+    // that changed the ordinal rather than the key would be a different finding.
+    const keysUnder = (
+      builder: (
+        lines: readonly string[],
+        lineNumber: number,
+        quantifierIndex: number,
+      ) => string,
+      lines: readonly string[],
+    ): readonly string[] => {
+      const seen = new Map<string, number>();
+      return quantifierOccurrences(
+        lines,
+        lines.map((_, i) => i + 1),
+      ).map((o) => {
+        const base = builder(lines, o.line, o.quantifierIndex);
+        const n = (seen.get(base) ?? 0) + 1;
+        seen.set(base, n);
+        return n === 1 ? base : `${base} #${n}`;
+      });
+    };
+
+    // The three discharge checks, verbatim in form, over synthetic input.
+    const discharge = (
+      declared: readonly string[],
+      foundKeys: readonly string[],
+    ) => {
+      const declaredSet = new Set(declared);
+      return {
+        missing: foundKeys.filter((k) => !declaredSet.has(k)),
+        stale: declared.filter((k) => !foundKeys.includes(k)),
+        balances: foundKeys.length === declared.length,
+      };
+    };
+
+    // NON-VACUITY BEFORE THE RULE, IN BOTH ARRAYS. A synthetic array the scan
+    // finds nothing in would make every assertion below pass having read
+    // nothing, which is the failure mode this whole file is organised against.
+    const beforeKeys = keysUnder(exemptionKeyFor, underDeclaration);
+    const afterKeys = keysUnder(exemptionKeyFor, underFixtureTitle);
+    expect(
+      [beforeKeys.length, afterKeys.length],
+      "one of the two synthetic arrays carries no declared-phrasing occurrence at all. The interpolation or the normalization convention changed and this fixture is now measuring nothing.",
+    ).toEqual([1, 1]);
+
+    // THE PROBE. The same occurrence under two different constructs produces
+    // two different anchored keys.
+    const beforeKey = beforeKeys[0] ?? "";
+    const afterKey = afterKeys[0] ?? "";
+    expect(
+      afterKey,
+      `the anchored key did NOT change when the occurrence moved from one construct to another.\n  under the declaration : ${JSON.stringify(beforeKey)}\n  under the title       : ${JSON.stringify(afterKey)}\nThat is the CR-17 shape: an exemption written for one construct discharged by an occurrence sitting under a different one. \`constructAnchorFor\` has stopped resolving the enclosing construct — check its recognisers before checking anything else.`,
+    ).not.toBe(beforeKey);
+    // And the difference is in the CONSTRUCT half specifically, not in the line
+    // half, which is byte-identical by construction.
+    const constructHalf = (k: string): string =>
+      k.slice(0, k.indexOf(EXEMPTION_ANCHOR_SEP));
+    const lineHalf = (k: string): string =>
+      k.slice(k.indexOf(EXEMPTION_ANCHOR_SEP) + EXEMPTION_ANCHOR_SEP.length);
+    expect(
+      lineHalf(afterKey),
+      "the LINE halves of the two keys differ, so this fixture is no longer isolating the construct anchor — the occurrence line is supposed to be byte-identical in both arrays.",
+    ).toBe(lineHalf(beforeKey));
+    expect(
+      constructHalf(afterKey),
+      "the CONSTRUCT halves of the two keys are the same, so the anchor is not resolving the enclosing construct.",
+    ).not.toBe(constructHalf(beforeKey));
+
+    // THE OUTCOME, WHICH IS WHAT ACTUALLY MATTERS. A different key is only the
+    // mechanism. With a map holding exactly the ORIGINAL key, the relocated
+    // array must raise an unexcused occurrence AND leave the entry matching
+    // nothing.
+    const declared = [beforeKey];
+    const relocated = discharge(declared, afterKeys);
+    expect(
+      relocated.missing,
+      "the relocated occurrence was DISCHARGED by an exemption written for its original construct. That is CR-17 exactly.",
+    ).not.toEqual([]);
+    expect(
+      relocated.stale,
+      "the exemption written for the ORIGINAL construct still matches something after the occurrence moved away from it.",
+    ).not.toEqual([]);
+    // AND THE COUNT STILL BALANCES, WHICH IS THE POINT. One occurrence removed,
+    // one added: the totals agree. That agreement is what let the original
+    // bypass through, so it is asserted here rather than left for a later
+    // reader to assume the count would have caught it.
+    expect(
+      relocated.balances,
+      "the count equality no longer balances across the relocation, so this fixture is no longer reproducing the shape that bypassed the gate — the original bypass balanced.",
+    ).toBe(true);
+
+    // THE COUNTER-PROBE. The identical relocation under the SUPERSEDED builder,
+    // asserted to be INVISIBLE. Without this half the fixture shows only that
+    // the new builder catches something; with it, the fixture shows that the
+    // anchoring is what makes the difference.
+    const preBefore = keysUnder(
+      preAnchoringExemptionKeyForFixtureOnly,
+      underDeclaration,
+    );
+    const preAfter = keysUnder(
+      preAnchoringExemptionKeyForFixtureOnly,
+      underFixtureTitle,
+    );
+    expect(
+      preAfter,
+      "the PRE-ANCHORING builder produced different keys across the relocation. It is retained precisely because it did NOT, and if it now does, this counter-probe no longer demonstrates the contrast it was written for.",
+    ).toEqual(preBefore);
+    const preRelocated = discharge(preBefore, preAfter);
+    expect(
+      preRelocated.missing,
+      "the pre-anchoring builder raised an unexcused occurrence for the relocation. It did not when CR-17 was measured, and the counter-probe depends on that.",
+    ).toEqual([]);
+    expect(
+      preRelocated.stale,
+      "the pre-anchoring builder left the original entry matching nothing. It did not when CR-17 was measured.",
+    ).toEqual([]);
+    expect(preRelocated.balances).toBe(true);
   });
 
   it("every clause carrying a DECLARED quantifier phrasing names a MEASURED bound", () => {
