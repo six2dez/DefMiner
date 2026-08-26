@@ -800,8 +800,15 @@
 //    recorded: both carry an authored residual, wave 27 derives the
 //    replacement and wave 28 reconciles both requirement-tier ledgers to
 //    it in ONE move, and another hand-authored copy would be another
-//    place the next drift can start. CORE-11's box stays `[ ]`; wave 28
-//    owns the flip and only against the derived text. NOTHING LEAKED:
+//    place the next drift can start. [A SENTENCE STOOD HERE STATING
+//    CORE-11's BOX STATE AND NAMING A LATER WAVE AS THE OWNER OF THE
+//    CHANGE. DELETED 2026-08-26 (wave 41, WINDOWS 41), under the same
+//    pointer-not-a-bound disposition wave 33 applied to the paragraph a
+//    hundred lines below: it was unmarked, present-tense, and its owner
+//    clause was false on its own terms — no wave ever owned that change.
+//    The authoritative surfaces are `CORE11_BOX_EXPECTED` below and the
+//    CORE-11 row in `.planning/REQUIREMENTS.md`; this block now POINTS at
+//    them and asserts nothing.] NOTHING LEAKED:
 //    WR-27 is a PROSPECTIVE BLINDNESS in a test-only gate, no outbound
 //    call exists in any non-spec source under either root, the gate runs
 //    green over the real tree — 23 files, ZERO violations — inside a
@@ -898,9 +905,16 @@
 //    files, ZERO violations — inside a 1148-test suite, with `pnpm
 //    check:bundle` reporting the shipped bundle's entire import set as
 //    one specifier, `crypto`. `REQUIREMENTS.md` and `STATE.md` stay
-//    deliberately untouched and CORE-11's box stays `[ ]`, for the reason
-//    waves 24 and 25 recorded: wave 27 derives the replacement text and
-//    wave 28 reconciles both requirement-tier ledgers to it in ONE move.
+//    deliberately untouched, for the reason waves 24 and 25 recorded:
+//    wave 27 derives the replacement text and wave 28 reconciles both
+//    requirement-tier ledgers to it in ONE move. [A CLAUSE STATING
+//    CORE-11's BOX STATE STOOD INSIDE THIS SENTENCE AND IS DELETED,
+//    2026-08-26 (wave 41, WINDOWS 41), for the same reason as the deletion
+//    in the wave-27 block above. The ledger-reconciliation clause is LEFT
+//    STANDING: it is the same dated record of intent the wave-27 block
+//    already carries, it names no box state, and reconciling the two
+//    ledgers is a thing that wave did. The authoritative surfaces are
+//    named in the note directly below.]
 //
 //    CORE-11's BOX IS NOT STATED HERE, AS OF 2026-08-25 (wave 33, WR-38). A
 //    paragraph asserting the box was NOW MARKED COMPLETE stood at this spot
@@ -908,13 +922,25 @@
 //    lines below it, and a header is the first thing a reader and a later
 //    planner meet — the worst available place to keep a second copy of a fact
 //    that has already been flipped early and reverted twice, at `e7cc4b6`
-//    and `faca607`. THE BOX'S STATE IS NOW STATED IN EXACTLY TWO PLACES:
-//    the CORE-11 row in `.planning/REQUIREMENTS.md`, and
-//    `CORE11_BOX_EXPECTED` below, which pins that row by bytes. This
-//    paragraph POINTS at both and asserts neither, so the contradiction
-//    cannot recur — one side of it no longer exists. The item-by-item
-//    discharge table is in `01-28-SUMMARY.md`; the table is the evidence and
-//    the checkbox is not.
+//    and `faca607`. THE SITE COUNT THIS PARAGRAPH USED TO STATE HERE WAS
+//    FALSE, AND IS REPLACED 2026-08-26 (wave 41, WINDOWS 41). It claimed a
+//    two-site total. Verification pass 9 measured FOUR sites stating the
+//    box's state and found all four in agreement — so there was no
+//    contradiction of FACT, and this was never what held the box where it
+//    is — but a false count standing on a reader surface is exactly the
+//    class the third criterion is about. NO COUNT REPLACES IT. The
+//    AUTHORITATIVE surfaces are the CORE-11 row in
+//    `.planning/REQUIREMENTS.md` and `CORE11_BOX_EXPECTED` below, which
+//    pins that row BY BYTES. WHAT THIS FILE CANNOT SEE IS NAMED RATHER
+//    THAN SILENTLY COUNTED: the ledger row lives in a different file, and
+//    no mechanism in this file enumerates the places IT states the box's
+//    state; `.planning/STATE.md` is governed by the pointer-not-a-bound
+//    rule below with no mechanical check at all. A count stated wider than
+//    the grep that produced it is the defect being corrected here. This
+//    paragraph POINTS at both authoritative surfaces and asserts nothing
+//    about the box's state itself, so the contradiction cannot recur. The
+//    item-by-item discharge table is in `01-28-SUMMARY.md`; the table is
+//    the evidence and the checkbox is not.
 //    ========================================================================
 // 3. THE FILE WALK below duplicates `store/sql-discipline.spec.ts`'s private walk
 //    by about fifteen lines, and the wrapper-unwrapping helper duplicates the one
