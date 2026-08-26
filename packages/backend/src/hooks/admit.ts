@@ -77,30 +77,49 @@ export const DEFAULT_ADMIT_CONFIG: AdmitConfig = {
   maxBytes: PASSIVE_MAX_BYTES,
 };
 
-const SCRIPTISH = [
-  "javascript",
-  "ecmascript",
+/** WHATWG MIME Sniffing's JavaScript MIME type essences, plus `text/js` which
+ *  the Phase 0 recorder accepted and this plugin already supports. Parameters
+ *  are deliberately excluded before matching: a boundary or profile value is
+ *  not the response's media type. */
+const SCRIPTISH_MEDIA_TYPES = [
+  "application/ecmascript",
+  "application/javascript",
+  "application/x-ecmascript",
   "application/x-javascript",
+  "text/ecmascript",
+  "text/javascript",
+  "text/javascript1.0",
+  "text/javascript1.1",
+  "text/javascript1.2",
+  "text/javascript1.3",
+  "text/javascript1.4",
+  "text/javascript1.5",
   "text/js",
-  "module",
-];
+  "text/jscript",
+  "text/livescript",
+  "text/x-ecmascript",
+  "text/x-javascript",
+] as const;
 
 /**
  * Content type first, URL extension second.
  *
- * Substring matching, not a pattern: see the ReDoS note in this file's header.
- * The extension check strips the fragment AND the query before looking at the
- * suffix, or `/app.js?v=2` would miss — and a cache-busting query is common
- * enough on exactly the bundles this tool exists to read.
+ * Exact MIME-essence matching, not a pattern: see the ReDoS note in this file's
+ * header. The extension check strips the fragment AND the query before looking
+ * at the suffix, or `/app.js?v=2` would miss — and a cache-busting query is
+ * common enough on exactly the bundles this tool exists to read.
  */
 export function isScriptish(
   contentType: string | null,
   url: string | null,
 ): boolean {
   if (contentType) {
-    const ct = String(contentType).toLowerCase();
-    for (const needle of SCRIPTISH) {
-      if (ct.indexOf(needle) !== -1) return true;
+    const essence = String(contentType)
+      .split(";", 1)[0]
+      .trim()
+      .toLowerCase();
+    for (const mediaType of SCRIPTISH_MEDIA_TYPES) {
+      if (essence === mediaType) return true;
     }
   }
   if (url) {
