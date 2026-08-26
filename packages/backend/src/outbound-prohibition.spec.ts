@@ -9255,6 +9255,30 @@ const maskQuantifiers = (text: string): string => {
  * silently by the builder itself` while NOTHING read the value — `grep` found
  * the declaration, one docblock mention and the return, and not one `expect`
  * (CR-21, verification pass 9).
+ *
+ * WR-55, 2026-08-26, wave 43. THE BOUND ABOVE IS CORRECT AND IT IS NOT THE
+ * WHOLE STORY, SO THE EXECUTED BOUND IS ADDED BESIDE IT RATHER THAN INSTEAD OF
+ * IT. This value is returned by exactly ONE route: `constructAnchorFor`'s
+ * backward scan running off the top of the file having accepted no line. Line 1
+ * of this file is a `//` comment with nothing above it, and the FIFTH
+ * recogniser — a line comment whose predecessor is not a line comment — accepts
+ * it unconditionally, so `constructTokenOf` returns a non-null token for it and
+ * the forward walk from `head = 1` returns on its first iteration for every
+ * line from 2 downward. MEASURED IN THIS SESSION by evaluating the SHIPPED
+ * builder at each line of the file in turn — a temporary case inside the gate's
+ * own `describe`, run and then removed — the set of lines resolving to this
+ * value is exactly `[1]`, out of 11,417 elements of `gateLines` (a `wc -l` of
+ * 11,416 over a file ending in a newline; both figures are live and move with
+ * every edit, so they are dated here rather than pinned). THE DEPENDENCE WAS
+ * WATCHED, NOT ASSUMED: blanking line 1 and re-running the same sweep grew that
+ * set from `[1]` to `[1, 2, 3]`, which is what makes the result a property of
+ * LINE 1's SHAPE rather than of the builder. So the two cases below are GREEN
+ * BY CONSTRUCTION over each surface line except that one. THEY ARE KEPT
+ * ANYWAY, and for a reason that is not sentiment: a declared phrasing landing
+ * on line 1, or line 1 ceasing to be a nameable `//` comment, are both edits a
+ * person can make in one commit, and either one puts the sentinel back in
+ * reach. This is not evidence about the other surface lines and is not offered
+ * as any.
  */
 const NO_PRECEDING_CONSTRUCT = "!NO-PRECEDING-CONSTRUCT!";
 
@@ -10644,6 +10668,24 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // produced by the surface is reached by the null-anchor case above instead;
   // a line inside one of the three exclusions is reached by neither.
   //
+  // WR-55, 2026-08-26, wave 43. THAT STATEMENT IS CORRECT AND IT IS NOT THE
+  // EXECUTED BOUND, WHICH IS NARROWER STILL AND IS ADDED HERE BESIDE IT. The
+  // sentinel is returned only when the backward scan exhausts the file having
+  // accepted no line. Line 1 is a `//` comment with nothing above it and the
+  // FIFTH recogniser — a line comment whose predecessor is not one — accepts it
+  // unconditionally, so from line 2 downward the forward walk returns on its
+  // first iteration. MEASURED IN THIS SESSION with the SHIPPED builder at each
+  // line of the file, by a temporary case inside this same `describe` that was
+  // run and then removed: exactly ONE line resolves to the sentinel, and it is
+  // LINE 1, out of 11,417 `gateLines` elements (`wc -l` 11,416; both live
+  // figures, dated rather than pinned, because each edit moves them). The
+  // dependence was WATCHED rather than cited — blanking line 1 grew the
+  // resolving set to `[1, 2, 3]`. THIS CASE IS THEREFORE GREEN BY CONSTRUCTION
+  // over each surface line except line 1, and it is KEPT because a declared
+  // phrasing landing on line 1, or line 1 ceasing to be a nameable `//`
+  // comment, are both one-commit edits that put the sentinel back in reach.
+  // None of this is evidence about the other surface lines.
+  //
   // GREEN ON ARRIVAL, AND THAT IS WHY IT WAS WATCHED FAILING. Re-measured at
   // wave 40 over the scanned surface: 29 occurrences, 0 resolving to the
   // sentinel. It guards the next sentence somebody writes rather than a defect
@@ -10726,7 +10768,16 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // occurrence under one of them was discharged just as well by an occurrence
   // under another — verification pass 9 moved a shipped table cell between two
   // identically-headed tables, 58 lines apart and about a different operator,
-  // for a byte-identical key at 434 of 434 green.
+  // for a byte-identical key at 434 of 434 green. THAT 58 IS MEASURED IN THE
+  // UNMODIFIED FRAME — the two-line cell still in place at its source while the
+  // destination is counted where it sits in the file as shipped. The frame is
+  // named because the same move measures 57 in the delete-first frame and both
+  // figures are correct; see the note beside the 57 further down, and
+  // `01-39-SUMMARY.md:531` and `:931`, which record the pair and its cause.
+  // Located by text TODAY, 2026-08-26 wave 43: the source table's header sits
+  // at line 299 and the destination table's at line 361, with the moved cell at
+  // 304..305 — a HISTORICAL measurement re-checked against a live file, not a
+  // live one, and it is written with its date so a reader can tell which.
   //
   // THE CENSUS IS ASSERTED FROM BOTH SIDES ON PURPOSE. The DECLARED map and
   // what the SURFACE produces are the same set today, and asserting only one
@@ -10741,8 +10792,33 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       census.size,
       "the anchor census is EMPTY, so the rule below compares every anchor against nothing and passes by having counted no line at all. Either the file was read as empty or `constructTokenOf` stopped returning tokens.",
     ).toBeGreaterThan(0);
-    const constructHalf = (k: string): string =>
-      k.slice(0, k.indexOf(EXEMPTION_ANCHOR_SEP));
+    // WR-58, 2026-08-26, wave 43. THE SPLIT GUARDS ITS OWN INPUT. Unguarded,
+    // `k.slice(0, k.indexOf(SEP))` on a key carrying NO separator answers
+    // `indexOf` -1 and silently yields the key minus its last character — a
+    // NEAR-COMPLETE key, which then enters `inUse`, finds zero producers and
+    // fails this case with a message about AMBIGUITY when the defect is
+    // MALFORMATION. A correct red for the wrong reason costs the reader the
+    // diagnosis. The prefix case above guards exactly this on its own inputs;
+    // this call site reads the same declared keys and now guards it too.
+    //
+    // WHAT THIS GUARD COVERS, AND WHAT IT DOES NOT. It covers THIS call site.
+    // The SECOND `constructHalf`, declared inside the cross-construct fixture
+    // further down, carries the identical expression and is left UNGUARDED
+    // deliberately: MEASURED in this session, its inputs come only from
+    // `exemptionKeyFor`, which interpolates EXEMPTION_ANCHOR_SEP
+    // unconditionally, so a separator-less key cannot reach it while that stays
+    // true — which is a fact about today's inputs, not about the expression.
+    // WR-57, which proposes consolidating the two declarations, was recorded by
+    // the reviewer and NOT re-executed by verification pass 10; it is
+    // UNADJUDICATED and is NOT closed here.
+    const constructHalf = (k: string): string => {
+      const at = k.indexOf(EXEMPTION_ANCHOR_SEP);
+      if (at < 0)
+        throw new Error(
+          `exemption key ${JSON.stringify(k)} carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator, so it has no construct half. This is MALFORMATION, not ambiguity: without this check the split would answer the key minus its last character and this case would report an anchor with zero producers. Rebuild the entry with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
+        );
+      return k.slice(0, at);
+    };
     const inUse = [
       ...new Set([
         ...Object.keys(HEADER_QUANTIFIER_EXEMPTIONS).map(constructHalf),
@@ -11138,7 +11214,17 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // Two constructs, byte-identical headers, the same occurrence line under
     // each. This is the shipped shape verification pass 9 exploited: it moved a
     // table cell out of one identically-headed table and into another, 57 lines
-    // away and about a different operator, for a byte-identical key.
+    // away and about a different operator, for a byte-identical key. THAT 57 IS
+    // MEASURED IN THE DELETE-FIRST FRAME, and naming the frame is the whole of
+    // this correction — wave 39 moved the two-line cell as a unit, deleting it
+    // before computing the insertion point, so the
+    // destination shifted up while the source stayed fixed. The same move
+    // measures 58 in the unmodified frame, which is the figure beside the other
+    // statement of it further up; NEITHER NUMBER IS WRONG, they are one move
+    // counted in two frames, and the frame is what each site was missing.
+    // Recorded in `01-39-SUMMARY.md:531` and in its discrepancy row `D-1` at
+    // `:931`. Both are HISTORICAL measurements; today, 2026-08-26 wave 43, the
+    // two identically-headed table headers sit at lines 299 and 361.
     const header = 'describe("the same header, twice", () => {';
     const cell = `  cell: "${phrasing}",`;
     const twice: readonly string[] = [header, cell, "});", header, cell, "});"];
