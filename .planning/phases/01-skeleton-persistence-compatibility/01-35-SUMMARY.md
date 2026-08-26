@@ -451,3 +451,11 @@ CORE-11 is `[x]` against a bar that is stated, reachable and discharged by execu
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+- All four production commits present in `git log --all`: `e47ffdd`, `9adb167`, `f5652a1`, `996c077`.
+- All four modified files present on disk.
+- CORE-11's box and `CORE11_BOX_EXPECTED` both read `[x]` — one occurrence each, agreeing.
+- `git show --stat f5652a1` confirms both moved in the SAME commit: 2 files, 2 insertions, 2 deletions.
+- No stubs, no skipped tests, no unrun `<verify>`: this plan ships documentation and one constant; every criterion row was executed and every mutation was watched.
