@@ -10060,6 +10060,119 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       "the scanned surface is EMPTY: the three exclusions between them cover the whole file. The rule below would pass having read nothing.",
     ).toBeGreaterThan(1000);
   });
+  // CR-22, 2026-08-26, wave 42. THE INTERCHANGEABILITY RESIDUAL IS THE ANCHOR'S
+  // SHADOW, AND THIS IS THE PIN OVER IT.
+  //
+  // WHAT WAS PUBLISHED AND WHY IT WAS THE WRONG QUANTITY. Limit (5) and the
+  // `constructAnchorFor` docblock both closed on the maximum distance from a
+  // shipped occurrence to its anchor. That number is correct and it has been
+  // re-measured three times. It is not the residual. Distance from an
+  // occurrence to its anchor is a fact about where the 29 shipped sentences
+  // happen to SIT. The residual is the width of the anchor's SHADOW — the set
+  // of surface lines that resolve to the SAME anchor — because any two lines in
+  // one shadow produce the same construct half, so an exemption written for one
+  // is discharged just as well by an occurrence at the other. Verification pass
+  // 10 measured the shadow with the live builder and moved the occurrence at
+  // the wrapped table cell 514 lines and then 1,129 lines, both times for a
+  // byte-identical key at 439 of 439 green, with the entry's stated reason false
+  // in both new homes.
+  //
+  // WHY THE CENSUS BELOW CANNOT REACH THIS, STATED SO THE TWO ARE NOT CONFUSED.
+  // The uniqueness census asserts that an anchor IN USE has exactly ONE PRODUCER
+  // LINE. The header row this shadow belongs to IS one line. A shadow is wide
+  // not because two lines produce the anchor but because 574 lines FIND it, and
+  // that is a different measurement needing a different case.
+  //
+  // WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. An upper bound hides a
+  // shadow that SHRANK, and a shadow that shrank is information about this
+  // file's recogniser geometry that this gate should not discard in silence; an
+  // exact equality makes both directions loud.
+  //
+  // THIS CASE'S REACH, STATED NARROWLY AND IN ITS OWN BYTES.
+  //   (1) It bounds the MAXIMUM shadow over SURFACE_LINES under the grouping
+  //       named above, and nothing wider.
+  //   (2) IT DOES NOT BOUND A NON-MAXIMAL SHADOW. The second-widest measured at
+  //       283 surface lines at wave 42, and it may grow to 573 without this case
+  //       reporting a thing.
+  //   (3) IT REACHES NO LINE INSIDE THE THREE EXCLUSIONS. SURFACE_LINES is the
+  //       scanned surface and the excluded spans are not in it.
+  //   (4) IT DOES NOT PREVENT A RELOCATION INSIDE A SHADOW. It makes the SIZE of
+  //       the region that permits one measured and drift-detectable. Pass 10's
+  //       relocation was re-run at wave 42 and stayed green; see the paragraph
+  //       below this case.
+  //   (5) IT DOES NOT MAKE THE ANCHOR A CONTAINMENT. The anchor is still the
+  //       nearest preceding line the five recognisers accept — a proximity. No
+  //       syntax tree, parser, compiler API or frame identity is computed here
+  //       or anywhere in wave 42's diff.
+  //
+  // AND WHY ONLY THE MAXIMUM IS PINNED, WHICH IS A DISCLOSURE AND NOT AN EXCUSE.
+  // Pinning the whole distribution would put a number under every one of the top
+  // shadows, and each of those numbers would have to move on ordinary prose
+  // edits inside a region hundreds of lines wide. A pin that must be re-derived
+  // on routine edits is a pin nobody trusts and everybody re-derives without
+  // reading. So the maximum is pinned here and the distribution is recorded as
+  // evidence in `01-42-SUMMARY.md` instead.
+  //
+  // MEASURED AT WAVE 42 with the shipped builder from inside this describe over
+  // all 8,846 surface lines. The widest shadow is the header row at `:417`,
+  // `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`, reached by
+  // recogniser (4). It claims raw lines 419..1574 — 1,156 raw lines — of which
+  // exactly the 582 lines the machine-owned span covers (its BEGIN sentinel to
+  // its END sentinel) are removed by exclusion one, leaving 1156 - 582 = 574
+  // surface lines. EVERY surface line in that range resolves to it, because
+  // between the rule at `:418` and the imports no line at all is accepted by any
+  // of the five recognisers. It already holds FOUR shipped occurrences.
+  const WIDEST_ANCHOR_SHADOW = 574;
+
+  it("the WIDEST ANCHOR SHADOW over the scanned surface is PINNED — an anchor's shadow is the set of lines interchangeable under it, so the shadow's width IS the residual and the occurrence-to-anchor distance is not", () => {
+    // EXHAUSTIVE BY CONSTRUCTION. Every element of SURFACE_LINES is read. There
+    // is no sampling, no early exit and no break: a maximum computed over part
+    // of the surface would state a reach it did not execute, which is the defect
+    // this whole file is organised against.
+    const shadows = new Map<string, number[]>();
+    for (const n of SURFACE_LINES) {
+      const token = constructAnchorFor(gateLines, n);
+      const at = shadows.get(token);
+      if (at === undefined) shadows.set(token, [n]);
+      else at.push(n);
+    }
+
+    // NON-VACUITY BEFORE THE RULE, ON FOUR COUNTS, EACH WITH ITS OWN MESSAGE.
+    expect(
+      SURFACE_LINES.length,
+      "the scanned surface is too small for this measurement to mean anything: the shadow grouping below would run over a handful of lines and its maximum would be a number about nothing. Check the three exclusions before touching the pin.",
+    ).toBeGreaterThan(1000);
+    expect(
+      shadows.size,
+      "the shadow map is EMPTY: no surface line resolved to any anchor at all. The rule below would then take a maximum over nothing and pass having measured nothing.",
+    ).toBeGreaterThan(0);
+    expect(
+      shadows.size,
+      `every surface line resolved to a SINGLE anchor (${shadows.size} distinct), so the maximum below is just the surface size and this case would pass having measured a COLLAPSE rather than a shadow. Something has stopped the recognisers accepting lines they used to accept.`,
+    ).toBeGreaterThan(1);
+
+    let widest = "";
+    let widestSize = 0;
+    for (const [token, ns] of shadows) {
+      if (ns.length > widestSize) {
+        widest = token;
+        widestSize = ns.length;
+      }
+    }
+    expect(
+      widestSize,
+      "the widest shadow measured ZERO lines, which cannot happen while the map is non-empty. The grouping above is broken, not the pin.",
+    ).toBeGreaterThan(0);
+
+    // THE RULE.
+    const ns = shadows.get(widest) ?? [];
+    const lo = ns[0] ?? -1;
+    const hi = ns[ns.length - 1] ?? -1;
+    expect(
+      widestSize,
+      `THE WIDEST ANCHOR SHADOW IS NOW ${widestSize} SURFACE LINES AND THIS GATE PINS IT AT ${WIDEST_ANCHOR_SHADOW}. The anchor that owns it is ${JSON.stringify(widest)}, spanning raw lines ${lo}..${hi}. A SHADOW THAT GREW IS A RESIDUAL THAT GREW: every one of those ${widestSize} lines now produces the same construct half, so an exemption written for any one of them is discharged just as well by an occurrence at any other, and the reach this file publishes for its anchoring is that wide. THE CORRECT RESPONSES ARE (a) re-site or rewrite whatever widened it, or (b) re-derive this pin ONLY against growth attributed LINE BY LINE to lines the same commit added, with the diff shown. Moving the pin to fit a number it cannot account for is decoration that reports green, and it is the exact defect this file has spent eleven waves removing. If the number FELL, that is equally reportable: the equality is exact so that a shadow which shrank is visible too, and the reason belongs in the commit that shrank it.`,
+    ).toBe(WIDEST_ANCHOR_SHADOW);
+  });
 
   // WR-54, 2026-08-26, wave 41. THE WIDTH ITSELF, PINNED. Everything above this
   // point checks that each exclusion resolves to SOMETHING, that the something
