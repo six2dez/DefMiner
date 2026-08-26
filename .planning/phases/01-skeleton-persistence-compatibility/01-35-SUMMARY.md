@@ -100,4 +100,43 @@ The narrowness, in the same passage:
 
 > It does not claim the gate catches everything; it claims the gate's DESCRIPTION OF ITSELF is derived, drift-detectable and singular, which is the only promise a static gate over an open language can actually keep. CR-15 ... CR-16 ... and the twenty-six measured silences that span now carries are NAMED RESIDUALS UNDER THIS NEW BAR: disclosed and unclosed, not defects it waves away and not shapes it has closed. The class stays open because the space of JavaScript spellings is open.
 
+## THE BYTE COMPARISONS, RUN BEFORE THE FIRST CRITERION ROW WAS WRITTEN
+
+Timestamped and executed BEFORE any conclusion was drafted, so no consistency check ran after the conclusions it was supposed to constrain.
+
+```
+TS=2026-08-26T01:55:13Z
+.planning/REQUIREMENTS.md
+  lines=580 entries=61 sha256=15e860382fddc6a291f5fa58cfdb8345ffd4c35cecb97aac5ec56eae38a3bbda
+packages/backend/src/outbound-prohibition.spec.ts
+  lines=580 entries=61 sha256=15e860382fddc6a291f5fa58cfdb8345ffd4c35cecb97aac5ec56eae38a3bbda
+```
+
+And the GENERATED form, measured by importing `deriveResidual` and `RESOLVER_REGISTRY` from the gate file itself:
+
+```
+GENERATED deriveResidual(RESOLVER_REGISTRY)
+  lines=580 entries=61 sha256=15e860382fddc6a291f5fa58cfdb8345ffd4c35cecb97aac5ec56eae38a3bbda
+```
+
+**THE HASHING CONVENTION, NAMED SO NOBODY RE-DERIVES IT.** The digest reproduces only when the extracted span is hashed WITHOUT a trailing newline — that is what `extractDerivedBlock` returns, since it joins the lines strictly between the two sentinel lines. A shell extractor that leaves the trailing newline on hashes to something else and the disagreement looks like drift.
+
+Re-measured at the end of the task, after the box flip and both pointer amendments: unchanged, all three at `15e86038…`, and `pnpm test` green at 31 files / 1372 tests.
+
+## THE THREE-ROW DISCHARGE TABLE
+
+In `01-32-SUMMARY.md`'s column shape — one row per CRITERION, not one per enumerated clause. The superseded eight-row enumerated-surface discharge (the one plan 01-19 flipped this box against and `faca607` reverted) is named here EXACTLY ONCE, as context showing which bar changed; it was not re-run and it is not the acceptance test.
+
+| Criterion | Executed evidence | Artifact measured against | Mutation that proved the evidence live | Verdict |
+| --- | --- | --- | --- | --- |
+| (1) DERIVED | Both shipped spans extracted from the files' own bytes and hashed: 580 lines / 61 entries / sha256 `15e86038…`, identical to each other AND to the generated form. Both one-entry-per-registry-row cases green. | `deriveResidual(RESOLVER_REGISTRY)`; the gate-header span; the `.planning/REQUIREMENTS.md` span | **M1** — one character changed in `RESOLVER_REGISTRY[0].clause` (line 4140), a field `deriveResidual` emits. BOTH byte comparisons went red at once. | ✓ |
+| (2) DRIFT-DETECTABLE | Each shipped copy is guarded by its OWN byte comparison, and each was driven red ALONE while the other stayed green. | The two byte-equality cases, one per copy | **M2** (gate-header copy, line 1010) → only the gate-header comparison red. **M4** (ledger copy, line 150) → only the ledger comparison red. Executed separately, never combined. | ✓ |
+| (3) THE SOLE BOUND | Four checks, all executed — see the section below. | Wave 33's whole-file wrap-tolerant quantifier guard, its three anchored exclusions and both pinned counts; the four reader surfaces | **M3** — a declared phrasing re-planted outside all three exclusions; the guard named the line and the phrasing index and went red. | ✓ (scoped — verbatim below) |
+
+**ROW 3's VERDICT, QUOTED VERBATIM** as it stands in `.planning/REQUIREMENTS.md`:
+
+> ✓ (scoped: met UP TO THE GUARD'S PHRASE-LIST REACH UNDER ITS NAMED NORMALIZATION, on the surfaces and spellings a mechanism can see, with BOTH classes of unreached surface named — CLASS ONE, UNGUARDED FILES: `.planning/STATE.md` and `.planning/WINDOWS.md`, reached by NO mechanical comparison at all, so the pointer-not-a-bound rule remains a prohibition with no check for those two; CLASS TWO, UNDECLARED SPELLINGS INSIDE THE GUARDED FILES: wave 33's guard is a PHRASE LIST over BYTES under one named normalization and says so itself, so a hand-written bound spelled in words it does not declare stands in the gate file and passes all four checks unseen)
+
+The scope is part of the pass, not a footnote to it. An unqualified `✓` on row 3 would have flipped this box on evidence strictly narrower than the criterion it discharges — a stated reach exceeding an executed reach, which is this phase's signature defect arriving inside the fix for exactly that defect.
+
 <!-- gsd:write-continue -->
