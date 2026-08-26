@@ -10020,18 +10020,10 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // entries, and — since wave 43 — each construct's OPENING line by its own
   // full text as well.
   //
-  // CR-23, 2026-08-26, wave 43. THIS PARAGRAPH USED TO READ "each locator
-  // proved to match exactly ONE line before it is used", and that was not true
-  // of each locator the case uses. ENUMERATED IN THIS SESSION, the case resolves
-  // lines through SEVEN locator expressions. FOUR are proved to match exactly
-  // one line before use, each behind its own hit count and its own failure
-  // message: the registry's full-line CLOSER, the nine live
-  // UNBOUNDED_QUANTIFIERS entry literals, the registry's full-line OPENER and
-  // the list's full-line OPENER. THREE ARE NOT PROVED, and are no longer
-  // claimed to be: `EXCLUSIONS`' own two opening locators, which are PREFIX
-  // matchers, and CLOSES_FROZEN_ARRAY, which is the scan under test rather than
-  // a locator over it. At wave 43's arrival the case used FIVE locator
-  // expressions of which TWO were proved.
+  // CR-23, 2026-08-26, waves 43 and 45. Endpoint VALUES resolved through prefix
+  // matchers are pinned by independent full-line equalities: registry/list
+  // openings and sentinel boundaries. PREFIX MATCHERS remain non-exact;
+  // CLOSES_FROZEN_ARRAY stays the scan under test. Unnamed endpoints are not pinned.
   //
   // THE PREFIX MATCHERS ARE LEFT AS THEY ARE, ON PURPOSE. A prefix matcher is
   // satisfied by a LONGER IDENTIFIER: a declaration named for the registry with
@@ -10096,6 +10088,29 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       },
     ];
   })();
+
+  it("exclusion one's sentinel endpoints land on the sentinels' own unique full lines", () => {
+    const beginHits = gateLines.filter((line) => line === DERIVED_BEGIN).length;
+    expect(
+      beginHits,
+      `the full-line locator ${JSON.stringify(DERIVED_BEGIN)} matches ${beginHits} line(s) of ${GATE_FILE}, not exactly one. At zero the endpoint pin would compare against no sentinel; above one it would resolve whichever duplicate came first. Restore one machine-owned opening sentinel before trusting the pin.`,
+    ).toBe(1);
+    const endHits = gateLines.filter((line) => line === DERIVED_END).length;
+    expect(
+      endHits,
+      `the full-line locator ${JSON.stringify(DERIVED_END)} matches ${endHits} line(s) of ${GATE_FILE}, not exactly one. At zero the endpoint pin would compare against no sentinel; above one it would resolve whichever duplicate came first. Restore one machine-owned closing sentinel before trusting the pin.`,
+    ).toBe(1);
+    const beginLine = lineOf((line) => line === DERIVED_BEGIN);
+    const endLine = lineOf((line) => line === DERIVED_END);
+    expect(
+      EXCLUSIONS[0].from,
+      `exclusion one's realized FROM endpoint is line ${EXCLUSIONS[0].from}, but its opening sentinel's own full line is ${beginLine} — a gap of ${EXCLUSIONS[0].from - beginLine} line(s). A slide of this endpoint moves the largest exclusion and can silently remove pre-existing lines from what the gate scans. Restore the prefix locator's intended landing; do not move this independent pin to fit it.`,
+    ).toBe(beginLine);
+    expect(
+      EXCLUSIONS[0].to,
+      `exclusion one's realized TO endpoint is line ${EXCLUSIONS[0].to}, but its closing sentinel's own full line is ${endLine} — a gap of ${EXCLUSIONS[0].to - endLine} line(s). A slide of this endpoint moves the largest exclusion and can silently remove pre-existing lines from what the gate scans. Restore the prefix locator's intended landing; do not move this independent pin to fit it.`,
+    ).toBe(endLine);
+  });
 
   const EXCLUDED_LINES = new Set<number>(
     EXCLUSIONS.flatMap((e) => {
@@ -10727,7 +10742,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       const at = key.indexOf(EXEMPTION_ANCHOR_SEP);
       expect(
         at,
-        `exemption key ${JSON.stringify(key)} carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator, so it has no construct half to check. Rebuild it with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
+        `exemption key ${JSON.stringify(key)} either carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator or opens with that separator and therefore has an EMPTY construct half to check. Both shapes are MALFORMATION, not a self-anchor. Rebuild it with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
       ).toBeGreaterThan(0);
       const construct = key.slice(0, at);
       const line = key
@@ -10799,9 +10814,9 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     // UNADJUDICATED and is NOT closed here.
     const constructHalf = (k: string): string => {
       const at = k.indexOf(EXEMPTION_ANCHOR_SEP);
-      if (at < 0)
+      if (at <= 0)
         throw new Error(
-          `exemption key ${JSON.stringify(k)} carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator, so it has no construct half. This is MALFORMATION, not ambiguity: without this check the split would answer the key minus its last character and this case would report an anchor with zero producers. Rebuild the entry with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
+          `exemption key ${JSON.stringify(k)} either carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator or opens with that separator and therefore has an EMPTY construct half. Both shapes are MALFORMATION, not ambiguity: without this check the split would admit a near-complete or empty key and this case would report an anchor with zero producers. Rebuild the entry with \`exemptionKeyFor\`, which is the only thing that may author a key.`,
         );
       return k.slice(0, at);
     };
