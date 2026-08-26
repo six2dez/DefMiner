@@ -9434,6 +9434,14 @@ const exemptionKeyFor = (
  * relocation is invisible to all three discharge checks. That is the shape the
  * verifier drove a fabricated hand-written bound through at 432 of 432 green.
  *
+ * THAT STRUCTURAL SENTENCE IS AN ASSERTION RATHER THAN A DESCRIPTION SINCE WAVE
+ * 40. The cross-construct fixture pins this helper's output to the LINE HALF of
+ * `exemptionKeyFor`'s key — the portion after `EXEMPTION_ANCHOR_SEP` — for both
+ * of its array pairs, over the fixture's SYNTHETIC inputs and no wider. Until
+ * then the claim held nowhere: verification pass 9 replaced this body with
+ * `return "CONSTANT";` and every one of the counter-probe's five assertions
+ * still passed, at 434 of 434 green (WR-51).
+ *
  * WHY THE OLD BUILDER IS KEPT RATHER THAN DESCRIBED. A fixture that shows the
  * new builder catching a relocation is equally consistent with a builder that
  * catches everything and with one that catches nothing that matters. Only
@@ -10447,6 +10455,26 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       preAnchoringExemptionKeyForFixtureOnly,
       underFixtureTitle,
     );
+    // THE PIN TO THE LIVE BUILDER, WHICH IS THE ONE ASSERTION A CONSTANT
+    // CANNOT SATISFY (WR-51, wave 40). Everything below this point is
+    // satisfied by `() => "CONSTANT"` — verification pass 9 replaced the
+    // helper's body with exactly that and measured 434 of 434 green — because
+    // the five assertions only ask that the OLD builder produce the SAME thing
+    // on both sides and match itself. They never ask that it produce what
+    // `exemptionKeyFor` produces minus its construct half, which is the
+    // docblock's structural claim and was asserted nowhere. Pinned here to the
+    // LINE HALF of the live key, through the fixture's own `lineHalf` helper
+    // rather than a re-derived split, so a change to `EXEMPTION_ANCHOR_SEP`
+    // cannot leave the two computations disagreeing silently.
+    for (const [which, pre, live] of [
+      ["under the declaration", preBefore, beforeKey],
+      ["under the title", preAfter, afterKey],
+    ] as readonly (readonly [string, readonly string[], string])[]) {
+      expect(
+        pre[0],
+        `the pre-anchoring builder (${which}) is no longer \`exemptionKeyFor\` with its construct half removed, so the counter-probe is drawing its contrast against something other than the format CR-17 was measured in. Its output must be byte-identical to the portion of the live key after ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} — that identity IS the docblock's structural claim, and without it any constant function satisfies every assertion below (WR-51, measured at 434 of 434 green).`,
+      ).toBe(lineHalf(live));
+    }
     expect(
       preAfter,
       "the PRE-ANCHORING builder produced different keys across the relocation. It is retained precisely because it did NOT, and if it now does, this counter-probe no longer demonstrates the contrast it was written for.",
@@ -10559,6 +10587,18 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       // only that the new builder catches something.
       const preB = keysUnder(preAnchoringExemptionKeyForFixtureOnly, before);
       const preA = keysUnder(preAnchoringExemptionKeyForFixtureOnly, after);
+      // THE PIN, HELD OVER THIS PAIR TOO (WR-51, wave 40). The contrast has to
+      // be drawn against the live builder in BOTH shapes the fixture covers,
+      // not only in the first.
+      for (const [which, pre, live] of [
+        ["before", preB, bKey],
+        ["after", preA, aKey],
+      ] as readonly (readonly [string, readonly string[], string])[]) {
+        expect(
+          pre[0],
+          `the pre-anchoring builder (${which}, ${shape}) is no longer \`exemptionKeyFor\` with its construct half removed, so this pair's counter-probe is contrasting against something other than the format CR-17 was measured in.`,
+        ).toBe(lineHalf(live));
+      }
       expect(
         preA,
         `the PRE-ANCHORING builder produced different keys across the own-header relocation (${shape}). It is retained precisely because it did NOT.`,
