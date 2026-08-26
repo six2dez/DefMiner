@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-26T17:20:00Z
+reviewed: 2026-08-26T22:05:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -162,6 +162,38 @@ reviews:
       green, under a comment claiming both endpoints are pinned. Test-only gate:
       nothing leaks, the shipped bundle's import set is one specifier and the
       walk is at 23 modules / zero violations.
+  - pass: gap-closure-round-10
+    reviewed: 2026-08-26T22:05:00Z
+    scope: 1 source file changed by plans 01-42, 01-43 (packages/backend/src/outbound-prohibition.spec.ts)
+    findings: CR-24...CR-28, WR-61...WR-65, IN-45...IN-49
+    verdict: >-
+      CR-23 is CLOSED and the fix is REAL: both new opening pins were watched RED
+      against their decoys — the registry pin at 4161 vs a slid 4057, the list pin
+      at 5985 vs a slid 5955 — and the two sides are genuinely independent
+      expressions. CR-22 is HALF closed. The 574 pin survived every attempt to
+      grow the maximum past it, and the measurement reproduces exactly (widest
+      shadow 574 surface lines at `:417`, raw 419..1574, four shipped
+      occurrences, second-widest 283, sentinel resolving set `[1]`). What it does
+      NOT survive is its own prose. FIVE NEW BLOCKERS, and every one is the
+      signature defect: a stated reach exceeding an executed one, in the round
+      that re-scoped the phase around accurate disclosure. The new synthetic
+      fixture says it "turns red instead of arguing" when the pins above it are
+      swapped back to prefix matchers — EXECUTED: pin swapped, decoy planted,
+      441 of 441 GREEN. The pin's reach statement (2) says a non-maximal shadow
+      may grow "to 573" silently — EXECUTED at 574, GREEN, and contradicted by
+      limit (5)'s own correct statement of the same fact one file-region away.
+      The rationale "an exact equality makes both directions loud" — EXECUTED:
+      the widest shadow SHRANK 574 -> 492 with the pin green. WR-60's resolution
+      replaced one wrong number with a false live locator: the file now says "the
+      two identically-headed table headers sit at lines 299 and 361", and
+      measured over every ruled table in the file there is NO pair of
+      byte-identical headers at all — 299 and 361 resolve to different anchors.
+      And the site-identity retirement's "bounded enumeration" missed three
+      assertion messages that still say `constructAnchorFor` resolves the
+      ENCLOSING construct, a containment the same wave's reach statement (5)
+      denies and the anchoring docblock disowns by name at `:9397`. Test-only
+      gate: nothing leaks, suite 441 of 441, tree restored clean after five
+      planted mutations.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -6091,3 +6123,768 @@ once."*
 _Reviewed: 2026-08-26T17:20:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard — every measurement re-executed against the live file via an out-of-tree harness; five mutations planted, run and reverted; `git diff --exit-code -- packages/` clean, `pnpm exec vitest run` 31 files / 1379 tests, gate suite 439, `tsc --build` 0, `eslint` clean_
+
+---
+
+# ROUND 10 — gap closure, commits `2940ceb..HEAD`
+
+**Reviewed:** 2026-08-26T22:05:00Z
+**Depth:** standard, with every claim below re-executed against the live file
+**Scope:** `git diff 2940ceb..HEAD -- packages/` — one file,
+`packages/backend/src/outbound-prohibition.spec.ts` (+451/−20). Planning
+documents are out of scope.
+**Status:** issues_found
+
+## Summary (pass 10, round 10)
+
+**How this was reviewed.** `normalizeGateLine`, `maskQuantifiers`,
+`nameableRemainder`, `constructTokenOf`, `constructAnchorFor`, `lineOf`,
+`CLOSES_FROZEN_ARRAY`, the `EXCLUSIONS` derivation, `SURFACE_LINES`,
+`joinGateLines` and `quantifierOccurrences` were lifted verbatim into an
+out-of-tree harness reading the real file, and the harness was then **validated
+against the shipped case itself**: inserting one comment line at `:500` made the
+real suite report `THE WIDEST ANCHOR SHADOW IS NOW 575 SURFACE LINES … spanning
+raw lines 419..1575`, which is byte-for-byte what the harness predicted. Five
+mutations were planted in the real tree, run and reverted; `git diff
+--exit-code -- packages/` is clean and the gate suite is back at **441 of 441**.
+
+**What round 10 got right, and it is not small.**
+
+- **CR-23 is CLOSED, and the fix is real, not decorative.** Both new opening
+  pins were watched RED against their decoys. A `RESOLVER_REGISTRY_SHADOW`
+  declaration 104 lines above the real opener slides `EXCLUSIONS[2].from` from
+  4161 to 4057 while `registryOpen` stays at 4162 → RED. A
+  `UNBOUNDED_QUANTIFIERS_LEGACY` declaration 30 lines above slides
+  `EXCLUSIONS[1].from` from 5985 to 5955 while `listOpen` stays at 5986 → RED.
+  The two sides ARE independent expressions: one is `startsWith` inside
+  `EXCLUSIONS`, the other is a `===` against a literal that carries the type
+  annotation and the `Object.freeze([` tail. Round 9's tautology is gone.
+- **Every wave-42 measurement reproduces.** Widest shadow **574** surface lines,
+  anchor `SPELLING (operator, by POSITION) RESOLVED BY REPORTS` at `:417`, raw
+  span **419..1574**, `1156 − 582 = 574`, **four** shipped occurrences (`:436`,
+  `:468`, `:523`, `:600`), 29 occurrences in total, second-widest **283**.
+  The sentinel sweep reproduces exactly: over **all 11,503** `gateLines`
+  elements — not just the surface — the resolving set is `[1]`.
+- **The 574 pin survived every attempt to make the maximum exceed it.** Growth
+  inside the shadow, deletion of the `/**` that terminates it, and all four
+  placements of a `BEGIN`/`END DERIVED RESIDUAL` decoy that slides exclusion one
+  each drove it RED. It also incidentally catches the one endpoint pair round 10
+  left unpinned (WR-62). Whatever else is wrong here, that case earns its place.
+- The recogniser numbering checks out: `:417` is reached by recogniser **(4)**,
+  "the nearest non-blank, non-rule row ABOVE the rule of a ruled ASCII table",
+  exactly as `:10197` says.
+- **F-11 confirmed.** The locator arithmetic reproduces on both sides: the case
+  resolves through SEVEN locator expressions of which FOUR are proved unique
+  (registry closer, nine entry literals, registry opener, list opener) and THREE
+  are not (`EXCLUSIONS`' two prefix openers, `CLOSES_FROZEN_ARRAY`); and at wave
+  43's arrival it was FIVE of which TWO were proved. Nothing rounded.
+- **F-1 refined.** The pair is now **11,502** by `wc -l` and **11,503** by
+  `gateLines.length`. Still two correct measures of one file — but see WR-61 for
+  what the file says instead.
+- **F-5 confirmed** in the file's own bytes: `:10272-10286` records the ~1,130-line
+  relocation as reporting a SHRINK 574 → 567 rather than a move, and attributes
+  it to recogniser (5) accepting the destination cell as a `//` block opening.
+  That paragraph is honest and it is the best thing in the diff.
+- **F-10 not re-raised.** Out of this file's scope.
+- **WR-57 remains open** and round 10 says so at `:10809-10812`. It also *widened*
+  the divergence it names; see IN-48.
+
+**What is wrong.** Five BLOCKERs, and every one is this phase's signature defect
+— a stated reach exceeding an executed one — in the round whose entire purpose
+was to stop claiming more than the code executes. Three of the five were caught
+by execution, not by reading:
+
+1. The new synthetic fixture states, as its reason for existing, that it "turns
+   red instead of arguing" when a future author swaps either opening pin back to
+   a prefix matcher. **Executed: pin swapped, decoy planted, 441 of 441 GREEN.**
+2. The pin's own reach statement (2) publishes a silent-growth ceiling of 573.
+   **Executed at 574: GREEN** — and limit (5) states the same fact correctly
+   ("up to that maximum") 1,065 lines away. Two numbers for one measurement, in
+   the same round that closed WR-60 for exactly that.
+3. The exactness rationale claims "an exact equality makes both directions
+   loud." **Executed: the widest shadow SHRANK from 574 to 492 — an 82-line move
+   in the one region holding all four shipped occurrences — with the pin GREEN.**
+4. WR-60's resolution replaced a wrong number with a false live locator. There is
+   **no pair of byte-identical table headers anywhere in this file**; `:299` and
+   `:361` head *differently* worded tables and resolve to different anchors.
+5. The site-identity retirement's "bounded enumeration" of surviving claims
+   missed three assertion messages that still assert `constructAnchorFor`
+   resolves the **ENCLOSING** construct — the containment the same wave's reach
+   statement (5) denies and the anchoring docblock disowns by name at `:9397`.
+
+**Severity note.** This is a test-only gate. Nothing here leaks, no shipped byte
+changes, and the walk is unaffected. Every BLOCKER below is a defect in *the
+enforcement or the disclosure of a claim*, which is the only thing this file is.
+
+**CORE-11's `[ ]` is correct and untouched by this review.** Nothing below argues
+for flipping it, and nothing below asks for AST work, enclosing-frame derivation
+or a narrowing of `constructAnchorFor` — that exit was closed by decision on
+2026-08-26 and the findings are written to respect it.
+
+## Critical Issues (pass 10, round 10)
+
+### CR-24: WR-60's resolution replaced a wrong number with a false live locator — there is no pair of identically-headed tables in this file
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10777-10779` and
+`:11225-11227` (both added by wave 43); the claims they support are at `:10770`
+and `:11216`, and at `:9067-9069`.
+
+**Issue.** WR-60 was raised because one measured relocation was published as "58
+lines apart" in one place and "57 lines away" in another. Round 10 resolved it as
+branch B — both numbers correct in different frames — and added, at each site, a
+live re-location:
+
+> `:10777-10779` — *"Located by text TODAY, 2026-08-26 wave 43: the source
+> table's header sits at line 299 and the destination table's at line 361, with
+> the moved cell at 304..305 — a HISTORICAL measurement re-checked against a live
+> file, not a live one."*
+>
+> `:11225-11227` — *"Both are HISTORICAL measurements; today, 2026-08-26 wave 43,
+> the two identically-headed table headers sit at lines 299 and 361."*
+
+The second sentence is false, and the first supports a claim that is false.
+Measured with the shipped `normalizeGateLine`:
+
+```
+:299  "SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS"
+:361  "SPELLING (??=,    receiver-key position) RESOLVED BY REPORTS"
+```
+
+They are not identical, and consequently:
+
+```
+constructAnchorFor(gateLines, 304) = "SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS"
+constructAnchorFor(gateLines, 305) = "SPELLING (rebind, receiver-key position) RESOLVED BY REPORTS"
+constructAnchorFor(gateLines, 363) = "SPELLING (??=, receiver-key position) RESOLVED BY REPORTS"
+```
+
+A cell moved from `:304` into the table headed at `:361` would **not** keep a
+byte-identical key — which is the entire property the sentence exists to
+illustrate. I then swept the whole file for the property rather than for the
+pair: for every ruled table or banner, the recogniser-(4) header (the nearest
+non-blank, non-rule row above the rule) was normalized and grouped. **Zero
+non-trivial duplicate headers exist.** The only repeated "headers" in the file
+are the closing punctuation lines `}`, `});` and `);` — which are not tables at
+all, and none of which is 57 or 58 lines from another.
+
+So either the pair is misidentified or the historical claim itself ("moved a
+shipped table cell between two identically-headed tables") no longer describes
+anything in the file — and the sentence added to settle WR-60 asserts, present
+tense and as a live re-check, a property that measurement contradicts. The
+per-frame reconciliation (57 in the delete-first frame, 58 in the unmodified
+frame) now rests entirely on a locator that does not hold. **Instance eleven of
+the signature defect, inside the finding written to close instance ten.**
+
+**Fix.** Re-locate the pair the pass-9 move actually used, or state plainly that
+the two tables have since been disambiguated in their own bytes and that the 57 /
+58 pair is a historical measurement no longer re-checkable against this file.
+Do not leave a present-tense locator standing that the file falsifies. Both
+sites carry the same sentence and both must move together:
+
+```ts
+// Both are HISTORICAL measurements. They are NOT re-checkable against this file
+// today: wave 39's two tables have since been disambiguated in their own bytes
+// (`(rebind, …)` at :299 and `(??=, …)` at :361 normalize DIFFERENTLY and
+// resolve to different anchors), and a sweep over every ruled table in this
+// file finds ZERO pairs of byte-identical headers. The 57/58 pair stands on
+// `01-39-SUMMARY.md:531` and `:931` alone.
+```
+
+---
+
+### CR-25: the pin's reach statement (2) publishes a silent-growth ceiling of 573; executed, a non-maximal shadow reaches 574 with the pin green — and limit (5) states the same fact correctly
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10173-10176`
+(the claim), `:9109-9111` (the contradicting correct statement), `:10204`
+(`WIDEST_ANCHOR_SHADOW = 574`).
+
+**Issue.** The case's reach statement (2) reads:
+
+> *"(2) IT DOES NOT BOUND A NON-MAXIMAL SHADOW. The second-widest measured at 283
+> surface lines at wave 42, and **it may grow to 573** without this case
+> reporting a thing."*
+
+The pin is `expect(widestSize).toBe(WIDEST_ANCHOR_SHADOW)` over the **maximum**.
+A non-maximal shadow that grows to exactly **574** leaves the maximum at 574, so
+nothing reports. "May grow to 573 without this case reporting" implies growth to
+574 *would* report. It does not.
+
+**Executed.** 291 filler `//` lines inserted into the second-widest shadow's
+region (`2..284`, whose predecessor lines are already `//` so recogniser (5) does
+not accept them):
+
+```
+V1 second-widest grown to 574: surface=9568 maxShadow=574 PIN(574) => GREEN
+   top3: 574 @2..575  | 574 @710..1865 "SPELLING (operator, by POSITION)…" | 202 @7303..9238
+```
+
+Two shadows at 574, one of them doubled in width, and the case is silent.
+
+This is not a rounding quibble. It is the *same fact stated twice with different
+values inside one round*, which is WR-60's exact shape — and the other statement
+is correct. `:9109-9111`:
+
+> *"WHICH PINS THE MAXIMUM ONLY: a non-maximal shadow may grow **up to that
+> maximum** with nothing reporting."*
+
+The re-scoped bar asks for a disclosure that is accurate **and contradicted
+nowhere**. This one is both inaccurate and contradicted, by its own round.
+
+**Fix.** Make `:10174-10176` say what `:9110-9111` says, and cite the execution:
+
+```ts
+//   (2) IT DOES NOT BOUND A NON-MAXIMAL SHADOW. The second-widest measured at
+//       283 surface lines at wave 42, and it may grow to 574 — the maximum
+//       itself, not one below it — with nothing reporting: two shadows at the
+//       maximum leave the maximum unchanged. MEASURED: 291 lines added inside
+//       the second-widest shadow took it to 574 and this case stayed GREEN.
+```
+
+---
+
+### CR-26: "an exact equality makes both directions loud" is false — the widest shadow shrank 574 → 492 with the pin green, and the anchor identity every other statement of the residual depends on is pinned by nothing
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10166-10168` (the
+rationale), `:10169-10184` (the five reach statements), and the five places that
+state the identity as a live fact: `:9096-9101`, `:9389-9391`, `:10195-10203`,
+`:10622-10624`, `:10651` (the null-anchor failure message).
+
+**Issue.** The rationale for choosing exact equality over an upper bound is:
+
+> *"WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. An upper bound hides a
+> shadow that SHRANK, and a shadow that shrank is information about this file's
+> recogniser geometry that this gate should not discard in silence; **an exact
+> equality makes both directions loud.**"*
+
+It makes **the maximum's** directions loud. It says nothing about any particular
+shadow, including the only one the file ever names.
+
+**Executed.** Second-widest grown to 574 (as CR-25), plus one blank line and one
+`// a new prose block opening here` inserted inside `419..1574` — a two-line edit
+a person makes in one commit:
+
+```
+V3: surface=9570 maxShadow=574 PIN(574) => GREEN
+    top3: 574 @2..575 | 492 @794..1867 "a new prose block opening here" | 202 @7305..9240
+```
+
+The `:417` shadow — the one holding **all four** shipped occurrences — fell from
+574 to 492, an 82-line change in the published residual, and the gate said
+nothing. Meanwhile five separate statements assert the identity as live fact,
+and none of them is defended:
+
+- `:9096-9101` — *"the widest shadow belongs to the header row at `:417` … 574
+  SURFACE LINES … and it ALREADY HOLDS FOUR SHIPPED OCCURRENCES."*
+- `:9389-9391` — *"the widest shadow is the header row at `:417` at 574 surface
+  lines, raw 419..1574, already holding four shipped occurrences."*
+- `:10195-10203` — the measured paragraph.
+- `:10622-10624` — *"…which is 574 surface lines wide for THIS occurrence's
+  anchor."*
+- `:10651` — **inside a shipped failure message**, telling a future author that
+  the construct half *"names the REGION the occurrence sits in, which is that
+  anchor's SHADOW and is 574 surface lines wide for the one shipped occurrence in
+  this position."*
+
+That last one is the one that matters: it is the sentence a person reads while
+the suite is red, and it can be false while the suite is green. Reach statement
+(1) says the case "bounds the MAXIMUM shadow … and nothing wider", which is true
+and is not the same disclosure as "the 574 attached to `:417` in five places is
+watched" — nothing watches that. This is the residual's own attribution left
+unpinned by the case written to pin the residual.
+
+**Fix.** Two changes, both small, neither requiring an AST:
+
+1. Correct the rationale to what it executes — *"an exact equality makes both
+   directions of THE MAXIMUM loud; a non-maximal shadow that shrank, INCLUDING
+   the one that used to be the maximum, is not seen at all"* — and add it as
+   reach statement (6).
+2. Pin the identity as well as the size, in the same case and in one line, so
+   the five statements above have something under them:
+
+```ts
+expect(
+  widest,
+  `THE WIDEST ANCHOR SHADOW HAS CHANGED OWNER. It is now ${JSON.stringify(widest)} …`,
+).toBe(WIDEST_ANCHOR_OWNER);
+```
+
+`WIDEST_ANCHOR_OWNER` is a masked token, not a line number, so it does not slide
+as the file grows — the same argument WR-54 used for pinning to located lines
+rather than to sizes. Alternatively drop the identity from all five prose sites
+and speak only of "the maximum", but then `:10651`'s message must stop naming a
+width for a specific occurrence.
+
+---
+
+### CR-27: the site-identity retirement's "bounded enumeration" is incomplete — three shipped assertion messages still assert the anchor resolves the ENCLOSING construct
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10633-10645`
+(the enumeration), `:10985`, `:10999`, `:11136` (the surviving claims),
+`:10182-10184` (reach statement (5)), `:9396-9398` (the docblock that disowns
+the word).
+
+**Issue.** The retirement bracket closes with a completeness claim:
+
+> *"NOTHING WAS DELETED SILENTLY. The bounded enumeration behind this retirement
+> is in `01-42-SUMMARY.md`; within the exemption-anchoring region it found **ONE
+> positive site claim, written in TWO places** — this paragraph and the failure
+> message below — and FIVE negative ones … none of them claims that a well-formed
+> anchor identifies anything."*
+
+The five negative statements check out (`:9407`, `:9467`, `:10646`/`:10693`,
+`:10726`/`:11149`, `:10724`/`:10756`), and the executors' own mid-wave correction
+from four to five is honest. But three assertion messages inside that same region
+still make a positive containment claim, and containment is precisely what the
+same wave's reach statement (5) says the case does not establish (*"IT DOES NOT
+MAKE THE ANCHOR A CONTAINMENT. The anchor is still the nearest preceding line the
+five recognisers accept — a proximity."*):
+
+- `:10985` — *"`constructAnchorFor` has **stopped resolving the enclosing
+  construct** — check its recognisers before checking anything else."*
+- `:10999` — *"the CONSTRUCT halves of the two keys are the same, so **the anchor
+  is not resolving the enclosing construct**."*
+- `:11136` — *"the CONSTRUCT halves are the same for `${shape}`, so **the anchor
+  is not resolving the ENCLOSING construct** for an occurrence that is its own
+  header."*
+
+Each asserts, by contraposition, that the anchor's normal behaviour *is* to
+resolve the enclosing construct. The file's own anchoring docblock refuses that
+word by name at `:9396-9398`:
+
+> *"The word `enclosing` would claim a containment this scan does not compute;
+> what it computes is proximity under those five recognisers."*
+
+WR-49 (round 8) got that word out of the **docblock**. It was never taken out of
+the **failure messages**, and wave 42's enumeration — the one that underwrites
+"nothing was deleted silently" — did not reach them. Two further instances sit in
+the anchoring docblocks at `:9242` and `:9411` ("the next enclosing construct is
+tried"), which are arguably in region too.
+
+An enumeration whose *stated* completeness exceeds its *executed* completeness is
+the signature defect one meta-level up, and it is load-bearing here: the bracket
+is the evidence that exit 2 was taken cleanly.
+
+**Fix.** Replace `enclosing` with what the scan computes in all three messages —
+*"has stopped resolving a DIFFERENT anchor for a different construct"* /
+*"the anchor is not distinguishing the two constructs"* — and correct the
+enumeration's own count in the bracket, dating the correction the way wave 42
+dated its four-to-five correction. If the three are judged out of region, say so
+in the bracket in one clause; do not leave the region undefined.
+
+---
+
+### CR-28: the new synthetic fixture cannot do the job its own comment claims — executed, the pin was swapped back to a prefix matcher and the decoy planted, at 441 of 441 green
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10433-10434`
+(the claim), `:10441-10500` (the fixture).
+
+**Issue.** The fixture is introduced with:
+
+> *"A future author who swaps either pin above back to a prefix matcher makes
+> that case a tautology again; **this one turns red instead of arguing**."*
+
+It cannot. The fixture is entirely self-contained: it declares its own
+`REAL_OPENER` (`:10442-10443`), its own prefix finder
+(`synthetic.findIndex((l) => l.startsWith("export const RESOLVER_REGISTRY"))`,
+`:10465-10467`) and its own full-line finder (`:10468`), all over a frozen
+seven-element literal declared three lines above. It reads **nothing** from the
+case above it — not `REGISTRY_OPEN`, not `LIST_OPEN`, not `registryOpen`, not
+`EXCLUSIONS`. Its four assertions are facts about a hardcoded array
+(`prefixHit === 1`, `fullLineHit === 4`) and about `String.prototype.startsWith`.
+It is green for every possible state of the pins it claims to protect.
+
+**Executed on the real tree, two steps, both reverted:**
+
+```
+1. :10362  const registryOpen = lineOf((l) => l === REGISTRY_OPEN);
+   ->      const registryOpen = lineOf((l) => l.startsWith("export const RESOLVER_REGISTRY"));
+   pnpm exec vitest run … => Tests  441 passed (441)
+
+2. + line 4057: export const RESOLVER_REGISTRY_SHADOW: readonly number[] = Object.freeze([1]);
+   pnpm exec vitest run … => Tests  441 passed (441)
+```
+
+The tautology is restored, the CR-23 decoy is back in the tree, 104 lines are
+back off the scanned surface — and the fixture written to make that "turn red
+instead of arguing" argued nothing, because it never looked. `registryOpenHits`
+still counts 1 because the *uniqueness* assertion still uses the full-line
+literal; only the resolution was swapped, which is exactly the edit the comment
+names.
+
+Note the shape: this is the CR-23 defect one layer out. CR-23 was "a pin compared
+against an expression derived from the thing it pins." CR-28 is "a fixture that
+pins nothing at all, under a comment saying which edit it catches."
+
+**Fix.** Make the fixture read the shipped expressions instead of re-declaring
+them. The two locators are already `const`s inside the case above; hoist them to
+the enclosing `describe` and have the fixture assert *those*:
+
+```ts
+// hoisted beside GATE_FILE
+const REGISTRY_OPEN = "export const RESOLVER_REGISTRY: readonly ResolverRecord[] = Object.freeze([";
+const registryOpenOf = (lines: readonly string[]): number =>
+  lines.findIndex((l) => l === REGISTRY_OPEN);
+
+it("a PREFIX locator and a FULL-LINE locator disagree …", () => {
+  const synthetic = Object.freeze([...]);            // decoy above REAL opener
+  const prefixHit = synthetic.findIndex((l) => l.startsWith("export const RESOLVER_REGISTRY"));
+  const fullLineHit = registryOpenOf(synthetic);     // THE SHIPPED EXPRESSION
+  expect(prefixHit, "…").not.toBe(fullLineHit);
+});
+```
+
+Now swapping the shipped resolution to a prefix matcher makes `fullLineHit`
+equal `prefixHit` and the fixture goes red — which is what `:10434` says
+happens. Until then, either wire it up or delete the sentence; a permanent case
+whose justification is false is worse than no case, because the next reviewer
+reads the justification.
+
+## Warnings (pass 10, round 10)
+
+### WR-61: both published sweep scopes were already stale in the commit that wrote them — 8,846 vs 9,277 surface lines, 11,417 vs 11,503 `gateLines`
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9095` and `:10196`
+(surface count); `:9270-9271` and `:10680-10681` (`gateLines` count).
+
+**Issue.** Both wave 42 and wave 43 publish the scope of an exhaustive sweep, and
+both figures were wrong the moment they shipped:
+
+| stated | where | measured today |
+|---|---|---|
+| *"over all **8,846** surface lines"* | `:9095`, `:10196` | **9,277** |
+| *"**11,417** elements of `gateLines` (`wc -l` **11,416**)"* | `:9270-9271`, `:10680-10681` | **11,503** / `wc -l` **11,502** |
+
+The arithmetic identifies the cause exactly. `9277 − 8846 = 431`, which is round
+10's own net line count (`451 insertions, 20 deletions`): the surface was
+measured before wave 42's first insertion and never re-derived.
+`11503 − 11417 = 86`, which is commit `137c427`'s own diffstat (`90 insertions,
+4 deletions`): the sentinel sweep was run, then the 86 lines describing it were
+added to the file it had just finished sweeping.
+
+**Both results still hold** — I re-ran both against the live file. Widest shadow
+574; the sentinel resolving set over **all 11,503** lines is `[1]`, and blanking
+line 1 grows it, exactly as `:9273-9275` says. So nothing is *wrong*; what is
+wrong is the stated scope of two sweeps whose whole value is that they were
+exhaustive. `:9271-9272` hedges the `gateLines` pair — *"both figures are live
+and move with every edit, so they are dated here rather than pinned"* — but a
+date does not rescue a figure that was already false when the date was written.
+The 8,846 carries no hedge at all: *"MEASURED AT WAVE 42 … over all 8,846 surface
+lines"*.
+
+**Fix.** Either re-derive both at the end of the round that publishes them (a
+one-line harness run, and the executors already have the harness), or stop
+publishing the totals and publish only the results, which are what the sweeps are
+for: *"MEASURED AT WAVE 42 with the shipped builder over EVERY element of
+SURFACE_LINES — no sampling, no early exit — the widest shadow is …"*.
+
+---
+
+### WR-62: exclusion ONE's endpoints are neither proved unique nor pinned, while the round's language says `EXCLUSIONS`' opening endpoints are — and the correct full-text constant already exists
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10060-10061`
+(the unpinned locators), `:10026-10032` (the enumeration that calls them "two"),
+`:10018-10020` (the docblock claim), `:6043` (`DERIVED_BEGIN`),
+`:6182-6183` (`extractDerivedBlock`'s matcher).
+
+**Issue.** `EXCLUSIONS` has **three** opening locators, all `startsWith`:
+
+```ts
+const spanStart    = lineOf((l) => l.startsWith("BEGIN DERIVED RESIDUAL"));   // :10060
+const spanEnd      = lineOf((l) => l.startsWith("END DERIVED RESIDUAL"));     // :10061
+const listStart    = lineOf((l) => l.startsWith("export const UNBOUNDED_QUANTIFIERS"));
+const registryStart= lineOf((l) => l.startsWith("export const RESOLVER_REGISTRY"));
+```
+
+Wave 43 pinned two of them. `:10029-10030` describes what was left as
+*"`EXCLUSIONS`' own **two** opening locators, which are PREFIX matchers"*, and
+`:10018-10020` says the case now locates *"each construct's OPENING line by its
+own full text as well."* Neither is true of exclusion one, which is the **largest**
+of the three (582 lines, 983..1564) and is the exclusion whose slide removes the
+most surface. Four of `EXCLUSIONS`' six endpoints are pinned, not all of them,
+and the enumeration is complete over *the case* rather than over `EXCLUSIONS` —
+which is not what the sentence says.
+
+The gap is sharper than usual because **the correct locator already exists as an
+exported constant**: `DERIVED_BEGIN` at `:6043` carries the full sentinel text,
+and `extractDerivedBlock` matches on it (`lines.findIndex((l) => l.includes(begin))`,
+`:6182`). So the file already contains two different matchers for one construct's
+opening endpoint — a 22-character hand-written prefix in `EXCLUSIONS` and the
+full generated text everywhere else — and the hand-written one is the unpinned
+one. A decoy line beginning `BEGIN DERIVED RESIDUAL` (inside any block comment,
+so it compiles) slides `EXCLUSIONS[0].from` while `extractDerivedBlock` and the
+byte-comparison against `deriveResidual(RESOLVER_REGISTRY)` never notice.
+
+**Executed, in both directions, and this is the honest part:** every placement I
+could construct is caught **today**, but by the new 574 pin and not by any
+endpoint pin.
+
+```
+D3 BEGIN decoy 100 lines above the real sentinel: EXCL[0].from 983 -> 883,
+   100 lines off the surface, band 100..1500 satisfied, `proof` still in range,
+   both new opening pins GREEN — maxShadow 464, pin574 => RED
+D4 BEGIN decoy at :301:                            surface 9277 -> 8595,
+   every exclusion-one check GREEN                 — maxShadow 283, pin574 => RED
+```
+
+That is luck of geometry: exclusion one lies inside the widest shadow's raw
+span, so any slide of it changes the 574. Move the shadow, re-derive the pin, or
+let a future wave attach a `#N`-style compensating edit, and the protection is
+gone — and nothing in the file discloses that this is where the protection comes
+from.
+
+**Fix.** Pin exclusion one the same way, using the constant that already exists,
+and correct `:10029-10030` from "two" to "three of `EXCLUSIONS`' four prefix
+locators, of which THIS case pins two":
+
+```ts
+const spanOpenHits = gateLines.filter((l) => l === DERIVED_BEGIN).length;
+expect(spanOpenHits, `the locator ${JSON.stringify(DERIVED_BEGIN)} matches …`).toBe(1);
+expect(EXCLUSIONS[0].from, "…").toBe(lineOf((l) => l === DERIVED_BEGIN));
+```
+
+---
+
+### WR-63: WR-58's guard is `at < 0` where the finding prescribed `at <= 0`, so a key that OPENS with the separator still fails as ambiguity rather than as malformation
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10814-10822`
+(the guard), `:10797-10804` (the paragraph that states what it covers).
+
+**Issue.** The guard added for WR-58 is:
+
+```ts
+const constructHalf = (k: string): string => {
+  const at = k.indexOf(EXEMPTION_ANCHOR_SEP);
+  if (at < 0)
+    throw new Error(`… carries no ${JSON.stringify(EXEMPTION_ANCHOR_SEP)} separator …`);
+  return k.slice(0, at);
+};
+```
+
+`EXEMPTION_ANCHOR_SEP` is `" §§ "` (`:9307`). A hand-written key that *opens*
+with the separator — `" §§ some line :: q3"` — gives `at === 0`, passes the
+guard, and returns `""`. The empty construct half enters `inUse`, finds zero
+producers, and the case fails with the census's **ambiguity** message
+(`:10855`, *"A ZERO PRODUCER COUNT IS THIS SAME FAILURE FROM THE OTHER SIDE: the
+key was hand-written against a header that is not in the file"*) — which is the
+exact misdiagnosis WR-58 was raised to end, one boundary value over. The
+round-9 fix text prescribed `if (at <= 0)`; the shipped guard dropped the `=`.
+
+The paragraph above it says *"THE SPLIT GUARDS ITS OWN INPUT"* without
+qualification, and hand-written keys are precisely the threat model the
+surrounding messages name (*"Rebuild the entry with `exemptionKeyFor`, which is
+the only thing that may author a key"*). Surface-derived keys cannot reach
+`at === 0`, because `exemptionKeyFor` always prefixes a non-empty token — the
+declared map is the reachable half, and it is the unguarded one.
+
+**Fix.** `if (at <= 0)`, and widen the message to name both shapes: *"carries no
+`§§` separator, or opens with one, so it has no construct half."*
+
+The rest of WR-58's paragraph is correct and I verified it: the second
+`constructHalf` at `:10989` genuinely takes its inputs only from
+`exemptionKeyFor` (`beforeKey`/`afterKey` at `:10981-10982`, `bKey`/`aKey` at
+`:11125-11126`, `k` at `:11141-11143`), so leaving it unguarded is a defensible
+call correctly scoped as a fact about today's inputs.
+
+---
+
+### WR-64: the stated reason the 574 shadow is contiguous does not cover the top of the range it explains — `:1573` IS accepted by a recogniser
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10201-10203`.
+
+**Issue.**
+
+> *"EVERY surface line in that range resolves to it, **because between the rule at
+> `:418` and the imports no line at all is accepted by any of the five
+> recognisers.**"*
+
+Measured over `419..1574`, exactly one line is accepted: `:1573`, which is the
+`/**` opening the `THE SOURCE ROOTS THE PLUGIN SHIPS` docblock — and it sits
+*below* the imports (`:1567-1571`), not between the rule and them. So the stated
+reason is literally true of `419..1566` and establishes nothing about
+`1567..1574`, which is a quarter-percent of the range but is also where the
+shadow terminates.
+
+The real mechanism for those last two lines is the one the file elsewhere calls
+load-bearing: `:1573` **is** accepted, its forward walk finds no non-null token
+(`constructTokenOf("/**")` is `null`), so the scan falls through and continues
+upward — the WR-53 extension, disclosed at `:9464-9470`. That is also exactly why
+`:1575` is *not* in the shadow: from there the walk reaches `:1574` and takes it.
+
+This matters because `:10250-10254`'s failure message instructs a future author
+to re-derive the pin "ONLY against growth attributed LINE BY LINE." An author who
+re-derives from the stated reason will get the geometry wrong at the boundary.
+
+**Fix.**
+
+```
+//  … EVERY surface line in that range resolves to it. Between the rule at :418
+//  and the imports at :1567 no line is accepted by any of the five recognisers
+//  at all; the last two lines, :1573-:1574, resolve to it for the OTHER reason —
+//  :1573's `/**` IS accepted but names nothing, so the forward walk finds no
+//  token and the backward scan continues (the WR-53 extension). :1575 is the
+//  first line the walk can take :1574, which is where the shadow ends.
+```
+
+---
+
+### WR-65: the exact pin is brittle in exactly the way its own rationale says a pin must not be — one ordinary prose line inside `419..1574` turns it red
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10186-10192`
+(the rationale), `:10250-10254` (the failure message), `:10204` (the constant).
+
+**Issue.** The reason given for pinning only the maximum:
+
+> *"Pinning the whole distribution would put a number under every one of the top
+> shadows, and each of those numbers would have to move on ordinary prose edits
+> inside a region hundreds of lines wide. **A pin that must be re-derived on
+> routine edits is a pin nobody trusts and everybody re-derives without
+> reading.**"*
+
+The maximum pin is that pin, for the 574 lines it names. **Executed** on the real
+tree: one `//` comment line inserted at `:500`:
+
+```
+AssertionError: THE WIDEST ANCHOR SHADOW IS NOW 575 SURFACE LINES AND THIS GATE
+PINS IT AT 574. … spanning raw lines 419..1575 … : expected 575 to be 574
+Tests  1 failed | 440 passed (441)
+```
+
+`419..1574` is this file's opening header prose — the CORE-11 statement, the
+spelling tables, the requirement history. It is edited most rounds. Every added
+line there is a red, and the failure message forbids moving the pin except
+"against growth attributed LINE BY LINE to lines the same commit added, with the
+diff shown," calling anything else "decoration that reports green."
+
+The behaviour is defensible on the merits — a wider shadow *is* a wider residual,
+and forcing attribution is the point. What is not defensible is asserting the
+opposite principle eighteen lines above the pin that violates it. As the prompt
+anticipated: a pin brittle in the wrong direction gets ripped out by the next
+round and takes the disclosure with it, and this one has an argument in its own
+comment block that the next round can quote while ripping it out.
+
+**Fix.** Keep the pin; fix the rationale so it does not supply the argument
+against itself, and pre-authorise the routine case so nobody has to invent a
+policy under time pressure:
+
+```
+// AND WHY ONLY THE MAXIMUM IS PINNED. Pinning the whole distribution would put a
+// number under every top shadow and each would move on ordinary prose edits. The
+// MAXIMUM's number moves too — one comment line added inside 419..1574 turns this
+// red, MEASURED — and that is ACCEPTED, because that region IS the residual and a
+// line added to it IS residual growth. THE SANCTIONED RESPONSE for that case is
+// (b): bump the constant in the SAME commit, with the added lines shown. What is
+// forbidden is bumping it for growth the commit cannot account for.
+```
+
+## Info (pass 10, round 10)
+
+### IN-45: two of the pin's "FOUR COUNTS" of non-vacuity cannot fire, and one says so in its own message
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10219`
+(the claim), `:10224-10227`, `:10241-10244`, `:10247-10249`.
+
+**Issue.** `:10219` announces *"NON-VACUITY BEFORE THE RULE, ON FOUR COUNTS, EACH
+WITH ITS OWN MESSAGE."* Two of the four are unreachable:
+
+- `:10224-10227` asserts `shadows.size > 0`; `:10228-10231` asserts
+  `shadows.size > 1` four lines later. The first can never be the one that fires.
+- `:10241-10244` asserts `widestSize > 0` and its own message concedes the point:
+  *"which cannot happen while the map is non-empty."* With `shadows.size > 1`
+  already asserted and every value non-empty by construction, `widestSize >= 1`
+  always.
+- `:10247-10249`'s `shadows.get(widest) ?? []` and `ns[0] ?? -1` /
+  `ns[ns.length - 1] ?? -1` defaults are likewise unreachable — `widest` is a key
+  the loop just read out of the map.
+
+Nothing is broken; four is three, and one of them is dead code carrying a message
+explaining why it is dead. In a case whose title is about stating a reach
+accurately, the count in the section header should be the executed count.
+
+**Fix.** Drop `:10224-10227` (subsumed) and fold its diagnosis into the `> 1`
+message; keep `:10241-10244` only if the `?? []` defaults are also kept, and say
+"THREE COUNTS".
+
+---
+
+### IN-46: the pin's failure message prints `lo`/`hi` as "raw lines" when they are the extremes of the SURFACE subset
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10248-10252`.
+
+**Issue.** `const lo = ns[0]` / `const hi = ns[ns.length - 1]` are read out of
+`shadows.get(widest)`, which is built from `SURFACE_LINES` only. The message
+prints them as *"spanning raw lines `${lo}..${hi}`"*. For `:417` they coincide
+with the raw span (419 and 1574 are both surface lines) so the message is correct
+today — I verified it in a live red. For any anchor whose shadow begins or ends
+inside an exclusion they will not, and the message will understate the raw span
+while calling it raw.
+
+**Fix.** Call them what they are: *"spanning surface lines `${lo}..${hi}`"* — or
+compute the raw span honestly and print both, which is two lines and makes the
+`1156 − 582 = 574` arithmetic self-evident in the red.
+
+---
+
+### IN-47: "EVERY LINE OF THE SYNTHETIC ARRAY IS AN INDENTED, QUOTED STRING ELEMENT" — one of the seven is a bare identifier
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10436-10439`
+(the claim), `:10448` (the exception).
+
+**Issue.** The claim exists to establish that nothing the fixture writes into
+this file's bytes can be matched by the real full-line locators. Element five is
+`REAL_OPENER,` — a bare identifier reference, not a quoted string
+(`:10448`). The conclusion still holds (`      REAL_OPENER,` matches neither
+locator, and the two uniqueness assertions at `:10352-10358` and `:10365-10370`
+re-check it against the real bytes every run), but the sentence is false of the
+array it describes. This is small; it is also the third self-description in this
+diff that overstates by exactly one, after CR-25 and CR-27.
+
+**Fix.** *"EVERY LINE OF THE SYNTHETIC ARRAY IS EITHER AN INDENTED QUOTED STRING
+ELEMENT OR A BARE IDENTIFIER REFERENCE, so no line written here …"*.
+
+---
+
+### IN-48: duplication grew in the round that names duplication as a hazard — a third and fourth copy of the same non-vacuity guard, and `constructHalf` now declared twice with DIVERGENT bodies
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10223` (new copy),
+alongside `:9607`, `:10140`, `:11421`; and `:10814-10822` vs `:10989-10990`.
+
+**Issue.** Two strands, both pre-existing and both widened by round 10:
+
+- `toBeGreaterThan(1000)` non-vacuity now appears four times. `:9607` and
+  `:11421` guard file *reads* and are a different check; `:10140` and the new
+  `:10223` guard `SURFACE_LINES.length` with near-identical messages, twelve
+  `it`-blocks apart. One shared `expectSurfaceNonVacuous()` would keep the two
+  messages in step.
+- WR-57 (round 9) reported `constructHalf` declared twice with byte-identical
+  bodies and proposed hoisting. Round 10 explicitly leaves WR-57 unadjudicated
+  (`:10809-10812`, correctly and honestly) — but wave 43 then made the two copies
+  **diverge**: `:10814-10822` throws on a missing separator, `:10989-10990` does
+  not. Two functions with one name and different behaviour is a worse state than
+  the duplication WR-57 was raised about, and the note at `:10805-10812` argues
+  the divergence is safe rather than closing it.
+
+**Fix.** Close WR-57 in the direction wave 43 already chose: hoist the guarded
+`constructHalf` and `lineHalf` to module scope beside `EXEMPTION_ANCHOR_SEP` and
+delete `:10989-10992`. The guard costs the second call site nothing, and the
+"fact about today's inputs" caveat at `:10806-10808` disappears with it.
+
+---
+
+### IN-49: the same measured relocation is "1,129 lines" three times and "~1,130-LINE MOVE" once, inside one wave's diff
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9103`, `:9391`,
+`:10155`, `:10618` (1,129) and `:10272` (~1,130).
+
+**Issue.** The tilde discloses the approximation, so this is not WR-60 repeating
+— but it is the same reader hazard in the same file: a figure a later summary
+will copy without the tilde. WR-60 exists because that is precisely what happened
+to 57/58.
+
+**Fix.** Use `1,129` in all five places, or `~1,130` in all five. One measurement,
+one spelling.
+
+---
+
+_Reviewed: 2026-08-26T22:05:00Z_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard — the shipped builder, `EXCLUSIONS`, `SURFACE_LINES` and `quantifierOccurrences` lifted verbatim into an out-of-tree harness and VALIDATED against the shipped case (a one-line insertion produced the same 575 / `419..1575` the real assertion printed); five mutations planted in the real tree, run and reverted; `git diff --exit-code -- packages/` clean; gate suite 441 of 441_
