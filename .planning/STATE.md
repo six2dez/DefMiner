@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-43-PLAN.md
-last_updated: "2026-08-26T21:53:26.482Z"
+stopped_at: Completed 01-44-PLAN.md
+last_updated: "2026-08-26T21:57:56.574Z"
 last_activity: 2026-08-26
-last_activity_desc: Phase 01 execution started
-state_head: 1267cf384e859914e7dafdfbb05258b9df1e45c1
+last_activity_desc: Plan 01-44 complete; 01-45 outstanding
+state_head: 52b99067fd0efd50e5de922a6439b3dbb7c3a45a
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 45
-  completed_plans: 43
+  completed_plans: 44
 ---
 
 # Project State
@@ -28,11 +28,16 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — READY TO EXECUTE
-Plan: 43 of 43 (42 of 43 plans summarized on disk)
-Status: Executing — 01-43 is the one outstanding plan
-Last activity: 2026-08-26 — 01-42 complete: CR-22's two parts, the anchor shadow measured and pinned
+Plan: 45 of 45 (44 of 45 plans summarized on disk)
+Status: Executing — 01-45 is the one outstanding plan
+Last activity: 2026-08-26 — 01-44 complete: CR-28's shared fixture and the deletion-only disclosure half
 
-Progress: [█████████░] 97% of phase 01 (42 of 43 plans)
+Progress: [█████████░] 98% of phase 01 (44 of 45 plans)
+
+> WAVE 44 REPEATED THE RECORDED COUNTER DRIFT. `state.advance-plan` returned
+> `last_plan` at 43 of 43 while 45 PLAN files and 44 SUMMARY files were already
+> on disk. Its frontmatter recomputation was correct at 45/44; the prose position
+> above is corrected from that file inventory, which leaves 01-45 outstanding.
 
 > WAVE 42, THE SAME DRIFT AS WAVES 37 AND 39, CORRECTED THE SAME WAY AND FOR THE
 > THIRD TIME. `state.advance-plan` moved the prose counter 1 -> 2 and both numbers
@@ -219,6 +224,7 @@ Progress: [█████████░] 97% of phase 01 (42 of 43 plans)
 | Phase 01 P41 | 15 min | 2 tasks | 1 files |
 | Phase 01 P42 | 22 min | 2 tasks | 1 files |
 | Phase 01 P43 | 20 min | 3 tasks | 1 files |
+| Phase 01 P44 | 15 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -393,6 +399,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: Verification pass 10's exit 2 taken for CORE-11's anchoring: stop claiming a site, correct the disclosure. No AST, no parser, no compiler-API identity, no hand-rolled containment and no fourth narrowing — all asserted by body-scoped byte-identity diff rather than promised. — Nothing in the 2026-08-25 re-scoped bar (DERIVED, DRIFT-DETECTABLE, SOLE BOUND) requires the anchor to identify a site; SOLE BOUND requires a disclosure accurate and contradicted nowhere. Three rounds of narrowing each produced a new instance of the signature defect inside the paragraph stating the previous fix's reach.
 - [Phase 01]: The interchangeability residual is republished as the measured width of the anchor's SHADOW — 574 surface lines at the header row :417, raw 419..1574 — and pinned by EXACT EQUALITY rather than an upper bound, so a shadow that shrank is as loud as one that grew. — An upper bound would hide a shrinking shadow, which is information about the file's recogniser geometry. Only the MAXIMUM is pinned: pinning the whole distribution would force a re-derivation on every ordinary prose edit inside a region hundreds of lines wide, and a pin re-derived without reading is not a pin.
 - [Phase 01]: The pin is shipped beside an EXECUTED counter-observation of what it does not catch: pass 10's own 514-line relocation was re-run at wave 42 and stayed GREEN at 440 of 440 with a byte-identical key, so the relocation class is disclosed as OPEN in the bytes rather than argued closed. — The prescribed ~1,130-line relocation went RED against prediction, but on a SHRINK (574->567) caused by the destination inserting a recogniser-(5)-accepted line that split the shadow — not by detecting a relocation. Diagnosed to the exact 7 lines before being described, per the plan's pre-commitment.
+- [Phase 01]: Route the registry hit count, one-based pin and fixture through one shared full-line resolver; leave LIST_OPEN and EXCLUSIONS' prefix locators unchanged. — CR-28 names the registry resolver only, while CR-23's endpoint assertion depends on the prefix and full-line expressions remaining independent.
+- [Phase 01]: Close CR-24, CR-25, CR-27 and WR-61 by deletion without replacement prose. — The prior three correction rounds generated 1, then 2, then 5 prose blockers; the deletion commit proves zero word tokens were introduced that were absent from removed lines.
 
 ### Known Risks Carried Forward
 
@@ -435,8 +443,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T19:41:24.113Z
-**Stopped at:** Completed 01-43-PLAN.md
+**Last session:** 2026-08-26T21:57:21.436Z
+**Stopped at:** Completed 01-44-PLAN.md
 **Resume file:** None
 
 ### Blockers
