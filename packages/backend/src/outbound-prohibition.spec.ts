@@ -10173,6 +10173,47 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       `THE WIDEST ANCHOR SHADOW IS NOW ${widestSize} SURFACE LINES AND THIS GATE PINS IT AT ${WIDEST_ANCHOR_SHADOW}. The anchor that owns it is ${JSON.stringify(widest)}, spanning raw lines ${lo}..${hi}. A SHADOW THAT GREW IS A RESIDUAL THAT GREW: every one of those ${widestSize} lines now produces the same construct half, so an exemption written for any one of them is discharged just as well by an occurrence at any other, and the reach this file publishes for its anchoring is that wide. THE CORRECT RESPONSES ARE (a) re-site or rewrite whatever widened it, or (b) re-derive this pin ONLY against growth attributed LINE BY LINE to lines the same commit added, with the diff shown. Moving the pin to fit a number it cannot account for is decoration that reports green, and it is the exact defect this file has spent eleven waves removing. If the number FELL, that is equally reportable: the equality is exact so that a shadow which shrank is visible too, and the reason belongs in the commit that shrank it.`,
     ).toBe(WIDEST_ANCHOR_SHADOW);
   });
+  // WHAT THE PIN ABOVE DOES NOT DO, EXECUTED AT WAVE 42 RATHER THAN ARGUED.
+  // Verification pass 10 relocated the shipped occurrence in the wrapped table
+  // cell twice and got 439 of 439 green both times (`01-VERIFICATION.md`,
+  // `### CR-20 is NOT CLOSED / CR-22`). BOTH WERE RE-RUN IN THIS SESSION AGAINST
+  // THE PIN ABOVE, and the two answers are different for a reason worth writing
+  // down rather than averaging.
+  //
+  //   (A) PASS 10's 514-LINE MOVE, out of the table to the paragraph closing
+  //       `against a walk that shrinks` — still inside this anchor's shadow,
+  //       with a `//` line above it so recogniser (5) does not accept it.
+  //       RESULT: 440 of 440 GREEN, the pin included. The key is byte-identical
+  //       and the entry's stated reason is false where the sentence now sits.
+  //       THIS IS THE HONEST STATEMENT OF WHAT THE PIN DOES NOT DO: it does not
+  //       prevent, detect or report a relocation inside a shadow. It makes the
+  //       SIZE of the region that permits one measured and drift-detectable, and
+  //       that is the whole of its contribution.
+  //
+  //   (B) PASS 10's ~1,130-LINE MOVE, to the top level above the imports.
+  //       RESULT: the pin reported — but it reported a SHRINK, 574 -> 567, and
+  //       NOT a relocation. THE MECHANISM, BECAUSE A REPORT NOBODY CAN EXPLAIN
+  //       IS WORTH NOTHING: that destination puts the cell under a BLANK line,
+  //       which makes it the OPENING line of a contiguous `//` block, which
+  //       recogniser (5) accepts. Its own token is null — its whole normalized
+  //       content masks to one quantifier token — so the forward walk steps over
+  //       it and lands on the import line below, and the seven surface lines
+  //       under that import left this anchor's shadow. The pin saw the shadow
+  //       SPLIT. It did not see the sentence move. A destination that splits
+  //       nothing, which is what (A) is, reports nothing at all.
+  //       ALL 439 PRE-EXISTING CASES STAYED GREEN under (B), exactly as pass 10
+  //       recorded; the only case that spoke was the one above.
+  //
+  // SO, STATED SO THAT READING ONLY THIS PARAGRAPH CANNOT MISLEAD: THE
+  // RELOCATION CLASS IS NOT CLOSED. An occurrence inside this shadow can still
+  // be moved to another line inside it, keep a byte-identical key, keep an
+  // exemption reason that is false of its new home, and take the whole suite
+  // green with it — (A) is that, executed, at wave 42, at 440 of 440. The
+  // anchor is still a proximity and not a containment, criterion (3)'s mechanism
+  // leg is not discharged by this case, and CORE-11 is not closed by it. What
+  // changed at wave 42 is only this: the WIDTH of the region inside which that
+  // move is invisible is now a measured number the suite defends, instead of a
+  // published figure five times too small.
 
   // WR-54, 2026-08-26, wave 41. THE WIDTH ITSELF, PINNED. Everything above this
   // point checks that each exclusion resolves to SOMETHING, that the something
