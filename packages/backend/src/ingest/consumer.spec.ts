@@ -836,6 +836,33 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     ).toBe(2);
   });
 
+  it("does not repeat a cadence pass while early returns leave the write count stalled", async () => {
+    const entries: Planned[] = [];
+    for (let i = 0; i < RETENTION_SWEEP_EVERY_N; i += 1) {
+      entries.push({
+        id: "r" + String(i),
+        url: "https://x.test/" + String(i) + ".js",
+        bytes: body("artifact-" + String(i)),
+      });
+    }
+    const p = plan(entries);
+    p.offer();
+    for (const id of ["missing-1", "missing-2", "missing-3"]) {
+      queue.offer({ id, bytes: 10, kind: "js" });
+    }
+
+    await runOnce(p.overrides);
+
+    expect(counters.processed).toBe(RETENTION_SWEEP_EVERY_N);
+    expect(counters.reloadMissing).toBe(3);
+    expect(
+      counters.retentionSweeps,
+      "the write counter stayed on a cadence boundary while three reloads " +
+        "returned early; that boundary must schedule one pass, not one pass " +
+        "per later queue entry",
+    ).toBe(2);
+  });
+
   /** The fixture database with every DELETE rejecting — the shape a locked
    *  database or a half-applied schema takes from in here. */
   function dbWhereDeletesFail(): SqliteFixture["db"] {

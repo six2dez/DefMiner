@@ -259,6 +259,7 @@ export function startConsumer(
   // a sweep, or the interval would restart every time it fired.
   let processedForSweep = 0;
   let sweptSinceStart = false;
+  let lastSweptAtProcessedCount = -1;
 
   /**
    * ONE bounded retention pass. Never a loop to convergence.
@@ -615,11 +616,13 @@ export function startConsumer(
         const due =
           !sweptSinceStart ||
           (processedForSweep > 0 &&
-            processedForSweep % RETENTION_SWEEP_EVERY_N === 0);
+            processedForSweep % RETENTION_SWEEP_EVERY_N === 0 &&
+            processedForSweep !== lastSweptAtProcessedCount);
         if (due) {
           const projectId = await deps.getProjectId();
           if (projectId !== "") {
             sweptSinceStart = true;
+            lastSweptAtProcessedCount = processedForSweep;
             await runRetentionPass(projectId);
           }
         }
