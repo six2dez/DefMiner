@@ -80,3 +80,13 @@ scripts/spike/__pycache__/
 # the sidecar release.json), and committing an executable this repo does not
 # build is exactly the supply-chain shape threat T-01-30 is about.
 .caido-bin/
+
+# GSD session lock — holds a live pid and session id; never belongs in git.
+.planning/milestone.lock
+
+# Two run directories left untracked (gap-closure round 10 disposition, 2026-08-26).
+# NOTE: 390 sibling files under these same results/runs/ paths ARE tracked — see
+# the token/log/cert exclusions above. These two are excluded by decision, not by
+# convention; drop these lines and `git add` them to bring them in line.
+.planning/phases/00-runtime-reality-check/results/runs/recorder-20260820T180307Z/
+.planning/phases/01-skeleton-persistence-compatibility/results/runs/20260821T075936Z-12874/
