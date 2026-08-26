@@ -28,7 +28,11 @@ import {
 // THE counter object, imported rather than constructed. Plan 01-05 moved it to
 // telemetry.ts and REPLACED the local one; a spec that built its own would be
 // the second object `telemetry.spec.ts`'s AST scan exists to forbid.
-import { counters, resetTelemetryForTest } from "../telemetry";
+import {
+  counters,
+  resetTelemetryForTest,
+  URL_REDACTION,
+} from "../telemetry";
 
 import { REJECT_REASONS } from "./admit";
 import {
@@ -217,6 +221,24 @@ describe("a throw inside the gate is caught and counted", () => {
     expect(counters.hookErrors).toBe(1);
     expect(queue.depth).toBe(0);
     expect(sdk.calls.consoleLog.join("\n")).toContain("hook skip");
+  });
+
+  it("redacts a target URL before writing the caught error to the host log", () => {
+    const secret = "hook-secret-value";
+    const sdk = makeFakeSdk({
+      inScope: () => {
+        throw new Error(
+          "scope failed for https://private.example/app.js?token=" + secret,
+        );
+      },
+    });
+
+    onResponse(sdk, makeFakeRequest(), makeFakeResponse());
+
+    const logged = sdk.calls.consoleLog.join("\n");
+    expect(logged).toContain(URL_REDACTION);
+    expect(logged).not.toContain("private.example");
+    expect(logged).not.toContain(secret);
   });
 
   it("survives sdk.console.log ALSO throwing", () => {

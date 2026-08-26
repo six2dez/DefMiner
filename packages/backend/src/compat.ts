@@ -37,6 +37,8 @@
 //
 // Its refusal is just as hard: `init()` registers no hook either way.
 
+import { describeError } from "./telemetry";
+
 /** The build every Phase 0 threshold was measured on. Running below it would
  *  produce silently wrong results rather than an error, which is why this is a
  *  hard floor and not a warning. */
@@ -314,7 +316,7 @@ export function probeSurfaces(
         scope: s.scope,
         coverage_row: s.coverageRow,
         ok: false,
-        error: String(e).slice(0, 160),
+        error: describeError(e).slice(0, 160),
       };
     }
   });

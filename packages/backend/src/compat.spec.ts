@@ -21,6 +21,7 @@ import {
 } from "./compat";
 
 import { init } from "./index";
+import { PATH_REDACTION, URL_REDACTION } from "./telemetry";
 
 // ---------------------------------------------------------------------------
 // cmpCaidoVersion
@@ -364,6 +365,25 @@ describe("REQUIRED_SURFACES", () => {
     expect(
       out?.some((o) => (o.error ?? "").includes("exploding context")),
     ).toBe(true);
+  });
+
+  it("redacts URL and absolute-path details from a throwing probe", () => {
+    const ctx: SurfaceContext = {
+      get sdk(): unknown {
+        throw new Error(
+          "probe https://private.example/app.js?token=probe-secret " +
+            "/Users/private-user/Library/Application Support/Caido/data.db",
+        );
+      },
+    };
+
+    const out = probeSurfaces(ctx, ["sdk"]);
+    const errors = out.map((o) => o.error ?? "").join("\n");
+    expect(errors).toContain(URL_REDACTION);
+    expect(errors).toContain(PATH_REDACTION);
+    expect(errors).not.toContain("private.example");
+    expect(errors).not.toContain("probe-secret");
+    expect(errors).not.toContain("private-user");
   });
 });
 

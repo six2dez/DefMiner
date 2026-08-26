@@ -22,29 +22,13 @@
 // ===========================================================================
 // THE GATE'S FOUR BOUNDARIES, STATED HONESTLY RATHER THAN LEFT TO BE DISCOVERED
 // ===========================================================================
-// 1. IT IS SCOPED TO `store/` — AND THE THREE RENDERS OUTSIDE THAT SCOPE ARE
-//    NAMED HERE, EACH WITH ITS OWNER. Rewritten on 2026-08-21 (01-13). This
-//    boundary used to name two files and stop. A residual disclosed with no owner
-//    is read as somebody else's problem by every reader in turn, and these two
-//    have been disclosed since 01-07 with nobody named. The owners below are
-//    checkable against `.planning/ROADMAP.md`'s Requirement Traceability table
-//    (`:396`, `ERR-01 … ERR-04 → Phase 2`), not asserted:
+// 1. IT IS SCOPED TO `store/`. Two previously accepted renders outside that
+//    scope — `compat.ts`'s per-surface error and `hooks/passive.ts`'s host-log
+//    error — now pass through `describeError`; their own behavioural specs pin
+//    URL/path redaction. This gate still does NOT enforce every future backend
+//    call site, and must not be cited as if it did.
 //
-//      - `packages/backend/src/compat.ts:317` renders `String(e).slice(0, 160)`
-//        into the per-surface `error` field the operator reads.
-//        OWNER: **Phase 2, ERR-04** — "a per-artifact failure is recorded with its
-//        reason and is visible to the operator". That requirement rewrites how a
-//        failure is recorded and surfaced, which is the moment the redaction
-//        decision is that author's to make rather than deferred past them.
-//      - `packages/backend/src/hooks/passive.ts:171` renders
-//        `String(e).slice(0, 160)` into `sdk.console.log` on the hook's error path.
-//        OWNER: **Phase 2, ERR-03** — "errors thrown or rejected inside
-//        `onInterceptResponse` are caught and logged by us", which is this exact
-//        line.
-//        Both sites are outside the store layer, outside the UAT gap this gate
-//        closes, and recorded as threat T-01-37, disposition ACCEPT. Widening
-//        STORE_DIR is a one-line change when Phase 2 takes them.
-//      - `packages/backend/src/telemetry.ts:422` is `const body = String(e);`
+//      - `packages/backend/src/telemetry.ts` contains `const body = String(e);`
 //        INSIDE `describeError`'s own implementation. It is CORRECT — it is the
 //        one place where the safe rendering happens — and it has NO OWNER, in
 //        those words, because an owner would imply work that must not be done.
@@ -674,8 +658,8 @@ export function auditSource(file: string, source: string): Violation[] {
 
       // ---- POSITION: an object-literal property value. ----------------------
       // CR-05's second. This is the exact shape of every write result in this
-      // directory — `{ ok: false, error: ... }` — and the exact shape
-      // `compat.ts:317` uses for the field the operator reads.
+      // directory — `{ ok: false, error: ... }` — and the same shape a
+      // compatibility outcome uses for the field the operator reads.
       if (ts.isObjectLiteralExpression(node)) {
         for (const prop of node.properties) {
           if (ts.isPropertyAssignment(prop) && derives(prop.initializer)) {

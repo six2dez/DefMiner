@@ -16,7 +16,7 @@
 
 import { type BoundedQueue } from "@defminer/engine/queue";
 
-import { counters } from "../telemetry";
+import { counters, describeError } from "../telemetry";
 
 import { admit, type AdmitConfig, DEFAULT_ADMIT_CONFIG } from "./admit";
 
@@ -168,7 +168,9 @@ export function onResponse(
     // kept receiving events normally.
     try {
       counters.hookErrors++;
-      sdk.console.log("[defminer] hook skip: " + String(e).slice(0, 160));
+      sdk.console.log(
+        "[defminer] hook skip: " + describeError(e).slice(0, 160),
+      );
     } catch {
       /* sdk.console.log itself can throw during teardown; nothing left to do */
     }
