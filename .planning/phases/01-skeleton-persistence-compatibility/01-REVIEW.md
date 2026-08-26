@@ -1,6 +1,6 @@
 ---
 phase: 01-skeleton-persistence-compatibility
-reviewed: 2026-08-26T06:40:00Z
+reviewed: 2026-08-26T14:05:00Z
 reviews:
   - pass: initial
     reviewed: 2026-08-21T00:30:00Z
@@ -112,6 +112,28 @@ reviews:
       section still carries CR-14's exact false paragraph — the row
       `silence-operator-around-global-receiver` and its six now-reporting
       exemplars — one surface over from where wave 33 deleted it.
+  - pass: gap-closure-round-8
+    reviewed: 2026-08-26T14:05:00Z
+    scope: 1 source file changed by plans 01-36, 01-37, 01-38 (packages/backend/src/outbound-prohibition.spec.ts)
+    findings: CR-20, CR-21, WR-49...WR-53, IN-37...IN-40
+    verdict: >-
+      WR-48 is CLOSED and its correction is honest: `CLOSES_FROZEN_ARRAY`
+      resolves exclusion three to 4135..5767 (1633 lines), the 117 returned
+      lines raise exactly ZERO obligations as claimed, and the 12/12 clause
+      equality holds unchanged. CR-17 is NOT closed. `constructAnchorFor` does
+      not anchor to a construct — it anchors to a MASKED LINE OF TEXT, and for
+      7 of the 29 regenerated keys that text either IS the occurrence's own line
+      (3 keys, so the anchor travels with the sentence it is supposed to pin) or
+      occurs 3 and 10 times elsewhere in the file (4 keys, so the anchor names a
+      syntactic form rather than a site). All seven were re-executed: the
+      relocated key is BYTE-IDENTICAL. Separately, the `!NO-PRECEDING-CONSTRUCT!`
+      sentinel introduced in the same wave DEFEATS the null-anchor case added in
+      the same wave — the sentinel's own letters satisfy `nameableRemainder`, so
+      a fully-masked occurrence under no resolvable construct produces
+      `!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2`, identical from anywhere in the
+      file, and passes green. Limit (5) discloses neither shape. The signature
+      defect for the ninth consecutive round, and this time it is inside the
+      mechanism written to end it.
 depth: standard
 files_reviewed: 59
 files_reviewed_list:
@@ -175,10 +197,10 @@ files_reviewed_list:
   - pnpm-workspace.yaml
   - package.json
 findings:
-  critical: 19
-  warning: 48
-  info: 36
-  total: 103
+  critical: 21
+  warning: 53
+  info: 40
+  total: 114
 status: issues_found
 fixed_at: 2026-08-21T08:05:00Z
 resolution:
@@ -4892,3 +4914,575 @@ failing loudly on a lost anchor is applied to one anchor out of four.)
 _Reviewed: 2026-08-26T06:40:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+---
+
+# ROUND 8 — gap closure, commits `6c2c5ce..e0d17b8`
+
+**Reviewed:** 2026-08-26T14:05:00Z
+**Depth:** standard, with every claim below re-executed against the live file
+**Scope:** `git diff 3660710..HEAD -- packages/` — one file,
+`packages/backend/src/outbound-prohibition.spec.ts` (+467/−43). Planning
+documents touched this round are out of scope.
+**Status:** issues_found
+
+## Summary (pass 8, round 8)
+
+**How this was reviewed.** Every measurement below was produced by lifting the
+round-8 helpers (`normalizeGateLine`, `maskQuantifiers`, `nameableRemainder`,
+`constructAnchorFor`, `exemptionKeyFor`, `preAnchoringExemptionKeyForFixtureOnly`,
+`quantifierOccurrences`, `surfaceExemptionKeys`, and the `EXCLUSIONS` derivation)
+verbatim out of the spec file into a scratch harness outside the repo and running
+them against the real `packages/backend/src/outbound-prohibition.spec.ts`. **No
+file in the repository was modified and no mutation was planted in the tree**
+(`git status --porcelain -- packages/ tests/ scripts/` → 0 lines). The harness
+reproduces the shipped result exactly: 29 surface keys, no duplicate-separator
+keys, exclusions resolving to `957..1538`, `5959..5969`, `4135..5767`.
+
+**WR-48 is genuinely closed, and its correction is honest.** `CLOSES_FROZEN_ARRAY`
+resolves exclusion three to `4135..5767` = 1633 lines, matching limit (4)'s
+restated number to the line. The 117 lines returned to the guarded surface
+(`5768..5884`) raise **exactly zero** obligations — measured, matching the
+docblock's "MEASURED AFTER THE CHANGE rather than predicted before it: ZERO."
+Exclusion two still resolves to `5959..5969`, exactly the pair it resolved to
+before, as the comment claims. The 12/12 clause-count equality holds. Three
+separate round-8 sentences about WR-48 were checked against execution and all
+three are accurate. That is a real improvement over rounds 5–7, where the
+correction itself was usually the next defect.
+
+**CR-17 is not closed, and the mechanism written to close it fails in two
+independent ways that limit (5) does not disclose.**
+
+`constructAnchorFor` does not resolve a *construct*. It resolves a *masked line
+of text*, truncated to 64 characters, and puts that string in the key. Three
+consequences, all re-executed:
+
+1. **Three of the 29 keys are self-anchored** — the backward scan starts at
+   `i = lineNumber`, so an occurrence that sits on its own construct header (a
+   docblock's first content line, an `it(` title) resolves to *itself*. Its
+   construct half is a truncation of its own line half and carries no positional
+   information at all. Relocating such a line to a completely different construct
+   produces a **byte-identical key** (proven for `:1838` and `:7512`).
+2. **Two of the anchor tokens are not unique in the file** — `it.each([` is
+   produced by 10 distinct lines and `SPELLING (in receiver-key position)
+   RESOLVED BY REPORTS` by 3 (`:283`, `:299`, `:361`). Four more keys hang off
+   those. Relocation across any of those sites is invisible (proven for `:7364`).
+3. **The `!NO-PRECEDING-CONSTRUCT!` sentinel defeats the null-anchor case added
+   in the same wave.** `nameableRemainder("!NO-PRECEDING-CONSTRUCT!")` is 20
+   characters, so the new `no exemption key's ANCHOR reduces to nothing` case
+   passes a key that names *nothing whatsoever* about position. Two fully-masked
+   occurrences in unrelated constructs produce the identical key
+   `!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2` — CR-17's shape verbatim, under a
+   new name, green.
+
+So the relocation guard covers 22 of 29 entries, not 29, and the residual it
+*does* disclose (limit (5): "two occurrences under the same construct remain
+interchangeable") is not the residual it *has*. Seven of the entries are
+relocatable across constructs.
+
+**Two further overclaims.** The `CLOSES_FROZEN_ARRAY` comment ends by asserting
+the two exclusions using it are "pinned by their `proof` tokens and their bands
+against the day that difference matters" — but the `proof` check is
+`range.some(l => l.includes(proof))`, which is monotone in range width and
+therefore *cannot* detect an over-walk (it passed for the whole life of WR-48),
+and exclusion three's band of `500..3000` already demonstrably failed on WR-48's
+1750. Neither named mechanism caught WR-48; the unnamed one (the clause-count
+equality) did. And `constructAnchorFor`'s docblock says the anchor is "the FINEST
+construct enclosing the occurrence" — measured, four occurrences anchor to **line
+1 of the file**, up to 234 lines above them, and four more to a table header up
+to 183 lines above. The `//`-block recogniser deliberately climbs to the *top* of
+the contiguous comment block, which is the coarsest granularity available in
+comment prose, not the finest.
+
+**The new fixture is real but softer than it reads.** It fails if
+`constructAnchorFor` is neutered on the probe side. Its *counter-probe* side pins
+nothing: a `preAnchoringExemptionKeyForFixtureOnly` rewritten to `() => "CONSTANT"`
+passes every one of the five counter-probe assertions (executed). And the fixture
+deliberately chooses an occurrence line that "is not its own construct header",
+which makes it structurally blind to exactly the three shipped occurrences that
+are — the class CR-20 exploits.
+
+**On severity.** This is a test-only enforcement gate. Nothing here reaches a
+network, nothing here ships: the bundle's entire import set is `crypto`, and the
+walk covers 23 files at zero violations. Every finding below is a defect in the
+*enforcement of a claim*, not a live vulnerability. CR-20 and CR-21 are rated
+Critical on the same basis CR-17 was — they falsify the central claim of the work
+under review and re-open the finding it was written to close — not because
+anything leaks.
+
+**On WINDOWS entry 41 / P38-D2 (disclosed, confirmed).** The two surviving
+unmarked standing statements at `:803-804` and `:901`, and wave 33's
+"EXACTLY TWO PLACES" note at `:905` that they falsify, reproduce as described:
+four sites state the box, all four agree on `[ ]`. Round 8 introduced no *new*
+statement of the box's state — the only round-8 change in that region is
+`CORE11_BOX_EXPECTED` at `:10311` flipping to `"- [ ] **CORE-11**"`, which is
+correct. Not re-reported.
+
+---
+
+## Critical Issues (pass 8, round 8)
+
+### CR-20: `constructAnchorFor` anchors to a line of text, not to a construct — 7 of the 29 regenerated keys survive a cross-construct relocation byte-identical, and limit (5) discloses none of them
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9210-9254` (the
+builder), `:9028-9040` (limit (5)), `:9052`, `:9054`, `:9056`, `:9068`, `:9090`,
+`:9094`, `:9100` (the seven affected keys)
+**Severity:** Critical — enforcement only. CR-17 is not closed; it is narrowed.
+
+**Issue.** The anchor is `maskQuantifiers(normalizeGateLine(<some line>))`
+truncated to 64 characters. Nothing in that string identifies a *site*. Two
+distinct failures follow, and I executed both.
+
+**(a) Self-anchoring.** The backward scan opens at the occurrence's own line:
+
+```ts
+for (let i = lineNumber; i >= 1; i--) {          // :9226 — starts AT the occurrence
+```
+
+If that line is itself a recognised header — a docblock's first content line
+reached by the forward walk, or an `it(`/`describe(` title — then `head === i`
+and the forward walk returns the occurrence line. The construct half becomes a
+64-character prefix of the line half and carries zero independent information.
+Measured, three of the 29 do this:
+
+| key line | occurrence | anchor resolves to | distance |
+|---|---|---|---|
+| `:9068` | `:1838` | `:1838` (itself) | 0 |
+| `:9094` | `:7512` | `:7512` (itself) | 0 |
+| `:9100` | `:7740` | `:7740` (itself) | 0 |
+
+Executed relocation of `:1838` — the line
+`" * Every non-spec module the plugin SHIPS, under either source root, at any depth."` —
+lifted verbatim into a synthetic, unrelated `export const SOMETHING_ELSE = ...`
+construct:
+
+```
+orig key    : "Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2"
+relocated   : "Every non-spec module the plugin SHIPS, under either source root… §§ Every non-spec module the plugin SHIPS, under either source root, at {q2}. :: q2"
+IDENTICAL?  : true
+```
+
+This is not academic. That exemption's whole reason is construct-dependent — it
+reads *"Not a claim about the OUTBOUND WALK's resolution reach at all: it
+describes the FILE WALK's directory recursion"*. Move that sentence next to the
+outbound walk's resolver and it becomes a false universal about the thing CORE-11
+is actually about, the exemption still discharges it, and the suite stays green.
+That is CR-17's mutation, one construct over.
+
+**(b) Ambiguous anchor tokens.** The token is a line of text, and lines repeat.
+Counting how many lines of the file produce each of the 16 distinct anchor tokens
+in use:
+
+```
+>>> 10  "it.each(["                                            (key :9090)
+>>>  3  "SPELLING (in receiver-key position) RESOLVED BY REPORTS"  (keys :9052, :9054, :9056 — headers at :283, :299, :361)
+     1  everything else
+```
+
+Executed: the occurrence at `:7364` (the `it.each` title
+`"through assembledNames: every spelling of a bound assembly is unreadable — %s"`)
+placed under any of the other nine `it.each([` lines
+(`6985, 7213, 8379, 8440, 8473, 8578, 8587, 8623, 8881`) yields an identical key.
+Its exemption reason is again site-specific — *"The spellings it names are the
+case's own parameter table, sitting directly beneath it"* — and a different
+`it.each` has a different parameter table, so the reason becomes false while the
+key does not move.
+
+**(c) The disclosure is wrong, not merely incomplete.** Limit (5) at `:9032-9036`
+states the residual as:
+
+> IT DOES NOT FOLLOW THAT AN EXEMPTION CANNOT BE DISCHARGED BY A DIFFERENT
+> OCCURRENCE: TWO OCCURRENCES UNDER THE SAME CONSTRUCT REMAIN INTERCHANGEABLE,
+> separated only by the positional `#N` ordinal
+
+and the sentence above it states, flatly, *"an exemption written for one construct
+is NOT discharged by an occurrence sitting under a DIFFERENT one."* Both are
+false for the seven keys above. This is the stated-reach-exceeds-executed-reach
+defect, in the paragraph written to state the reach of the fix for that defect.
+
+**Fix.** Make the anchor identify a *site*, not a string, and make the residual
+match:
+
+```ts
+// 1. Never let an occurrence be its own anchor.
+for (let i = lineNumber - 1; i >= 1; i--) { ... }
+//      ^^^^^^^^^^^^^^^^ the enclosing construct is strictly ABOVE the occurrence.
+//   Then an occurrence sitting ON a title/docblock line resolves to the
+//   describe/const that encloses THAT, which is what "the construct it sits
+//   under" means.
+
+// 2. Make an ambiguous token loud instead of silent. A token produced by more
+//    than one line of the file names a FORM, not a construct:
+it("every construct anchor in use names exactly ONE line of the file", () => {
+  const tok = (raw: string) => { const t = maskQuantifiers(normalizeGateLine(raw));
+    return t.length > 64 ? `${t.slice(0, 64)}…` : t; };
+  const census = new Map<string, number>();
+  for (const l of gateLines) census.set(tok(l), (census.get(tok(l)) ?? 0) + 1);
+  for (const { key, line } of surfaceExemptionKeys(gateLines, SURFACE_LINES)) {
+    const construct = key.slice(0, key.indexOf(EXEMPTION_ANCHOR_SEP));
+    expect(census.get(construct), `the anchor ${JSON.stringify(construct)} for the occurrence at :${line} is produced by ${census.get(construct)} lines of this file. It names a SYNTACTIC FORM, not a construct, so the entry is discharged by an occurrence under any of them. Disambiguate the header, or carry the enclosing DECLARATION as well.`).toBe(1);
+  }
+});
+```
+
+Until both hold, limit (5) must say what is true: *the anchor is the nearest
+preceding recognised header LINE TEXT; where that text is the occurrence's own
+line, or occurs more than once in the file, relocation is still invisible, and
+today that is 7 of 29 entries.*
+
+---
+
+### CR-21: `!NO-PRECEDING-CONSTRUCT!` re-opens CR-17 verbatim and defeats the null-anchor case added in the same wave to forbid it
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9162-9167` (the
+constant and its docblock), `:9251` and `:9253` (its two return sites), `:9971-9979`
+(the case it defeats)
+**Severity:** Critical — enforcement only.
+
+**Issue.** Round 8 added, in the same commit, (i) a sentinel string returned when
+no construct resolves and (ii) a case forbidding a key whose anchor "reduces to
+nothing". The sentinel is made of letters, so it satisfies (ii). The two cancel.
+
+```ts
+const NO_PRECEDING_CONSTRUCT = "!NO-PRECEDING-CONSTRUCT!";     // :9167
+const nameableRemainder = (text: string): string =>            // :9159
+  text.replace(/\{q\d+\}/g, "").replace(/[^A-Za-z0-9]/g, "");
+// nameableRemainder("!NO-PRECEDING-CONSTRUCT! §§ {q2}") === "NOPRECEDINGCONSTRUCT"  → length 20 → PASSES
+```
+
+Executed against the live builder, two fully-masked occurrences under two
+unrelated constructs, six lines apart in one array and nowhere near each other in
+the other:
+
+```
+sentinel key A: "!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"     // ["const foo = 1;", "", "// any depth"]
+sentinel key B: "!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"     // ["it(\"x\", …", "  bar();", "});", "", "", "// any depth"]
+IDENTICAL across 2 unrelated constructs?               : true
+passes the NEW 'anchor reduces to nothing' check?      : true
+```
+
+`"!NO-PRECEDING-CONSTRUCT! §§ {q2} :: q2"` is precisely the key shape CR-17 was
+filed about — `"{q2} :: q2"` with twenty letters of decoration bolted on. It
+names no construct and no line. The failure message of the very case that would
+have caught it says, in the same commit:
+
+> An anchor made only of mask tokens names no construct and no line, so the entry
+> is discharged by ANY occurrence whose normalized form masks to the same shape —
+> wherever in this file that occurrence sits.
+
+That description is exactly true of the sentinel key, and the case passes it.
+
+**Second defect, same lines.** The constant's docblock at `:9163-9166` reads:
+
+> NAMED rather than empty on purpose: an empty anchor is the shape this mechanism
+> exists to forbid, so **it may not be produced silently by the builder itself.**
+
+Nothing observes the sentinel. `grep -n "NO_PRECEDING_CONSTRUCT"` returns four
+hits: the declaration and the two `return` sites — no assertion, no
+`expect`, no message. Naming a value does not make producing it loud. The
+sentence claims a mechanism that does not exist; the value is produced silently
+and then laundered through the one check that would have flagged it as empty.
+
+**Third defect, same lines.** The constant's docblock says it is returned "when
+NO preceding construct resolves", but the `return` at `:9251` fires when a
+preceding construct *did* resolve (`head >= 0`) and merely named nothing between
+`head` and the occurrence. Two different conditions, one description.
+
+**Fix.** Exclude the sentinel from `nameableRemainder`'s notion of "names
+something", and assert it is never produced:
+
+```ts
+const nameableRemainder = (text: string): string =>
+  text
+    .split(NO_PRECEDING_CONSTRUCT).join("")   // the sentinel names nothing BY DEFINITION
+    .replace(/\{q\d+\}/g, "")
+    .replace(/[^A-Za-z0-9]/g, "");
+
+it("no occurrence on the scanned surface resolves to NO PRECEDING CONSTRUCT", () => {
+  for (const { key, line } of surfaceExemptionKeys(gateLines, SURFACE_LINES)) {
+    expect(
+      key.startsWith(NO_PRECEDING_CONSTRUCT),
+      `the occurrence at :${line} resolved to no construct at all, so its key names only its masked line. If that line also masks away, the key names NOTHING and is discharged from anywhere in the file — CR-17 exactly. Give the sentence an enclosing construct the recognisers can see, or add the recogniser.`,
+    ).toBe(false);
+  }
+});
+```
+
+Measured today: zero shipped occurrences hit the sentinel, so both changes are
+green on arrival and the guard is real from the next sentence someone writes.
+
+---
+
+## Warnings (pass 8, round 8)
+
+### WR-49: "the anchor is the FINEST construct enclosing the occurrence" — measured, four occurrences anchor to line 1 of the file, 234 lines above them
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9195-9196`,
+`:9204-9207` (`isLineComment` / rule recognisers)
+**Issue.** The `//`-block recogniser matches the **first** line of a contiguous
+`//` block (`isLineComment(raw) && !isLineComment(lines[i - 2] ?? "")`), and the
+rule recogniser climbs above the rule. Both deliberately resolve to the *top* of
+a prose region, which in this file is very large. Instrumented head-resolution
+for all 29 occurrences:
+
+| occurrences | anchor head | distance | anchor token |
+|---|---|---|---|
+| 133, 134, 178, 235 | `:1` | 132–234 lines | `packages/backend/src/outbound-prohibition.spec.ts — CORE-11's wi…` |
+| 436, 468, 523, 600 | `:417` | 19–183 lines | `SPELLING (operator, by POSITION) RESOLVED BY REPORTS` |
+| 303, 305, 309 | `:299` | 4–10 lines | `SPELLING (in receiver-key position) RESOLVED BY REPORTS` |
+
+Four occurrences spread over 100+ lines share the file's *title line* as their
+"finest enclosing construct". That word is doing work the code does not do. It
+also silently widens limit (5)'s disclosed residual — "two occurrences under the
+same construct remain interchangeable" sounds like a few lines and measures up to
+234.
+**Fix.** Replace "the FINEST construct enclosing the occurrence" with what
+executes — *"the nearest preceding line the five recognisers accept; for a
+contiguous `//` region or a ruled banner that is the region's FIRST line, which
+in this file reaches 234 lines above the occurrence"* — and state the measured
+maximum in limit (5) so the interchangeability residual is quantified rather than
+implied.
+
+---
+
+### WR-50: "pinned by their `proof` tokens and their bands against the day that difference matters" — the `proof` check cannot detect an over-walk, and the band already failed on this exact defect
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9758-9761`
+(the claim), `:9840-9842` (the `proof` assertion), `:9780`/`:9790`/`:9798` (the band
+declarations) and `:9831-9838` (the band assertions)
+**Issue.** The comment ends its otherwise-honest confession by naming two
+mechanisms as the backstop for the residual it just disclosed. Neither is one.
+
+- The `proof` assertion is
+  `gateLines.slice(e.from - 1, e.to).some((l) => l.includes(e.proof))`. It is
+  **monotone in range width**: widening a range can never make it fail. It was
+  green for the entire lifetime of WR-48, across all 1750 wrong lines, because
+  `id: "constStrings"` sits at the top of the range regardless of where the range
+  ends. Against an over-walk — the failure mode the sentence is about — it
+  contributes exactly nothing.
+- Exclusion three's band is `[500, 3000]`. WR-48's over-walk produced 1750. The
+  comment says so itself, eleven lines earlier: *"its band of 500..3000 did not
+  catch it, because 1750 lines sits inside that band."* The same paragraph then
+  names that band as the pin.
+
+Worked forward: if `] as readonly ResolverRecord[]);` at `:5767` ever changes
+shape, the next column-0 match is `:5884`, then `:5969` — size 1835, still inside
+the band, `proof` still present. The mechanism that would catch it is the
+clause-count equality (`inRange` would jump by the nine phrasings in
+`UNBOUNDED_QUANTIFIERS`), and that is the one mechanism the sentence does not
+name.
+**Fix.** Name the mechanism that actually holds:
+
+> This is a narrower recogniser than "the closing line of the construct". The
+> `proof` token cannot catch an over-walk — it is monotone in width and was green
+> throughout WR-48 — and exclusion three's band did not catch WR-48's 1750 lines
+> either. What caught it, and what would catch the next one, is the clause-count
+> equality below. Exclusion two is pinned by its tight `5..40` band; exclusion
+> three is pinned by the equality and by nothing else.
+
+---
+
+### WR-51: The counter-probe pins nothing — a `preAnchoringExemptionKeyForFixtureOnly` that returns a constant passes every one of its five assertions
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9287-9315` (the
+retained builder and its docblock), `:10126-10152` (the counter-probe)
+**Issue.** The retained builder is justified at `:9297-9303` on the grounds that
+"a fixture that shows the new builder catching a relocation is equally consistent
+with a builder that catches everything and with one that catches nothing that
+matters" — a good argument. But the counter-probe only checks that the old
+builder produces the *same* keys across the relocation. It never checks that the
+old builder produces *the keys it produced when CR-17 was measured*. Executed with
+`preAnchoringExemptionKeyForFixtureOnly` replaced by `() => "CONSTANT"`:
+
+```
+preBefore == preAfter?  true   [ 'CONSTANT' ]  [ 'CONSTANT' ]
+missing: []   stale: []   balances: true
+```
+
+All five assertions pass. The counter-probe is satisfied by any constant
+function, including one that has lost all contact with `exemptionKeyFor`. The
+docblock's structural claim — *"It is `exemptionKeyFor` with the construct half
+removed"* — is asserted nowhere, and there is nothing to keep the two in step if
+the 96-character truncation, the mask set or the `:: qN` suffix ever changes in
+one and not the other.
+**Fix.** Pin the counter-probe to the live builder's line half, which is the one
+byte-level relationship that makes the contrast meaningful:
+
+```ts
+expect(
+  preBefore[0],
+  "the pre-anchoring builder is no longer `exemptionKeyFor` minus its construct half, so the counter-probe is contrasting the new builder against something other than the format CR-17 falsified.",
+).toBe(`${lineHalf(beforeKey)} :: q${UNBOUNDED_QUANTIFIERS.indexOf(phrasing)}`);
+```
+
+---
+
+### WR-52: The fixture states it "proves the CROSS-CONSTRUCT case" while deliberately excluding the occurrence shape that breaks it
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9998-10001`
+(the claim), `:10019-10021` (the exclusion), `:10008` (the title)
+**Issue.** The fixture's own comment is careful:
+
+> The occurrence line is deliberately neither a comment nor a declaration nor a
+> title, so it is not its own construct header and the backward scan has to leave
+> it to find one.
+
+That is an accurate statement of the choice. Two paragraphs above, the same
+comment states the coverage:
+
+> This fixture proves the CROSS-CONSTRUCT case and NOT the general one.
+
+It does not. It proves the cross-construct case *for occurrences that are not
+their own construct header*, and three of the 29 shipped occurrences are (CR-20).
+For those three the fixture would be green with `constructAnchorFor` reduced to
+`(lines, n) => maskQuantifiers(normalizeGateLine(lines[n - 1] ?? ""))` — an anchor
+that copies the line and pins nothing. The one shape the fixture excludes is the
+one shape the mechanism gets wrong.
+**Fix.** Add the excluded shape as a second array in the same case and restate the
+coverage sentence:
+
+```ts
+// The occurrence sitting ON its own construct header — the shape three shipped
+// occurrences have (:1838, :7512, :7740). Its anchor must still change when the
+// enclosing construct does.
+const titleLine = `it("${'x'} ${phrasing}", () => {`;
+const inDescribeA = ['describe("alpha", () => {', titleLine, "});", "});"];
+const inDescribeB = ['describe("beta", () => {',  titleLine, "});", "});"];
+expect(
+  keysUnder(exemptionKeyFor, inDescribeB)[0],
+  "an occurrence sitting ON its own construct header anchors to ITSELF, so it carries its anchor with it and relocation is invisible — CR-17 for the three shipped keys of this shape.",
+).not.toBe(keysUnder(exemptionKeyFor, inDescribeA)[0]);
+```
+
+and change the coverage sentence to *"proves the cross-construct case for an
+occurrence that is not its own construct header, which is 26 of the 29 shipped
+occurrences; the other three are covered by the case below."*
+
+---
+
+### WR-53: "walked FORWARD to the first line of that same construct" — the walk is bounded by the occurrence, not by the construct, and can return a line from a later one
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9198-9200`
+(the claim), `:9245-9250` (the walk)
+**Issue.**
+
+```ts
+for (let k = head; k <= lineNumber; k++) {       // :9245 — bound is the OCCURRENCE
+  const token = maskQuantifiers(normalizeGateLine(lines[k - 1] ?? ""));
+  if (nameableRemainder(token).length > 0) { ... }
+}
+```
+
+There is no test that `k` is still inside the construct `head` opened. A bare
+`/**` followed by a `*/` and then a *different* construct returns the different
+construct's first line as the anchor of the docblock that was matched:
+
+```
+/**            <- head, DOCBLOCK_OPEN, names nothing
+ */            <- names nothing
+someCall({     <- returned as the anchor for an occurrence below it
+  msg: "… any depth …",
+});
+```
+
+Measured against the live file this is currently unexercised — all seven
+forward-walks land at `head + 1`, the docblock's own first content line — so this
+is latent, not live. But the docblock states it as a property of the code, and
+the code does not have it. Same class as WR-48: a description that is true of the
+inputs seen and false of the mechanism.
+**Fix.** Either bound the walk (stop at the first line that opens a *new*
+recognised construct, and fall through to `continue` the backward scan instead),
+or restate: *"walked FORWARD to the first line at or below the header that names
+anything, up to and including the occurrence's own line — the walk is bounded by
+the occurrence, not by the construct, so a header that names nothing above a
+construct that does will borrow the latter's name."*
+
+---
+
+## Info (pass 8, round 8)
+
+### IN-37: `EXEMPTION_ANCHOR_SEP`'s docblock draws an invalid inference from a premise nothing tests
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9169-9173`
+**Issue.** *"Absent from this file's bytes apart from this declaration and the
+keys built with it, so neither half can contain it."* The premise concedes that
+the 29 keys carry `" §§ "`, and the keys are bytes of the same file the halves are
+derived from — so the conclusion does not follow from its own premise. Measured
+today the fact holds (30 lines carry `" §§ "`: `:9173` plus the 29 key lines at
+`:9044-:9105`, and no occurrence resolves into that region), but it is pinned by
+nothing, and `constructHalf`/`lineHalf` at `:10091-10094` split on the **first**
+`indexOf`, so a two-separator key would silently split in the wrong place.
+**Fix.** Turn the premise into the assertion it is written as:
+`expect(gateLines.filter(l => l.includes(EXEMPTION_ANCHOR_SEP)).length).toBe(Object.keys(HEADER_QUANTIFIER_EXEMPTIONS).length + 1)`,
+and drop "so neither half can contain it" in favour of "so a half that contains it
+is a defect, pinned below".
+
+---
+
+### IN-38: `CLOSES_FROZEN_ARRAY`'s stated reach omits two of its three real constraints
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9755-9757`, `:9762`
+**Issue.** The comment says the recogniser "matches a bare `]);` and … a close
+carrying a trailing `as` assertion that contains no closing parenthesis", then
+concedes "a frozen array closed in some third form is STILL unrecognised". Both
+sentences are true, but the confession is vaguer than the file's own standard —
+it never names the concrete misses. Executed against `/^\]( as [^)]*)?\);$/`:
+
+```
+MATCH   "]);"                                     MISS    "] as readonly (string | number)[]);"
+MATCH   "] as const);"                            MISS    "] as ReadonlyArray<() => void>);"
+MATCH   "] as readonly ResolverRecord[]);"        MISS    "  ] as const);"     (any indentation)
+MATCH   "] as const,);"                           MISS    "]as const);"        (no space before `as`)
+```
+
+Two constraints are unstated: the match is anchored to **column 0 of the raw,
+un-normalized line** (every other reader in this region normalizes first), and it
+requires single spaces around `as`. Harmless today — both anchored constructs are
+top level and prettier-formatted — but "the recogniser's own reach, stated rather
+than implied" is the heading this paragraph carries.
+**Fix.** Add the two constraints and name the third form concretely: *"an `as`
+type containing a `)`, e.g. `] as readonly (string | number)[]);`, and any close
+that is indented or spelled without single spaces around `as`."*
+
+---
+
+### IN-39: The only assertion in the new fixture with no failure message is the last one
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:10152`
+**Issue.** `expect(preRelocated.balances).toBe(true);` — every other `expect` in
+the 145-line case, and very nearly every `expect` in the file, carries a message
+saying what the failure means. Its probe-side twin at `:10122-10125` has a
+three-line one. If this one fires, the reader gets `expected false to be true` for
+the counter-probe's most easily-misread property.
+**Fix.** `expect(preRelocated.balances, "the pre-anchoring counter-probe stopped balancing across the relocation, so it is no longer reproducing the shape that bypassed the gate.").toBe(true);`
+
+---
+
+### IN-40: `constructAnchorFor`'s recogniser list and its docblock's enumeration have drifted apart in two small places
+
+**File:** `packages/backend/src/outbound-prohibition.spec.ts:9188-9194` (the
+enumeration), `:9215-9218` (the regexes)
+**Issue.** Minor, and in the safe direction, but this file's discipline is that a
+description match what it describes:
+
+- `DECLARATION` requires `\s+[A-Za-z_$]` after the keyword, so a destructuring
+  declaration (`const { a } = …`, `const [a] = …`) is **not** a recognised
+  construct header. The docblock's "a declaration (`const`, `let`, `var`, …)"
+  implies all of them.
+- `FIXTURE_TITLE` accepts `[(<]` after the optional modifier, so the tagged-template
+  form `it.each\`…\`` is not matched, and `test.concurrent` / `it.failing` /
+  `describe.skip.each` are not in the modifier list. The docblock says "a
+  `describe(` / `it(` / `test(` fixture title", which is closer to the code than
+  the regex's four-modifier list suggests, but the two do not agree.
+
+**Fix.** Either widen the regexes or narrow the prose to
+*"a declaration whose first token after the keyword is an identifier — a
+destructuring declaration is not recognised — and `describe`/`it`/`test` with at
+most one of `.each`/`.skip`/`.only`/`.todo`, opened with `(` or `<`."*
+
+---
+
+_Reviewed: 2026-08-26T14:05:00Z_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard — all measurements re-executed against the live file via an out-of-tree harness; repository unmodified_
