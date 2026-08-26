@@ -10477,10 +10477,18 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // bytes, rather than deleted quietly. The decision to withdraw it rather than
   // to build a containment is recorded in `01-VERIFICATION.md`'s
   // `## The mechanism judgement`, which put both exits to the operator; exit 2
-  // is the one taken. NOTHING WAS DELETED SILENTLY: the two negative
-  // statements about anchors naming no site, and the sentinel and prefix cases
-  // that assert them, are untouched and remain true — they are statements about
-  // a DEFECT SHAPE, not claims that a well-formed anchor identifies anything.
+  // is the one taken. NOTHING WAS DELETED SILENTLY. The bounded enumeration
+  // behind this retirement is in `01-42-SUMMARY.md`; within the
+  // exemption-anchoring region it found ONE positive site claim, written in TWO
+  // places — this paragraph and the failure message below — and FIVE negative
+  // ones, and it is five rather than the four the round-10 plan listed as its
+  // floor. All five are untouched and byte-identical: an anchor that travelled
+  // with the sentence and named no site; an anchor that names no site at all;
+  // an anchor that is the sentinel and names no construct and no line; a
+  // self-anchoring key that names no site; and a key whose halves were both
+  // read off the occurrence's own line and so names no site. Each survives
+  // because each is a true statement about a DEFECT SHAPE, and none of them
+  // claims that a well-formed anchor identifies anything.
   it("no exemption key's ANCHOR reduces to nothing — a fully-masked anchor names no construct and no line", () => {
     for (const key of Object.keys(HEADER_QUANTIFIER_EXEMPTIONS)) {
       const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
