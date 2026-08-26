@@ -1,0 +1,4 @@
+caido_version=0.58.2
+expected_version=0.58.2
+caido_bin=/Applications/Caido.app/Contents/Resources/bin/caido-cli
+run_id=20260826T224147Z-25836

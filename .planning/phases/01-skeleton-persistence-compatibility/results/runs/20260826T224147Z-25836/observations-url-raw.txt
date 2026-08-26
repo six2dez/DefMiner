@@ -1,0 +1,2 @@
+http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&<redacted>&<redacted>&<redacted>
+http://127.0.0.1:8972/defminer-tracer-fixture.js;jsessionid=<redacted>?v=<redacted>&access_token=<redacted>&<redacted>&<redacted>&<redacted>
