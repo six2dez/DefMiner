@@ -859,3 +859,12 @@ None - no external service configuration required.
 ---
 *Phase: 01-skeleton-persistence-compatibility*
 *Completed: 2026-08-26*
+
+## Self-Check: PASSED
+
+```
+FOUND: packages/backend/src/outbound-prohibition.spec.ts
+FOUND: .planning/phases/01-skeleton-persistence-compatibility/01-40-SUMMARY.md
+FOUND: 28b5547   FOUND: 294d646   FOUND: e1a34fd
+gate suite 438 passed (438); grep -c NO_PRECEDING_CONSTRUCT = 9; TREE-CLEAN
+```

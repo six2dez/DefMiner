@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 01
 current_phase_name: Skeleton, Persistence & Compatibility
 status: executing
-stopped_at: Completed 01-39-PLAN.md
-last_updated: "2026-08-26T14:00:03.681Z"
+stopped_at: Completed 01-40-PLAN.md
+last_updated: "2026-08-26T14:29:20.195Z"
 last_activity: 2026-08-26
 last_activity_desc: Phase 01 execution started
-state_head: 8d783290ea22b6b04203eeea382ad0a0fdebc4d7
+state_head: e1a34fdcb66eb7d058b078489f5af5e5a363acf9
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 41
-  completed_plans: 39
+  completed_plans: 40
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 01 (Skeleton, Persistence & Compatibility) — EXECUTING
-Plan: 40 of 41 (39 of 41 plans summarized on disk)
+Plan: 41 of 41 (39 of 41 plans summarized on disk)
 Status: Executing — plans 01-40 and 01-41 are the two outstanding plans
 Last activity: 2026-08-26 — 01-39 complete: CR-20's two changes and WR-52's widening
 
@@ -211,6 +211,7 @@ Progress: [█████████░] 95% of phase 01 (39 of 41 plans)
 | Phase 01 P37 | 20 min | 2 tasks | 2 files |
 | Phase 01 P38 | 21 min | 3 tasks | 4 files |
 | Phase 01 P39 | 33 min | 3 tasks | 1 files |
+| Phase 01 P40 | 19 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -373,6 +374,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: WR-53's extension was TAKEN on the 29-key prefix measurement (3 -> 1 after change (1) alone, 0 after bounding the forward walk strictly above the occurrence and continuing the backward scan) rather than in advance — no parser, no AST, no it/describe frame derivation
 - [Phase 01]: Both census-flagged anchors disposed of by choice (i), disambiguating the header in its own bytes; the census was not widened, no token exempted, no ordinal minted, no line number folded into a key
 - [Phase 01]: The it.each disambiguation is a named tuple TYPE ARGUMENT, not a trailing comment, because prettier relocates a trailing // onto the next line where normalizeGateLine never sees it
+- [Phase 01]: The sentinel is excluded from nameableRemainder BY REFERENCE to the constant (.split/.join), never by re-spelling its letters — 0 added lines carry the literal, so renaming the constant cannot silently un-fix CR-21.
+- [Phase 01]: The corrected sentinel docblock describes ONE return, because wave 39's WR-53 extension deleted the second, and states that removal by name — the only truthful form of pass 9's 'describe both returns'.
+- [Phase 01]: WR-51's prescribed snippet doubles the ':: qN' suffix (lineHalf already carries it); measured false before writing, so the pin is toBe(lineHalf(live)).
+- [Phase 01]: Two mutations were ADDED beyond the three prescribed: a top-of-file sentinel producer, because neither of pass 9's steps still reaches the surface case under WR-53; and an isolating constant body, because the verifier's version masks the own-header pair's message.
 
 ### Known Risks Carried Forward
 
@@ -415,8 +420,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-26T14:00:03.172Z
-**Stopped at:** Completed 01-39-PLAN.md
+**Last session:** 2026-08-26T14:29:04.668Z
+**Stopped at:** Completed 01-40-PLAN.md
 **Resume file:** None
 
 ### Blockers
