@@ -437,14 +437,6 @@
 //      (b ? cache : client).send(req)           operatorReceiver     [] — the third state:
 //      (cache ?? client).send(req)                returns undefined    NOT A RECEIVER, and the
 //      (ready && cache).send(req)                                      twin of every row above
-//      (ok && globalThis).fetch(url)            NOTHING              [] — the descent is NOT
-//      (b ? navigator : x).sendBeacon(u, d)                            reached from
-//      (b ? eval : x)(src)                                             isGlobalReceiver /
-//        an operator around a GLOBAL receiver                          isFetchExpression /
-//                                                                      isNavigatorReceiver.
-//                                                                      OPEN and UNOWNED,
-//                                                                      MEASURED IDENTICAL
-//                                                                      before and after wave 25
 //
 //    Everything in the NOTHING rows is a measured silence, not a bound: reverting
 //    any branch in this file leaves those rows green. They are asserted below as
@@ -452,12 +444,7 @@
 //    evidence that some rule holds.
 //
 //    THE RESIDUAL, precisely. THREE parts, RESTATED 2026-08-24 (CR-08) against
-//    what the code does rather than against what it was intended to do. This is
-//    THE ONE BOUND, and the same statement appears in `REQUIREMENTS.md`'s CORE-11
-//    correction, in `.planning/STATE.md`'s P9-D3 amendment, and in the
-//    `WINDOWS.md` entry appended by plan 01-18. If a reader finds those four
-//    disagreeing, the code wins and the prose is the defect — that disagreement
-//    IS what CR-08 was:
+//    what the code does rather than against what it was intended to do:
 //      (a) MORE THAN ONE HOP of indirection, or a value crossing a FUNCTION
 //          BOUNDARY, is beyond the walk. `const a = "requests"; const b = a;
 //          sdk[b].send(req)` reports nothing, and that is asserted below as a
@@ -741,18 +728,6 @@
 //    where they disagreed and `sdk[b ? (c ? "requests" : "x") : "y"]` was
 //    silent. `keyReceiver` now recurses through `operatorReceiver`
 //    passing itself.
-//
-//    WHAT REMAINS SILENT, READ OFF THE BRANCHES: TWO HOPS OF KEY — `const
-//    a = "requests"; const b = a; sdk[b]` — because `constStrings` and
-//    `assembledNames` read the INITIALIZER'S SHAPE and never the live
-//    set, so a key cannot be grown from a name already in a set; a value
-//    crossing a FUNCTION BOUNDARY; a PARAMETER; a LOOP BINDING; and a
-//    name bound in ANOTHER FILE. And one thing is ASSUMED rather than
-//    proven: a member or method call named in `NUMERIC_MEMBERS` is taken
-//    to be numeric WHATEVER ITS RECEIVER, a NAME heuristic that fails
-//    OPEN (WR-26), disclosed rather than narrowed because narrowing it
-//    was measured to change nothing except to re-poison ordinary `+`
-//    indexing.
 //
 //    WHAT STOOD HERE, AND WHY IT IS GONE RATHER THAN CORRECTED. Two
 //    paragraphs occupied this spot until 2026-08-25 (wave 33, CR-14). The
@@ -9094,8 +9069,8 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     shipped sentences happen to sit. Measured at wave 42 with the shipped
  *     builder from inside this file's own describe, the widest shadow belongs
  *     to the header row at `:417`,
- *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`: 574 SURFACE
- *     LINES, raw span 419..1574 — 1,156 raw lines, of which exactly the 582
+ *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`: 549 SURFACE
+ *     LINES, raw span 419..1549 — 1,131 raw lines, of which exactly the 582
  *     the machine-owned span covers are removed by exclusion one — and it
  *     ALREADY HOLDS FOUR SHIPPED OCCURRENCES. Any occurrence inside a shadow
  *     can be moved to another line inside that shadow and keep a
@@ -9385,7 +9360,7 @@ const anchorTokenCensus = (
  * OCCURRENCE TO ITS ANCHOR. Stated here on the same basis and to the same
  * figure as limit (5) above, which is where it is measured and where the
  * measurement is described: the widest shadow is the header row at `:417` at
- * 574 surface lines, raw 419..1574, already holding four shipped occurrences,
+ * 549 surface lines, raw 419..1549, already holding four shipped occurrences,
  * and pass 10 relocated one of them 514 lines and then 1,129 lines for a
  * byte-identical key at 439 of 439 green. WR-49's 234 — the largest distance a
  * shipped sentence happens to sit from its anchor, and still 234 when wave 39
@@ -10176,7 +10151,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // WHY THE CENSUS BELOW CANNOT REACH THIS, STATED SO THE TWO ARE NOT CONFUSED.
   // The uniqueness census asserts that an anchor IN USE has exactly ONE PRODUCER
   // LINE. The header row this shadow belongs to IS one line. A shadow is wide
-  // not because two lines produce the anchor but because 574 lines FIND it, and
+  // not because two lines produce the anchor but because 549 lines FIND it, and
   // that is a different measurement needing a different case.
   //
   // WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. The equality makes
@@ -10210,13 +10185,13 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // MEASURED AT WAVE 42 with the shipped builder from inside this describe. The
   // widest shadow is the header row at `:417`,
   // `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`, reached by
-  // recogniser (4). It claims raw lines 419..1574 — 1,156 raw lines — of which
+  // recogniser (4). It claims raw lines 419..1549 — 1,131 raw lines — of which
   // exactly the 582 lines the machine-owned span covers (its BEGIN sentinel to
-  // its END sentinel) are removed by exclusion one, leaving 1156 - 582 = 574
-  // surface lines. Across raw 419..1574, this session's evaluation of all five
+  // its END sentinel) are removed by exclusion one, leaving 1131 - 582 = 549
+  // surface lines. Across raw 419..1549, this session's evaluation of all five
   // recognisers accepts only the `/**` docblock opener at 1573; its null token makes
   // WR-53's forward walk fall through and the backward scan continue, so every surface line in that range resolves to the header. It already holds FOUR shipped occurrences.
-  const WIDEST_ANCHOR_SHADOW = 574;
+  const WIDEST_ANCHOR_SHADOW = 549;
   const WIDEST_ANCHOR_TOKEN =
     "SPELLING (operator, by POSITION) RESOLVED BY REPORTS";
 
@@ -10638,7 +10613,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // What the construct half names is a REGION — the anchor's SHADOW, every
   // surface line resolving to that anchor — whose width is measured and pinned
   // by the case titled `the WIDEST ANCHOR SHADOW over the scanned surface is
-  // PINNED`, and which is 574 surface lines wide for THIS occurrence's anchor.
+  // PINNED`, and which is 549 surface lines wide for THIS occurrence's anchor.
   // WHY THE CLAIM IS RETIRED RATHER THAN REPAIRED: nothing in the 2026-08-25
   // re-scoped bar ever required it. That bar asks for a residual that is
   // DERIVED, that is DRIFT-DETECTABLE, and that is the SOLE BOUND — and SOLE
@@ -10654,7 +10629,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
       expect(
         nameableRemainder(anchor).length,
-        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half then names the REGION the occurrence sits in, which is that anchor's SHADOW and is 574 surface lines wide for the one shipped occurrence in this position; it does NOT identify the occurrence's site, a claim withdrawn at wave 42 and recorded in the bracket above this case — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
+        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half then names the REGION the occurrence sits in, which is that anchor's SHADOW and is 549 surface lines wide for the one shipped occurrence in this position; it does NOT identify the occurrence's site, a claim withdrawn at wave 42 and recorded in the bracket above this case — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
   });
