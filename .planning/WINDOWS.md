@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 22
+open_count: 25
 waived_count: 0
 fixed_count: 22
-total_count: 44
-last_updated: 2026-08-26T19:41:49.894Z
+total_count: 47
+last_updated: 2026-08-27T14:05:13.548Z
 ---
 
 # Broken Windows Ledger
@@ -80,6 +80,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 42 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | CR-21 closes one laundering route only: a hand-written key outside HEADER_QUANTIFIER_EXEMPTIONS, the same-construct residual, the phrase-list reach and both classes of unreached surface remain — criterion (3) not discharged. | open |  | 2026-08-26T14:29:20.319Z |  |
 | 43 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | FINDING F-10: the round-10 baseline variable BASE_FILES held a source-file count (46) while its only consumer compares it against vitest's test-file count (31) — two correct measurements of different quantities | open |  | 2026-08-26T19:41:49.796Z |  |
 | 44 | 01 | deviation | packages/backend/src/outbound-prohibition.spec.ts |  | FINDING F-11: plan 01-43 states the WR-54 case claims 'all five locators proved unique when THREE are'; enumerated this session the case used five locator expressions of which TWO were proved | open |  | 2026-08-26T19:41:49.894Z |  |
+| 45 | 01 | unmet-truth | packages/backend/src/outbound-prohibition.spec.ts | 9147 | F-3 (measured by plan 01-46, filed by plan 01-47 which owns this ledger): the HEADER_QUANTIFIER_EXEMPTIONS section divider reads '--- HEADER (1..956) ---' while the BEGIN DERIVED RESIDUAL sentinel sits at 949, so the header extent is 1..948. A hand-written range in the gate file's live bytes, off by one on arrival and off by eight now, reached by no mechanical check. Same class as CR-25/CR-31. | open |  | 2026-08-27T14:05:00.114Z |  |
+| 46 | 01 | unrun-verify | packages/backend/src/outbound-prohibition.spec.ts | 10314 | F-2 (measured by plan 01-46, filed by plan 01-47 which owns this ledger): the anchor walk's foreign-lines report has a zero branch and a non-zero branch; neither of wave 46's two planted mutations exercised the non-zero branch, so the rendering path a reader would meet on a real split shadow has never been watched. It is a failure-message path, not an assertion — recorded as unwatched rather than claimed as guarded. | open |  | 2026-08-27T14:05:13.436Z |  |
+| 47 | 01 | deviation | .planning/phases/01-skeleton-persistence-compatibility/01-SECURITY.md | 168 | F-1 class, and plan 01-47 hit its own instance: a plan gate that can only go green by mutating an artifact marked kept-verbatim. 01-46's WM -eq 3 gate was unsatisfiable alongside the census that plan mandated (measured 7, zero new mechanism claims). 01-47's open-scoped gates on 01-SECURITY.md read 1 and 3 because every row whose Status cell says open sits inside a superseded, kept-verbatim historical block, and all three were already CLOSED with evidence. Both executors declined to fit the artifact to the gate. The gates, not the artifacts, are what need revising. | open |  | 2026-08-27T14:05:13.548Z |  |
 
 ````json
 [
@@ -609,6 +612,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-26T19:41:49.894Z",
+    "resolved_at": null
+  },
+  {
+    "id": 45,
+    "kind": "unmet-truth",
+    "phase": "01",
+    "file": "packages/backend/src/outbound-prohibition.spec.ts",
+    "line": 9147,
+    "description": "F-3 (measured by plan 01-46, filed by plan 01-47 which owns this ledger): the HEADER_QUANTIFIER_EXEMPTIONS section divider reads '--- HEADER (1..956) ---' while the BEGIN DERIVED RESIDUAL sentinel sits at 949, so the header extent is 1..948. A hand-written range in the gate file's live bytes, off by one on arrival and off by eight now, reached by no mechanical check. Same class as CR-25/CR-31.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-27T14:05:00.114Z",
+    "resolved_at": null
+  },
+  {
+    "id": 46,
+    "kind": "unrun-verify",
+    "phase": "01",
+    "file": "packages/backend/src/outbound-prohibition.spec.ts",
+    "line": 10314,
+    "description": "F-2 (measured by plan 01-46, filed by plan 01-47 which owns this ledger): the anchor walk's foreign-lines report has a zero branch and a non-zero branch; neither of wave 46's two planted mutations exercised the non-zero branch, so the rendering path a reader would meet on a real split shadow has never been watched. It is a failure-message path, not an assertion — recorded as unwatched rather than claimed as guarded.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-27T14:05:13.436Z",
+    "resolved_at": null
+  },
+  {
+    "id": 47,
+    "kind": "deviation",
+    "phase": "01",
+    "file": ".planning/phases/01-skeleton-persistence-compatibility/01-SECURITY.md",
+    "line": 168,
+    "description": "F-1 class, and plan 01-47 hit its own instance: a plan gate that can only go green by mutating an artifact marked kept-verbatim. 01-46's WM -eq 3 gate was unsatisfiable alongside the census that plan mandated (measured 7, zero new mechanism claims). 01-47's open-scoped gates on 01-SECURITY.md read 1 and 3 because every row whose Status cell says open sits inside a superseded, kept-verbatim historical block, and all three were already CLOSED with evidence. Both executors declined to fit the artifact to the gate. The gates, not the artifacts, are what need revising.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-27T14:05:13.548Z",
     "resolved_at": null
   }
 ]
