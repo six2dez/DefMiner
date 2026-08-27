@@ -96,7 +96,10 @@ the anchor resolves — a different shape, disclosed rather than edited. Case-in
 
 **The edit is comment-only and the line count is unchanged, 11503 before and after.** That is
 load-bearing, not incidental: this file's pins are computed over its own bytes, so an inserted
-or deleted line moves anchors, exclusion endpoints and the 574-line shadow. Re-measured after:
+or deleted line moves anchors, exclusion endpoints and the widest anchor's shadow — whose width
+`WIDEST_ANCHOR_SHADOW` in the gate spec publishes and this sentence deliberately does not (figure
+deleted 2026-08-27, gap-closure round 12, plan 01-47, CR-32; it had been superseded twice since it
+was written here). Re-measured after:
 `pnpm test` 31 files / **1390 passed**; the gate spec alone **442/442** — both identical to the
 pre-edit baseline; `tsc --build` exit 0; `eslint .` exit 0; `pnpm check:bundle` one import
 specifier, `crypto`.
@@ -155,6 +158,42 @@ write.
 1390 passed; gate spec alone → 442/442; `pnpm check:bundle` → one import specifier, `crypto`.
 The must-NOT holds. The one open threat is a defect in a **test-only** file's description of
 itself, not an exposure.
+
+## Re-adjudication 2026-08-27 — gap-closure round 12, plan 01-47
+
+**Every claim below was RE-EXECUTED against the live tree in this session before anything in
+this file was touched.** The plan that ordered this work predicted that `T-01-264`, `T-01-280`
+and `T-01-286` were LIVE `open` rows asserting facts about a superseded tree. **Execution
+refutes that prediction, and it is recorded here rather than quietly fitted to.** All three
+were already CLOSED with evidence on 2026-08-27 in the Round-11 Closure table above; the only
+rows in this file whose Status cell reads `open` are the seven inside the collapsed
+`Historical …` block below, which its own `<summary>` marks *superseded, kept verbatim*, and
+which the frontmatter's `threats_open: 0` and the **NONE.** at *Threat Register — Open*
+both contradict as a statement about the current tree.
+
+**READ THE BLOCK BELOW AS A DATED SNAPSHOT, NOT AS A LIVE REGISTER.** Its Status column records
+what each status WAS on 2026-08-26. That marker sits on the container and not on the rows, so a
+reader — or a `grep` for `| open |` — meets seven rows that look live. Recording that weakness
+is the honest disposition available here: correcting the cells would falsify *kept verbatim*
+and destroy the record of what was believed and when, which is the harm this round exists to
+prevent, so the rows are left byte-unchanged and this pointer is added outside them instead.
+
+**What the re-execution returned, per row. Constants, assertions and case titles are cited
+rather than gate-file line numbers — every line number these rows carry has moved twice, and a
+citation that slides will be wrong again within one wave.**
+
+| Row | The claim, quoted | Re-executed 2026-08-27 | Verdict |
+|---|---|---|---|
+| `T-01-264` | "**Nothing pins it.**" | The SIZE is pinned by `WIDEST_ANCHOR_SHADOW`, asserted by EXACT EQUALITY against a width computed in the run; the IDENTITY is pinned by `WIDEST_ANCHOR_TOKEN`, asserted by exact equality against the owning anchor. Both live in the case titled *the WIDEST ANCHOR SHADOW over the scanned surface is PINNED*. The size pin was installed at wave 42, the identity pin at wave 45. All six gate-file line numbers the row cites now land on unrelated bytes. | **FALSE when written into this file's live register, and already CLOSED above.** No further action; the row stays as the dated snapshot it is. |
+| `T-01-280` | "`WIDEST_ANCHOR_SHADOW = 574` at `:10204`" | `grep -c 'WIDEST_ANCHOR_SHADOW = 574'` returns **0** — the quoted constant value no longer exists. `:10204` is now the uniqueness-census comment. The row's scenario (a second anchor reaching the maximum while the named shadow collapses) is the exact mutation wave 45 watched go RED at the identity assertion. | **FALSE, already CLOSED above with that watched-RED evidence.** |
+| `T-01-286` | "`:10174` says a non-maximal shadow may grow to **573**" | `grep -c 'grow to 573'` returns **0**. Stronger than the closure record above claims: that record measured `573` at exactly one surviving site, inside a `1573` in the pin's hand-written span arithmetic — and plan 01-46 deleted that arithmetic closing CR-31, so `grep -n '573'` now returns **0 hits file-wide**. | **FALSE, already CLOSED above, and its closure evidence is now stronger than when it was written.** |
+
+**The file's own live/history split holds, and this section is the live half.** `status: secured`,
+`threats_open: 0`, *Threat Register — Open* reads **NONE.** Nothing in this round changed the
+exposure position; what changed is one present-tense figure in the prose above, deleted rather
+than corrected.
+
+---
 
 ---
 
