@@ -597,12 +597,6 @@
 //    `01-19-SUMMARY.md` are what stand behind it.
 //
 //    ================= THE FINAL RESIDUAL, AFTER PLAN 01-25 =================
-//    RE-DERIVED from the branches above and RENDERED PROGRAMMATICALLY into
-//    `.planning/WINDOWS.md` from one canonical source, so "the same words
-//    rather than two paraphrases" is a machine check and not a promise. If the
-//    two disagree, the code wins and the prose is the defect. `REQUIREMENTS.md`
-//    and `STATE.md` still carry OLDER text and are deliberately untouched here
-//    — see the last paragraph.
 //    WIDENED 2026-08-24 (WR-27), and the widening is why this block now says
 //    01-25 rather than 01-24. NOTHING HERE IS SUPERSEDED BY WR-27 AND THAT IS
 //    THE POINT OF IT: the shape it closed — an operator in CALL-RECEIVER
@@ -791,9 +785,6 @@
 //    bundle's entire import set as one specifier, `crypto`.
 //
 //    ============= THE NARROWING, AFTER PLAN 01-26 =============
-//    AUTHORED ONCE and rendered into this block and into `.planning/WINDOWS.md`
-//    from the same bytes, exactly as the wave-25 block above was, so "the same
-//    words rather than two paraphrases" stays a check rather than a promise.
 //    THE NARROWING AFTER WAVE 26 (plan 01-26, closing IN-26). This block
 //    AMENDS the wave-25 residual above rather than replacing it:
 //    everything in it still holds except the one clause named here, and
@@ -9129,10 +9120,11 @@ describe("the shapes that MUST stay quiet — each one real in or adjacent to th
  *     shipped sentences happen to sit. Measured at wave 42 with the shipped
  *     builder from inside this file's own describe, the widest shadow belongs
  *     to the header row at `:417`,
- *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`: 549 SURFACE
- *     LINES, raw span 419..1549 — 1,131 raw lines, of which exactly the 582
- *     the machine-owned span covers are removed by exclusion one — and it
- *     ALREADY HOLDS FOUR SHIPPED OCCURRENCES. Any occurrence inside a shadow
+ *     `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`, and its WIDTH
+ *     is the figure the shadow pin publishes and the pin's own failure
+ *     message computes and prints — it is not restated here, because a bound
+ *     written down twice is a bound one commit can falsify in one of the two
+ *     places. IT ALREADY HOLDS SHIPPED OCCURRENCES. Any occurrence inside a shadow
  *     can be moved to another line inside that shadow and keep a
  *     BYTE-IDENTICAL key: verification pass 10 moved one 514 lines and then
  *     1,129 lines, at 439 of 439 green both times, with the entry's stated
@@ -9419,8 +9411,8 @@ const anchorTokenCensus = (
  * SHADOW, every surface line resolving to it — AND NOT THE DISTANCE FROM AN
  * OCCURRENCE TO ITS ANCHOR. Stated here on the same basis and to the same
  * figure as limit (5) above, which is where it is measured and where the
- * measurement is described: the widest shadow is the header row at `:417` at
- * 549 surface lines, raw 419..1549, already holding four shipped occurrences,
+ * measurement is described: the widest shadow is the header row at `:417`,
+ * whose width the pin there publishes and this line deliberately does not,
  * and pass 10 relocated one of them 514 lines and then 1,129 lines for a
  * byte-identical key at 439 of 439 green. WR-49's 234 — the largest distance a
  * shipped sentence happens to sit from its anchor, and still 234 when wave 39
@@ -10251,7 +10243,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // surface lines. Across raw 419..1549, this session's evaluation of all five
   // recognisers accepts only the `/**` docblock opener at 1573; its null token makes
   // WR-53's forward walk fall through and the backward scan continue, so every surface line in that range resolves to the header. It already holds FOUR shipped occurrences.
-  const WIDEST_ANCHOR_SHADOW = 549;
+  const WIDEST_ANCHOR_SHADOW = 540;
   const WIDEST_ANCHOR_TOKEN =
     "SPELLING (operator, by POSITION) RESOLVED BY REPORTS";
 
@@ -10673,7 +10665,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // What the construct half names is a REGION — the anchor's SHADOW, every
   // surface line resolving to that anchor — whose width is measured and pinned
   // by the case titled `the WIDEST ANCHOR SHADOW over the scanned surface is
-  // PINNED`, and which is 549 surface lines wide for THIS occurrence's anchor.
+  // PINNED`, and whose width that case publishes rather than this comment.
   // WHY THE CLAIM IS RETIRED RATHER THAN REPAIRED: nothing in the 2026-08-25
   // re-scoped bar ever required it. That bar asks for a residual that is
   // DERIVED, that is DRIFT-DETECTABLE, and that is the SOLE BOUND — and SOLE
@@ -10689,7 +10681,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       const anchor = key.replace(/ :: q\d+( #\d+)?$/, "");
       expect(
         nameableRemainder(anchor).length,
-        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half then names the REGION the occurrence sits in, which is that anchor's SHADOW and is 549 surface lines wide for the one shipped occurrence in this position; it does NOT identify the occurrence's site, a claim withdrawn at wave 42 and recorded in the bracket above this case — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
+        `exemption key ${JSON.stringify(key)} carries an ANCHOR that reduces to NOTHING once its \`{qN}\` tokens, whitespace and punctuation are removed. An anchor made only of mask tokens names no construct and no line, so the entry is discharged by ANY occurrence whose normalized form masks to the same shape — wherever in this file that occurrence sits. That is how a fabricated hand-written bound was planted 9,001 lines from the cell its exemption was written for, with the suite reporting 432 of 432 green (CR-17, verification pass 8). Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key; it derives the construct anchor for you. If the occurrence's own line genuinely normalizes to a bare declared phrasing, that is fine — the construct half then names the REGION the occurrence sits in, which is that anchor's SHADOW and is ${WIDEST_ANCHOR_SHADOW} surface lines wide for the one shipped occurrence in this position; it does NOT identify the occurrence's site, a claim withdrawn at wave 42 and recorded in the bracket above this case — but if BOTH halves mask away, the line is the defect: REWRITE the sentence so it says what it is about, or DELETE it.`,
       ).toBeGreaterThan(0);
     }
   });
@@ -11533,5 +11525,199 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       shipped,
       `the derived residual block in ${GATE_FILE} DIVERGED from deriveResidual(RESOLVER_REGISTRY, BYTE_COMPARED_SURFACES).\n\nThe GENERATED text is authoritative and the shipped text is the defect. Replace the span between the sentinels with exactly this:\n\n----- BEGIN EXPECTED -----\n${generated}\n----- END EXPECTED -----\n`,
     ).toBe(generated);
+  });
+
+  // ===========================================================================
+  // THE HEADER CENSUS: EVERY `.planning/` MENTION IN THE GATE HEADER IS LISTED
+  // ===========================================================================
+  /**
+   * A MENTION OF A PLANNING FILE IN THIS FILE'S HEADER IS EITHER MACHINE-OWNED
+   * OR WRITTEN DOWN HERE WITH A REASON. There is no third state, and the point
+   * of that is not tidiness.
+   *
+   * CR-30 IS WHY THIS EXISTS, AND IT IS WORTH ONE PARAGRAPH. Two header
+   * paragraphs told a reader, present tense and unmarked, that a MACHINE CHECK
+   * compared the derived residual against `.planning/WINDOWS.md`. No code in
+   * this repository has ever read that file. The sentence was not caught for
+   * eighteen waves because nothing could see it: it named a file, and no
+   * mechanism enumerated the files this header names. This census enumerates
+   * them. An undeclared mention names itself and turns the suite red.
+   *
+   * THE KEY IS THE TRIMMED RAW LINE. No normalization, no masking, no new key
+   * format: a key format is a narrowing, and a narrowing invented here would be
+   * a second thing to keep true.
+   *
+   * THE LIST IS A LIST OF RECORDS AND NOT AN OBJECT KEYED BY LINE TEXT, ON
+   * PURPOSE. A keyed record silently overwrites a duplicate key, so a list that
+   * can lose an entry without saying so would be the same vacuity hole this
+   * file's own discipline is organised against. The duplicate check below is a
+   * case of its own for the same reason.
+   *
+   * WHAT THIS CENSUS REACHES, AND THE THREE THINGS IT DOES NOT - STATED ON THE
+   * SAME TERMS AS POINTS 5(b) AND 5(c) OF THE DERIVED TEXT, AND DELIBERATELY
+   * WEAKER THAN THE GUARD RATHER THAN STRONGER.
+   *   (a) IT REACHES THE HEADER AND NO FURTHER. The scanned region is line 1 up
+   *       to but not including the line the exported `DERIVED_BEGIN` constant
+   *       matches by FULL-LINE equality. Prose below the registry is not
+   *       scanned by it at all.
+   *   (b) IT MATCHES A PATH PREFIX AND NOTHING ELSE. A mechanism claim that
+   *       names NO file is invisible to it. A sentence saying "a test compares
+   *       this against the ledger of record" raises no obligation here.
+   *   (c) IT MATCHES ONLY PATHS UNDER THE PLANNING DIRECTORY, SO A MECHANISM
+   *       CLAIM ABOUT A FILE ELSEWHERE IN THE REPOSITORY IS INVISIBLE TO IT
+   *       TOO. A false sentence claiming this suite reads a file under the
+   *       backend package, or under the scripts directory, NAMES A FILE and
+   *       still passes this census unseen. That is the same shape as CR-30 in a
+   *       different directory, and it is disclosed here rather than left for a
+   *       later round to find by moving one path.
+   *   (d) IT DOES NOT ADJUDICATE WHETHER A DECLARED REASON IS A GOOD ONE. It
+   *       makes the mention LISTED and REVIEWABLE, which is what converts an
+   *       invisible claim into one a reader can read and DISAGREE with. An
+   *       unnamed blind spot cannot be disagreed with; that is the whole of
+   *       what this buys and it is not more than that.
+   */
+  type HeaderPlanningMention = {
+    readonly line: string;
+    readonly reason: string;
+  };
+  const HEADER_PLANNING_MENTIONS: readonly HeaderPlanningMention[] =
+    Object.freeze([
+      {
+        line: "// split reason lives there and in `.planning/STATE.md` (decision P9-D1).",
+        reason:
+          "PROVENANCE POINTER. It records WHERE the 2026-08-21 CORE-01 -> CORE-11 retag was decided - in the ledger and as decision P9-D1 - and claims nothing about that file being read, compared or checked by anything here.",
+      },
+      {
+        line: "//    reason `.planning/STATE.md` and `.planning/WINDOWS.md` do not. What was",
+        reason:
+          "STATES AN ABSENCE, NOT A MECHANISM. Wave 33's paragraph says it restates no bound of its own FOR THE SAME REASON those two restate none; naming a file as one that carries no bound cannot promise a check on it.",
+      },
+      {
+        line: "//    CORE-11 row in `.planning/REQUIREMENTS.md`; this block now POINTS at",
+        reason:
+          "NAMES A SURFACE THAT IS GENUINELY READ, AND THE SENTENCE ONLY POINTS. The CORE-11 row in that ledger is read and pinned BY BYTES against CORE11_BOX_EXPECTED, and the ledger is one of the two entries in BYTE_COMPARED_SURFACES.",
+      },
+      {
+        line: "//    `.planning/REQUIREMENTS.md` and `CORE11_BOX_EXPECTED` below, which",
+        reason:
+          "THE SAME PAIR ONE PARAGRAPH LOWER, AND THE CLAIM IT MAKES IS TRUE: it says CORE11_BOX_EXPECTED pins that row BY BYTES, which the case named for the box executes against the ledger this suite reads.",
+      },
+      {
+        line: "//    state; `.planning/STATE.md` is governed by the pointer-not-a-bound",
+        reason:
+          "DISCLOSES THE ABSENCE OF A CHECK RATHER THAN CLAIMING ONE. Its own bytes say STATE.md is governed by the pointer-not-a-bound rule WITH NO MECHANICAL CHECK AT ALL, which is the opposite of CR-30's shape.",
+      },
+      {
+        line: "- this gate header and `.planning/REQUIREMENTS.md`'s CORE-11 entry - and BOTH are",
+        reason:
+          "TRUE, AND NOW ALSO DERIVED. It names the second of the two byte-compared surfaces; the same fact is rendered from BYTE_COMPARED_SURFACES into the machine-owned span and byte-compared in both. Kept as wave 27's surface DECISION - the record of why two and not four - and not as the bound.",
+      },
+      {
+        line: "`.planning/STATE.md` and `.planning/WINDOWS.md` carry a POINTER to those two and",
+        reason:
+          "STATES A PROHIBITION AND, A FEW LINES LOWER, THAT NOTHING ENFORCES IT - 'a prohibition with no mechanical check, the byte comparison reaches these two surfaces and no further'. It is the true statement CR-30's deleted clause contradicted.",
+      },
+      {
+        line: "`.planning/STATE.md` and `.planning/WINDOWS.md` do not - an authored bound",
+        reason:
+          "STATES AN ABSENCE, AS THE WAVE-33 ENTRY ABOVE DOES. Wave 28's note restates no bound of its own for the same reason those two restate none; that is a statement about what they carry, not about what reads them.",
+      },
+    ]);
+
+  /** The path prefix the census matches on, and the whole of what it matches. */
+  const PLANNING_PATH_PREFIX = ".planning/";
+
+  /** The shortest string this file will accept as a REASON rather than a token. */
+  const MIN_REASON_LENGTH = 24;
+
+  const headerRegion = (): readonly string[] => {
+    const at = gateLines.findIndex((l) => l === DERIVED_BEGIN);
+    return at < 0 ? [] : gateLines.slice(0, at);
+  };
+
+  const headerPlanningHits = (): readonly { n: number; text: string }[] =>
+    headerRegion()
+      .map((line, i) => ({ n: i + 1, text: line.trim() }))
+      .filter((h) => h.text.includes(PLANNING_PATH_PREFIX));
+
+  // NON-VACUITY BEFORE THE RULES. A census that scanned nothing, or matched
+  // nothing, passes having measured nothing - which is worse than no census
+  // because somebody is now relying on it.
+  it("the CENSUSED HEADER REGION is non-empty and the scan MATCHED something — non-vacuity, asserted BEFORE the rules", () => {
+    expect(
+      headerRegion().length,
+      `the censused header region resolved to ${headerRegion().length} line(s). It is bounded by the line matching the exported DERIVED_BEGIN constant by FULL-LINE equality; if that sentinel moved or its text changed, the region collapses and every rule below would pass having scanned nothing.`,
+    ).toBeGreaterThan(100);
+    expect(
+      headerPlanningHits().length,
+      `the census matched ${headerPlanningHits().length} header line(s) containing ${JSON.stringify(PLANNING_PATH_PREFIX)}. At zero the rules below are all vacuously satisfied by an empty declaration list. This file's header names planning files by design; a zero here means the MATCHER stopped matching, not that the mentions went away.`,
+    ).toBeGreaterThan(0);
+  });
+
+  it("every `.planning/` mention in the gate header is a DECLARED entry — an undeclared mention names itself and its three dispositions", () => {
+    const declared = new Set(HEADER_PLANNING_MENTIONS.map((m) => m.line));
+    const undeclared = headerPlanningHits().filter(
+      (h) => !declared.has(h.text),
+    );
+    expect(
+      undeclared.length,
+      `${undeclared.length} header line(s) name a file under ${JSON.stringify(PLANNING_PATH_PREFIX)} and are DECLARED NOWHERE:\n${undeclared
+        .map((h) => `  ${GATE_FILE}:${h.n}\n    ${h.text}`)
+        .join(
+          "\n",
+        )}\nYOU HAVE THREE DISPOSITIONS AND THEY ARE LISTED IN THE ORDER THIS FILE PREFERS THEM. (1) DELETE the sentence, if it states a MECHANISM this suite does not have — that is CR-30's disposition and a corrected mechanism sentence is still an authored one waiting for the next commit that moves a line. (2) MAKE IT DERIVED, if the fact is one the suite already computes — the surfaces this comparison reaches are rendered from BYTE_COMPARED_SURFACES into the machine-owned span and are byte-compared in both surfaces, so a sentence restating them belongs in the generator and not in the header. (3) DECLARE it in HEADER_PLANNING_MENTIONS with a one-clause reason, if the mention is genuinely not a mechanism claim. Declaring is the LAST option, not the first.`,
+    ).toBe(0);
+  });
+
+  it("every DECLARED header mention still MATCHES a header line — a stale entry is loud and says it is stale", () => {
+    const present = new Set(headerPlanningHits().map((h) => h.text));
+    const stale = HEADER_PLANNING_MENTIONS.filter((m) => !present.has(m.line));
+    expect(
+      stale.length,
+      `${stale.length} HEADER_PLANNING_MENTIONS entr(ies) are STALE — they match NO line of the censused header region, which is a DIFFERENT failure from an undeclared mention: nothing is unlisted, a listing has outlived its line.\n${stale
+        .map((m) => `  DECLARED: ${m.line}\n    REASON: ${m.reason}`)
+        .join(
+          "\n",
+        )}\nThe line was rewrapped, moved below the sentinel, or deleted. Remove the entry in the SAME commit that removed the line: a declared obligation matching nothing is the mirror image of an unlisted mention, and this file has shipped that shape before.`,
+    ).toBe(0);
+  });
+
+  it("the census COUNTS BALANCE — a header line mentioned twice cannot be discharged by one entry", () => {
+    expect(
+      HEADER_PLANNING_MENTIONS.length,
+      `the censused header region carries ${headerPlanningHits().length} matched line(s) while HEADER_PLANNING_MENTIONS declares ${HEADER_PLANNING_MENTIONS.length}. The set checks above can both be satisfied while these differ — two header lines carrying the SAME text are discharged by one entry, and a set comparison cannot see it. This equality is what makes the population and the list the same size.`,
+    ).toBe(headerPlanningHits().length);
+  });
+
+  it("no two DECLARED header mentions carry identical line text — a list that can lose an entry without saying so is the hole this shape exists to close", () => {
+    const seen = new Map<string, number>();
+    for (const m of HEADER_PLANNING_MENTIONS) {
+      seen.set(m.line, (seen.get(m.line) ?? 0) + 1);
+    }
+    const dupes = [...seen.entries()].filter(([, c]) => c > 1);
+    expect(
+      dupes.length,
+      `${dupes.length} declared line text(s) appear more than once in HEADER_PLANNING_MENTIONS:\n${dupes
+        .map(([line, c]) => `  x${c}  ${line}`)
+        .join(
+          "\n",
+        )}\nThe list is a LIST rather than an object keyed by line text precisely so this is visible: a keyed record would have swallowed the second entry and its reason without a word. Two header lines carrying identical text are two mentions and need two lines in this file, or one of them needs rewording so they are told apart.`,
+    ).toBe(0);
+  });
+
+  it("every DECLARED header mention carries a REASON, and a reason is longer than a token", () => {
+    const thin = HEADER_PLANNING_MENTIONS.filter(
+      (m) => m.reason.trim().length < MIN_REASON_LENGTH,
+    );
+    expect(
+      thin.length,
+      `${thin.length} HEADER_PLANNING_MENTIONS entr(ies) carry a reason shorter than ${MIN_REASON_LENGTH} characters:\n${thin
+        .map(
+          (m) => `  ${m.line}\n    REASON GIVEN: ${JSON.stringify(m.reason)}`,
+        )
+        .join(
+          "\n",
+        )}\nThe reason is the entire product of this census — it is what a reviewer reads and DISAGREES with. An empty string or a word is a declaration that the mention was waved through, and waving a mention through is what CR-30 was. Write what the line actually says.`,
+    ).toBe(0);
   });
 });
