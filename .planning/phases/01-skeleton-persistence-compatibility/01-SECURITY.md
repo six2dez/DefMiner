@@ -3,12 +3,14 @@ phase: 01
 slug: skeleton-persistence-compatibility
 status: blocked
 # threats_open = count of OPEN threats at or above workflow.security_block_on severity (the blocking gate)
-threats_open: 6
+threats_open: 1
 asvs_level: 1
 block_on: high
 created: 2026-08-26
+reaudited: 2026-08-27
 mode: State B — no SECURITY.md existed; register rebuilt from the 43 PLAN.md <threat_model> blocks
 register_authored_at_plan_time: true
+reaudit_note: "Round-11 re-audit (2026-08-27). 6 of the 7 open threats verified CLOSED against the live tree; T-01-263 remains OPEN and blocking. status stays `blocked`."
 ---
 
 # Phase 01 — Security
@@ -58,6 +60,61 @@ Every one resolved to its **highest** severity.
 
 ## Threat Register — Open
 
+**ONE blocking, after the 2026-08-27 re-audit.** `Repudiation`, in `outbound-prohibition.spec.ts`.
+
+| Threat ID | Category | Component | Severity | Disposition | Status |
+|-----------|----------|-----------|----------|-------------|--------|
+| T-01-263 | Repudiation | `enclosing`-construct claims the docblock disowns | high | mitigate | **open** |
+
+**T-01-263 — what round 11 closed and what it did not.** Plan 01-44 DID delete the three
+shipped failure messages CR-27 named, and deleted the overclaiming retirement bracket whole
+rather than merely recounting it — confirmed in `git show 52b9906`. What survives, measured
+on the live tree 2026-08-27:
+
+| Site | Reads | Why it is still a defect |
+|---|---|---|
+| `:9395` | the word `enclosing` "would claim a containment this scan does not compute" | the disowning statement — correct, and the baseline the others contradict |
+| `:9409` | "so the next enclosing construct is tried" | **13 lines below the disowning statement, in the SAME docblock** |
+| `:9242` | "made that case CONTINUE the backward scan to the next enclosing construct" | named by the threat row; survives verbatim |
+| `:9463` | "resumes the backward scan one line higher, **which resolves the NEXT enclosing construct**" | **worse than any site the row names, and unnamed by it** — a resolution claim, not a scan-continuation description, inside `constructAnchorFor`'s own body |
+
+Case-insensitive `enclos` population is 7 (`9242, 9380, 9395, 9409, 9463, 10761, 11129`),
+matching plan 01-44's own count. Plan 01-44 re-adjudicated `:9242` and `:9409` as "not
+asserting that a resolved anchor computes containment" and recorded that disposition **only
+in `01-44-SUMMARY.md`, nowhere in the gate's bytes** — so a reader of the file meets the
+disowned word with no adjudication beside it. Mitigation absent at 2 of the 4 cited
+locations, plus one worse uncited one.
+
+---
+
+## Round-11 Closure — re-audit 2026-08-27
+
+Six threats verified CLOSED against the live tree by `gsd-security-auditor` (ASVS L1,
+`block_on: high`). The auditor measured rather than reading the round-11 summaries, planted
+mutations to watch gates go red, and restored the tree byte-for-byte — `git diff --exit-code
+-- packages/` returns 0 and the gate file's md5 is `04c450e0b6d3dee6ad3223232ca04951`,
+identical to its pre-session backup. Both facts re-verified by the orchestrator before this
+write.
+
+| Threat | Verdict | Evidence |
+|---|---|---|
+| T-01-289 | **CLOSED** | The dated present-tense locator is deleted (`git show 52b9906`). Live greps: `"299 and 361"`=0, `"Located by text TODAY"`=0, `\b299\b`=0, `\b361\b`=0. The site now sits at `:10770-10781`, past-tense, resting on `01-39-SUMMARY.md:531`/`:931` — both read on disk, both say what is claimed. |
+| T-01-283 | **CLOSED** | Second site of the same locator deleted in the same commit. The case at `:11208-11256` now executes only over the synthetic 6-element `twice` array at `:11228-11230` and asserts nothing about live file lines — the reach it states is the reach it executes. |
+| T-01-264 | **CLOSED** | The `:417` shadow is pinned by IDENTITY, not only maximum: `WIDEST_ANCHOR_TOKEN` at `:10220-10221`, asserted at `:10271-10274`; `sed -n '417p'` confirms line 417 is that header. The auditor closed the token-merge bypass itself — planting a second producer of the identical header at line 8002 turned `every anchor IN USE is produced by exactly ONE line` RED, naming `produced by 2 line(s): 417, 8002`. |
+| T-01-280 | **CLOSED** | Pass 11's exact geometry replanted against the live tree (291 filler lines holding the maximum at 574 on a different owner, plus a 2-line collapse of the named shadow): `Tests 1 failed \| 441 passed (442)`, failing at the IDENTITY assertion with `EXPECTED OWNER "SPELLING (operator, by POSITION)…" BUT FOUND "…CORE-11's wi…"`. The SIZE assertion four lines earlier PASSED in that same run — 574 held while the named shadow collapsed, and the identity pin caught it. That is exactly the scenario the threat row said would stay green. |
+| T-01-239 | **CLOSED** | "A pin nobody watched failing" — watched failing, in the run above, independently of 01-45's account. Pass 11 recorded this identical mutation at `441 passed (441)` fully silent; on the live tree it is `1 failed \| 441 passed (442)` with a diagnostic naming the mechanism. |
+| T-01-286 | **CLOSED** (medium, was non-blocking) | `grow to 573` deleted; reach statement (2) at `:10190` is now the bare `IT DOES NOT BOUND A NON-MAXIMAL SHADOW.` `grep -no "573"` returns exactly one hit, line 10217, and it is the `1573` inside `raw 419..1574`. The bound is published once, at `:9109`. |
+
+**Live-exposure position, re-established rather than inherited:** `pnpm test` → 31 files /
+1390 passed; gate spec alone → 442/442; `pnpm check:bundle` → one import specifier, `crypto`.
+The must-NOT holds. The one open threat is a defect in a **test-only** file's description of
+itself, not an exposure.
+
+---
+
+<details>
+<summary>Historical — the seven-row Open register as audited 2026-08-26 (superseded, kept verbatim)</summary>
+
 Six blocking, one non-blocking. All are `Repudiation`, all in `outbound-prohibition.spec.ts`.
 
 | Threat ID | Category | Component | Severity | Disposition | Mitigation | Status |
@@ -86,6 +143,8 @@ Six blocking, one non-blocking. All are `Repudiation`, all in `outbound-prohibit
 **CORRECTION 2026-08-26:** an earlier revision of this line named `T-01-286` among the six and omitted `T-01-283`. Six names, the wrong six. Caught by the plan-checker after the error had already propagated into `01-44-PLAN.md` and `01-45-PLAN.md`, which cited this list rather than re-deriving it. Recorded rather than silently corrected: a stated completeness exceeding an executed one is the exact defect class round 11 exists to close, and this document authored an instance of it.
 
 The security audit and verification pass 11 converged on these six independently.
+
+</details>
 
 ---
 
@@ -122,6 +181,24 @@ Verified by class; representative evidence per class.
 1. **28 of 43 summaries carry no `## Threat Flags` section** (01-01…01-06, 01-09, 01-13, 01-18/19, 01-22…01-27, 01-31, 01-33…01-43). The auditor verified independently that no undeclared surface exists: no fs/process reach, no new imports, 4 read-only project-scoped RPCs, schema frozen by allowlist.
 2. **Out-of-repo `sqlite3` reads by no committed code.** `results/observation-url-exposure.json` records read-only opens of the operator's live Caido data directory, including 6 third-party plugin databases. Method sound — `COUNT(*)` only, values never read, nothing started or stopped, mtimes preserved — and only schema table names, never row values, reached the committed artifact.
 3. **`packages/frontend/src/**` does not exist.** No frontend attack surface in this phase.
+5. **`:10770-10772` carries an unregistered CR-24-class sentence** (found at the 2026-08-27
+   re-audit). It states `it.each([` was produced by TEN lines and the receiver-key table header
+   by THREE. Measured today: `it.each([` occurs on NINE lines (7011, 7239, 8405, 8466, 8499,
+   8604, 8613, 8649, 8907), and the three `receiver-key position` headers at `:283`/`:299`/`:361`
+   are pairwise DISTINCT (`const` / `rebind` / `??=`), so no receiver-key header has three
+   producers. The sentence is past-tense and true of the pre-wave-39 file, but it is CR-24's
+   class and it survived the deletion round unregistered.
+6. **The size pin's failure message overreaches.** `:10269` reads "the equality is exact so that
+   a shadow which shrank is visible too", while `:10190` and `:10276-10277` state that every
+   NON-maximal shadow is unwatched in both directions. True of the named shadow now that the
+   identity pin exists; false as the general claim a reader meets while the suite is red.
+7. **Neither 01-44 nor 01-45 carries a `## Threat Flags` section** (`grep -c` = 0 for both);
+   both carry `## Security Position` instead. No new attack surface: the only post-`dca732c`
+   edit to the gate file, commit `2efd48f`, merely retargets a false-positive fixture from
+   `telemetry.ts` to `ingest/consumer.ts`.
+8. **T-01-264's census guard is scoped to anchors IN USE.** It reaches only anchors used in
+   `HEADER_QUANTIFIER_EXEMPTIONS`; a commit deleting all four exemptions anchored to `:417` in
+   the same breath would remove that guard from the named shadow.
 4. **`T-01-277` / `T-01-279` closed with a disclosed residual.** `:10353-10362` uses full-line equality (`l === REGISTRY_OPEN`) with an explicit `toBe(1)` uniqueness assertion guarding the `-1 == -1` tautology — CLOSED at ASVS L1. Residual: nothing detects a future author swapping the matcher back to a prefix form. The guard is not itself guarded.
 
 ---
@@ -131,6 +208,7 @@ Verified by class; representative evidence per class.
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-08-26 | 294 | 287 | 7 (6 blocking) | gsd-security-auditor (ASVS L1, block_on: high) |
+| 2026-08-27 | 294 | 293 | 1 (1 blocking) | gsd-security-auditor re-audit after plans 01-44/01-45 (ASVS L1, block_on: high) |
 
 ---
 
@@ -138,4 +216,4 @@ Verified by class; representative evidence per class.
 
 - [x] All threats have a disposition (mitigate / accept / transfer)
 - [x] Accepted risks documented in Accepted Risks Log
-- [ ] `threats_open: 0` confirmed — **6 blocking open; see Threat Register — Open**
+- [ ] `threats_open: 0` confirmed — **1 blocking open (T-01-263); see Threat Register — Open**
