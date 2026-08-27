@@ -171,7 +171,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 51  <!-- counted on disk 2026-08-27: 4 SUMMARY in phase 00 + 47 in phase 01. Derived from `ls .planning/phases/*/*-SUMMARY.md`, not carried from a prior value. The duration fields below were never captured and are left empty rather than estimated. -->
 - Average duration: —
 - Total execution time: 0 hours
 
