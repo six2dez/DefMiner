@@ -1,16 +1,16 @@
 ---
 phase: 01
 slug: skeleton-persistence-compatibility
-status: blocked
+status: secured
 # threats_open = count of OPEN threats at or above workflow.security_block_on severity (the blocking gate)
-threats_open: 1
+threats_open: 0
 asvs_level: 1
 block_on: high
 created: 2026-08-26
 reaudited: 2026-08-27
 mode: State B — no SECURITY.md existed; register rebuilt from the 43 PLAN.md <threat_model> blocks
 register_authored_at_plan_time: true
-reaudit_note: "Round-11 re-audit (2026-08-27). 6 of the 7 open threats verified CLOSED against the live tree; T-01-263 remains OPEN and blocking. status stays `blocked`."
+reaudit_note: "Round-11 re-audit (2026-08-27) closed 6 of 7 against the live tree. T-01-263, the seventh, was then closed in the bytes by commit `efe93e8`. threats_open: 0. The last closure is ORCHESTRATOR-APPLIED, not independently audited — verification pass 12 is its check."
 ---
 
 # Phase 01 — Security
@@ -60,11 +60,55 @@ Every one resolved to its **highest** severity.
 
 ## Threat Register — Open
 
-**ONE blocking, after the 2026-08-27 re-audit.** `Repudiation`, in `outbound-prohibition.spec.ts`.
+**NONE.** `threats_open: 0` as of 2026-08-27.
 
-| Threat ID | Category | Component | Severity | Disposition | Status |
-|-----------|----------|-----------|----------|-------------|--------|
-| T-01-263 | Repudiation | `enclosing`-construct claims the docblock disowns | high | mitigate | **open** |
+The seventh and last, `T-01-263`, was closed in the bytes by commit `efe93e8` after the
+re-audit below isolated it. **That closure is ORCHESTRATOR-APPLIED and has NOT been
+independently audited** — it is recorded here as what was done and measured, and
+verification pass 12 is its check, not this document.
+
+### T-01-263 — closed 2026-08-27, commit `efe93e8`
+
+Four sites used the word `enclosing` to describe what the backward scan TARGETS, which is
+exactly the containment `:9395` disowns ("would claim a containment this scan does not
+compute; what it computes is proximity under those five recognisers"). All four now read
+"the next construct ABOVE" — the file's own non-containment vocabulary, already in use at
+`:9238`.
+
+| Site | Was | Now |
+|---|---|---|
+| `:9242` | "CONTINUE the backward scan to the next enclosing construct" | "…to the next construct ABOVE" |
+| `:9409` | "so the next enclosing construct is tried" | "so the next construct ABOVE is tried" |
+| `:9463` | "which resolves the NEXT enclosing construct" | "so the NEXT construct ABOVE is taken" |
+| `:10761` | "continuing the backward scan to the next enclosing construct" | "…to the next construct ABOVE" |
+
+`:9463` was the sharpest and the threat row did not name it: a **resolution** claim, not a
+scan-continuation description, sitting inside `constructAnchorFor`'s own body 68 lines below
+the disowning statement. `:10761` is a failure-message string; `grep` confirmed nothing
+asserts on its text.
+
+NOT edited, with the reason stated rather than left to inference: `:9380` ("NOT THE SAME AS
+THE FINEST ENCLOSING CONSTRUCT") is a negation drawing the same distinction and is correct as
+written; `:9395` is the disowning statement itself; `:11129` ("when its enclosing construct
+changed") describes the construct a sentence SITS IN during a relocation scenario, not what
+the anchor resolves — a different shape, disclosed rather than edited. Case-insensitive
+`enclos` population 7 → 3.
+
+**The edit is comment-only and the line count is unchanged, 11503 before and after.** That is
+load-bearing, not incidental: this file's pins are computed over its own bytes, so an inserted
+or deleted line moves anchors, exclusion endpoints and the 574-line shadow. Re-measured after:
+`pnpm test` 31 files / **1390 passed**; the gate spec alone **442/442** — both identical to the
+pre-edit baseline; `tsc --build` exit 0; `eslint .` exit 0; `pnpm check:bundle` one import
+specifier, `crypto`.
+
+Plan 01-44 had re-adjudicated `:9242` and `:9409` as acceptable but recorded that disposition
+only in `01-44-SUMMARY.md`, never in the gate's bytes — so a reader of the file met the
+disowned word with no adjudication beside it. This closes the contradiction in the bytes.
+
+---
+
+<details>
+<summary>Historical — T-01-263 as it stood at the 2026-08-27 re-audit, before commit `efe93e8` (kept verbatim)</summary>
 
 **T-01-263 — what round 11 closed and what it did not.** Plan 01-44 DID delete the three
 shipped failure messages CR-27 named, and deleted the overclaiming retirement bracket whole
@@ -84,6 +128,8 @@ asserting that a resolved anchor computes containment" and recorded that disposi
 in `01-44-SUMMARY.md`, nowhere in the gate's bytes** — so a reader of the file meets the
 disowned word with no adjudication beside it. Mitigation absent at 2 of the 4 cited
 locations, plus one worse uncited one.
+
+</details>
 
 ---
 
@@ -209,6 +255,7 @@ Verified by class; representative evidence per class.
 |------------|---------------|--------|------|--------|
 | 2026-08-26 | 294 | 287 | 7 (6 blocking) | gsd-security-auditor (ASVS L1, block_on: high) |
 | 2026-08-27 | 294 | 293 | 1 (1 blocking) | gsd-security-auditor re-audit after plans 01-44/01-45 (ASVS L1, block_on: high) |
+| 2026-08-27 | 294 | 294 | 0 | orchestrator — T-01-263 closed in the bytes (`efe93e8`); NOT independently audited, pass 12 is its check |
 
 ---
 
@@ -216,4 +263,4 @@ Verified by class; representative evidence per class.
 
 - [x] All threats have a disposition (mitigate / accept / transfer)
 - [x] Accepted risks documented in Accepted Risks Log
-- [ ] `threats_open: 0` confirmed — **1 blocking open (T-01-263); see Threat Register — Open**
+- [x] `threats_open: 0` confirmed — **no blocking threats remain.** The final closure is orchestrator-applied; verification pass 12 owns confirming it, and owns CORE-11's checkbox.
