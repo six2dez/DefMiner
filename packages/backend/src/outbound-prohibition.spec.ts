@@ -10203,8 +10203,9 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // WHY THE CENSUS BELOW CANNOT REACH THIS, STATED SO THE TWO ARE NOT CONFUSED.
   // The uniqueness census asserts that an anchor IN USE has exactly ONE PRODUCER
   // LINE. The header row this shadow belongs to IS one line. A shadow is wide
-  // not because two lines produce the anchor but because 549 lines FIND it, and
-  // that is a different measurement needing a different case.
+  // not because two lines produce the anchor but because its whole span RESOLVES
+  // to that one anchor, and that is a different measurement needing a different
+  // case. The width itself is the pin's, below, and is not restated here.
   //
   // WHY THE EQUALITY IS EXACT RATHER THAN AN UPPER BOUND. The equality makes
   // both directions of THE MAXIMUM loud; the identity pin makes a change in WHICH
@@ -10234,15 +10235,20 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
   // attribution in the commit; an unattributable bump is not authorised. So the maximum is pinned here and the distribution is recorded as
   // evidence in `01-42-SUMMARY.md` instead.
   //
-  // MEASURED AT WAVE 42 with the shipped builder from inside this describe. The
-  // widest shadow is the header row at `:417`,
-  // `SPELLING (operator, by POSITION) RESOLVED BY REPORTS`, reached by
-  // recogniser (4). It claims raw lines 419..1549 — 1,131 raw lines — of which
-  // exactly the 582 lines the machine-owned span covers (its BEGIN sentinel to
-  // its END sentinel) are removed by exclusion one, leaving 1131 - 582 = 549
-  // surface lines. Across raw 419..1549, this session's evaluation of all five
-  // recognisers accepts only the `/**` docblock opener at 1573; its null token makes
-  // WR-53's forward walk fall through and the backward scan continue, so every surface line in that range resolves to the header. It already holds FOUR shipped occurrences.
+  // THE SPAN ARITHMETIC AND THE ANCHOR-WALK RESULT ARE NOT WRITTEN DOWN HERE, AND
+  // CR-31 IS WHY. A sentence in this block once named the line number of the one
+  // construct the recognisers accept inside this span. It was TRUE when it was
+  // written and FALSE one commit later, because that commit deleted lines above it
+  // and moved the construct; the commit that closed the previous finding shipped
+  // the next one in the same breath. So the pin's own failure message COMPUTES and
+  // PRINTS the span, the raw count over it, the count exclusion one removes, the
+  // surface count and the anchor walk's verdict, at the moment it measures them.
+  // The anchor that owns the maximum is named by `WIDEST_ANCHOR_TOKEN` below and
+  // asserted by the identity pin, so it is not spelled as a line number either.
+  //
+  // THE EMISSION IS DELIBERATELY UNASSERTED. It is a diagnostic on the path that
+  // already fails, not a second rule: a new claim about this file's geometry made
+  // in the round that is removing one carries exactly the risk being removed.
   const WIDEST_ANCHOR_SHADOW = 540;
   const WIDEST_ANCHOR_TOKEN =
     "SPELLING (operator, by POSITION) RESOLVED BY REPORTS";
@@ -10291,9 +10297,33 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
     const ns = shadows.get(widest) ?? [];
     const lo = ns[0] ?? -1;
     const hi = ns[ns.length - 1] ?? -1;
+    // EMITTED, NOT WRITTEN DOWN. Each of these was a hand-written number in the
+    // comment above until CR-31; each is computed here from the same inputs the
+    // rule uses, and NONE of them is asserted.
+    const rawSpan = hi >= lo ? hi - lo + 1 : 0;
+    let excludedInSpan = 0;
+    for (let n = lo; n <= hi; n++) {
+      if (EXCLUDED_LINES.has(n)) excludedInSpan += 1;
+    }
+    const foreign: { n: number; token: string }[] = [];
+    for (const n of SURFACE_LINES) {
+      if (n < lo || n > hi) continue;
+      const token = constructAnchorFor(gateLines, n);
+      if (token !== widest) foreign.push({ n, token });
+    }
+    const foreignReport =
+      foreign.length === 0
+        ? "none - the whole surface of that span resolves to this one anchor"
+        : foreign
+            .slice(0, 5)
+            .map(
+              (f) =>
+                `${f.n} -> ${JSON.stringify(f.token)} :: ${JSON.stringify((gateLines[f.n - 1] ?? "").trim().slice(0, 70))}`,
+            )
+            .join("; ");
     expect(
       widestSize,
-      `THE WIDEST ANCHOR SHADOW IS NOW ${widestSize} SURFACE LINES AND THIS GATE PINS IT AT ${WIDEST_ANCHOR_SHADOW}. The anchor that owns it is ${JSON.stringify(widest)}, spanning raw lines ${lo}..${hi}. A SHADOW THAT GREW IS A RESIDUAL THAT GREW: every one of those ${widestSize} lines now produces the same construct half, so an exemption written for any one of them is discharged just as well by an occurrence at any other, and the reach this file publishes for its anchoring is that wide. THE CORRECT RESPONSES ARE (a) re-site or rewrite whatever widened it, or (b) re-derive this pin ONLY against growth attributed LINE BY LINE to lines the same commit added, with the diff shown. Moving the pin to fit a number it cannot account for is decoration that reports green, and it is the exact defect this file has spent eleven waves removing. If the number FELL, that is equally reportable: the equality is exact so that a shadow which shrank is visible too, and the reason belongs in the commit that shrank it.`,
+      `THE WIDEST ANCHOR SHADOW IS NOW ${widestSize} SURFACE LINES AND THIS GATE PINS IT AT ${WIDEST_ANCHOR_SHADOW}. The anchor that owns it is ${JSON.stringify(widest)}, spanning raw lines ${lo}..${hi}. RAW LINES ${rawSpan} over that span, of which EXCLUDED ${excludedInSpan} are removed by the three exclusions, leaving ${rawSpan - excludedInSpan} SURFACE lines, ${widestSize} of which resolve to this anchor. ANCHOR WALK over that span: ${foreign.length} surface line(s) resolve to a DIFFERENT anchor - ${foreignReport}. Every one of those five figures is COMPUTED IN THIS RUN and none of them is asserted; they replace the hand-written arithmetic CR-31 falsified. A SHADOW THAT GREW IS A RESIDUAL THAT GREW: every one of those ${widestSize} lines now produces the same construct half, so an exemption written for any one of them is discharged just as well by an occurrence at any other, and the reach this file publishes for its anchoring is that wide. THE CORRECT RESPONSES ARE (a) re-site or rewrite whatever widened it, or (b) re-derive this pin ONLY against growth attributed LINE BY LINE to lines the same commit added, with the diff shown. Moving the pin to fit a number it cannot account for is decoration that reports green, and it is the exact defect this file has spent eleven waves removing. If the number FELL, that is equally reportable: the equality is exact so that a shadow which shrank is visible too, and the reason belongs in the commit that shrank it.`,
     ).toBe(WIDEST_ANCHOR_SHADOW);
     expect(
       widest,
