@@ -1,10 +1,11 @@
 ---
 phase: 05
 slug: workspace-operator-workflow
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-28
+reviewed_at: 2026-08-28
 ---
 
 # Phase 05 — UI Design Contract
@@ -412,31 +413,71 @@ Order of visual weight, strongest first:
 
 ## UI Considerations
 
-Applicable state considerations resolved: **12 covered, 3 backstop, 2 unresolved**
+Applicable state considerations resolved: **37 covered, 6 backstop, 4 unresolved** (47 applicable, 0 unclassified)
 
-Elements classified: `findings-table` (list-collection), `evidence-panel` (static-content),
-`settings-form` (form), `page-nav` (nav), `export-dialog` (form), `health-strip` (static-content),
-`triage-controls` (interactive-control).
+Elements classified — 9 surfaces, kinds confirmed at the propose-then-confirm step rather than left
+to the prose classifier: `findings-table` (list-collection + interactive-control), `evidence-panel`
+(static-content + interactive-control), `settings-form` (form), `page-nav` (nav), `export-dialog`
+(form + interactive-control), `health-strip` (static-content), `triage-controls`
+(interactive-control), `suppressions-list` (list-collection + interactive-control),
+`findings-projection-preview` (list-collection + interactive-control).
+
+> **Two surfaces were added at the probe step.** `suppressions-list` and
+> `findings-projection-preview` were absent from the authoring pass's element list, so 16 of the
+> considerations below had never been raised — despite `## Data & Interaction Contract` calling the
+> suppressions list "a first-class surface" and R4 making the projection preview the *only* point of
+> review for an action that cannot be undone. Both carry target-controlled content, so both inherit
+> R1/R2 in full.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
 | empty | findings-table | ✅ covered | Zero analysed artifacts renders the "Nothing analysed on this target yet" heading and body from `## Copywriting Contract`; zero rows under an active filter renders the distinct filtered-empty copy with a **Clear all filters** action. The two are never the same screen. |
-| empty | export-dialog | ⚠ unresolved | Whether exporting a zero-row selection is disabled or produces a header-only file is an operator preference, not a derivable default. Listed in `## Open Decisions` (D3); planner treats as an assumption. |
 | loading | findings-table | ✅ covered | Skeleton rows at the fixed 32px `item-size`, count matching the 100-row page, with the "Loading the first 100 rows…" label. Never a centred spinner — a spinner reflows the table on resolve. |
-| loading | health-strip | ✅ covered | Health counters render their last known value with a dimmed `surface-400` treatment and a relative "as of {n}s ago"; they never blank to zero, because a blank counter reads as "healthy" and this strip exists to say the opposite. |
-| loading | export-dialog, settings-form | ✅ covered | Confirm button enters a disabled in-flight state with its own label ("Exporting…", "Saving…"); the dialog cannot be dismissed mid-write and the action cannot be double-submitted. |
 | error | findings-table | ✅ covered | The error copy in `## Copywriting Contract` with **Retry** and **Open Health**, and its explicit backend-thread explanation — so the operator diagnoses a blocked QuickJS thread (PITFALLS P3) instead of reporting a frozen UI. |
-| error | evidence-panel | ✅ covered | A failed analysis renders the ERR-04 copy — "This is not 'no findings': nothing was inspected" — with **Re-analyse this artifact** (OPS-03). The distinction between "clean" and "failed" is stated in words, never left to a badge colour. |
 | populated | findings-table | ✅ covered | 100-row keyset page inside `RecycleScroller` at fixed 32px, 2,000-row in-memory window, server-side sort and filter. Focal point per `## Visual Hierarchy`. |
 | partial | findings-table | ✅ covered | Per-row **Partial** badge plus the partial-view banner stating counts are a floor, with **Show only affected artifacts** (UI-09). Aggregate numbers are never presented as totals when any contributing artifact is `partial` or `failed`. |
-| partial | settings-form | ⚠ unresolved | The threshold and budget field set is defined by Phases 2–4, which are unplanned, so "some settings present, others absent" cannot be specified without inventing the schema. Planner treats as an assumption; the settings *shell* (UI-08) is in scope for 05-01 regardless. |
 | overflow | findings-table | 🧪 backstop | 10,000 rows must stay responsive and scroll smoothly (Phase 5 success criterion 2). Verified by a load test at 10,000 rows asserting a bounded in-memory window and no dropped frames — not by inspection. |
-| overflow | page-nav | ✅ covered | The tab strip wraps to a second row; it never scrolls horizontally and never collapses into an overflow menu. A hidden entity class is an entity class the operator never triages. |
-| overflow | evidence-panel | ✅ covered | The panel scrolls internally within a fixed height; the snippet is bounded at 2,048 characters with its byte range stated. The panel never grows the page. |
 | zero-one-many | findings-table | ✅ covered | Zero → the empty state; one → a normal single row, no special case; many → the count in the toolbar is written with singular/plural agreement ("1 secret" / "3,412 secrets"). Counts are never rendered as "1 secret(s)". |
-| long-text | evidence-panel, findings-table | 🧪 backstop | UISEC-03. Verified by an adversarial fixture — a multi-megabyte single-line string literal, a value with embedded newlines, and a 4-byte-grapheme value — asserting truncation at 256/2,048 characters, no grapheme split, no layout break, no renderer freeze. |
-| long-text | findings-table, evidence-panel | 🧪 backstop | UISEC-01/UISEC-03 hostile-content fixture: HTML tags, a `<script>` payload, a CSV formula payload, C0 control characters and bidi override characters. Asserts inert text rendering, the control/bidi strip, and a safe CSV export in one pass. This is Phase 5 success criterion 6 and cannot be signed off by inspection. |
-| long-text | settings-form, triage-controls, page-nav | ✅ covered | These carry only DefMiner-authored strings — no target-controlled content reaches a label, a button or a tab. Bounded by construction, and stated as a rule in `## Copywriting Contract` so it stays true. |
+| long-text | findings-table | 🧪 backstop | UISEC-03 at the 256-character cell cap. Verified by an adversarial fixture — a multi-megabyte single-line string literal, a value with embedded newlines, and a 4-byte-grapheme value — asserting truncation, no grapheme split, no layout break, no renderer freeze. |
+| loading | evidence-panel | ✅ covered | The panel is a persistent region (`## Data & Interaction Contract`), so while a selected row's evidence loads it renders a skeleton at its own fixed height and **does not collapse or unmount**. A collapsing panel would reflow the split body on every row click — the same defect the table's no-spinner rule exists to prevent. |
+| error | evidence-panel | ✅ covered | A failed analysis renders the ERR-04 copy — "This is not 'no findings': nothing was inspected" — with **Re-analyse this artifact** (OPS-03). The distinction between "clean" and "failed" is stated in words, never left to a badge colour. |
+| overflow | evidence-panel | ✅ covered | The panel scrolls internally within a fixed height; the snippet is bounded at 2,048 characters with its byte range stated. The panel never grows the page. |
+| long-text | evidence-panel | 🧪 backstop | UISEC-03 at the 2,048-character panel cap, with R2's grapheme-safe rule and the stated byte range. Same adversarial fixture as the table row. |
+| empty | settings-form | ✅ covered | The settings shell (UI-08) renders only the sections whose owning phase has shipped; a phase that has contributed no toggles contributes **no empty section**, rather than an empty labelled box implying a missing control. |
+| loading | settings-form | ✅ covered | Save enters a disabled in-flight state with its own label ("Saving…"); the action cannot be double-submitted. |
+| error | settings-form | ✅ covered | A failed save names the cause and **retains the operator's edits in the form** — it never silently discards them or reverts the fields to their stored values, which would lose work and read as success. |
+| partial | settings-form | ⚠ unresolved | The threshold and budget field set is defined by Phases 2–4, which are unplanned, so "some settings present, others absent" cannot be specified without inventing the schema. Planner treats as an assumption; the settings *shell* (UI-08) is in scope for 05-01 regardless. |
+| long-text | settings-form | ✅ covered | Labels are DefMiner-authored and bounded. The one unbounded string this surface can display is a filesystem path, which R5 requires be labelled "on the Caido server"; it truncates from the **left** so the filename stays visible, and carries the full path only via **Copy full value**, never in a `title`. |
+| loading | page-nav | ✅ covered | The tab strip renders immediately with its fixed tabs. An entity-class tab whose count is still resolving shows the tab **without** a count rather than showing zero — a zero would read as "nothing found here" and stop the operator opening it. |
+| error | page-nav | ✅ covered | A tab whose query fails still renders and still routes; the failure surfaces in the body region using the table's error copy. **A tab is never removed on error** — a removed tab is an entity class the operator cannot reach and cannot know is missing. |
+| overflow | page-nav | ✅ covered | The tab strip wraps to a second row; it never scrolls horizontally and never collapses into an overflow menu. A hidden entity class is an entity class the operator never triages. |
+| long-text | page-nav | ✅ covered | Tab labels are DefMiner-authored entity-class names and the fixed **Health** / **Settings** labels. No target-controlled string reaches a tab. |
+| empty | export-dialog | ⚠ unresolved | Whether exporting a zero-row selection is disabled or produces a header-only file is an operator preference, not a derivable default. Listed in `## Open Decisions` (D3); planner treats as an assumption. |
+| loading | export-dialog | ✅ covered | Confirm enters a disabled in-flight state labelled "Exporting…"; the dialog cannot be dismissed mid-write and the action cannot be double-submitted. |
+| error | export-dialog | ✅ covered | A failed export keeps the dialog open **with the redaction choice exactly as the operator set it**. It never falls back to raw, never re-defaults a raw selection to redacted silently, and never writes a partial file without saying so. |
+| partial | export-dialog | ✅ covered | When any contributing artifact is `partial` or `failed`, the exported file itself carries the UI-09 floor statement as a header comment (CSV) or a top-level field (JSON). A file read a week later has no banner above it — if the floor caveat lives only in the UI, the export silently becomes a claim of completeness. |
+| long-text | export-dialog | 🧪 backstop | R3's formula neutralisation (apostrophe prefix then quote-wrap, in that order) and R2's control-character strip, exercised by the hostile-content fixture: HTML tags, a `<script>` payload, a CSV formula payload, C0 controls and bidi overrides in one pass. Phase 5 success criterion 6; cannot be signed off by inspection. |
+| overflow | health-strip | ✅ covered | Counters are bounded integers rendered with thousands separators in a fixed-height strip; a large queue depth or dropped count never wraps the strip or reflows the toolbar. |
+| long-text | health-strip | ✅ covered | The strip carries only DefMiner-authored labels and numeric counters. No target-controlled content reaches it. |
+| loading | triage-controls | ✅ covered | The control enters a disabled in-flight state and the row's triage badge **does not optimistically flip before the write confirms**. An optimistic flip that later fails would show the operator a triage state that was never persisted, on the surface whose whole purpose is durable triage. |
+| error | triage-controls | ✅ covered | A failed triage write surfaces the failure and leaves the **prior** state visibly in place. It never silently reverts and never leaves the badge showing the attempted state. |
+| long-text | triage-controls | ✅ covered | Button labels are the fixed DefMiner-authored strings in `## Copywriting Contract`. No target-controlled string reaches a control label. |
+| empty | suppressions-list | ✅ covered | Zero rules renders an empty state explaining that suppression rules are created **from a finding**, in one action — and carries **no create-rule CTA of its own**, because a rule authored here would have no originating finding to attribute it to, breaking the attribution the populated state depends on. |
+| loading | suppressions-list | ✅ covered | Skeleton rows, same no-spinner rule as the findings table. |
+| error | suppressions-list | ✅ covered | A failed load renders an explicit error, **never an empty list**. An empty suppressions list means "nothing is being hidden from you" — presenting a load failure that way tells the operator the opposite of the truth about what they are seeing. |
+| populated | suppressions-list | ✅ covered | Each rule shows its scope (this value / this pattern / this host), attribution to the finding that created it, and a remove action carrying the reversibility copy from `## Copywriting Contract`. |
+| partial | suppressions-list | ✅ covered | A rule whose originating finding is no longer present still renders, with its scope intact and an explicit note that the source finding is gone. It is never hidden — a silently dropped rule row is a rule still suppressing findings with nothing on screen to say so. |
+| overflow | suppressions-list | ⚠ unresolved | Whether this list needs the `RecycleScroller` treatment depends on the expected rule count, which no requirement bounds. Planner treats as an assumption: if it is not virtualised, the reason should be a stated bound, not an omission. |
+| zero-one-many | suppressions-list | ✅ covered | Singular/plural agreement on rule counts and on the "{n} previously hidden findings will reappear" removal copy, by the same rule as the findings table. Never "1 finding(s)". |
+| long-text | suppressions-list | 🧪 backstop | Suppression rules reference target-controlled **values and patterns**, so R1 and R2 apply in full at the 256-character cap — this surface was outside the authoring pass's "DefMiner-authored strings only" row and is not bounded by construction. Covered by extending the hostile-content fixture to the suppressions surface. |
+| empty | findings-projection-preview | ✅ covered | When no result qualifies, the **Create Caido Findings** CTA is disabled and the surface states why, including R4's exclusion line: "{n} results are entropy-only or hint-grade and are never projected to Caido Findings." |
+| loading | findings-projection-preview | ✅ covered | The confirm action stays disabled until the preview has **fully** loaded. An irreversible write must not be confirmable against a partially-rendered list of what it will write (FIND-01). |
+| error | findings-projection-preview | ✅ covered | If the preview fails to load, projection is **blocked entirely** — there is no "create anyway" path. The one action in the tool that cannot be undone is never offered without the review surface that justifies it. |
+| populated | findings-projection-preview | ✅ covered | A row-by-row list of exactly what will be written (R4), with entropy-only and hint-grade results absent rather than unchecked, and the count of those exclusions stated. |
+| partial | findings-projection-preview | ✅ covered | When any contributing artifact is `partial` or `failed`, the preview carries the UI-09 floor statement and the count of affected artifacts **before** the confirmation. Projecting from an incomplete analysis writes permanent Findings from a floor, and FIND-01 means that cannot be corrected later. |
+| overflow | findings-projection-preview | ⚠ unresolved | R4 requires the operator can review the preview "row by row", which is not achievable at large `n`. Whether a single projection batch is capped, and at what count, is a real decision this contract does not make. Planner treats as an assumption. |
+| zero-one-many | findings-projection-preview | ✅ covered | "Create {n} Caido Findings?" and "Create {n} Findings" agree in number at n=1, as does the exclusion line. |
+| long-text | findings-projection-preview | 🧪 backstop | Preview rows render target-controlled values, so R1 and R2 apply at the 256-character cap. Covered by extending the hostile-content fixture to the projection preview. |
 
 <!-- Status vocabulary (locked by probe-core projectTruths):
      ✅ covered   → a plain truth string lifted into must_haves.truths
@@ -492,11 +533,23 @@ planning.
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: **PASS** — every CTA verb+noun and domain-specific; empty distinguished from filtered-empty; all three destructive actions carry a consequence sentence and a non-destructive escape.
+- [x] Dimension 2 Visuals: **PASS (with FLAGs)** — focal point declared, six-step weight order, no icon-only actions, no icon dependency. Four non-blocking recommendations recorded below.
+- [x] Dimension 3 Color: **PASS** — accent reserved to five named elements with an explicit *NOT* list; destructive to four; zero hex verified correct against the real `@caido/tailwindcss@0.1.0` package.
+- [x] Dimension 4 Typography: **PASS** — four sizes, two weights, line height per role. `Font: not DefMiner's to choose` sound under `preflight: false`. `font-mono` justified as a security control and applied consistently.
+- [x] Dimension 5 Spacing: **PASS** — seven values, exactly the standard set, no exceptions. The 32px/`item-size` coupling is stated and uncontradicted.
+- [x] Dimension 6 Registry Safety: **PASS** — "no registry fetch exists in this stack" verified (`components.json` genuinely absent); five substituted supply-chain gates are real and assertable.
 
-**Approval:** pending
+**Approval:** approved 2026-08-28 (gsd-ui-checker)
+
+### Open FLAGs — non-blocking, recorded not lost
+
+Raised by the checker at approval; none blocks planning. Resolve when Phase 3/4 schemas land, or
+sooner if planning 05-01/05-03 touches them.
+
+| # | Dimension | Finding |
+|---|-----------|---------|
+| F1 | 2 Visuals | The evidence panel has **no fixed frame for the score explanation**, though UI-04 and success criterion 3 require "which signals fired and why it scored as it did". UI-03's artifact version and byte offsets are covered by R1 as a *mechanism* but never listed as mandatory panel fields. Add a two-line evidence-panel frame (mandatory fields, which are target-controlled, which carry `font-mono`) so Phase 3/4's signal vocabulary binds to it the way `## Data & Interaction Contract` binds columns. |
+| F2 | 2 Visuals | "The single accent element on screen at a time" contradicts the five reserved accent uses — active tab, selected-row left bar and focus ring routinely co-occur. Reword to "no accent outside the five" rather than a per-screen count. |
+| F3 | 3 Color | The partial-view banner is listed under `info-500` and its count under `danger-500` #4. Reconcilable as banner chrome vs. count, but state the precedence explicitly. |
+| F4 | 3 Color | `surface-400` is used for `pending`/`running` badges and level-4 text but is not enumerated in the Color role table, which lists only 900/800/700/600. Add the step. |
