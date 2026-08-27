@@ -9239,7 +9239,7 @@ const maskQuantifiers = (text: string): string => {
  * of the file having accepted no line. The SECOND return verification pass 9
  * named — a construct that DID resolve but named nothing strictly above the
  * occurrence — no longer yields this token at all. Wave 39's WR-53 extension
- * made that case CONTINUE the backward scan to the next enclosing construct,
+ * made that case CONTINUE the backward scan to the next construct ABOVE,
  * so exhausting the scan is now the only route here, and a bare `/**` above an
  * occurrence resolves to the construct ABOVE IT instead of to this value.
  *
@@ -9406,7 +9406,7 @@ const anchorTokenCensus = (
  * WR-53 measured that bound separately and independently.
  *
  * WHEN THE WALK NAMES NOTHING ABOVE THE OCCURRENCE THE BACKWARD SCAN CONTINUES
- * rather than returning the sentinel, so the next enclosing construct is tried.
+ * rather than returning the sentinel, so the next construct ABOVE is tried.
  * Measured at wave 39 after both changes: ZERO of the 29 shipped occurrences
  * resolve to `NO_PRECEDING_CONSTRUCT`. That is a measurement of THIS surface,
  * not a property of the builder — a key WRITTEN BY HAND can still carry an
@@ -9460,8 +9460,8 @@ const constructAnchorFor = (
     }
     // THE HEADER NAMED NOTHING STRICTLY ABOVE THE OCCURRENCE, SO THE SCAN
     // CONTINUES RATHER THAN GIVING UP. Falling out of this walk resumes the
-    // backward scan one line higher, which resolves the NEXT enclosing
-    // construct. Returning the sentinel here instead would hand a bare `/**`
+    // backward scan one line higher, so the NEXT construct ABOVE is taken
+    // instead. Returning the sentinel here would hand a bare `/**`
     // an anchor that names no site at all, and CR-20(a) is the measurement
     // that the two-line docblock is exactly where that happens.
   }
@@ -10758,7 +10758,7 @@ describe("the residual is DERIVED — the registry is bound to the walk, and the
       compared++;
       expect(
         line.startsWith(head),
-        `exemption key ${JSON.stringify(key)} has a CONSTRUCT half that is a PREFIX of its LINE half. Both halves were read off the SAME line, so the key carries no positional information whatsoever: the entry is discharged by that masked text wherever in this file it sits, and the sentence the entry excuses can be moved into a construct its stated reason is FALSE of without any of the three discharge checks noticing. That is CR-20(a). It was measured at verification pass 9 by taking a shipped occurrence out of the docblock it belonged to and planting it 5,264 lines away inside an unrelated \`describe\`, for a byte-identical key, with the suite reporting 434 of 434 green. An occurrence sitting ON its own construct header — an \`it(\` title, or the first content line of a docblock — is the shape that produces it. Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key. If the REBUILT key still has this shape, the defect is in \`constructAnchorFor\`'s scan bounds and not in the entry: its backward scan must open STRICTLY ABOVE the occurrence, and its forward walk must stop STRICTLY ABOVE it too, continuing the backward scan to the next enclosing construct when a header names nothing above the occurrence.`,
+        `exemption key ${JSON.stringify(key)} has a CONSTRUCT half that is a PREFIX of its LINE half. Both halves were read off the SAME line, so the key carries no positional information whatsoever: the entry is discharged by that masked text wherever in this file it sits, and the sentence the entry excuses can be moved into a construct its stated reason is FALSE of without any of the three discharge checks noticing. That is CR-20(a). It was measured at verification pass 9 by taking a shipped occurrence out of the docblock it belonged to and planting it 5,264 lines away inside an unrelated \`describe\`, for a byte-identical key, with the suite reporting 434 of 434 green. An occurrence sitting ON its own construct header — an \`it(\` title, or the first content line of a docblock — is the shape that produces it. Rebuild the entry with \`exemptionKeyFor\` rather than hand-writing a key. If the REBUILT key still has this shape, the defect is in \`constructAnchorFor\`'s scan bounds and not in the entry: its backward scan must open STRICTLY ABOVE the occurrence, and its forward walk must stop STRICTLY ABOVE it too, continuing the backward scan to the next construct ABOVE when a header names nothing above the occurrence.`,
       ).toBe(false);
     }
     expect(
