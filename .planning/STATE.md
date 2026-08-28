@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Phase 05 context gathered
-last_updated: "2026-08-28T10:15:39.943Z"
-last_activity: 2026-08-27
-last_activity_desc: All 45 Phase 01 plans summarized; verification pass 12 outstanding
-state_head: b5c48e75ff7d9e6d8aa936c52c2bb4c95fda2188
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-28T11:30:46.695Z"
+last_activity: 2026-08-28
+last_activity_desc: Phase 05 execution started
+state_head: 43428b24ce5d0a07cc8de51ca38cf932f71fa1bc
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 47
+  completed_plans: 48
 ---
 
 # Project State
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-20)
 
 **Core value:** When a target's JavaScript contains something that expands the attack surface, DefMiner surfaces it — with a low enough false-positive rate that the operator actually reads every finding.
-**Current focus:** Phase 01 — Skeleton, Persistence & Compatibility
+**Current focus:** Phase 05 — Workspace & Operator Workflow
 
 ## Current Position
 
-Phase: 05 (Workspace & Operator Workflow) — READY TO EXECUTE
-Plan: 45 of 45 (45 of 45 plans summarized on disk)
-Status: Plan execution complete — verification pass 12 is outstanding
-Last activity: 2026-08-27 — 01-45 complete: identity, sentinel endpoints and malformed-key diagnostics
+Phase: 05 (Workspace & Operator Workflow) — EXECUTING
+Plan: 2 of 12
+Status: Ready to execute
+Last activity: 2026-08-28 — Phase 05 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -233,6 +233,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 01 P43 | 20 min | 3 tasks | 1 files |
 | Phase 01 P44 | 15 min | 2 tasks | 1 files |
 | Phase 01 P45 | 14 min | 2 tasks | 1 files |
+| Phase 05 P01 | 34 min | 4 tasks | 38 files |
 
 ## Accumulated Context
 
@@ -410,6 +411,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 01]: The pin is shipped beside an EXECUTED counter-observation of what it does not catch: pass 10's own 514-line relocation was re-run at wave 42 and stayed GREEN at 440 of 440 with a byte-identical key, so the relocation class is disclosed as OPEN in the bytes rather than argued closed. — The prescribed ~1,130-line relocation went RED against prediction, but on a SHRINK (574->567) caused by the destination inserting a recogniser-(5)-accepted line that split the shadow — not by detecting a relocation. Diagnosed to the exact 7 lines before being described, per the plan's pre-commitment.
 - [Phase 01]: Route the registry hit count, one-based pin and fixture through one shared full-line resolver; leave LIST_OPEN and EXCLUSIONS' prefix locators unchanged. — CR-28 names the registry resolver only, while CR-23's endpoint assertion depends on the prefix and full-line expressions remaining independent.
 - [Phase 01]: Close CR-24, CR-25, CR-27 and WR-61 by deletion without replacement prose. — The prior three correction rounds generated 1, then 2, then 5 prose blockers; the deletion commit proves zero word tokens were introduced that were absent from removed lines.
+- [Phase 05]: Both low-download first-party Caido packages (@caido/primevue@0.3.3 at 279/wk, @caido/tailwindcss@0.1.0 at 258/wk) approved after registry verification (option-b); @caido/primevue's missing repository and absent provenance recorded as an unresolved residual
+- [Phase 05]: The frontend externals gate requires only 'vue' to be present; 'absent from the import set' cannot distinguish inlined from never-imported, so the rest of the set is enforced by the complementary rule that every bare import must be declared external
+- [Phase 05]: knip ignoreExportsUsedInFile is false (Phase 1 hole closed) via per-export @internal tags on 31 backend exports; the plan's premise that the frontend would give those types cross-module consumers is false because the frontend must not depend on @defminer/backend
 
 ### Known Risks Carried Forward
 
@@ -452,9 +456,9 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T08:19:53.858Z
-**Stopped at:** Phase 05 context gathered
-**Resume file:** .planning/phases/05-workspace-operator-workflow/05-CONTEXT.md
+**Last session:** 2026-08-28T11:30:35.571Z
+**Stopped at:** Completed 05-01-PLAN.md
+**Resume file:** None
 
 ### Blockers
 

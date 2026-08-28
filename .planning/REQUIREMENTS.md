@@ -205,8 +205,10 @@ authoritative and the shipped text is the defect.
 
 THE SURFACES THAT COMPARISON REACHES - 2, RENDERED FROM THE ONE
 DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:
+
   - packages/backend/src/outbound-prohibition.spec.ts
   - .planning/REQUIREMENTS.md
+
 NO OTHER FILE IN THIS REPOSITORY IS REACHED BY IT. A file that is not listed
 just above - including a file under the planning directory that is not listed
 just above - carries at most a POINTER to these two and is byte-compared to
@@ -215,6 +217,7 @@ with or renders into an unlisted file is FALSE, and the disposition for such
 a sentence is to DELETE it rather than to re-date it.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
+
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
@@ -225,6 +228,7 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
    branch removed from the walk turned its entry red; it was FALSIFIED by
    mutation (WR-32) and is corrected rather than deleted, because the
    per-branch probes now support the narrower claim it makes.
+
 2. It does NOT prove the registry enumerates every mechanism the walk has. A
    coverage guard enumerates TWO populations out of this file's own source -
    collectors matching a declared naming convention, and resolver functions
@@ -235,10 +239,13 @@ WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
    shape - an inline branch in the walk, a differently-shaped binding, a
    resolver declared inside another function - is enumerated by neither half
    and is NOT caught.
+
 3. Each entry's probes are EXAMPLES. They prove the entry true OF ITSELF and
    do not cover that resolver's whole domain.
+
 4. The MEASURED SILENCE entries are NOT proven exhaustive: a shape nobody
    thought of is still silent and still unlisted here.
+
 5. WHAT CLAUSE-TO-BRANCH BINDING CANNOT PROVE - FOUR THINGS, STATED FLATLY.
    (a) It does NOT prove a clause NAMES every branch the code has. A branch
        the clause is silent about is bound to nothing, exactly as before.
@@ -876,7 +883,7 @@ MEASURED SILENCES - 26 entries.
 
 ### Workspace UI (UI)
 
-- [ ] **UI-01**: A sidebar page providing a project-wide view — every secret, endpoint, and host for the target, not just the response currently open.
+- [x] **UI-01**: A sidebar page providing a project-wide view — every secret, endpoint, and host for the target, not just the response currently open.
 - [ ] **UI-02**: Filterable, sortable tables with keyset pagination and virtualised scrolling, usable at thousands of rows.
 - [ ] **UI-03**: Every entity links back to its source request, artifact version, and byte offsets.
 - [ ] **UI-04**: Each finding shows a score explanation — which signals fired and why it scored as it did.

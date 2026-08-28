@@ -358,7 +358,7 @@ Plans:
   7. Native Findings are created only for high-signal results with stable dedupe keys; entropy-only and hint-grade results provably never project
   8. Degraded and partial analyses are visibly marked
 
-**Plans**: 12 plans
+**Plans**: 1/12 plans executed
 
 > **Scope split, decision D-05 (2026-08-28).** Phase 5 nominally depends on Phase 4, and the
 > `entities` / `evidence` tables do not exist. Rather than re-sequence, the phase is split: what is
@@ -368,9 +368,23 @@ Plans:
 > with its blocker and unblocking plan recorded in `05-04`'s deferral register.
 
 Plans:
+
+- [x] 05-01-PLAN.md
+- [ ] 05-02-PLAN.md
+- [ ] 05-03-PLAN.md
+- [ ] 05-04-PLAN.md
+- [ ] 05-05-PLAN.md
+- [ ] 05-06-PLAN.md
+- [ ] 05-07-PLAN.md
+- [ ] 05-08-PLAN.md
+- [ ] 05-09-PLAN.md
+- [ ] 05-10-PLAN.md
+- [ ] 05-11-PLAN.md
+- [ ] 05-12-PLAN.md
+
 **Wave 1**
 
-- [ ] 05-01: Frontend workspace and the end-to-end tracer — page, sidebar item, build-output gates, lint enforcement
+- [x] 05-01: Frontend workspace and the end-to-end tracer — page, sidebar item, build-output gates, lint enforcement
 - [ ] 05-02: SQL discipline gate widened, and the two measurements the query design rests on
 - [ ] 05-03: Engine safety primitives — strip and truncate, CSV neutralisation, the hostile-content fixture
 
