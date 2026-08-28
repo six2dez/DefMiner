@@ -27,19 +27,29 @@
       "entry": ["src/index.ts", "src/**/*.spec.ts"],
       "project": ["src/**/*.ts"],
       "ignoreDependencies": [
-        // Declared so the backend OWNS the Caido SDK surface (and so it is
-        // absent from packages/engine's resolution path, which is what makes
-        // `import type { SDK } from "@caido/sdk-backend"` a TYPECHECK error in
-        // the engine). No source imports it yet: plan 01-06's SDK-surface probe
-        // is what will, and until Phase 0's measurement of how badly the type
-        // packages under-declare the runtime is revisited, `sdk: any` at the
-        // boundary is the honest annotation.
-        "@caido/sdk-backend",
+        // `@caido/sdk-backend` IS NO LONGER LISTED HERE. It was, carrying the
+        // note that "no source imports it yet" and that `sdk: any` at the
+        // boundary was the honest annotation until the RPC surface justified a
+        // type. Plan 05-07 landed that justification: `src/api/spec.ts` declares
+        // the plugin package specification and `init()` takes a
+        // spec-typed parameter, so the package is reached through the backend
+        // tsconfig's `types` list and knip resolves it. Removed rather than left
+        // as a harmless no-op, for the same reason the frontend's
+        // `@defminer/engine` entry was: an ignore that has stopped being needed
+        // is an ignore that starts hiding the next real one.
+        //
         // Provided BY THE RUNTIME, never installed. `sqlite` is one of the ten
         // specifiers the Phase 0 capability probe loaded successfully inside
         // Caido 0.57.1, it is externalised by the build, and it is typed by
         // @caido/quickjs-types. See scripts/ci/check-bundle-imports.mjs.
-        "sqlite"
+        "sqlite",
+        // Same category as `sqlite`, and reached the same way. `caido:plugin` is
+        // an ambient module declared by @caido/sdk-backend's typing.d.ts, not a
+        // package on disk; `api/spec.ts` imports `APISDK` from it as a TYPE, so
+        // nothing is emitted and the shipped bundle's import set is unchanged
+        // (scripts/ci/check-bundle-imports.mjs reads the built artifact, which
+        // is the only place that question can be answered honestly).
+        "caido"
       ]
     },
     "packages/frontend": {

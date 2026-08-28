@@ -10,9 +10,17 @@
   //                          layer therefore has to know `crypto` exists;
   //                          WHICH built-ins may actually ship is decided by the
   //                          DIST-05 allowlist gate, not by this list.
+  //   @caido/sdk-backend   — added by plan 05-07. It declares the `caido:plugin`
+  //                          module, which is where `SDK<Api, Events>` lives, and
+  //                          the generic SDK is the whole point of `api/spec.ts`:
+  //                          without it `sdk.api.register` cannot check an
+  //                          endpoint name or a callback signature against
+  //                          anything. Types only — the declarations are ambient
+  //                          and nothing is emitted, so the shipped bundle's
+  //                          import set (check-bundle-imports.mjs) is unchanged.
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node", "@caido/quickjs-types"]
+    "types": ["node", "@caido/quickjs-types", "@caido/sdk-backend"]
   },
   // `test/**` carries the vitest-only SQLite fixture. It is in the project so the
   // specs that import it typecheck; it is NOT reachable from src/index.ts, so it

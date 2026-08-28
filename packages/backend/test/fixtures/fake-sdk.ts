@@ -36,6 +36,8 @@
 // runs under vitest and is never reachable from `packages/backend/src/index.ts`,
 // so it never enters the shipped bundle.
 
+import type { Database } from "sqlite";
+
 // --- bodies -----------------------------------------------------------------
 
 /** The `Body` surface the hook and the consumer actually use. */
@@ -259,6 +261,16 @@ export type FakeSdkCalls = {
   requestsGet: string[];
   inScope: unknown[];
   apiRegister: string[];
+  /** Every `sdk.api.send(...)` the code under test made, recorded as the event
+   *  name and the arguments EXACTLY as they were handed over.
+   *
+   *  Recorded rather than swallowed because the invalidation event's whole
+   *  security property is negative — that the payload carries four scalars and
+   *  NOTHING else (UI-07, T-05-35) — and a negative property can only be asserted
+   *  against the object that actually crossed the boundary. Caido surfaces
+   *  nothing from plugin code, so an event that quietly grew a `rows` field would
+   *  otherwise be invisible until it reached a frontend. */
+  apiSend: { event: string; args: unknown[] }[];
   interceptResponseHandlers: Array<(...args: unknown[]) => unknown>;
   /** Every `onProjectChange` callback the code under test registered. Recorded
    *  rather than swallowed so {@link emitProjectChange} can DRIVE the event —
@@ -278,9 +290,12 @@ export type FakeSdk = {
     get(id: string): Promise<unknown>;
     inScope(request: unknown): boolean;
   };
-  meta: { db(): Promise<unknown> };
+  meta: { db(): Promise<Database> };
   console: { log(msg: string): void };
-  api: { register(name: string, fn: unknown): void };
+  api: {
+    register(name: string, fn: unknown): void;
+    send(event: string, ...args: unknown[]): void;
+  };
   events: {
     onInterceptResponse(fn: (...args: unknown[]) => unknown): void;
     onProjectChange(
@@ -303,6 +318,7 @@ export type FakeSdkOverrides = {
   db?: () => Promise<unknown>;
   log?: (msg: string) => void;
   register?: (name: string, fn: unknown) => void;
+  send?: (event: string, ...args: unknown[]) => void;
 };
 
 /**
@@ -314,12 +330,17 @@ export type FakeSdkOverrides = {
  * overrides exactly the one method its case is about, so what a case is testing
  * is visible in the override list rather than buried in a builder.
  */
+/** The `undefined` the default `meta.db()` resolves, widened once so the
+ *  assertion at its single use site has something to assert from. */
+const absentDatabase: unknown = undefined;
+
 export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
   const calls: FakeSdkCalls = {
     consoleLog: [],
     requestsGet: [],
     inScope: [],
     apiRegister: [],
+    apiSend: [],
     interceptResponseHandlers: [],
     projectChangeHandlers: [],
     projectsGetCurrent: 0,
@@ -358,10 +379,24 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
       },
     },
     meta: {
-      db: async () => {
+      // TYPED AS THE SDK TYPES IT, WITH THE LIE IN ONE PLACE. `sdk.meta.db()`
+      // resolves a `Database`, and the plugin's own entry point is now typed
+      // against that (api/spec.ts's PluginSdk). The DEFAULT here still resolves
+      // `undefined`, because most cases are not about the database at all and
+      // constructing a fixture handle for them would be noise — so the cast
+      // lives here, once, with this comment, rather than at every `init(sdk)`
+      // call site across four spec files. A case that DOES need a handle passes
+      // one through `overrides.db` and gets the real thing.
+      db: async (): Promise<Database> => {
         calls.metaDb += 1;
-        if (overrides.db !== undefined) return overrides.db();
-        return undefined;
+        if (overrides.db !== undefined)
+          return (await overrides.db()) as Database;
+        // The assertion goes through `absentDatabase`, whose declared type is
+        // `unknown`, rather than through an inline `undefined as unknown as
+        // Database` — eslint's fixer strips the redundant-looking first half of
+        // that chain and leaves a typecheck error behind. The indirection is
+        // load-bearing, not style.
+        return absentDatabase as Database;
       },
     },
     console: {
@@ -374,6 +409,13 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
       register: (name: string, fn: unknown) => {
         calls.apiRegister.push(name);
         overrides.register?.(name, fn);
+      },
+      // The ARGUMENTS are kept, not just the name. What crosses this call is the
+      // difference between a summary and a leak, and only the object itself can
+      // answer which one it was.
+      send: (event: string, ...args: unknown[]) => {
+        calls.apiSend.push({ event, args });
+        overrides.send?.(event, ...args);
       },
     },
     events: {

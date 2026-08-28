@@ -294,6 +294,9 @@ importers:
       '@caido/sdk-backend':
         specifier: 0.57.1
         version: 0.57.1
+      '@caido/sdk-shared':
+        specifier: 0.2.2
+        version: 0.2.2
 
   packages/engine: {}
 

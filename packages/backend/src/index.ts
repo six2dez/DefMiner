@@ -42,6 +42,7 @@ import { BoundedQueue } from "@defminer/engine/queue";
 import { QUEUE_CAP } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
+import type { CompatPayload, PluginSdk, StatusPayload } from "./api/spec";
 import {
   checkCompat,
   checkRuntimeSurfaces,
@@ -111,7 +112,11 @@ const ISOLATION_UNAVAILABLE_REASON =
   "registered, so a project switch would go unnoticed and this plugin would " +
   "write one project's traffic under another's id. Ingestion is DISABLED.";
 
-function status(): Record<string, unknown> {
+/** The projection `getStatus` returns, minus the one field only `init()` holds.
+ *  Typed against the published contract rather than `Record<string, unknown>`:
+ *  a renamed field is now a typecheck failure here instead of an `undefined` the
+ *  frontend reads at runtime. */
+function status(): Omit<StatusPayload, "caidoVersion"> {
   return {
     compatible,
     reason: compatReason,
@@ -136,7 +141,7 @@ function status(): Record<string, unknown> {
  * exposes, measured inside the QuickJS runtime rather than inferred from a type
  * package. `scripts/phase1/compat-smoke.sh` records it per leg.
  */
-function compatReport(caidoVersion: string | null): Record<string, unknown> {
+function compatReport(caidoVersion: string | null): CompatPayload {
   return {
     compatible,
     reason: compatReason,
@@ -148,7 +153,24 @@ function compatReport(caidoVersion: string | null): Record<string, unknown> {
   };
 }
 
-export async function init(sdk: any): Promise<void> {
+/**
+ * THE PARAMETER IS TYPED AGAINST THE PUBLISHED CONTRACT AS OF PLAN 05-07.
+ *
+ * It was `any`. That was the honest annotation while the RPC surface was four
+ * argument-less endpoints registered against `sdk.api.register(name: string, fn:
+ * unknown)` — there was nothing for a type to check. It stopped being honest the
+ * moment an endpoint took a `PageRequest` and returned a `PageResponse`: a typo
+ * in an endpoint name registers a second, unreachable endpoint, and a callback
+ * whose return shape drifted from the contract is read by a stale frontend as
+ * `undefined`. On this runtime both are SILENT — Caido surfaces neither a throw
+ * nor a rejection from plugin code.
+ *
+ * {@link PluginSdk} types `sdk.api` as `APISDK<Api, Events>` and leaves the rest
+ * of the surface structural, which is the shape every other module in this
+ * package already uses (`MetaSdk`, `LifecycleSdk`, `PassiveSdk`). Its own doc
+ * comment states why the whole `SDK<...>` is not adopted wholesale.
+ */
+export async function init(sdk: PluginSdk): Promise<void> {
   log(sdk, "init");
 
   // OUTSIDE the try because the catch reports it, and INSIDE nothing else:

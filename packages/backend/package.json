@@ -9,7 +9,8 @@
   },
   "devDependencies": {
     "@caido/quickjs-types": "0.26.0",
-    "@caido/sdk-backend": "0.57.1"
+    "@caido/sdk-backend": "0.57.1",
+    "@caido/sdk-shared": "0.2.2"
   },
   "license": "UNLICENSED"
 }
