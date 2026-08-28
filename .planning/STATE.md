@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-08-28T16:39:21.270Z"
+stopped_at: Completed 05-09-PLAN.md
+last_updated: "2026-08-28T17:29:45.681Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: ad690e8a22314442b34127ad5c5af6d2f19c2cdd
+state_head: 61fd868fd9a7ffb3d5119323a1c46dde8a862c25
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 55
+  completed_plans: 56
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 9 of 12
+Plan: 10 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -291,6 +291,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P06 | 24 min | 4 tasks | 8 files |
 | Phase 05 P07 | 20 min | 3 tasks | 14 files |
 | Phase 05 P08 | 20 min | 3 tasks | 7 files |
+| Phase 05 P09 | 42 min | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -517,6 +518,13 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D60 (plan 05-08): the coalescer's debounce carries maxWait equal to the reaction cap's interval. NOT in the design contract, added after measuring what its absence does. — A pure trailing debounce never elapses while events keep arriving, so a sustained stream produces ZERO reactions — measured at 0 over three simulated seconds of 20 events/second — and the operator watches a table that has silently stopped updating. A coalescer that coalesces everything into nothing is worse than none.
 - [Phase 05]: P5-D61 (plan 05-08): the mid-triage suppression rule is checked TWICE — on arrival and again when the trailing window elapses. — The plan's own stated reason (a debounced reaction firing just after the operator selects a row is the same defect arriving late) is only closed by the second check. Checking on arrival alone leaves a 500 ms hole directly over the moment the operator clicks. Measured: removing the second check lets a reaction land on a selected row.
 - [Phase 05]: P5-D62 (plan 05-08): the coalescer's trailing WINDOW is overridable through an option and the CAP is not. — The asymmetry is what makes the throttle gate provable: with a window too short to hold the cap, the debounce cannot be what enforces it. Measured — 20 summaries in one simulated second produce 20 reactions with the throttle removed, and 2 with it. Disclosed residual: a caller passing a large window could delay a legitimate update, so the mounting component must not pass it.
+- [Phase 05]: P5-D63 (plan 05-09): the scan-state vocabulary MOVED from packages/backend/src/store/analyses.ts to @defminer/engine/contract. The plan asked the badge to import it from the backend store module; that is not reachable — the frontend package cannot import the backend at all (caido:* specifiers resolve only inside QuickJS) and api/client.ts records that a gate greps for the specifier. One declaration still, in the module both packages already import. EntityLead.state stopped being a bare string and schema.spec.ts stopped iterating a literal copy of the five values.
+- [Phase 05]: P5-D64 (plan 05-09): the table row-height Tailwind class is a LOOKUP KEYED BY TABLE_ROW_HEIGHT_PX that throws at import on a missing entry. An interpolated arbitrary value is invisible to Tailwind's JIT, which emits no rule and renders the page unstyled while the build succeeds — the exact failure tailwind.config.ts already records once.
+- [Phase 05]: P5-D65 (plan 05-09): RecycleScroller is stubbed in every jsdom spec and row GEOMETRY is asserted only in the browser spec. MEASURED: with fifty items in a 320px container the real scroller renders an EMPTY item wrapper, because it sizes from getBoundingClientRect and jsdom has no layout. Cell assertions against that pass by measuring an empty set — 05-08's own recorded failure.
+- [Phase 05]: P5-D66 (plan 05-09): an unknown analysis state renders NOTHING in the lead cell. A fabricated 'Complete' is the silence UI-09 forbids; an invented 'Unknown' is the UI-only synonym the status vocabulary bans. The column keeps its position so the plan that supplies the data does not move the operator's columns.
+- [Phase 05]: P5-D67 (plan 05-09): UI-SPEC FLAG F3 resolved — the partial-view banner's CHROME is always info-500 and the COUNT inside it takes danger-500 only when the affected set includes a failed artifact, because failed means nothing was inspected. Two elements, two rules, stated in the component and asserted.
+- [Phase 05]: P5-D68 (plan 05-09): the table cell uses forCellText (O(cap)), never forCell (O(n)). forCell walks the whole value for the 'Truncated at {shown} of {total}' affordance, which is the PANEL's. The 10,000-row browser backstop measured what that cost on the cell path: 99 of 396 frames over the 32 ms budget, p95 418 ms, whole scroll 37.4 s; after, 0 over budget, p95 17.1 ms, 4.0 s. Legitimate only because sanitise.spec.ts asserts byte equality with forDisplay over the whole hostile corpus at both caps.
+- [Phase 05]: P5-D69 (plan 05-09): UI-09 is deliberately NOT marked complete although 05-09 is its only declarer. The badge, the banner and the floor statement ship and are exercised, but the shipped paged reads carry no scan_state and no endpoint returns one, so nothing is marked on the running page. Checking it off would present an incomplete thing as complete — the requirement's own subject.
 
 ### Known Risks Carried Forward
 
@@ -559,8 +567,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T16:39:21.232Z
-**Stopped at:** Completed 05-08-PLAN.md
+**Last session:** 2026-08-28T17:29:17.714Z
+**Stopped at:** Completed 05-09-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -576,3 +584,4 @@ None.
 - **SCOPED MARKER 2026-08-26, PLAN 01-38 (GAP-CLOSURE ROUND 8, WAVE 38) — REACHING ONLY THE CLAUSE NAMED HERE, WITH THE AMENDMENT ABOVE LEFT BYTE-IDENTICAL.** FALSIFIED BY COMMIT `4105fd0` OF 2026-08-26: the clause "and CORE-11's box is now `[x]`, moved with `CORE11_BOX_EXPECTED` in ONE commit". Verification pass 8 was written on 2026-08-26 at 09:45 and adjudicated criterion (3) UNMET; `4105fd0` landed at 09:52 and reverted the box and the constant together, which is the same one-commit rule the flip obeyed. THE REST OF THIS AMENDMENT STANDS AND IS THE CURRENT POSITION, AND MOST OF IT IS THE REST: the 2026-08-25 operator re-scope and its route; the diagnosis that the old bar is unreachable over an open language; the three criteria (1) DERIVED, (2) DRIFT-DETECTABLE, (3) THE SOLE BOUND; that all three were re-verified BY EXECUTION with a mutation planted, watched red and restored; that criterion 3's verdict is SCOPED and the scope is part of it, met up to the guard's phrase-list reach under its named normalization; the two classes of unreached surface — unguarded FILES (`.planning/STATE.md` and `.planning/WINDOWS.md`, reached by no mechanical comparison, which includes this line) and undeclared SPELLINGS inside the guarded files; that the amendment restates no bound and is a pointer; that the new bar is NARROWER and ends no class, with CR-15, CR-16 and the twenty-six measured silences as NAMED RESIDUALS; that what narrowed is the checkbox's meaning and not the prohibition's, CORE-11's first sentence being byte-identical and still holding; and that STORE-03 and STORE-07 remain deferred with their owner. This marker states no bound and awards no verdict.
 
 - POINTER AMENDMENT 2026-08-26 (gap-closure round 8, plans 01-36 through 01-38, waves 36 through 38). THIS AMENDMENT RESTATES NO BOUND AND IS A POINTER: the bound of record is the machine-owned generated span in `.planning/REQUIREMENTS.md` and in the gate file, byte-compared to `deriveResidual(RESOLVER_REGISTRY)` by the suite, and this file is reached by NO mechanical comparison at all. THE ROUND OPENED MEASURED RED WHERE THE HANDOFF DESCRIBED IT GREEN: at HEAD `4105fd0` the suite ran 2 failed of 1372, both caused by that commit reverting CORE-11's checkbox while two cases still pinned the flipped state; wave 36 restored the tree by regenerating `.planning/REQUIREMENTS.md`'s machine-owned span and moving `CORE11_BOX_EXPECTED` to the shipped `[ ]`. WHAT THE ROUND'S FOUR FINDINGS WERE AND HOW THEY WERE DISPOSED OF. CR-17: the gate file's exemption keys were positional and survived a cross-construct relocation unnoticed — wave 37 anchored them with `constructAnchorFor`, watched a purpose-built relocation fixture fail first, and shipped it. WR-48: quantifier exclusion three was wider than the span it needed — wave 37 narrowed it to `4135..5767` and MEASURED the 117 restored lines, which raised ZERO new obligations. CR-18: CORE-11's ledger row stated this box's state and a superseded bar — wave 38 reduced it to the prohibition plus one pointer, relocating all three removed passages BYTE-IDENTICAL into a dated 2026-08-26 history block, on the reasoning that a row carrying no statement of the box's state cannot carry a stale one. CR-19: this section's own CORE-11 lines were stale and one was FALSE — corrected above against six probes RE-EXECUTED through `auditSource` on 2026-08-26 rather than cited from verification pass 8, all six reporting, and against a registry re-counted at 26 `measured-silence` rows of 61 with all five of plan 01-32's names present and `silence-operator-around-global-receiver` absent. THAT ROW WAS NOT RESTORED AND MUST NOT BE: the suite asserts its absence and calls its return a REGRESSION in the descent. THE TWO CLASSES OF UNREACHED SURFACE, STATED AS UNGUARDED LIMITS AND NOT AS SATISFIED CHECKS: unguarded FILES — `.planning/STATE.md` and `.planning/WINDOWS.md` are reached by no mechanical comparison, the byte comparisons reaching the gate header and the ledger and no further, so the pointer-not-a-bound rule is a prohibition with no check on either file; and undeclared PHRASINGS — a standing statement spelled outside the phrase set this round's enumeration used is invisible to that enumeration, which was a ONE-TIME GREP over four named files and not a standing gate. CORE-11's CHECKBOX IS `[ ]`, MEASURED, AND IT BELONGS TO A VERIFIER: this round produced evidence on criterion (3)'s document legs and awards no verdict on criterion (3), on whether the box may move, or on whether the gate is complete. THE FLOOR AT THE CLOSE, MEASURED NOT CLAIMED: 31 test files / 1374 tests exit 0, typecheck / lint / knip clean, the shipped bundle at one import specifier, and the real tree at 23 files with ZERO violations.
+- UI-09 remains OPEN after plan 05-09, its only declarer. The degradation-marking components ship and are exercised, but packages/backend/src/store/reads.ts's paged statements carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. Closing UI-09 needs a backend read that carries the analysis state; a scan-state filter column is additionally needed before 'Show only affected artifacts' can narrow anything. Recorded in .planning/WINDOWS.md entries 56-58.

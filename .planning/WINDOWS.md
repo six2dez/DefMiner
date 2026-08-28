@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 33
+open_count: 36
 waived_count: 0
 fixed_count: 22
-total_count: 55
-last_updated: 2026-08-28T16:39:28.707Z
+total_count: 58
+last_updated: 2026-08-28T17:26:53.230Z
 ---
 
 # Broken Windows Ledger
@@ -91,6 +91,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 53 | 05 | deviation | .planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md |  | D-01's one-way reversibility checkpoint is carried forward UNSPENT and is OWED to the first task that calls sdk.findings.create; no task in Phase 5 writes a Finding | open |  | 2026-08-28T12:53:40.720Z |  |
 | 54 | 05 | deviation | packages/backend/src/store/schema.spec.ts |  | 05-06: the plan's task-2 gate edit was folded into task 1's commit to avoid committing a red schema gate; the task boundary in 05-06-PLAN.md and the shipped commit boundary therefore differ | open |  | 2026-08-28T15:11:18.513Z |  |
 | 55 | 05 | deviation | packages/frontend/src/stores/coalescer.ts |  | 05-08: CoalescerOptions.trailingWindowMs is overridable and the reaction CAP is not. The seam exists so a spec can drive the debounce faster than the cap and prove the throttle gate load-bearing (P5-D62); a production caller passing a large window could delay a legitimate update. Disclosed, not closed — the mounting component (05-09) must not pass it. | open |  | 2026-08-28T16:39:28.707Z |  |
+| 56 | 05 | stub | packages/frontend/src/App.vue |  | ArtifactsTable and ObservationsTable are mounted with :analyses="null" and :affected-filter="null" — the shipped paged reads carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. UI-09 deliberately left unmarked. | open |  | 2026-08-28T17:26:44.942Z |  |
+| 57 | 05 | stub | packages/frontend/src/components/ArtifactsTable.vue |  | The triage column renders empty text: the triage table does not exist yet (its key waits on Phase 4's stable entity identity, D-05(4)). The column holds its position so it does not shift every column right of it when the data lands. | open |  | 2026-08-28T17:26:53.143Z |  |
+| 58 | 05 | stub | packages/frontend/src/components/PartialBanner.vue |  | The show-only-affected action is suppressed on both shipped tables because the backend statement matrix has no scan-state filter column, so no single-column filter can express 'only the affected artifacts'. Component-level behaviour is proved; the wiring has no filter to bind to. | open |  | 2026-08-28T17:26:53.230Z |  |
 
 ````json
 [
@@ -752,6 +755,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-28T16:39:28.707Z",
+    "resolved_at": null
+  },
+  {
+    "id": 56,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/App.vue",
+    "line": null,
+    "description": "ArtifactsTable and ObservationsTable are mounted with :analyses=\"null\" and :affected-filter=\"null\" — the shipped paged reads carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. UI-09 deliberately left unmarked.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T17:26:44.942Z",
+    "resolved_at": null
+  },
+  {
+    "id": 57,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/components/ArtifactsTable.vue",
+    "line": null,
+    "description": "The triage column renders empty text: the triage table does not exist yet (its key waits on Phase 4's stable entity identity, D-05(4)). The column holds its position so it does not shift every column right of it when the data lands.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T17:26:53.143Z",
+    "resolved_at": null
+  },
+  {
+    "id": 58,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/components/PartialBanner.vue",
+    "line": null,
+    "description": "The show-only-affected action is suppressed on both shipped tables because the backend statement matrix has no scan-state filter column, so no single-column filter can express 'only the affected artifacts'. Component-level behaviour is proved; the wiring has no filter to bind to.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T17:26:53.230Z",
     "resolved_at": null
   }
 ]
