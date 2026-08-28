@@ -11,6 +11,7 @@
     "./digest": "./src/digest.ts",
     "./pipeline": "./src/pipeline.ts",
     "./queue": "./src/queue.ts",
+    "./sanitise": "./src/sanitise.ts",
     "./thresholds": "./src/thresholds.ts",
     "./yield": "./src/yield.ts"
   },

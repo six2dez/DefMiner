@@ -60,8 +60,7 @@ const COMBINED = "e\u0301";
 /** The nine bidi characters R2 names: U+202A-U+202E (5) and U+2066-U+2069 (4).
  *  05-03-PLAN.md's behaviour list says "all eight"; the two ranges it names
  *  contain nine characters and all nine are stripped. */
-const BIDI_ALL =
-  "\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069";
+const BIDI_ALL = "\u202A\u202B\u202C\u202D\u202E\u2066\u2067\u2068\u2069";
 
 /** True when `s` contains a surrogate code unit without its partner. A naive
  *  `.slice(0, 256)` produces exactly this, and it is what "grapheme-safe"
@@ -147,10 +146,7 @@ describe("forDisplay — step 2, bidi overrides and isolates", () => {
   it("defuses the hostname-reversal spoof (T-05-11)", () => {
     // RIGHT-TO-LEFT OVERRIDE makes `evil.com` render as `moc.live` in the very
     // column the operator triages on.
-    const out = forDisplay(
-      "\u202Emoc.live\u202C",
-      TABLE_CELL_MAX_GRAPHEMES,
-    );
+    const out = forDisplay("\u202Emoc.live\u202C", TABLE_CELL_MAX_GRAPHEMES);
     expect(out.text).toBe("moc.live");
     expect(out.text).not.toMatch(/[\u202A-\u202E\u2066-\u2069]/);
   });
@@ -275,6 +271,9 @@ describe("forEvidence — the one surface that deliberately shows whitespace", (
   it("renders a control with no conventional letter as a hex escape, never raw", () => {
     const out = forEvidence("a\u0001b\u009Fc", EVIDENCE_PANEL_MAX_GRAPHEMES);
     expect(out.text).toBe("a\\x01b\\x9Fc");
+    // Asserting the ABSENCE of the control range requires naming it; see the
+    // note on C0_C1_CONTROLS.
+    // eslint-disable-next-line no-control-regex
     expect(out.text).not.toMatch(/[\u0000-\u001F\u007F-\u009F]/);
   });
 
