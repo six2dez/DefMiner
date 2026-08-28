@@ -209,6 +209,54 @@ CREATE INDEX IF NOT EXISTS idx_observations_keyset
   ON observations (project_id, observed_at DESC, request_id DESC);
 `,
   },
+  /**
+   * Step v4 — plan 05-07. The SECOND sort key on each pageable table, indexed.
+   *
+   * WHY THIS STEP EXISTS AT ALL, given step v3 already added a keyset index per
+   * table. v3 indexed one sort key each — `last_seen_at` on `artifacts` and
+   * `observed_at` on `observations` — and `store/reads.ts` offers TWO sort keys
+   * per table, because a size column and a status column are the two things an
+   * operator sorts an inventory by after recency. An `ORDER BY byte_len DESC,
+   * sha256 DESC` with no index behind it does not degrade gracefully: SQLite
+   * restricts to the project partition and then top-N sorts the WHOLE of it, once
+   * per page. On a 200,000-row partition that is a scan whose cost is of the same
+   * order as the `LIMIT ... OFFSET` form `05-UI-SPEC.md` bans outright — reached
+   * by clicking a column header, on the single QuickJS thread, inside one
+   * synchronous driver call with no yield point. Shipping the sort key without
+   * the index would have been shipping that click.
+   *
+   * DIRECTIONS ARE EXPLICIT AND UNIFORM, for exactly the reason step v3 states:
+   * the paginated reads use a row-value cursor `(a, b) < (?, ?)`, which requires
+   * a single direction to be CORRECT rather than merely fast. SQLite traverses an
+   * index in reverse for the opposite ORDER BY, so one `DESC, DESC` index serves
+   * both the ascending and the descending statement for its sort key — which is
+   * why there are two indexes here and not four.
+   *
+   * WHAT THIS STEP DELIBERATELY DOES NOT ADD: a filter-leading index. Making
+   * `kind` and `content_type` sargable would need one composite index per (filter
+   * column x sort key x direction) and would multiply the write cost of every
+   * ingested response. The settled design instead bounds the SCANNED window
+   * inside each filtered statement (`store/reads.ts`, CANDIDATE_WINDOW_ROWS),
+   * which was measured to make the cost independent of filter selectivity
+   * entirely — 500 candidates at a 25,000-row partition and 500 at a 200,000-row
+   * one. An index cannot buy that property; it can only make the good case
+   * faster.
+   *
+   * THE PROVENANCE CAVEAT FROM STEP v3 CARRIES OVER UNCHANGED. Those plans were
+   * measured on SQLite 3.51.0 and 3.53.4, not on Caido's shipped 3.46.0, and are
+   * disclosed as a result narrowed to a 3.46 -> 3.51 window rather than claimed
+   * as verified on the shipped runtime. The correctness half — that a row-value
+   * cursor needs a uniform direction — does not depend on a query plan.
+   */
+  {
+    v: 4,
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_artifacts_size_keyset
+  ON artifacts (project_id, byte_len DESC, sha256 DESC);
+CREATE INDEX IF NOT EXISTS idx_observations_status_keyset
+  ON observations (project_id, status DESC, request_id DESC);
+`,
+  },
 ];
 
 /** One step's outcome. A migration that fails must be LEGIBLE: Caido surfaces

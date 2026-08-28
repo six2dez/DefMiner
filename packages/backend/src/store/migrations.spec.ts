@@ -252,16 +252,51 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v3 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v4 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
-    // the literal 3 rather than against `MIGRATIONS.length`: a step number that
+    // the literal 4 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
     expect(
       MIGRATIONS.find((m) => m.v === 3),
       "step v3 is missing",
     ).toBeDefined();
+    expect(
+      MIGRATIONS.find((m) => m.v === 4),
+      "step v4 is missing",
+    ).toBeDefined();
+  });
+
+  it("step v4 indexes the SECOND sort key on each pageable table", async () => {
+    // The reason this is asserted structurally rather than trusted: an
+    // `ORDER BY byte_len DESC, sha256 DESC` with no index behind it does not
+    // fail, it just top-N sorts the whole project partition once per page — on
+    // the single QuickJS thread, at a cost of the same order as the
+    // `LIMIT ... OFFSET` form the UI design contract bans. A dropped index is a
+    // silent regression of exactly that shape.
+    const fx = createFixtureDb();
+    try {
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+
+      const indexes = (
+        fx.raw
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC",
+          )
+          .all() as { name: string }[]
+      ).map((r) => String(r.name));
+
+      expect(indexes).toContain("idx_artifacts_size_keyset");
+      expect(indexes).toContain("idx_observations_status_keyset");
+      // Step v3's pair is still there — appending a step must never have
+      // replaced one.
+      expect(indexes).toContain("idx_artifacts_keyset");
+      expect(indexes).toContain("idx_observations_keyset");
+    } finally {
+      fx.close();
+    }
   });
 
   it("step v3 brings `audit` to a database that stopped at v1, losing no seeded row", async () => {
@@ -273,8 +308,11 @@ describe("forward-only migration ladder (STORE-05)", () => {
 
       const report = await migrate(fx.db);
       expect(report.ok, JSON.stringify(report.steps)).toBe(true);
-      expect(report.version).toBe(3);
-      expect(userVersion(fx.raw)).toBe(3);
+      // The ladder runs to its HEAD, not to v3: a step appended after v3 must
+      // not turn this case red, and pinning the literal here would guarantee it
+      // did. What this case is about is `audit` arriving, asserted below.
+      expect(report.version).toBe(SCHEMA_VERSION);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
       expect(readArtifacts(fx)).toEqual(before);
 
       expect(listTables(fx.raw)).toContain("audit");
