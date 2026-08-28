@@ -74,8 +74,78 @@ reads *"It is written to the Caido server and is your responsibility from that p
 sentence is now wrong and must be amended to describe a download to the operator's machine.
 `## Rendering Safety Contract` R5 (server-side path labelling) still applies to any path the
 Settings surface displays; it no longer applies to exports, because exports produce no server path.
+**Discharged 2026-08-28 by D-07 below.**
+
+### Post-research decisions (2026-08-28) — operator calls on escalations from `05-RESEARCH.md`
+
+The researcher returned `## RESEARCH COMPLETE` with three items it explicitly refused to decide
+alone. These are the operator's answers. They are locked, exactly as D-01 … D-04 are.
+
+- **D-05 (resolves O-02): Do not re-sequence Phase 5. Split it, and emit an entity read contract
+  upward to Phases 3/4.** Concretely:
+  1. **Plan and execute now:** 05-01 (sidebar shell, navigation, settings surface), 05-02 (tables —
+     keyset pagination, virtualised scrolling, filtering, coalesced events) built over the shipped
+     `artifacts` / `observations` tables, and the **safety + export half of 05-05** (rendering
+     safety R1–R3, the hostile-content fixture, the CSV/JSON exporter, the D-04 Blob download) over
+     `observations.url`, which is genuinely target-controlled and is the right first subject.
+  2. **Phase 5 authors and publishes the entity read contract** — not Phase 4's storage schema, but
+     the four columns `05-UI-SPEC.md` already binds (state/score, target-controlled value, last
+     seen, triage state), the cursor tuple shape, the invalidation category name, and the
+     score-explanation record shape UI-04 renders. A document plus a TypeScript type in
+     `packages/engine/` (the SDK-free workspace). Phase 5 is the only consumer, so it is Phase 5's
+     to write. This also answers UI-SPEC FLAG F1: specify the evidence-panel *frame* (which fields
+     are mandatory, which are target-controlled, which carry `font-mono`) and leave the signal
+     vocabulary to Phase 3.
+  3. **Do NOT plan, and do not invent a schema for:** 05-03 in full, the triage/suppression halves
+     of 05-04 (OPS-01/02/04 — they key on an entity identity Phase 4's plan 04-03 defines), and the
+     projection half of 05-05 (FIND-01/02 — it needs the high-signal tier from Phases 3/4). These
+     are deferred to a follow-on pass after Phase 4, and the plan set must say so explicitly rather
+     than silently omitting them.
+  4. **Still in scope inside 05-04 today:** the `audit` table (STORE-08) and the retry path
+     (OPS-03, over `analyses.scan_state`). The triage/suppression *table shape and write
+     discipline* may be designed now; the *key* may not be fixed.
+  — **Reversibility:** costly — the published entity read contract becomes a cross-phase interface
+  Phases 3 and 4 build against. Changing it later means changing their plans, not just Phase 5's.
+
+- **D-06 (resolves O-03's retention question): `audit` is exempt from the retention age bound and
+  keeps only a raised row bound.** An audit trail exists to answer "when did I project this
+  permanent Finding, and what did I export" — questions asked long after 90 days, about actions
+  that are themselves irreversible. `sweepRetention`'s row cap still bounds growth, so the database
+  stays bounded. This is a deliberate, single, documented exception to the per-table-per-project
+  policy P4-D7 established, and the exception must be visible in the sweep code, not implicit.
+
+- **D-07 (resolves part of O-04's neighbourhood — the raw-export copy): `05-UI-SPEC.md`
+  `## Copywriting Contract` raw-export confirmation is amended and the amendment is already
+  applied.** It was wrong twice: it described a server-side file (contradicted by D-04), and it
+  promised *"{n} live secret values in cleartext"*, which URL query values cannot honour because
+  `observations.ts` redacts query values at write time — a "raw" export cannot un-redact what was
+  never stored. The new copy states the download target and states plainly that write-time-redacted
+  values stay redacted. 05-05 must use the amended string verbatim.
+
+**Considered and explicitly declined [informational] — do not re-open, do not treat as oversights:**
+
+- The `"{total} secrets exist on this target"` filtered-empty copy **stays exactly as approved.**
+  The operator reviewed the objection (it uses a word on `telemetry.ts`'s
+  `FORBIDDEN_COMPLETENESS_WORDS`, and would count suppressed rows) and chose to keep it. Verified
+  during this run: that word list is scoped to counter names, RPC field names and strings
+  `telemetry.ts` itself projects, enforced only by `telemetry.spec.ts` against that module — it
+  does **not** reach frontend copy, so there is no mechanical failure here. The residual is
+  semantic only. **What the planner must still do:** define explicitly what `{total}` counts and
+  state whether suppressed rows are inside it. The copy is fixed; the number behind it is not yet
+  specified.
+- **O-05 stays as the UI-SPEC has it: projection WARNS on `partial`/`failed` contributing
+  artifacts, it does not block.** The researcher recommended blocking; the operator declined. The
+  UI-09 floor statement and the affected-artifact count still appear before the confirmation.
 
 ### Open — raised, NOT decided in this discussion
+
+> **Status as of 2026-08-28, after research.** `O-02` → resolved by **D-05**. `O-03`'s retention
+> question → resolved by **D-06**; the rest of O-03 (suppression mechanism, `audit` shape, triage
+> identity) is answered with evidence in `05-RESEARCH.md § O-03` — read it there, and note that the
+> triage *key* remains blocked on Phase 4 per D-05(3). `O-05` → decided: keep the UI-SPEC's warn
+> behaviour (see the declined block above). `O-01`, `O-04` and `O-06` are answered with executed
+> measurements in `05-RESEARCH.md` — the planner follows the research, not the open text below.
+> The text below is kept as the original statement of each question, not as a live to-do list.
 
 These were surfaced and consciously left open. **They are not defaults and must not be read as
 locked.** The researcher should investigate them and the planner must either resolve them from
