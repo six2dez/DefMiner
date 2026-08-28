@@ -65,15 +65,22 @@
       // @defminer/engine/sanitise. Removed rather than left in place as a
       // harmless no-op, because an ignore that has stopped being needed is an
       // ignore that starts hiding the next real one.
+      // `@vueuse/core` IS NO LONGER LISTED BELOW. It was, carrying the note
+      // "Remove when 05-07 and 05-08 import them", and plan 05-08 landed the
+      // import: src/stores/coalescer.ts composes useDebounceFn and
+      // useThrottleFn to hold 05-UI-SPEC.md's 500 ms window and its two
+      // reactions per second. Removed rather than left as a harmless no-op,
+      // for the same reason the `@defminer/engine` entry was: an ignore that
+      // has stopped being needed is an ignore that starts hiding the next real
+      // one — and knip reports the stale entry itself as a configuration hint,
+      // so leaving it costs a line of permanent noise beside a real finding.
       "ignoreDependencies": [
-        // Fixed by 05-UI-SPEC.md as the stack later Phase 5 plans build on —
-        // vue-virtual-scroller is the RecycleScroller plan 05-07's table needs
-        // and @vueuse/core the composables 05-08 needs. Both are pinned EXACTLY
-        // here so those plans cannot resolve a version other than the one this
-        // phase's design was measured against. Remove when 05-07 and 05-08
-        // import them.
-        "vue-virtual-scroller",
-        "@vueuse/core"
+        // Fixed by 05-UI-SPEC.md as the stack a later Phase 5 plan builds on.
+        // `vue-virtual-scroller` is the RecycleScroller the virtualised table
+        // needs, pinned EXACTLY here so that plan cannot resolve a version
+        // other than the one this phase's design was measured against. Remove
+        // when the table imports it.
+        "vue-virtual-scroller"
       ]
     }
   },

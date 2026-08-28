@@ -28,8 +28,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computed, ref } from "vue";
 
 import type { InvalidationSubscription } from "../api/client";
-import type { TriageGate } from "./inventory";
-import { createInventoryStore } from "./inventory";
+
 import type { CoalescerOptions, InvalidationCoalescer } from "./coalescer";
 import {
   COALESCE_TRAILING_WINDOW_MS,
@@ -37,6 +36,8 @@ import {
   MAX_REACTIONS_PER_SECOND,
   REACTION_MIN_INTERVAL_MS,
 } from "./coalescer";
+import type { TriageGate } from "./inventory";
+import { createInventoryStore } from "./inventory";
 
 // ---------------------------------------------------------------------------
 // THE STUB EVENT BUS AND THE STUB GATE
@@ -405,10 +406,17 @@ describe("composed with the real inventory store", () => {
       countRows: () =>
         Promise.resolve({
           ok: true,
-          value: { visible: 1, hiddenBySuppression: 0, suppressionRuleCount: 0 },
+          value: {
+            visible: 1,
+            hiddenBySuppression: 0,
+            suppressionRuleCount: 0,
+          },
         }),
     });
-    const coalescer = createCoalescer({ gate: store, subscribe: bus.subscribe });
+    const coalescer = createCoalescer({
+      gate: store,
+      subscribe: bus.subscribe,
+    });
     await store.loadFirstPage();
 
     store.selectRow("r0");
