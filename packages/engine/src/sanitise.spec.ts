@@ -24,6 +24,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { HOSTILE_CASE_IDS, HOSTILE_CASES } from "./hostile.fixture";
 import {
   BIDI_OVERRIDES_ISOLATES,
   C0_C1_CONTROLS,
@@ -349,5 +350,71 @@ describe("the Intl.Segmenter fallback is a CAPABILITY difference, not an API one
       forDisplay("a\u0000b\u202Ec", TABLE_CELL_MAX_GRAPHEMES),
     );
     expect(out.text).toBe("abc");
+  });
+});
+
+describe("the hostile-content fixture, iterated EXHAUSTIVELY", () => {
+  // Derived from the exported constants rather than restated, and without the
+  // `g` flag so `toMatch` cannot be affected by a shared `lastIndex`. Two copies
+  // of a security range drift; one `.source` cannot.
+  const CONTROL_PATTERN = new RegExp(C0_C1_CONTROLS.source);
+  const BIDI_PATTERN = new RegExp(BIDI_OVERRIDES_ISOLATES.source);
+
+  const exercised = new Set<string>();
+
+  it.each([...HOSTILE_CASES])(
+    "$id is safe to display at the cell cap",
+    (hostileCase) => {
+      const out = forDisplay(hostileCase.value, TABLE_CELL_MAX_GRAPHEMES);
+      exercised.add(hostileCase.id);
+
+      expect(out.shown, hostileCase.why).toBeLessThanOrEqual(
+        TABLE_CELL_MAX_GRAPHEMES,
+      );
+      expect(out.text, hostileCase.why).not.toMatch(CONTROL_PATTERN);
+      expect(out.text, hostileCase.why).not.toMatch(BIDI_PATTERN);
+      expect(hasLoneSurrogate(out.text), hostileCase.why).toBe(false);
+      expect(out.total, hostileCase.why).toBeGreaterThanOrEqual(out.shown);
+    },
+  );
+
+  it.each([...HOSTILE_CASES])(
+    "$id is safe to show in the panel",
+    (hostileCase) => {
+      const out = forEvidence(hostileCase.value, EVIDENCE_PANEL_MAX_GRAPHEMES);
+      exercised.add(hostileCase.id);
+
+      expect(out.shown, hostileCase.why).toBeLessThanOrEqual(
+        EVIDENCE_PANEL_MAX_GRAPHEMES,
+      );
+      // The panel SHOWS whitespace — as escapes. Never as raw control bytes.
+      expect(out.text, hostileCase.why).not.toMatch(CONTROL_PATTERN);
+      expect(out.text, hostileCase.why).not.toMatch(BIDI_PATTERN);
+      expect(hasLoneSurrogate(out.text), hostileCase.why).toBe(false);
+    },
+  );
+
+  it("is FROZEN, so no consumer can mutate the corpus for the next one", () => {
+    expect(Object.isFrozen(HOSTILE_CASES)).toBe(true);
+    expect(Object.isFrozen(HOSTILE_CASE_IDS)).toBe(true);
+    expect(HOSTILE_CASES).toHaveLength(HOSTILE_CASE_IDS.length);
+    expect(HOSTILE_CASES.length).toBeGreaterThanOrEqual(17);
+    expect(new Set(HOSTILE_CASE_IDS).size, "ids must be unique").toBe(
+      HOSTILE_CASE_IDS.length,
+    );
+    for (const hostileCase of HOSTILE_CASES) {
+      expect(
+        hostileCase.why,
+        `${hostileCase.id} has no stated reason`,
+      ).not.toBe("");
+    }
+  });
+
+  it("exercised EVERY id in HOSTILE_CASE_IDS, not a subset", () => {
+    // Declared last in this describe, so it runs after the two it.each blocks.
+    // Without it, a case added to the fixture tomorrow is carried by this file
+    // without being asserted on, and the suite still reports green.
+    expect([...exercised].sort()).toEqual([...HOSTILE_CASE_IDS].sort());
+    expect(HOSTILE_CASE_IDS.length).toBeGreaterThanOrEqual(17);
   });
 });

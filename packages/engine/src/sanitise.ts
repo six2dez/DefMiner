@@ -58,6 +58,23 @@
 // is invisible at the call site.
 //
 // ===========================================================================
+// THE ONE FULL WALK, AND WHY IT IS NOT THE SHAPE DET-07 BANS
+// ===========================================================================
+// `capped()` walks the whole stripped string once, because `total` is part of
+// R2's contract — "showing 256 of 4,194,304" cannot be said without counting to
+// 4,194,304 — while the array it builds stops growing at the cap, so a 4 MiB
+// value is never rebuilt in memory. Measured: ~170 ms for 4 MiB through
+// `Intl.Segmenter`, and `sanitise.spec.ts` holds it under a named ceiling so a
+// rewrite that loses the early stop fails rather than merely runs slowly.
+//
+// DET-07 bans PER-CHARACTER INDEX READS (`charCodeAt`, `codePointAt`,
+// `.charAt(`, `fromCharCode`) in engine source, and `digest.spec.ts` enforces
+// that by scanning this file. There are none here: the strip is a native regex
+// pass, the escape lookup is a prebuilt table keyed by the character itself, and
+// the walk is an iterator. What DET-07's measurement was about — a hand-rolled
+// hash loop reading code units one at a time — is not what this does.
+//
+// ===========================================================================
 // WHAT COMES BACK, AND WHAT DELIBERATELY DOES NOT
 // ===========================================================================
 // `{ text, shown, total }` and nothing else. The untruncated remainder is not a
@@ -119,17 +136,48 @@ type Displayed = {
   total: number;
 };
 
-/** The two-character escapes R2 permits the evidence panel to show. Everything
- *  else in the control ranges becomes `\xHH`, so nothing is ever raw. */
-const CONTROL_ESCAPES: ReadonlyMap<number, string> = new Map([
-  [0x00, "\\0"],
-  [0x08, "\\b"],
-  [0x09, "\\t"],
-  [0x0a, "\\n"],
-  [0x0b, "\\v"],
-  [0x0c, "\\f"],
-  [0x0d, "\\r"],
-]);
+/**
+ * Every control character in both ranges, mapped to the escape the evidence
+ * panel shows instead of it. Seven get the conventional two-character letter;
+ * the other fifty-eight get `\xHH`, so nothing is ever raw and nothing is ever
+ * silently dropped by this path.
+ *
+ * KEYED BY THE CHARACTER, NOT BY ITS CODE UNIT, AND BUILT ONCE. `digest.spec.ts`
+ * enforces DET-07 across every non-spec module in this package by banning
+ * `charCodeAt`, `codePointAt`, `.charAt(` and `fromCharCode` in engine source —
+ * Phase 0 measured a per-character JS loop at 9 ms/MB EMPTY on a runtime with no
+ * interrupt (SPIKE-01), so a per-character index read inside a hot path is a
+ * banned shape here whatever it is computing. A lookup table built at module
+ * load from sixty-five constants costs nothing per call and needs no index read
+ * at all: the regex engine finds the character natively and this map answers in
+ * one hop.
+ */
+const CONTROL_ESCAPES: ReadonlyMap<string, string> = buildControlEscapes();
+
+function buildControlEscapes(): ReadonlyMap<string, string> {
+  const conventional = new Map<number, string>([
+    [0x00, "\\0"],
+    [0x08, "\\b"],
+    [0x09, "\\t"],
+    [0x0a, "\\n"],
+    [0x0b, "\\v"],
+    [0x0c, "\\f"],
+    [0x0d, "\\r"],
+  ]);
+  const table = new Map<string, string>();
+  const add = (codePoint: number): void => {
+    const hex = codePoint.toString(16).toUpperCase().padStart(2, "0");
+    table.set(
+      String.fromCodePoint(codePoint),
+      conventional.get(codePoint) ?? `\\x${hex}`,
+    );
+  };
+  // The SAME two ranges C0_C1_CONTROLS matches, so the table is total over that
+  // pattern and the lookup in forEvidence can never miss.
+  for (let codePoint = 0x00; codePoint <= 0x1f; codePoint++) add(codePoint);
+  for (let codePoint = 0x7f; codePoint <= 0x9f; codePoint++) add(codePoint);
+  return table;
+}
 
 /** The shape of `Intl.Segmenter` this module uses, declared structurally so no
  *  lib type is required and the fallback path stays honest. */
@@ -237,13 +285,14 @@ export function forDisplay(raw: string, maxGraphemes: number): Displayed {
 export function forEvidence(raw: string, maxGraphemes: number): Displayed {
   assertCap(maxGraphemes);
   const escaped = raw
-    .replace(C0_C1_CONTROLS, (character) => {
-      const codeUnit = character.charCodeAt(0);
-      return (
-        CONTROL_ESCAPES.get(codeUnit) ??
-        `\\x${codeUnit.toString(16).toUpperCase().padStart(2, "0")}`
-      );
-    })
+    // CONTROL_ESCAPES is total over C0_C1_CONTROLS, so the `??` arm is
+    // unreachable. It is written as "" rather than as a throw because the fallen
+    // -back behaviour must be the SAFE one — removing the character, exactly
+    // what forDisplay does — and not a render path that throws on hostile input.
+    .replace(
+      C0_C1_CONTROLS,
+      (character) => CONTROL_ESCAPES.get(character) ?? "",
+    )
     .replace(BIDI_OVERRIDES_ISOLATES, "");
   return capped(escaped, maxGraphemes);
 }

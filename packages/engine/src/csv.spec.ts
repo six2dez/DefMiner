@@ -20,6 +20,8 @@ import {
   csvRow,
   DANGEROUS_LEADS,
 } from "./csv";
+import { HOSTILE_CASE_IDS, HOSTILE_CASES } from "./hostile.fixture";
+import { C0_C1_CONTROLS } from "./sanitise";
 
 /** LATIN SMALL LETTER E + COMBINING ACUTE ACCENT. One grapheme, two code
  *  points, and its FIRST code unit is an ordinary letter — which is why the
@@ -167,5 +169,39 @@ describe("csvRow and csvHeader", () => {
     const out = csvHeader(["=host"]);
     expect(out[1]).toBe("'");
     expect(out[2]).toBe("=");
+  });
+});
+
+describe("the hostile-content fixture, iterated EXHAUSTIVELY", () => {
+  // Derived from the exported constant, `g` flag dropped — see the same note in
+  // sanitise.spec.ts.
+  const CONTROL_PATTERN = new RegExp(C0_C1_CONTROLS.source);
+
+  const exercised = new Set<string>();
+
+  it.each([...HOSTILE_CASES])(
+    "$id serialises to an inert CSV field",
+    (hostileCase) => {
+      const out = csvField(hostileCase.value);
+      exercised.add(hostileCase.id);
+
+      // Quote-wrapped, always, neutralised or not.
+      expect(out.startsWith('"'), hostileCase.why).toBe(true);
+      expect(out.endsWith('"'), hostileCase.why).toBe(true);
+      expect(out.length, hostileCase.why).toBeGreaterThanOrEqual(2);
+
+      // The FIRST CONTENT CHARACTER — index 1, immediately inside the opening
+      // quote — is never a dangerous lead. For a neutralised field it is the
+      // apostrophe; for a benign one it is the value's own first character.
+      expect(DANGEROUS_LEADS, hostileCase.why).not.toContain(out.slice(1, 2));
+
+      // And no control character survived to reach the file.
+      expect(out, hostileCase.why).not.toMatch(CONTROL_PATTERN);
+    },
+  );
+
+  it("exercised EVERY id in HOSTILE_CASE_IDS, not a subset", () => {
+    expect([...exercised].sort()).toEqual([...HOSTILE_CASE_IDS].sort());
+    expect(HOSTILE_CASE_IDS.length).toBeGreaterThanOrEqual(17);
   });
 });

@@ -10,6 +10,7 @@
     "./deadline": "./src/deadline.ts",
     "./decode": "./src/decode.ts",
     "./digest": "./src/digest.ts",
+    "./hostile.fixture": "./src/hostile.fixture.ts",
     "./pipeline": "./src/pipeline.ts",
     "./queue": "./src/queue.ts",
     "./sanitise": "./src/sanitise.ts",
