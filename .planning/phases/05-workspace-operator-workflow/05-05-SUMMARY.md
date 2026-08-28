@@ -49,15 +49,15 @@ key-files:
     - knip.json
 
 key-decisions:
-  - "P5-D21: the gate SKIPS directories named `__*`. scripts/ci/lint-r1.spec.ts writes deliberate R1 violations into packages/frontend/src/__r1_fixtures__ for the life of one test and vitest runs spec files concurrently, so without the skip this gate would intermittently report another spec's fixtures as real findings — a flake indistinguishable from a genuine violation. This is the fourth place the same fact is written (gitignore, tsconfig exclude, eslint ignores, here) and it is written at the walk because that is where it acts."
-  - "P5-D22: template rules run over EXTRACTED EXPRESSIONS (bound attribute values and `{{ }}` bodies), not over raw template text. Markup is what a template is made of, so scanning raw text for `<tag>` would report every component's own markup as `markup-string-construction`. HTML comments are discarded first, which is both why an `<!-- eslint-disable -->` is inert here and why App.vue's own comment mentioning `v-html` by name is not a finding."
-  - "P5-D23: the `<template>` block is extracted by DEPTH COUNTING, not by slicing to the first `</template>`. App.vue nests a `<template v-if>` inside the root block; a first-close scan would end the block there and leave the entire artifacts table unaudited — a silent coverage loss in the largest template in the package."
-  - "P5-D24: descent is asserted over the DIRECTORIES the walk entered rather than only over the files it yielded, plus (from task 2) the stronger file-level form. src/styles/ holds only CSS, so a files-only descent proof would have been unassertable when the gate landed and would have become true later by accident. Both assertions are kept: the first survives a reorganisation that empties src/safety/."
-  - "P5-D25: `forPanel` returns the same three keys as `forCell` and carries NO byte count, although R2 asks the panel to state the byte range shown. Bytes are the BACKEND's space and the display text has been grapheme-truncated in the frontend's; putting both spaces on one object is what invites the arithmetic that is silently wrong. The panel (05-10) states the byte range from what the backend supplies alongside the value. `assertHighlightRanges`'s bounds check is where that mismatch is made loud."
-  - "P5-D26: `assertHighlightRanges` throws UNCONDITIONALLY rather than only in a development build. packages/frontend's tsconfig carries `types: [\"node\"]` and not vite/client, so `import.meta.env` is not typed here — and the unconditional form is the stronger one anyway: a violated precondition means the offsets and the string disagree, and a confidently WRONG highlight on a triage surface is worse than none."
-  - "P5-D27: `copyToClipboard` has NO `document.execCommand` fallback. That path copies by putting the value into a textarea in the document, which is exactly what R2 forbids; a silent downgrade to it would be a security regression that looks like a convenience. On a runtime without the async clipboard API it throws and the caller surfaces the failure."
-  - "P5-D28: HighlightSlices renders the EMPTY gap element between two touching ranges, and one element for the whole value when there are no ranges at all. Spans then correspond one-to-one with the offsets the backend reported, which is what makes a wrong highlight auditable rather than merely wrong (EDGE UISEC-01 adjacency and empty)."
-  - "P5-D29: the frontend asserts sanitisation using the engine's EXPORTED strip patterns rather than restating them. sanitise.ts exports them for exactly this, and there is a harder reason here: `noInlineConfig: true` is set for packages/frontend/**, so `// eslint-disable-next-line no-control-regex` is inert and a control-character regex literal cannot be written in this package at all."
+  - "P5-D22: the gate SKIPS directories named `__*`. scripts/ci/lint-r1.spec.ts writes deliberate R1 violations into packages/frontend/src/__r1_fixtures__ for the life of one test and vitest runs spec files concurrently, so without the skip this gate would intermittently report another spec's fixtures as real findings — a flake indistinguishable from a genuine violation. This is the fourth place the same fact is written (gitignore, tsconfig exclude, eslint ignores, here) and it is written at the walk because that is where it acts."
+  - "P5-D23: template rules run over EXTRACTED EXPRESSIONS (bound attribute values and `{{ }}` bodies), not over raw template text. Markup is what a template is made of, so scanning raw text for `<tag>` would report every component's own markup as `markup-string-construction`. HTML comments are discarded first, which is both why an `<!-- eslint-disable -->` is inert here and why App.vue's own comment mentioning `v-html` by name is not a finding."
+  - "P5-D24: the `<template>` block is extracted by DEPTH COUNTING, not by slicing to the first `</template>`. App.vue nests a `<template v-if>` inside the root block; a first-close scan would end the block there and leave the entire artifacts table unaudited — a silent coverage loss in the largest template in the package."
+  - "P5-D25: descent is asserted over the DIRECTORIES the walk entered rather than only over the files it yielded, plus (from task 2) the stronger file-level form. src/styles/ holds only CSS, so a files-only descent proof would have been unassertable when the gate landed and would have become true later by accident. Both assertions are kept: the first survives a reorganisation that empties src/safety/."
+  - "P5-D26: `forPanel` returns the same three keys as `forCell` and carries NO byte count, although R2 asks the panel to state the byte range shown. Bytes are the BACKEND's space and the display text has been grapheme-truncated in the frontend's; putting both spaces on one object is what invites the arithmetic that is silently wrong. The panel (05-10) states the byte range from what the backend supplies alongside the value. `assertHighlightRanges`'s bounds check is where that mismatch is made loud."
+  - "P5-D27: `assertHighlightRanges` throws UNCONDITIONALLY rather than only in a development build. packages/frontend's tsconfig carries `types: [\"node\"]` and not vite/client, so `import.meta.env` is not typed here — and the unconditional form is the stronger one anyway: a violated precondition means the offsets and the string disagree, and a confidently WRONG highlight on a triage surface is worse than none."
+  - "P5-D28: `copyToClipboard` has NO `document.execCommand` fallback. That path copies by putting the value into a textarea in the document, which is exactly what R2 forbids; a silent downgrade to it would be a security regression that looks like a convenience. On a runtime without the async clipboard API it throws and the caller surfaces the failure."
+  - "P5-D29: HighlightSlices renders the EMPTY gap element between two touching ranges, and one element for the whole value when there are no ranges at all. Spans then correspond one-to-one with the offsets the backend reported, which is what makes a wrong highlight auditable rather than merely wrong (EDGE UISEC-01 adjacency and empty)."
+  - "P5-D30: the frontend asserts sanitisation using the engine's EXPORTED strip patterns rather than restating them. sanitise.ts exports them for exactly this, and there is a harder reason here: `noInlineConfig: true` is set for packages/frontend/**, so `// eslint-disable-next-line no-control-regex` is inert and a control-character regex literal cannot be written in this package at all."
 
 patterns-established:
   - "The stronger half of a two-part control names the weaker half and says why it is weaker, in the file that carries it"
@@ -200,11 +200,11 @@ _No REFACTOR commit: the cleanup pass (props destructuring, structural clipboard
 
 ## Decisions Made
 
-Nine decisions, P5-D21 through P5-D29, are in the frontmatter with their reasoning. The three that will matter most to later plans:
+Nine decisions, P5-D22 through P5-D30, are in the frontmatter with their reasoning. The three that will matter most to later plans:
 
-- **P5-D25** — `forPanel` carries **no byte count**, although R2 asks the panel to state the byte range shown. Bytes are the backend's length space; the display text has been grapheme-truncated in the frontend's. Putting both on one object is what invites the arithmetic that is silently wrong. Plan 05-10 states the byte range from what the backend supplies alongside the value, and `assertHighlightRanges`'s bounds check is where the mismatch is made loud.
-- **P5-D21** — the walk skips `__*` directories, because `scripts/ci/lint-r1.spec.ts` writes deliberate R1 violations into `packages/frontend/src/__r1_fixtures__` while vitest runs spec files concurrently. Without it this gate would intermittently report another spec's fixtures as real findings.
-- **P5-D27** — `copyToClipboard` has no `document.execCommand` fallback, because that path copies by putting the full value into the document.
+- **P5-D26** — `forPanel` carries **no byte count**, although R2 asks the panel to state the byte range shown. Bytes are the backend's length space; the display text has been grapheme-truncated in the frontend's. Putting both on one object is what invites the arithmetic that is silently wrong. Plan 05-10 states the byte range from what the backend supplies alongside the value, and `assertHighlightRanges`'s bounds check is where the mismatch is made loud.
+- **P5-D22** — the walk skips `__*` directories, because `scripts/ci/lint-r1.spec.ts` writes deliberate R1 violations into `packages/frontend/src/__r1_fixtures__` while vitest runs spec files concurrently. Without it this gate would intermittently report another spec's fixtures as real findings.
+- **P5-D28** — `copyToClipboard` has no `document.execCommand` fallback, because that path copies by putting the full value into the document.
 
 ## Deviations from Plan
 
@@ -320,9 +320,11 @@ None. The files created introduce no network endpoint, no auth path, no file acc
 `.planning/REQUIREMENTS.md`'s machine-owned span (lines 198–790) was hashed before this plan's close-out and again after:
 
 - before: `0233ac828596b11146b54ea33eee42c213c094c3aa2ac14806270cb9c9a1b843`
-- after: recorded in the close-out commit; the span was **not** edited by this plan.
+- after: `0233ac828596b11146b54ea33eee42c213c094c3aa2ac14806270cb9c9a1b843`
 
-`requirements.mark-complete` was run through `requirements.ready-ids`, which is read-only against the span.
+**Byte-identical, and `git status .planning/REQUIREMENTS.md` reports the whole file unmodified.** 05-01's close-out reformatted this file and broke the span; 05-02 repaired it; 05-03, 05-04 and now 05-05 have not reproduced it.
+
+**Neither requirement box was flipped, and that is the correct outcome rather than an omission.** `requirements.ready-ids` reported **0 of 2** ready: `UISEC-01` and `UISEC-03` are both also declared by plan **05-09**, which has no SUMMARY yet, so the shared-ID gate blocks them until the last declaring plan finishes. `requirements.mark-complete` was therefore not run at all, which is why the file is untouched. `requirements-completed` in this SUMMARY's frontmatter is this plan's *declaration* copied verbatim from its PLAN, not a claim that either box now reads complete.
 
 ## User Setup Required
 
@@ -334,7 +336,7 @@ None — no external service configuration.
 
 - **05-07** (virtualised keyset table) must read `TABLE_ROW_HEIGHT_PX` from `safety/display.ts` for `RecycleScroller`'s `:item-size` rather than restating `32`.
 - **05-09** (findings table) owes the `verification: backstop` lift for `long-text / findings-table` — the browser-driven load spec where a broken row height is observable. It also owns removing `vue-virtual-scroller` from `knip.json`'s frontend `ignoreDependencies` if 05-07 has not.
-- **05-10** (evidence panel) owes the `long-text / evidence-panel` backstop, and is the plan that states the panel's **byte range** from what the backend supplies (P5-D25).
+- **05-10** (evidence panel) owes the `long-text / evidence-panel` backstop, and is the plan that states the panel's **byte range** from what the backend supplies (P5-D26).
 - **05-11** (export) owes the hostile-content half of the export row's backstop — the produced bytes.
 - **All frontend plans** are now under the gate: it is a static walk, so it covers files that do not exist yet. Any component written by 05-06 through 05-12 that reaches for `v-html`, an HTML sink, `eval`, a non-literal `style`/`href`/`src`/`data-*` binding, a `title` attribute, or markup built by concatenation fails `pnpm test` at the commit that introduces it.
 - **When Phase 4 unblocks the suppressions list and the projection preview**, `hostile.spec.ts` extends by adding a third and fourth surface to its loop — the corpus is imported, not forked.
@@ -342,6 +344,10 @@ None — no external service configuration.
 ---
 *Phase: 05-workspace-operator-workflow*
 *Completed: 2026-08-28*
+
+## Correction: decision numbering
+
+These decisions were first written as P5-D21 through P5-D29 and are **P5-D22 through P5-D30** here. `P5-D21` was already taken by plan 05-04's close-out — a decision recorded directly in `.planning/STATE.md` (the seven requirements 05-04 declares but deliberately leaves unflipped) rather than in its SUMMARY frontmatter, which is why it was not visible when this plan's numbers were first assigned. Recorded rather than silently renumbered: a decision id that means two things is exactly the defect CORE-11's own history is a record of.
 
 ## Self-Check: PASSED
 

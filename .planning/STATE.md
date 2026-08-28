@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-08-28T12:52:55.359Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-08-28T13:28:39.149Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 34b9bfec3e3898db949d9b9d932889b3156ed45d
+state_head: 2f1b912abddb9f0c265f9fc0cc66a48c1bb81769
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 51
+  completed_plans: 52
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 5 of 12
+Plan: 6 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -267,6 +267,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P02 | 21 min | 3 tasks | 4 files |
 | Phase 05 P03 | 19 min | 3 tasks | 6 files |
 | Phase 05 P04 | 12 min | 3 tasks | 4 files |
+| Phase 05 P05 | 24 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -463,6 +464,15 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D19: every exported type is imported and given a conforming value in contract.spec.ts — Required mechanically — knip runs `ignoreExportsUsedInFile: false` with `types: error` since 05-01 closed that hole — and useful independently: a conforming literal is the cheapest check that a Phase 3 or Phase 4 author can actually construct the shape.
 - [Phase 05]: P5-D20: the proposed suppressions-list bound is 200 rules per project, enforced at CREATE time, answering the UI-SPEC's unresolved overflow row — A cap that filters on READ hides rules that are still suppressing findings, which is the exact failure the partial/suppressions-list row already forbids. The number is defensible not measured and is marked a proposal; the shape of the answer — a stated bound with an argument, enforced at write time — is what should survive if the number moves.
 - [Phase 05]: P5-D21 (close-out): the seven requirements plan 05-04 DECLARES are deliberately NOT flipped to complete in REQUIREMENTS.md. Their boxes stay `[ ]` and the deferral register carries them instead — UI-03, UI-04, OPS-01, OPS-02, OPS-04, FIND-01 and FIND-02 are declared by this plan so the deferral is VISIBLE rather than silently omitted (the plan says so in its own prohibitions) — not because they were delivered. Nothing here builds triage, suppression, an evidence table, a scorer or a Findings projection; every one is blocked on Phase 3 or Phase 4 with a named unblocking plan. Marking them complete would make the ledger claim a reach it has not executed, which is the exact defect CORE-11 was reverted for TWICE (`e7cc4b6` and `faca607`). `requirements.ready-ids` reported six of the seven ready and `mark-complete` was deliberately not run on them; UI-03 was blocked anyway by sibling plan 05-10. REQUIREMENTS.md is byte-untouched by this close-out, including the machine-owned DERIVED RESIDUAL span, which was hashed before and after and is identical.
+- [Phase 05]: P5-D22: the frontend R1/R2 static gate SKIPS directories named __* — scripts/ci/lint-r1.spec.ts writes deliberate R1 violations into packages/frontend/src/__r1_fixtures__ for the life of one test and vitest runs spec files concurrently, so without the skip this gate would intermittently report another spec's fixtures as real findings, a flake indistinguishable from a genuine violation. Fourth place the same fact is written (gitignore, tsconfig exclude, eslint ignores, the walk); it is written at the walk because that is where it acts.
+- [Phase 05]: P5-D23: the gate's template rules run over EXTRACTED EXPRESSIONS (bound attribute values and mustache bodies), never over raw template text — markup is what a template is made of, so a raw-text scan for a tag would report every component's own markup. HTML comments are discarded first, which is both why an eslint-disable comment is inert here and why App.vue's own comment naming v-html is not a finding.
+- [Phase 05]: P5-D24: the <template> block is extracted by DEPTH COUNTING, not by slicing to the first close tag — App.vue nests a <template v-if> inside the root block, so a first-close scan would end the block there and leave the entire artifacts table unaudited, a silent coverage loss in the largest template in the package.
+- [Phase 05]: P5-D25: gate descent is asserted over the DIRECTORIES the walk entered rather than only the files it yielded (plus the stronger file-level form from task 2) — src/styles/ holds only CSS, so a files-only proof would have been unassertable when the gate landed and would have become true later by accident. Both are kept: the directory form survives a reorganisation that empties src/safety/.
+- [Phase 05]: P5-D26: forPanel returns the same three keys as forCell and carries NO byte count, although R2 asks the panel to state the byte range shown — bytes are the BACKEND's length space and the display text is grapheme-truncated in the frontend's, and putting both spaces on one object is what invites the arithmetic that is silently wrong. Plan 05-10 states the range from what the backend supplies; assertHighlightRanges's bounds check is where the mismatch is made loud.
+- [Phase 05]: P5-D27: assertHighlightRanges throws UNCONDITIONALLY rather than only in a development build — packages/frontend's tsconfig carries types:[node] and not vite/client so import.meta.env is not typed there, and the unconditional form is stronger anyway: a violated precondition means the offsets and the string disagree, and a confidently WRONG highlight on a triage surface is worse than none.
+- [Phase 05]: P5-D28: copyToClipboard has NO document.execCommand fallback — that path copies by putting the full value into a textarea in the document, exactly what R2 forbids, so a silent downgrade to it would be a security regression that looks like a convenience. On a runtime without the async clipboard API it throws and the caller surfaces the failure.
+- [Phase 05]: P5-D29: HighlightSlices renders the EMPTY gap element between two touching ranges, and one element for the whole value when there are no ranges — rendered spans then correspond one-to-one with the offsets the backend reported, which is what makes a wrong highlight auditable rather than merely wrong (EDGE UISEC-01 adjacency and empty).
+- [Phase 05]: P5-D30: the frontend asserts sanitisation using the engine's EXPORTED strip patterns rather than restating them — sanitise.ts exports them for exactly this, and noInlineConfig is on for packages/frontend so a no-control-regex disable comment is inert and a control-character regex literal cannot be written in that package at all. Asserted with replace rather than test, because both patterns carry the g flag and a global regex's test is stateful.
 
 ### Known Risks Carried Forward
 
@@ -505,8 +515,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T12:49:38.844Z
-**Stopped at:** Completed 05-04-PLAN.md
+**Last session:** 2026-08-28T13:26:46.711Z
+**Stopped at:** Completed 05-05-PLAN.md
 **Resume file:** None
 
 ### Blockers
