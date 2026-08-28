@@ -129,7 +129,13 @@ function seedAudit(
   const ids: string[] = [];
   for (let i = 0; i < count; i += 1) {
     const id = "evt-" + String(i).padStart(6, "0");
-    stmt.run(projectId, id, firstAt + i * stepMs, "finding_projected", "fp:" + id);
+    stmt.run(
+      projectId,
+      id,
+      firstAt + i * stepMs,
+      "finding_projected",
+      "fp:" + id,
+    );
     ids.push(id);
   }
   return ids;
@@ -223,7 +229,7 @@ describe("the row-count bound", () => {
     const summary = await sweepRetention(
       fx.db,
       P1,
-      { maxRows: 40, maxAgeMs: HUGE_AGE },
+      { maxRows: 40, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
       NOW,
     );
     expect(summary.deleted).toBe(0);
@@ -247,6 +253,7 @@ describe("the age bound", () => {
     await sweepToConvergence(P1, {
       maxRows: DEFAULT_RETENTION_MAX_ROWS,
       maxAgeMs,
+      auditMaxRows: HUGE_ROWS,
     });
 
     const left = (
@@ -274,6 +281,7 @@ describe("the age bound", () => {
     await sweepToConvergence(P1, {
       maxRows: DEFAULT_RETENTION_MAX_ROWS,
       maxAgeMs,
+      auditMaxRows: HUGE_ROWS,
     });
 
     const ids = (
@@ -299,7 +307,11 @@ describe("project isolation (T-01-20)", () => {
     expect(before.artifacts).toBe(50);
     expect(before.observations).toBe(1);
 
-    await sweepToConvergence(P1, { maxRows: 5, maxAgeMs: HUGE_AGE });
+    await sweepToConvergence(P1, {
+      maxRows: 5,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
 
     expect((await retentionCounts(fx.db, P1)).artifacts).toBe(5);
     // Counted BEFORE and AFTER, not merely asserted at the end.
@@ -311,12 +323,13 @@ describe("project isolation (T-01-20)", () => {
     const summary = await sweepRetention(
       fx.db,
       GLOBAL_PROJECT_ID,
-      { maxRows: 1, maxAgeMs: 1 },
+      { maxRows: 1, maxAgeMs: 1, auditMaxRows: 1 },
       NOW,
     );
     expect(summary).toEqual({
       examined: 0,
       deleted: 0,
+      auditDeleted: 0,
       moreWork: false,
       errors: 0,
       lastError: null,
@@ -338,7 +351,7 @@ describe("the per-pass cap and convergence", () => {
     const first = await sweepRetention(
       fx.db,
       P1,
-      { maxRows: 10, maxAgeMs: HUGE_AGE },
+      { maxRows: 10, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
       NOW,
     );
     expect(first.deleted).toBeGreaterThan(0);
@@ -350,6 +363,7 @@ describe("the per-pass cap and convergence", () => {
     const rest = await sweepToConvergence(P1, {
       maxRows: 10,
       maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
     });
     expect(rest.passes).toBeGreaterThan(0);
     expect((await retentionCounts(fx.db, P1)).artifacts).toBe(10);
@@ -357,7 +371,7 @@ describe("the per-pass cap and convergence", () => {
     const settled = await sweepRetention(
       fx.db,
       P1,
-      { maxRows: 10, maxAgeMs: HUGE_AGE },
+      { maxRows: 10, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
       NOW,
     );
     expect(settled.deleted).toBe(0);
@@ -412,6 +426,7 @@ describe("the per-pass cap and convergence", () => {
       artifacts: 0,
       observations: 0,
       analyses: 0,
+      audit: 0,
     });
   });
 
@@ -460,7 +475,7 @@ describe("a sweep that cannot delete", () => {
     const summary = await sweepRetention(
       dbWhereDeletesFail(),
       P1,
-      { maxRows: 0, maxAgeMs: 1 },
+      { maxRows: 0, maxAgeMs: 1, auditMaxRows: HUGE_ROWS },
       NOW,
     );
 
@@ -479,6 +494,7 @@ describe("a sweep that cannot delete", () => {
       artifacts: 5,
       observations: 5,
       analyses: 0,
+      audit: 0,
     });
   });
 
@@ -487,7 +503,7 @@ describe("a sweep that cannot delete", () => {
     const summary = await sweepRetention(
       fx.db,
       P1,
-      { maxRows: 0, maxAgeMs: 1 },
+      { maxRows: 0, maxAgeMs: 1, auditMaxRows: HUGE_ROWS },
       NOW,
     );
     expect(summary.deleted).toBe(3);
@@ -543,11 +559,13 @@ describe("the cascade leaves no orphan", () => {
       artifacts: 6,
       observations: 12,
       analyses: 6,
+      audit: 0,
     });
 
     await sweepToConvergence(P1, {
       maxRows: DEFAULT_RETENTION_MAX_ROWS,
       maxAgeMs,
+      auditMaxRows: HUGE_ROWS,
     });
 
     // The three old artifacts and everything hanging off them are gone; the three
@@ -556,6 +574,7 @@ describe("the cascade leaves no orphan", () => {
       artifacts: 3,
       observations: 6,
       analyses: 3,
+      audit: 0,
     });
     // Counted DIRECTLY, not inferred from the delete order.
     expect(orphanCount(P1)).toEqual({ observations: 0, analyses: 0 });
@@ -574,7 +593,11 @@ describe("the cascade leaves no orphan", () => {
     }
     expect((await retentionCounts(fx.db, P1)).observations).toBe(12);
 
-    await sweepToConvergence(P1, { maxRows: 2, maxAgeMs: HUGE_AGE });
+    await sweepToConvergence(P1, {
+      maxRows: 2,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
 
     const after = await retentionCounts(fx.db, P1);
     expect(after.artifacts).toBe(2);
@@ -594,6 +617,7 @@ describe("the cascade leaves no orphan", () => {
     await sweepToConvergence(P1, {
       maxRows: DEFAULT_RETENTION_MAX_ROWS,
       maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+      auditMaxRows: HUGE_ROWS,
     });
 
     expect(orphanCount(P1)).toEqual({ observations: 0, analyses: 0 });
@@ -749,15 +773,21 @@ describe("D-06 — the audit table is bounded by ROWS and NOT by age", () => {
 
   it("a FAILING audit delete is counted and the pass continues — the sweep still never throws", async () => {
     seedAudit(P1, 9, NOW - 9_000, 1);
-    const failing = {
+    // Same shape as `dbWhereDeletesFail` above, narrowed to the AUDIT delete so
+    // the other tables' sweeps still run and "the pass continues" is a claim
+    // about work that actually happened.
+    const failing: SqliteFixture["db"] = {
+      exec: fx.db.exec.bind(fx.db),
       prepare: async (sql: string) => {
-        if (sql.includes("DELETE FROM audit")) {
-          throw new Error("simulated audit delete failure");
-        }
-        return fx.db.prepare(sql);
+        const stmt = await fx.db.prepare(sql);
+        if (!/^\s*DELETE FROM audit\b/i.test(sql.trim())) return stmt;
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: () => Promise.reject(new Error("database is locked")),
+        };
       },
-      exec: async (sql: string) => fx.db.exec(sql),
-    } as unknown as typeof fx.db;
+    };
 
     const summary = await sweepRetention(
       failing,
@@ -819,7 +849,7 @@ describe("D-06 — the audit table is bounded by ROWS and NOT by age", () => {
     }
   });
 
-  it("the audit row bound is DERIVED from the per-table default, not picked", async () => {
+  it("the audit row bound is DERIVED from the per-table default, not picked", () => {
     // The number's arithmetic is stated in `settings.ts`. Asserted here so the
     // relationship survives an edit to either constant: the audit bound is four
     // times the per-table default, because the audit table has no age bound and

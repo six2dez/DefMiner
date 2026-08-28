@@ -5,6 +5,10 @@
 // the project, and it survives a force-reinstall (DB_SURVIVES_REINSTALL). Nothing
 // else will ever reclaim a row.
 //
+// ONE TABLE IS EXEMPT FROM THE AGE BOUND AND FROM IT ONLY: `audit` is bounded by
+// rows alone (decision D-06). The reasoning is stated in full beside its
+// statements below, where the missing over-age statement is.
+//
 // ---------------------------------------------------------------------------
 // THIS IS A LIBRARY FUNCTION WITH EXACTLY ONE CALLER, AND THE CALLER IS NOT HERE.
 // ---------------------------------------------------------------------------
@@ -81,6 +85,12 @@ import type { RetentionBounds } from "./settings";
 export type RetentionSweepSummary = {
   examined: number;
   deleted: number;
+  /** Audit rows removed by the raised row bound, counted SEPARATELY and also
+   *  included in `deleted`. Its own category because the audit table is the one
+   *  bounded by rows alone (decision D-06): an operator-facing health surface has
+   *  to be able to say "and N audit events aged out of the row cap" rather than
+   *  folding an irreplaceable record into one opaque number. */
+  auditDeleted: number;
   moreWork: boolean;
   /** Deletes that failed, plus one for a pass that threw outright. */
   errors: number;
@@ -201,6 +211,47 @@ ORDER BY started_at ASC, sha256 ASC
 LIMIT ?
 `;
 
+// ===========================================================================
+// THE AUDIT TABLE IS BOUNDED BY ROWS AND DELIBERATELY NOT BY AGE (decision D-06).
+// ===========================================================================
+// Every other table above has BOTH an over-age statement and an oldest-first
+// statement. `audit` has only the second, and the missing one is missing ON
+// PURPOSE. If you came here to add `AUDIT_OVER_AGE_SQL` "for consistency", this
+// paragraph is the answer: don't, and `retention.spec.ts` will stop you.
+//
+// WHY. An audit trail exists to answer two questions — WHEN did I project this
+// permanent Finding, and WHAT did I export — and both are asked long after
+// ninety days, about actions that are themselves irreversible. A Finding
+// projected into Caido cannot be withdrawn; bytes that left in a raw export are
+// in cleartext outside this tool for ever; a revealed value cannot be unseen. An
+// audit log that quietly aged those records out would be at its least useful
+// exactly when it was most needed, which is a weak audit log and arguably not one
+// at all.
+//
+// AND GROWTH IS STILL BOUNDED, which is what makes the exemption survivable
+// rather than merely principled. The row cap still applies — a raised one,
+// `bounds.auditMaxRows`, derived in `settings.ts` with its arithmetic written out
+// — so this table has a ceiling like every other, on a database Caido never
+// garbage-collects, does not delete with the project, and which survives a
+// force-reinstall.
+//
+// THIS IS A SINGLE, DELIBERATE, DOCUMENTED EXCEPTION to the per-table-per-project
+// policy decision P4-D7 established. It is not the first of a family. Any second
+// exemption is a new decision and needs its own paragraph here.
+
+const AUDIT_OLDEST_SQL = `
+SELECT event_id FROM audit
+WHERE project_id = ?
+ORDER BY at ASC, event_id ASC
+LIMIT ?
+`;
+
+const COUNT_AUDIT_SQL = `SELECT COUNT(*) AS n FROM audit WHERE project_id = ?`;
+
+const DELETE_AUDIT_SQL = `
+DELETE FROM audit WHERE project_id = ? AND event_id = ?
+`;
+
 // Orphans: a child whose parent is already gone. The cascade below cannot create
 // one — children go first — but a crash mid-pass in some future version, or a row
 // written before this module existed, can. Cleaning them is cheap and makes "no
@@ -270,6 +321,7 @@ export async function sweepRetention(
 ): Promise<RetentionSweepSummary> {
   let examined = 0;
   let deleted = 0;
+  let auditDeleted = 0;
   let moreWork = false;
   /** Mutated from inside `remove` below, so it is an object rather than two
    *  `let`s: a captured `let` assigned only inside a closure is exactly the
@@ -282,6 +334,7 @@ export async function sweepRetention(
     return {
       examined,
       deleted,
+      auditDeleted,
       moreWork,
       errors: failures.count,
       lastError: failures.last,
@@ -439,6 +492,38 @@ export async function sweepRetention(
       if (ana.capped) moreWork = true;
     }
 
+    // --- 3b. the audit table's ROW bound, and only its row bound -----------
+    // No `cutoff` is passed and no over-age candidate statement exists to pass it
+    // to. That is the whole of D-06, expressed as code rather than as a comment:
+    // the count-and-trim half is here and the age half is absent.
+    if (budget() > 0) {
+      const auditTotal = await countRows(db, COUNT_AUDIT_SQL, projectId);
+      const auditExcess = auditTotal - bounds.auditMaxRows;
+      if (auditExcess > 0) {
+        const oldestAudit = await db.prepare(AUDIT_OLDEST_SQL);
+        const victims = await oldestAudit.all<{ event_id: string }>(
+          projectId,
+          Math.min(auditExcess, CANDIDATE_SCAN_LIMIT),
+        );
+        examined += victims.length;
+        for (const v of victims) {
+          if (budget() <= 0) {
+            moreWork = true;
+            break;
+          }
+          // The SAME fully-bound single-row delete every other table uses, and
+          // the same recorded-failure discipline: a failing delete is counted,
+          // the pass continues, and the sweep never throws.
+          const removed = await remove(DELETE_AUDIT_SQL, [
+            projectId,
+            String(v.event_id),
+          ]);
+          deleted += removed;
+          auditDeleted += removed;
+        }
+      }
+    }
+
     // --- 4. does work remain for the next pass? ----------------------------
     // Asked by RE-COUNTING rather than by trusting the loop's bookkeeping: the
     // question is about the database, and the database is right there.
@@ -458,6 +543,7 @@ export async function sweepRetention(
   return {
     examined,
     deleted,
+    auditDeleted,
     moreWork,
     errors: failures.count,
     lastError: failures.last,
@@ -666,6 +752,13 @@ async function workRemains(
   if ((await countRows(db, COUNT_ANALYSES_SQL, projectId)) > bounds.maxRows)
     return true;
 
+  // The audit table is asked about its ROW bound and NOTHING ELSE. There is no
+  // `cutoff` comparison here and there must never be one — an audit row over the
+  // age bound is not work remaining, it is a row the sweep is required to keep
+  // (decision D-06).
+  if ((await countRows(db, COUNT_AUDIT_SQL, projectId)) > bounds.auditMaxRows)
+    return true;
+
   return false;
 }
 
@@ -674,11 +767,17 @@ async function workRemains(
 export async function retentionCounts(
   db: Database,
   projectId: string,
-): Promise<{ artifacts: number; observations: number; analyses: number }> {
+): Promise<{
+  artifacts: number;
+  observations: number;
+  analyses: number;
+  audit: number;
+}> {
   return {
     artifacts: await countRows(db, COUNT_ARTIFACTS_SQL, projectId),
     observations: await countRows(db, COUNT_OBSERVATIONS_SQL, projectId),
     analyses: await countRows(db, COUNT_ANALYSES_SQL, projectId),
+    audit: await countRows(db, COUNT_AUDIT_SQL, projectId),
   };
 }
 

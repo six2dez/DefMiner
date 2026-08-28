@@ -94,6 +94,11 @@ export async function resolveSetting(
 export const RETENTION_MAX_ROWS_KEY = "retention.max_rows_per_table";
 /** @internal */
 export const RETENTION_MAX_AGE_MS_KEY = "retention.max_age_ms";
+/** The audit table's own row bound. A SEPARATE key, not a reuse of
+ *  {@link RETENTION_MAX_ROWS_KEY}: the audit log is bounded by rows ALONE
+ *  (decision D-06), so raising the per-table bound must not silently raise it and
+ *  raising it must not silently raise every other table's. */
+export const AUDIT_RETENTION_MAX_ROWS_KEY = "retention.audit_max_rows";
 
 /**
  * Maximum rows per table per project.
@@ -116,13 +121,48 @@ export const DEFAULT_RETENTION_MAX_ROWS = 50_000;
  */
 export const DEFAULT_RETENTION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
+/**
+ * Maximum audit rows per project — the audit table's ONLY bound.
+ *
+ * DERIVED, NOT PICKED. The arithmetic, so a reader can check it rather than
+ * take it:
+ *
+ *   - the per-table default is {@link DEFAULT_RETENTION_MAX_ROWS} = 50,000;
+ *   - a generous engagement produces on the order of 1,000 audit events — say
+ *     500 triage decisions, ~150 projections, ~200 reveals, ~100 suppression
+ *     changes and a few dozen exports. These are OPERATOR actions, one human
+ *     click each, so unlike every other table in this schema the row rate is not
+ *     something the TARGET can drive;
+ *   - 50,000 x 4 = 200,000, which is 200 engagements of history.
+ *
+ * WHY FOUR TIMES AND NOT ONE. Every other table is bounded by rows OR age,
+ * whichever binds first, and in practice the 90-day age bound is what reclaims.
+ * D-06 removes the age bound here, so the row bound must carry ALONE the horizon
+ * those two carry jointly elsewhere — which is the entire reason the number is
+ * raised rather than shared.
+ *
+ * AND IT IS STILL BOUNDED, which is the property that makes "no age bound"
+ * survivable on a database Caido never garbage-collects. A worst-case row is a
+ * 36-character UUID, an integer, a short enum, a key and a `detail` capped at
+ * `ERROR_TEXT_LIMIT` (240) — about 350 bytes, so 200,000 rows is roughly 70 MB
+ * at the ceiling. The realistic row carries a null or short `detail` and runs
+ * nearer 120 bytes, so roughly 24 MB. Both numbers are stated because the
+ * ceiling is the one that has to be acceptable.
+ */
+export const DEFAULT_AUDIT_RETENTION_MAX_ROWS = DEFAULT_RETENTION_MAX_ROWS * 4;
+
 /** What {@link sweepRetention} takes. Produced here so the bounds and their
  *  defaults have one owner. */
 export type RetentionBounds = {
-  /** Maximum rows per table per project. */
+  /** Maximum rows per table per project. Does NOT apply to `audit`, which has
+   *  its own raised bound below. */
   maxRows: number;
-  /** Maximum row age in milliseconds, measured against the sweep's `nowMs`. */
+  /** Maximum row age in milliseconds, measured against the sweep's `nowMs`.
+   *  Applies to every table EXCEPT `audit` (decision D-06). */
   maxAgeMs: number;
+  /** Maximum audit rows per project. The audit table's only bound — there is no
+   *  audit age bound, deliberately. */
+  auditMaxRows: number;
 };
 
 /** A finite positive integer, or the default. A stored bound is a STRING that some
@@ -138,20 +178,32 @@ function boundOrDefault(raw: string | null, fallback: number): number {
 /**
  * The retention bounds in force for this project.
  *
- * BOTH bounds always apply and whichever binds first wins — a project under the
- * row cap can still hold rows past the age cap, and a project inside the age
- * window can still hold too many rows.
+ * The row and age bounds always BOTH apply and whichever binds first wins — a
+ * project under the row cap can still hold rows past the age cap, and a project
+ * inside the age window can still hold too many rows.
+ *
+ * `auditMaxRows` is the exception and is the third bound rather than a variant of
+ * the first: the audit table is bounded by rows ALONE (decision D-06). See
+ * `retention.ts`, where the absence of an audit age bound is a stated exception
+ * rather than an omission.
  */
 export async function getRetentionBounds(
   db: Database,
   projectId: string,
 ): Promise<RetentionBounds> {
-  const [rows, age] = [
+  const [rows, age, auditRows] = [
     await resolveSetting(db, projectId, RETENTION_MAX_ROWS_KEY),
     await resolveSetting(db, projectId, RETENTION_MAX_AGE_MS_KEY),
+    await resolveSetting(db, projectId, AUDIT_RETENTION_MAX_ROWS_KEY),
   ];
   return {
     maxRows: boundOrDefault(rows, DEFAULT_RETENTION_MAX_ROWS),
     maxAgeMs: boundOrDefault(age, DEFAULT_RETENTION_MAX_AGE_MS),
+    // Through the SAME guard as the other two, and for the same reason stated
+    // there: a stored bound is a string some future UI wrote, and an unguarded
+    // `Number("")` of 0 applied as the audit cap would delete the whole audit
+    // log on the next sweep — the one table whose loss cannot be reconstructed
+    // from the traffic, because nothing else records that the action happened.
+    auditMaxRows: boundOrDefault(auditRows, DEFAULT_AUDIT_RETENTION_MAX_ROWS),
   };
 }
