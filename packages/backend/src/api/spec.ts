@@ -116,8 +116,12 @@ export type CompatPayload = {
 /** The argument the inventory count takes: which table, and the same at-most-one
  *  filter a page request carries. Reusing `PageRequest["filter"]` rather than
  *  restating it means the count and the page it belongs under cannot disagree
- *  about what a filter is. */
-export type CountRequest = {
+ *  about what a filter is.
+ *
+ *  Not exported, for the reason {@link Spec} is not: the registration site infers
+ *  this shape from the API map rather than importing it, so an export would have
+ *  no cross-module consumer and knip runs with `ignoreExportsUsedInFile: false`. */
+type CountRequest = {
   readonly projectId: string;
   readonly table: InventoryTable;
   readonly filter: PageRequest["filter"];

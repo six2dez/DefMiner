@@ -27,6 +27,13 @@
 //                     epoch re-check downstream a constant `true` and turns the
 //                     plugin into a cross-project writer.
 //   6. start the consumer.
+//  6b. register the RPC surface — SUCCESS PATH ONLY. After the consumer, so
+//                     nothing can be served before there is a loop behind it,
+//                     and BEFORE the ready latch. Every name is registered on
+//                     exactly ONE path: `api.register` rejects a duplicate, and
+//                     the refusal paths deliberately keep only the minimal
+//                     getStatus / getCompat pair so a refusing build is still
+//                     diagnosable.
 //   7. ready = true.
 //   8. ONLY THEN register onInterceptResponse — events arrive before init()
 //      finishes awaiting, and the `ready` latch is what makes that safe.
@@ -38,11 +45,21 @@
 // scripts/ci/check-bundle-imports.mjs gates.
 import { createHash } from "crypto";
 
+import type {
+  PageRequest,
+  PageResponse,
+  VisibleTotal,
+} from "@defminer/engine/contract";
 import { BoundedQueue } from "@defminer/engine/queue";
 import { QUEUE_CAP } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
-import type { CompatPayload, PluginSdk, StatusPayload } from "./api/spec";
+import {
+  type CompatPayload,
+  CONTRACT_VERSION,
+  type PluginSdk,
+  type StatusPayload,
+} from "./api/spec";
 import {
   checkCompat,
   checkRuntimeSurfaces,
@@ -65,10 +82,15 @@ import {
   installLifecycle,
   projectEpoch,
 } from "./lifecycle";
-import { listArtifacts } from "./store/artifacts";
+import { type ArtifactRow, listArtifacts } from "./store/artifacts";
 import { getDb, readSqliteVersion } from "./store/db";
 import { migrate } from "./store/migrations";
-import { listObservations } from "./store/observations";
+import { listObservations, type ObservationRow } from "./store/observations";
+import {
+  countInventory,
+  listArtifactsPage,
+  listObservationsPage,
+} from "./store/reads";
 import { describeError, slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
@@ -116,6 +138,40 @@ const ISOLATION_UNAVAILABLE_REASON =
  *  Typed against the published contract rather than `Record<string, unknown>`:
  *  a renamed field is now a typecheck failure here instead of an `undefined` the
  *  frontend reads at runtime. */
+/**
+ * THE PAGE A READ ANSWERS WITH WHEN THERE IS NOTHING TO READ FROM.
+ *
+ * FAIL CLOSED, NOT THROW. Caido surfaces neither a synchronous throw nor an
+ * async rejection from plugin code, so a read that threw here would hand the
+ * frontend a promise that never settles and nothing anywhere would say why. An
+ * empty exhausted page is a shape the caller already knows how to render.
+ */
+function emptyPage<TRow>(): PageResponse<TRow> {
+  return { rows: [], nextCursor: null, scanned: 0, exhausted: true };
+}
+
+/** The count a read answers with when there is nothing to count. */
+const NO_ROWS_VISIBLE: VisibleTotal = {
+  visible: 0,
+  hiddenBySuppression: 0,
+  suppressionRuleCount: 0,
+};
+
+/**
+ * Replace the caller's `projectId` with the one the plugin resolved.
+ *
+ * THE CALLER DOES NOT GET TO NAME THE PROJECT. `PageRequest` carries a
+ * `projectId` because the store layer needs one in every predicate, not because
+ * the frontend is the authority on which project is active — and a read that
+ * trusted the field would let anything holding the RPC handle page another
+ * project's rows out of the one shared SQLite file (T-05-34, T-01-20). The value
+ * comes from `currentProjectId()`, which is CORE-09's lifecycle-resolved id, and
+ * the caller's is discarded without comment.
+ */
+function scopedTo(req: PageRequest, projectId: string): PageRequest {
+  return { ...req, projectId };
+}
+
 function status(): Omit<StatusPayload, "caidoVersion"> {
   return {
     compatible,
@@ -325,6 +381,19 @@ export async function init(sdk: PluginSdk): Promise<void> {
       },
     });
 
+    // 6b — THE RPC SURFACE. SUCCESS PATH ONLY, AND EACH NAME ON EXACTLY ONE
+    // PATH.
+    //
+    // `sdk.api.register` REJECTS A DUPLICATE NAME, which is exactly what a
+    // re-init or a hot reload produces — so a name registered on two paths is
+    // not a redundancy, it is a rejection that aborts init(), invisibly. The
+    // three refusal paths above keep registering only the minimal `getStatus` /
+    // `getCompat` pair: a build that refuses is exactly the build whose surface
+    // matrix somebody needs to read, and none of the reads below has a database
+    // to serve from on those paths anyway.
+    //
+    // Placement obeys the ordering contract in this file's header: after the
+    // consumer starts, BEFORE the passive-ready latch, and inside the one try.
     sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
     sdk.api.register("getCompat", () => compatReport(caidoVersion));
     sdk.api.register("getArtifacts", async () => {
@@ -337,6 +406,25 @@ export async function init(sdk: PluginSdk): Promise<void> {
       if (!db || pid === null) return [];
       return listObservations(db, pid);
     });
+    sdk.api.register("listArtifactsPage", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return emptyPage<ArtifactRow>();
+      return listArtifactsPage(db, scopedTo(req, pid));
+    });
+    sdk.api.register("listObservationsPage", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return emptyPage<ObservationRow>();
+      return listObservationsPage(db, scopedTo(req, pid));
+    });
+    sdk.api.register("countInventory", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return NO_ROWS_VISIBLE;
+      return countInventory(db, pid, req.table, req.filter);
+    });
+    // Not `async`, and it touches nothing: a version check that could fail for
+    // any reason other than the plugin being absent would be a check the
+    // frontend has to interpret rather than compare.
+    sdk.api.register("getContractVersion", () => CONTRACT_VERSION);
 
     // 7, 8 — latch, THEN register. Not the other way round.
     setPassiveReady(true);

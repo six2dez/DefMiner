@@ -35,6 +35,11 @@
 // while `admitted` climbed, `queueDepth` climbed to QUEUE_CAP, `queueOverflow`
 // climbed, and `processed` never moved again.
 
+import type {
+  InvalidationCategory,
+  InvalidationSummary,
+} from "@defminer/engine/contract";
+import { INVALIDATION_EVENT } from "@defminer/engine/contract";
 import { sha256Hex } from "@defminer/engine/digest";
 import {
   type AbortLike,
@@ -221,10 +226,29 @@ export function resetConsumerForTest(): void {
   current = undefined;
 }
 
+/** Test seam. `init()` starts the consumer and keeps the handle to itself, so a
+ *  spec that drives the REAL entry point has no other way to make the loop run
+ *  on demand — and waiting for the poll timer would make every such case a race.
+ *  Resolves immediately when no consumer is running. */
+export function drainConsumerForTest(): Promise<void> {
+  return current?.drainNow() ?? Promise.resolve();
+}
+
 export function startConsumer(
   sdk: {
     console: { log(msg: string): void };
     requests: { get(id: string): Promise<unknown> };
+    /** The event channel, narrowed to the ONE event this plugin emits and the
+     *  ONE payload it may carry. Declared structurally, like every other SDK
+     *  slice this package takes, so a spec can drive it without a real Caido —
+     *  and typed to the contract's summary so an emit that grew a field is a
+     *  typecheck failure rather than a leak nobody notices. */
+    api: {
+      send(
+        event: typeof INVALIDATION_EVENT,
+        summary: InvalidationSummary,
+      ): void;
+    };
   },
   deps: ConsumerDeps,
 ): ConsumerHandle {
@@ -254,6 +278,85 @@ export function startConsumer(
   let draining = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let maxReloadLatencyMs = 0;
+
+  // ---------------------------------------------------------------------
+  // UI-07's INVALIDATION SUMMARIES — ACCUMULATED PER DRAIN PASS, EMITTED ONCE
+  // ---------------------------------------------------------------------
+  //
+  // WHY THE EMIT LIVES HERE AND NOT AT THE STORE. Decision P3-D4 already puts
+  // every store call site in this file, for the reason that a producer and its
+  // only caller owned by different plans is a contract with nobody implementing
+  // it. The same argument applies to announcing a write: the only code that
+  // knows a batch FINISHED is the loop that ran it.
+  //
+  // WHY PER PASS AND NOT PER ROW. A busy browsing session writes an artifact and
+  // an observation per proxied response, and one event per row would hand the
+  // frontend the exact storm the coalescer exists to absorb. One summary per
+  // category per drain pass is the smallest honest unit: it says THAT the
+  // category changed, how many rows, and the newest identifier.
+  //
+  // WHY THE BACKEND HOLDS NO TIMER. It emits and forgets. The reaction-rate cap
+  // — trailing debounce, at most two reactions a second, never while a row is
+  // selected — is the FRONTEND's, because a timer here would run on the single
+  // thread that also serves every RPC, every hook and this loop, and would be
+  // spending the operator's proxy latency on the operator's own screen refresh.
+  //
+  // WHAT MAY CROSS: four scalars (UI-07, T-05-35). No row, no body, no URL, no
+  // target-controlled string. `newestId` is a digest or a Caido request id —
+  // both DefMiner-side or Caido-side identifiers, neither of them bytes the
+  // target chose. The frontend re-queries a page when it decides to, through the
+  // same project-scoped, redacted read path everything else uses.
+  const pendingInvalidations = new Map<
+    InvalidationCategory,
+    { projectId: string; changedCount: number; newestId: string }
+  >();
+
+  function noteChange(
+    category: InvalidationCategory,
+    projectId: string,
+    newestId: string,
+  ): void {
+    const existing = pendingInvalidations.get(category);
+    if (existing === undefined || existing.projectId !== projectId) {
+      // A project change mid-pass discards what was accumulated under the
+      // previous project rather than re-attributing it — the same rule the
+      // queue drain follows (decision P5-D2). A summary that mixed two projects
+      // would invalidate the wrong table for the wrong operator.
+      pendingInvalidations.set(category, {
+        projectId,
+        changedCount: 1,
+        newestId,
+      });
+      return;
+    }
+    existing.changedCount += 1;
+    existing.newestId = newestId;
+  }
+
+  function flushInvalidations(): void {
+    for (const [category, agg] of pendingInvalidations) {
+      // BUILT AS A LITERAL WITH EXACTLY FOUR KEYS. Not a spread of an internal
+      // object: a spread is how a fifth field arrives without anybody deciding
+      // it should, and `index.spec.ts` asserts the emitted object's own
+      // enumerable key set for precisely that reason.
+      const summary: InvalidationSummary = {
+        projectId: agg.projectId,
+        category,
+        changedCount: agg.changedCount,
+        newestId: agg.newestId,
+      };
+      try {
+        sdk.api.send(INVALIDATION_EVENT, summary);
+      } catch (e) {
+        // An event channel that is gone during teardown must never take the
+        // drain loop down with it, and Caido would report nothing if it did.
+        counters.consumerErrors++;
+        recordError(e);
+        log("invalidation emit failed: " + describeError(e));
+      }
+    }
+    pendingInvalidations.clear();
+  }
 
   // STORE-06's cadence state. Monotonic for the plugin's lifetime; never reset by
   // a sweep, or the interval would restart every time it fired.
@@ -415,6 +518,11 @@ export function startConsumer(
     if (!a.ok) {
       c.storeErrors++;
       log("ARTIFACT_WRITE_FAILED " + a.error);
+    } else {
+      // Only a write that REPORTED SUCCESS is announced. A failed write left the
+      // table exactly as it was, and telling the frontend to re-query would send
+      // it looking for a row that is not there.
+      noteChange("artifacts", projectId, got.sha256);
     }
     // THE RETENTION INTERVAL COUNTS WRITES, NOT COMPLETIONS.
     //
@@ -457,6 +565,8 @@ export function startConsumer(
     if (!o.ok) {
       c.storeErrors++;
       log("OBSERVATION_WRITE_FAILED " + o.error);
+    } else {
+      noteChange("observations", projectId, got.requestId);
     }
 
     // --- 3. CORE-08's SKIP --------------------------------------------------
@@ -631,6 +741,13 @@ export function startConsumer(
       }
     } finally {
       draining = false;
+      // IN THE `finally`, not after the loop. Every exit from the drain is a
+      // `return` — the queue emptied, or `stopped` went true mid-pass — so a
+      // flush placed after the loop would never run at all, and the rows written
+      // in that pass would sit in the table with nothing announcing them until
+      // the NEXT pass happened to emit. A stop is exactly when that next pass
+      // does not come.
+      flushInvalidations();
     }
   }
 
