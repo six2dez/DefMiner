@@ -29,6 +29,8 @@ import {
   sweepRetention,
 } from "./retention";
 import {
+  AUDIT_RETENTION_MAX_ROWS_KEY,
+  DEFAULT_AUDIT_RETENTION_MAX_ROWS,
   DEFAULT_RETENTION_MAX_AGE_MS,
   DEFAULT_RETENTION_MAX_ROWS,
   getRetentionBounds,
@@ -44,6 +46,10 @@ const NOW = 1_800_000_000_000;
 
 /** Generous enough that only the bound under test binds. */
 const HUGE_AGE = 10 * 365 * 24 * 60 * 60 * 1000;
+
+/** The same, for the audit row bound: a test about the AGE exemption must not
+ *  accidentally be a test about the row cap. */
+const HUGE_ROWS = 1_000_000;
 
 let fx: SqliteFixture;
 
@@ -107,6 +113,35 @@ function seedObservation(
     );
 }
 
+/** Seed audit events directly, for the same reason `seedArtifacts` does: this is
+ *  arranging a database state, not exercising `recordAudit`. Event ids increase
+ *  with `i`, and so does `at`, so event 0 is the oldest on both keys. */
+function seedAudit(
+  projectId: string,
+  count: number,
+  firstAt: number,
+  stepMs = 1,
+): string[] {
+  const stmt = fx.raw.prepare(
+    `INSERT INTO audit (project_id, event_id, at, kind, subject, detail)
+     VALUES (?, ?, ?, ?, ?, NULL)`,
+  );
+  const ids: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const id = "evt-" + String(i).padStart(6, "0");
+    stmt.run(projectId, id, firstAt + i * stepMs, "finding_projected", "fp:" + id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function auditCount(projectId: string): number {
+  const row = fx.raw
+    .prepare("SELECT COUNT(*) AS n FROM audit WHERE project_id = ?")
+    .get(projectId) as { n: number };
+  return Number(row.n);
+}
+
 function orphanCount(projectId: string): {
   observations: number;
   analyses: number;
@@ -153,7 +188,11 @@ async function sweepToConvergence(
 describe("the row-count bound", () => {
   it("100 artifacts against a bound of 40 leaves EXACTLY 40", async () => {
     seedArtifacts(P1, 100, NOW - 1000);
-    const bounds: RetentionBounds = { maxRows: 40, maxAgeMs: HUGE_AGE };
+    const bounds: RetentionBounds = {
+      maxRows: 40,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    };
 
     const { passes } = await sweepToConvergence(P1, bounds);
     expect(passes).toBeGreaterThan(0);
@@ -163,7 +202,11 @@ describe("the row-count bound", () => {
   it("trims the OLDEST first — the survivors are the most recently seen", async () => {
     // last_seen_at increases with i, so digest 0 is the oldest.
     const digests = seedArtifacts(P1, 10, NOW - 10_000, 1);
-    await sweepToConvergence(P1, { maxRows: 3, maxAgeMs: HUGE_AGE });
+    await sweepToConvergence(P1, {
+      maxRows: 3,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
 
     const survivors = (
       fx.raw
@@ -336,7 +379,11 @@ describe("the per-pass cap and convergence", () => {
     }
     await claimAnalysis(fx.db, P1, String(sha), DETECTOR_CORPUS_VERSION, 1);
 
-    const bounds: RetentionBounds = { maxRows: 0, maxAgeMs: 1 };
+    const bounds: RetentionBounds = {
+      maxRows: 0,
+      maxAgeMs: 1,
+      auditMaxRows: HUGE_ROWS,
+    };
     const first = await sweepRetention(fx.db, P1, bounds, NOW);
 
     expect(
@@ -559,6 +606,7 @@ describe("bounds come from settings with documented defaults", () => {
     expect(await getRetentionBounds(fx.db, P1)).toEqual({
       maxRows: DEFAULT_RETENTION_MAX_ROWS,
       maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+      auditMaxRows: DEFAULT_AUDIT_RETENTION_MAX_ROWS,
     });
   });
 
@@ -594,5 +642,191 @@ describe("bounds come from settings with documented defaults", () => {
         `stored bound ${JSON.stringify(bad)} was accepted`,
       ).toBe(DEFAULT_RETENTION_MAX_ROWS);
     }
+  });
+});
+
+describe("D-06 — the audit table is bounded by ROWS and NOT by age", () => {
+  it("THE CONTRAST: equally old rows, and only the artifact ones are swept", async () => {
+    // THIS IS THE TEST THAT MAKES D-06 A CLAIM ABOUT BEHAVIOUR RATHER THAN ABOUT
+    // TEXT. Asserting that no `AUDIT_OVER_AGE` statement exists proves only that
+    // somebody did not write one. Seeding audit rows and artifact rows at the
+    // SAME timestamp, sweeping once, and finding one set gone and the other
+    // intact proves the exemption is in force — and it fails the day a
+    // well-meaning edit adds the age bound "for consistency".
+    const ANCIENT = NOW - 400 * 24 * 60 * 60 * 1000;
+    seedArtifacts(P1, 10, ANCIENT, 0);
+    seedAudit(P1, 10, ANCIENT, 0);
+
+    const bounds: RetentionBounds = {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+      auditMaxRows: HUGE_ROWS,
+    };
+    await sweepToConvergence(P1, bounds);
+
+    // The artifacts are older than the age bound and are gone.
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(0);
+    // The audit rows are EXACTLY as old and every one of them survives.
+    expect(auditCount(P1)).toBe(10);
+  });
+
+  it("the ROW bound still applies — the oldest audit rows go first", async () => {
+    // The exemption is from the AGE bound only. Growth is still bounded, which
+    // is what makes "no age bound" survivable on a database Caido never
+    // garbage-collects.
+    const ids = seedAudit(P1, 20, NOW - 20_000, 1);
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: 5,
+    });
+
+    expect(auditCount(P1)).toBe(5);
+    const survivors = (
+      fx.raw
+        .prepare(
+          "SELECT event_id FROM audit WHERE project_id = ? ORDER BY event_id ASC",
+        )
+        .all(P1) as { event_id: string }[]
+    ).map((r) => String(r.event_id));
+    // The five NEWEST, i.e. the last five seeded.
+    expect(survivors).toEqual(ids.slice(15));
+  });
+
+  it("candidate selection is oldest-first with an explicit tie-break, so a capped pass RESUMES correctly", async () => {
+    // Every audit row shares one timestamp, so `at` alone cannot order them and
+    // a resumption would be a matter of luck. The tie-break on `event_id` is
+    // what makes two consecutive passes agree on which rows come next.
+    const TIE = NOW - 5_000;
+    const ids = seedAudit(P1, 12, TIE, 0);
+    const bounds: RetentionBounds = {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: 4,
+    };
+
+    await sweepToConvergence(P1, bounds);
+    expect(auditCount(P1)).toBe(4);
+
+    const survivors = (
+      fx.raw
+        .prepare(
+          "SELECT event_id FROM audit WHERE project_id = ? ORDER BY event_id ASC",
+        )
+        .all(P1) as { event_id: string }[]
+    ).map((r) => String(r.event_id));
+    // Deterministic despite the shared timestamp: the four HIGHEST event ids.
+    expect(survivors).toEqual(ids.slice(8));
+  });
+
+  it("sweeping one project's audit log does not touch another's", async () => {
+    seedAudit(P1, 10, NOW - 10_000, 1);
+    seedAudit(P2, 10, NOW - 10_000, 1);
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: 2,
+    });
+    expect(auditCount(P1)).toBe(2);
+    expect(auditCount(P2)).toBe(10);
+  });
+
+  it("reports audit deletions as their OWN counted category", async () => {
+    // Distinguishable from the other tables' deletions, so an operator-facing
+    // health surface can say "and N audit events aged out of the row cap"
+    // rather than folding them into a single opaque number.
+    seedAudit(P1, 9, NOW - 9_000, 1);
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      { maxRows: HUGE_ROWS, maxAgeMs: HUGE_AGE, auditMaxRows: 4 },
+      NOW,
+    );
+    expect(summary.auditDeleted).toBe(5);
+    expect(summary.deleted).toBeGreaterThanOrEqual(summary.auditDeleted);
+    expect(summary.errors).toBe(0);
+  });
+
+  it("a FAILING audit delete is counted and the pass continues — the sweep still never throws", async () => {
+    seedAudit(P1, 9, NOW - 9_000, 1);
+    const failing = {
+      prepare: async (sql: string) => {
+        if (sql.includes("DELETE FROM audit")) {
+          throw new Error("simulated audit delete failure");
+        }
+        return fx.db.prepare(sql);
+      },
+      exec: async (sql: string) => fx.db.exec(sql),
+    } as unknown as typeof fx.db;
+
+    const summary = await sweepRetention(
+      failing,
+      P1,
+      { maxRows: HUGE_ROWS, maxAgeMs: HUGE_AGE, auditMaxRows: 4 },
+      NOW,
+    );
+
+    // Not thrown — reported.
+    expect(summary.errors).toBeGreaterThan(0);
+    expect(summary.lastError).not.toBeNull();
+    expect(summary.auditDeleted).toBe(0);
+    // And nothing was lost.
+    expect(auditCount(P1)).toBe(9);
+  });
+
+  it("the reserved empty project scope still returns an empty summary", async () => {
+    seedAudit(P1, 5, NOW - 5_000, 1);
+    const summary = await sweepRetention(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      { maxRows: 0, maxAgeMs: 1, auditMaxRows: 1 },
+      NOW,
+    );
+    expect(summary).toEqual({
+      examined: 0,
+      deleted: 0,
+      auditDeleted: 0,
+      moreWork: false,
+      errors: 0,
+      lastError: null,
+    });
+    // P1's log is untouched — the reserved scope swept nothing at all.
+    expect(auditCount(P1)).toBe(5);
+  });
+
+  it("the audit bound resolves from settings with its own key and its own default", async () => {
+    expect((await getRetentionBounds(fx.db, P1)).auditMaxRows).toBe(
+      DEFAULT_AUDIT_RETENTION_MAX_ROWS,
+    );
+
+    await putSetting(fx.db, P1, AUDIT_RETENTION_MAX_ROWS_KEY, "1234", NOW);
+    expect((await getRetentionBounds(fx.db, P1)).auditMaxRows).toBe(1234);
+    // The audit bound is its OWN key: overriding it does not move the per-table
+    // bound, and vice versa.
+    expect((await getRetentionBounds(fx.db, P1)).maxRows).toBe(
+      DEFAULT_RETENTION_MAX_ROWS,
+    );
+
+    // Same `boundOrDefault` guard as the other two: a stored bound is a string
+    // some future UI wrote, and `Number("")` is 0 — which as an audit row cap
+    // would delete the entire audit log on the next sweep.
+    for (const bad of ["", "abc", "-5", "0"]) {
+      await putSetting(fx.db, P1, AUDIT_RETENTION_MAX_ROWS_KEY, bad, NOW);
+      expect(
+        (await getRetentionBounds(fx.db, P1)).auditMaxRows,
+        `stored audit bound ${JSON.stringify(bad)} was accepted`,
+      ).toBe(DEFAULT_AUDIT_RETENTION_MAX_ROWS);
+    }
+  });
+
+  it("the audit row bound is DERIVED from the per-table default, not picked", async () => {
+    // The number's arithmetic is stated in `settings.ts`. Asserted here so the
+    // relationship survives an edit to either constant: the audit bound is four
+    // times the per-table default, because the audit table has no age bound and
+    // must therefore carry alone the horizon that rows and age carry jointly
+    // everywhere else.
+    expect(DEFAULT_AUDIT_RETENTION_MAX_ROWS).toBe(
+      DEFAULT_RETENTION_MAX_ROWS * 4,
+    );
   });
 });
