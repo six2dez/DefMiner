@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 29
+open_count: 31
 waived_count: 0
 fixed_count: 22
-total_count: 51
-last_updated: 2026-08-28T12:25:05.499Z
+total_count: 53
+last_updated: 2026-08-28T12:53:40.720Z
 ---
 
 # Broken Windows Ledger
@@ -87,6 +87,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 49 | 05 | stub | tests/export-payload-budget.spec.ts |  | CSV serialiser is a measurement-only stand-in for packages/engine/src/csv.ts (UISEC-02), which plan 05-03 writes | open |  | 2026-08-28T11:58:40.447Z |  |
 | 50 | 05 | unmet-truth | tests/sqlite-346-query-plans.spec.ts |  | Query plans measured on SQLite 3.53.4, not Caido's target 3.46.0 — no 3.46 binary reachable; assumption A5 narrowed, not closed | open |  | 2026-08-28T11:58:40.533Z |  |
 | 51 | 05 | deviation | packages/engine/src/sanitise.ts |  | capped() makes one O(n) pass over a target-controlled string to report R2's total; disclosed in the module header, bounded by a named 2,000 ms ceiling on the 4 MiB case, and not the per-character-index shape DET-07 bans | open |  | 2026-08-28T12:25:05.499Z |  |
+| 52 | 05 | deviation | .planning/REQUIREMENTS.md |  | Plan 05-04 declared UI-03, UI-04, OPS-01, OPS-02, OPS-04, FIND-01 and FIND-02 but deliberately left their boxes [ ] — the deliverables are deferred to Phases 3/4 and are carried in 05-ENTITY-CONTRACT.md's Deferral Register (P5-D21) | open |  | 2026-08-28T12:53:40.633Z |  |
+| 53 | 05 | deviation | .planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md |  | D-01's one-way reversibility checkpoint is carried forward UNSPENT and is OWED to the first task that calls sdk.findings.create; no task in Phase 5 writes a Finding | open |  | 2026-08-28T12:53:40.720Z |  |
 
 ````json
 [
@@ -700,6 +702,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-28T12:25:05.499Z",
+    "resolved_at": null
+  },
+  {
+    "id": 52,
+    "kind": "deviation",
+    "phase": "05",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "Plan 05-04 declared UI-03, UI-04, OPS-01, OPS-02, OPS-04, FIND-01 and FIND-02 but deliberately left their boxes [ ] — the deliverables are deferred to Phases 3/4 and are carried in 05-ENTITY-CONTRACT.md's Deferral Register (P5-D21)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T12:53:40.633Z",
+    "resolved_at": null
+  },
+  {
+    "id": 53,
+    "kind": "deviation",
+    "phase": "05",
+    "file": ".planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md",
+    "line": null,
+    "description": "D-01's one-way reversibility checkpoint is carried forward UNSPENT and is OWED to the first task that calls sdk.findings.create; no task in Phase 5 writes a Finding",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T12:53:40.720Z",
     "resolved_at": null
   }
 ]
