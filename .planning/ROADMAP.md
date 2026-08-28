@@ -368,18 +368,40 @@ Plans:
 > with its blocker and unblocking plan recorded in `05-04`'s deferral register.
 
 Plans:
+**Wave 1**
 
 - [ ] 05-01: Frontend workspace and the end-to-end tracer — page, sidebar item, build-output gates, lint enforcement
 - [ ] 05-02: SQL discipline gate widened, and the two measurements the query design rests on
 - [ ] 05-03: Engine safety primitives — strip and truncate, CSV neutralisation, the hostile-content fixture
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-04: The entity read contract published upward, and the deferral register
 - [ ] 05-05: Rendering safety — the static AST gate, the display path, the hostile render proof
 - [ ] 05-06: Schema v3 — the `audit` table (STORE-08), keyset indexes, and the D-06 retention exemption
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-07: The literal-statement matrix, keyset pagination, and the typed RPC contract
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 05-08: Inventory store, event coalescer, and the typed frontend client
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 05-09: The findings tables — virtualised, degradation-marked, load-backstopped at 10,000 rows
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 05-10: The evidence panel frame and the retry path (OPS-03)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 05-11: Safe export — serialiser, dialog, and the browser download (D-04)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 05-12: Settings, Health, and the visible compatibility refusal surface
 
 ### Phase 6: Retroactive Scan & Deployment Reality

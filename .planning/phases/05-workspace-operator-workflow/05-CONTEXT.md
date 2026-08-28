@@ -81,8 +81,8 @@ Settings surface displays; it no longer applies to exports, because exports prod
 The researcher returned `## RESEARCH COMPLETE` with three items it explicitly refused to decide
 alone. These are the operator's answers. They are locked, exactly as D-01 … D-04 are.
 
-- **D-05 (resolves O-02): Do not re-sequence Phase 5. Split it, and emit an entity read contract
-  upward to Phases 3/4.** Concretely:
+- **D-05:** Do not re-sequence Phase 5 — split it, and emit an entity read contract upward to
+  Phases 3/4 (resolves O-02). Concretely:
   1. **Plan and execute now:** 05-01 (sidebar shell, navigation, settings surface), 05-02 (tables —
      keyset pagination, virtualised scrolling, filtering, coalesced events) built over the shipped
      `artifacts` / `observations` tables, and the **safety + export half of 05-05** (rendering
@@ -107,16 +107,16 @@ alone. These are the operator's answers. They are locked, exactly as D-01 … D-
   — **Reversibility:** costly — the published entity read contract becomes a cross-phase interface
   Phases 3 and 4 build against. Changing it later means changing their plans, not just Phase 5's.
 
-- **D-06 (resolves O-03's retention question): `audit` is exempt from the retention age bound and
-  keeps only a raised row bound.** An audit trail exists to answer "when did I project this
+- **D-06:** `audit` is exempt from the retention age bound and keeps only a raised row bound
+  (resolves O-03's retention question). An audit trail exists to answer "when did I project this
   permanent Finding, and what did I export" — questions asked long after 90 days, about actions
   that are themselves irreversible. `sweepRetention`'s row cap still bounds growth, so the database
   stays bounded. This is a deliberate, single, documented exception to the per-table-per-project
   policy P4-D7 established, and the exception must be visible in the sweep code, not implicit.
 
-- **D-07 (resolves part of O-04's neighbourhood — the raw-export copy): `05-UI-SPEC.md`
-  `## Copywriting Contract` raw-export confirmation is amended and the amendment is already
-  applied.** It was wrong twice: it described a server-side file (contradicted by D-04), and it
+- **D-07:** the `05-UI-SPEC.md` `## Copywriting Contract` raw-export confirmation is amended, and
+  the amendment is already applied to that file (resolves part of O-04's neighbourhood — the
+  raw-export copy). It was wrong twice: it described a server-side file (contradicted by D-04), and it
   promised *"{n} live secret values in cleartext"*, which URL query values cannot honour because
   `observations.ts` redacts query values at write time — a "raw" export cannot un-redact what was
   never stored. The new copy states the download target and states plainly that write-time-redacted
