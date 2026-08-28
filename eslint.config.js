@@ -137,7 +137,17 @@ export default [
     // for DefMiner's own packages because each one contradicts a MEASURED
     // decision in this repo rather than a stylistic preference. Every exception
     // names its evidence; an exception without one does not belong here.
-    files: ["packages/**/*.ts"],
+    // `.vue` IS IN SCOPE AS OF PLAN 05-09, and the omission was a gap rather
+    // than a decision. The exception's own evidence is about `null` being a
+    // first-class value in this codebase, and the frontend's single-file
+    // components consume exactly the types that carry it — `PageRequest["filter"]`
+    // is `{ column; value } | null`, and a table prop that can say "I have
+    // nothing to report" has to be able to say `| null`. Restricted to `.ts`
+    // the rule pushed a `.vue` file towards `undefined`, which in a Vue prop
+    // means ABSENT and defaulted, not PRESENT AND EMPTY — two different claims,
+    // and the difference is the whole reason 05-09's tables take a required
+    // nullable prop instead of an optional one.
+    files: ["packages/**/*.{ts,vue}"],
     rules: {
       // `null` is a first-class value in this codebase and collapsing it into
       // `undefined` would destroy information the Phase 0 exit gates assert on.

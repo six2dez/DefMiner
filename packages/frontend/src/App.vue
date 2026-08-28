@@ -3,17 +3,25 @@
 // Interaction Contract fixes, top to bottom — a 48px toolbar, a tab strip, and
 // a split body.
 //
-// WHAT THIS COMPONENT IS FOR, AND WHAT IT DELIBERATELY IS NOT. This is the
-// tracer slice: one path from the shipped SQLite `artifacts` table to rendered
-// text, proving the architecture end to end. The virtualised keyset table
-// (05-07), the evidence panel (05-10), the export dialog (05-11) and the
-// settings form (05-12) each land in their own plan. Pre-empting them here
-// would mean guessing at schemas Phases 3 and 4 have not defined yet.
+// WHAT CHANGED IN PLAN 05-09. The tracer's inline artifacts rendering is gone.
+// It existed to prove one path from the shipped SQLite table to rendered text,
+// and it did; keeping it beside the real table would leave two renderings of the
+// same rows, one of which nobody maintains. The two entity tabs now mount
+// `ArtifactsTable` and `ObservationsTable` over the keyset stores. Health and
+// Settings still route and still render from the first paint — plans 05-10 and
+// 05-12 own their bodies, and reaching into them here would put two plans in one
+// file for no gain.
 
-import { inject, onMounted, ref } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
 
-import type { ArtifactRow, DefMinerSDK } from "./backend";
+import type { DefMinerBackendSdk, ObservationRow } from "./api/client";
+import { createBackendClient } from "./api/client";
+import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
+import ArtifactsTable from "./components/ArtifactsTable.vue";
+import ObservationsTable from "./components/ObservationsTable.vue";
+import type { InventoryStore, PageReader } from "./stores/inventory";
+import { createInventoryStore } from "./stores/inventory";
 
 /**
  * The tab strip's contents, FROZEN and declared at module scope.
@@ -44,51 +52,106 @@ type TabId = (typeof TABS)[number]["id"];
 
 const activeTab = ref<TabId>("artifacts");
 
-/**
- * The artifacts query's state, as a closed vocabulary rather than a pair of
- * booleans. `loading`/`error` as separate flags admits the state where both are
- * true, which renders two contradictory things at once.
- */
-type LoadState = "loading" | "ready" | "failed";
-
-const loadState = ref<LoadState>("loading");
-const rows = ref<ArtifactRow[]>([]);
-
 // `inject` rather than an import. The SDK is a per-instance object Caido hands
 // to `init()`; typed as possibly-undefined because a component mounted without
-// a provider (a spec that forgets the stub) must render the shell and say so,
+// a provider (a spec that forgets the stub) must render the shell and SAY SO,
 // not throw during setup and leave a blank page.
-const sdk = inject<DefMinerSDK | undefined>(SDK_INJECTION_KEY, undefined);
+//
+// TYPED AS THE CLIENT'S OWN STRUCTURAL SURFACE (P5-D41): every module declares
+// the piece of the SDK it touches rather than the whole. It is also what makes
+// a spec's stub a literal instead of a cast — a stub that has to be cast is a
+// stub that stops failing when the real surface changes.
+const sdk = inject<DefMinerBackendSdk | undefined>(
+  SDK_INJECTION_KEY,
+  undefined,
+);
+
+/**
+ * The project id the page ASKS under.
+ *
+ * DELIBERATELY A PLACEHOLDER AND NOT A REAL ID. The backend discards the
+ * caller's `projectId` on every paged read and substitutes its own
+ * lifecycle-resolved value — `scopedTo(req, currentProjectId())` in
+ * packages/backend/src/index.ts, whose comment says why: trusting the field
+ * would let anything holding the RPC handle page another project's rows out of
+ * the one shared SQLite file (T-05-34). So this value is never the answer to
+ * "which project"; it is a required field on a request whose scope the server
+ * decides. Naming it makes that visible instead of leaving a mystery literal.
+ */
+const SERVER_SCOPED_PROJECT = "server-scoped";
+
+const client = sdk === undefined ? null : createBackendClient(sdk);
+
+/**
+ * A reader for a table the SDK cannot serve.
+ *
+ * ANSWERS A FAILURE VALUE, NEVER REJECTS, and never resolves an empty page. An
+ * empty page would render the "Nothing analysed on this target yet" screen over
+ * a plugin that is not connected at all, which tells the operator the opposite
+ * of the truth about what they are looking at — the same argument the design
+ * contract makes about an errored suppressions list rendering as empty.
+ */
+const unavailable =
+  <TRow,>(): PageReader<TRow> =>
+  () =>
+    Promise.resolve({ ok: false, reason: "rpc-rejected", versions: null });
+
+const countUnavailable = () =>
+  Promise.resolve({
+    ok: false,
+    reason: "rpc-rejected",
+    versions: null,
+  } as const);
+
+const artifacts: InventoryStore<ArtifactRow> =
+  createInventoryStore<ArtifactRow>({
+    projectId: SERVER_SCOPED_PROJECT,
+    table: "artifacts",
+    // The shipped sort keys, from the backend's own frozen lookup. Newest first:
+    // the operator's question on arriving is "what has this target served me
+    // lately", not "what is alphabetically first".
+    sortKey: "last_seen",
+    direction: "desc",
+    readPage:
+      client === null
+        ? unavailable<ArtifactRow>()
+        : (request) => client.listArtifactsPage(request),
+    countRows: client === null ? countUnavailable : client.countInventory,
+  });
+
+const observations: InventoryStore<ObservationRow> =
+  createInventoryStore<ObservationRow>({
+    projectId: SERVER_SCOPED_PROJECT,
+    table: "observations",
+    sortKey: "observed_at",
+    direction: "desc",
+    readPage:
+      client === null
+        ? unavailable<ObservationRow>()
+        : (request) => client.listObservationsPage(request),
+    countRows: client === null ? countUnavailable : client.countInventory,
+  });
+
+const activePanelId = computed(() => `defminer-panel-${activeTab.value}`);
 
 onMounted(() => {
-  if (sdk === undefined) {
-    loadState.value = "failed";
-    return;
-  }
-
   // Deliberately not `await`ed in an async `onMounted`: the tab strip and the
-  // rest of the shell must be on screen before this resolves, and a rejected
-  // promise here must not escape the lifecycle hook.
-  void sdk.backend
-    .getArtifacts()
-    .then((result) => {
-      rows.value = result;
-      loadState.value = "ready";
-    })
-    .catch(() => {
-      // The rejection value is DISCARDED ON PURPOSE. An error thrown across the
-      // RPC boundary can quote target-controlled bytes, and 05-UI-SPEC.md's
-      // copywriting rule outranks every other rule on this page: no sentence
-      // ever interpolates a target-controlled string. The operator gets a
-      // DefMiner-authored explanation of what to do; the raw text is not
-      // rendered anywhere.
-      loadState.value = "failed";
-    });
+  // rest of the shell must be on screen before any of this resolves, and a
+  // rejected promise here must not escape the lifecycle hook. Every one of these
+  // answers with a VALUE rather than a rejection (api/client.ts's whole reason
+  // to exist), so the failure path is a rendered error state, not a stack trace
+  // Caido would swallow.
+  if (client !== null) {
+    void client.checkContractVersion();
+  }
+  void artifacts.loadFirstPage();
+  void observations.loadFirstPage();
 });
 
-/** A millisecond epoch as a fixed-width, sortable, locale-independent string. */
-function formatTimestamp(ms: number): string {
-  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
+/** The table asked for Health. The TAB STRIP is this component's to move; a
+ *  table that switched tabs itself would be a component writing to a sibling. */
+function openHealth(): void {
+  activeTab.value = "health";
 }
 </script>
 
@@ -98,8 +161,8 @@ function formatTimestamp(ms: number): string {
     hex literal in this file: `--c-*` is operator-customisable, and a hardcoded
     colour would survive their theme change as the one unreadable element on the
     page. There is no `font-family` either — preflight is off, so family and root
-    size are inherited from Caido; `font-mono` below is a Tailwind utility, not
-    an authored declaration.
+    size are inherited from Caido; `font-mono` in the tables below is a Tailwind
+    utility, not an authored declaration.
   -->
   <div class="flex h-full flex-col bg-surface-900 text-sm text-surface-100">
     <!-- Region 1 — toolbar. 48px is the `2xl` scale value, and it is fixed:
@@ -127,7 +190,7 @@ function formatTimestamp(ms: number): string {
         role="tab"
         :aria-selected="tab.id === activeTab"
         :aria-controls="`defminer-panel-${tab.id}`"
-        class="border-b-2 px-2 py-1 text-xs font-semibold"
+        class="border-b-2 px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-primary-500"
         :class="
           tab.id === activeTab
             ? 'border-primary-500 text-primary-500'
@@ -144,90 +207,41 @@ function formatTimestamp(ms: number): string {
          is the wrong ergonomics for triaging thousands of items. -->
     <div class="flex min-h-0 flex-1 gap-4 p-4">
       <section
-        :id="`defminer-panel-${activeTab}`"
+        :id="activePanelId"
         class="flex min-w-0 flex-1 flex-col"
         role="tabpanel"
         :aria-labelledby="`defminer-tab-${activeTab}`"
       >
-        <template v-if="activeTab === 'artifacts'">
-          <p v-if="loadState === 'loading'" class="text-surface-400">
-            Loading artifacts…
-          </p>
+        <!-- `:analyses` and `:affected-filter` ARE EXPLICITLY NULL, and the
+             null is the honest answer rather than an omission. The shipped
+             paged reads select no `scan_state` and there is no endpoint that
+             returns one, so this page has nothing to say about analysis state
+             yet; a per-row badge would have to be invented, and inventing
+             "Complete" for an unknown analysis is precisely the silence UI-09
+             forbids. Same for the narrowing filter: the backend's statement
+             matrix has no scan-state filter column, so no single-column filter
+             can express "only the affected artifacts". Both become real when
+             the reads carry the state — see ArtifactsTable.vue's header. -->
+        <ArtifactsTable
+          v-if="activeTab === 'artifacts'"
+          :store="artifacts"
+          :analyses="null"
+          :affected-filter="null"
+          @open-health="openHealth"
+        />
 
-          <!-- DefMiner-authored, every word of it. No part of the rejection
-               value reaches this element. -->
-          <p v-else-if="loadState === 'failed'" class="text-danger-500">
-            Could not load artifacts. The DefMiner backend did not answer — it
-            may be busy analysing a large bundle, which blocks its single
-            thread. Open Health to see queue depth and dropped count.
-          </p>
+        <ObservationsTable
+          v-else-if="activeTab === 'observations'"
+          :store="observations"
+          :analyses="null"
+          :affected-filter="null"
+          @open-health="openHealth"
+        />
 
-          <div v-else-if="rows.length === 0" class="py-16">
-            <h2 class="text-2xl font-semibold leading-tight">
-              Nothing analysed on this target yet
-            </h2>
-            <p class="mt-4 text-surface-400">
-              DefMiner analyses JavaScript as you browse, in the background.
-              Browse the target with the Caido proxy running and assets appear
-              here as they are analysed. DefMiner sends nothing to the target to
-              do this.
-            </p>
-          </div>
-
-          <div v-else class="flex min-h-0 flex-col overflow-hidden">
-            <!-- Header and rows are both 32px, the `xl` scale value. That
-                 height is load-bearing rather than cosmetic: the virtualised
-                 scroller plan 05-07 puts here needs a FIXED item size to
-                 compute scroll geometry, and a cell allowed to wrap destroys
-                 it. Cells never wrap — hence `whitespace-pre` and
-                 `overflow-hidden` on every one of them. -->
-            <div
-              class="flex h-8 shrink-0 items-center gap-4 border-b border-surface-600 bg-surface-800 px-2 text-xs font-semibold"
-            >
-              <span class="min-w-0 flex-1 overflow-hidden whitespace-pre"
-                >Digest</span
-              >
-              <span class="w-1/6 overflow-hidden whitespace-pre">Bytes</span>
-              <span class="w-1/6 overflow-hidden whitespace-pre">Kind</span>
-              <span class="w-1/4 overflow-hidden whitespace-pre"
-                >Last seen</span
-              >
-            </div>
-
-            <div class="min-h-0 flex-1 overflow-hidden">
-              <div
-                v-for="row in rows"
-                :key="row.sha256"
-                class="flex h-8 items-center gap-4 border-b border-surface-600 px-2"
-              >
-                <!-- Target-DERIVED, therefore `font-mono`. In a proportional
-                     face `l`/`I`/`1` and `0`/`O` are indistinguishable, and an
-                     operator comparing two digests cannot see a lookalike.
-                     Interpolated as TEXT — there is no `v-html` in this
-                     codebase and lint makes that an error that cannot be
-                     disabled inline. -->
-                <span
-                  class="min-w-0 flex-1 overflow-hidden whitespace-pre font-mono"
-                  >{{ row.sha256 }}</span
-                >
-                <span class="w-1/6 overflow-hidden whitespace-pre">{{
-                  row.byte_len
-                }}</span>
-                <span class="w-1/6 overflow-hidden whitespace-pre font-mono">{{
-                  row.kind
-                }}</span>
-                <span class="w-1/4 overflow-hidden whitespace-pre font-mono">{{
-                  formatTimestamp(row.last_seen_at)
-                }}</span>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <!-- The other three tabs ROUTE and RENDER from the first paint; they
-             gain real bodies in plans 05-09, 05-10 and 05-12. A tab is never
-             removed, never disabled and never hidden on account of having no
-             body yet — the strip is a fixed map of the surface. -->
+        <!-- Health and Settings ROUTE and RENDER from the first paint; they gain
+             real bodies in plans 05-10 and 05-12. A tab is never removed, never
+             disabled and never hidden on account of having no body yet — the
+             strip is a fixed map of the surface. -->
         <div v-else class="py-16">
           <h2 class="text-2xl font-semibold leading-tight">
             Nothing analysed on this target yet
