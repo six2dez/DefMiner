@@ -345,7 +345,7 @@ Thirteen, `P5-D50` through `P5-D62`, in the frontmatter. The four that would sur
 
 ---
 
-**Total deviations:** 5 auto-fixed (2 bugs in this plan's own specs, 2 missing-critical, 1 blocking)
+**Total deviations:** 6 auto-fixed (3 bugs, 2 missing-critical, 1 blocking)
 **Impact on plan:** No scope creep. Both bugs were in tests written minutes earlier and both had the same shape — an assertion that would have passed while testing nothing. Both missing-critical additions are inside the design contract's stated intent and each is pinned by a test proved red without it.
 
 ## Issues Encountered
@@ -386,6 +386,16 @@ The three pieces 05-09's virtualised table sits on are in place and typed: `crea
 ---
 *Phase: 05-workspace-operator-workflow*
 *Completed: 2026-08-28*
+
+**6. [Rule 1 - Bug] `requirements.mark-complete` reformatted a machine-owned generated span in REQUIREMENTS.md**
+- **Found during:** close-out, by the final full-suite run
+- **Issue:** flipping UI-07's checkbox also inserted seven blank lines into the CORE-11 derived-residual block, which `packages/backend/src/outbound-prohibition.spec.ts` byte-compares against `deriveResidual(RESOLVER_REGISTRY, BYTE_COMPARED_SURFACES)`. The suite went red on a span this plan has no business touching. The gate did exactly what it was built for.
+- **Fix:** the file was restored to its pre-close-out bytes and the single checkbox flipped by hand, so the only change to REQUIREMENTS.md is one character.
+- **Files modified:** `.planning/REQUIREMENTS.md`
+- **Verification:** `pnpm vitest run packages/backend/src/outbound-prohibition.spec.ts` — 455 pass; full suite 49 files / 1828 tests pass.
+- **Committed in:** `ba16d57` (repaired in the follow-up close-out commit)
+
+**Note for later close-outs:** `requirements.mark-complete` prettifies the whole markdown file. Any phase touching REQUIREMENTS.md while that generated span ships must re-run the backend suite afterwards, not only its own package's.
 
 ## Self-Check: PASSED
 
