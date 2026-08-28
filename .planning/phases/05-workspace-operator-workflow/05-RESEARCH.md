@@ -1478,9 +1478,16 @@ a `projects` one.
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **The suppressions list's virtualisation bound.**
+> All five were carried into planning and settled there. Each question below is kept as its
+> original statement; the `— RESOLVED:` marker on each names where it was actually answered.
+
+1. **The suppressions list's virtualisation bound.** — RESOLVED: plan `05-04`'s stated-bound
+   assumption. The contract states a per-project rule bound as a **proposal** with its argument
+   rather than omitting one, and plan `05-04` task 2 writes it into `05-ENTITY-CONTRACT.md` for the
+   pass that builds the surface. Answered the way the UI-SPEC's `overflow / suppressions-list` row
+   asked to be answered: a stated bound, not an omission.
    - What we know: `05-UI-SPEC.md` marks this `⚠ unresolved` and asks that if it is not virtualised,
      the reason be "a stated bound, not an omission".
    - What's unclear: nothing in REQUIREMENTS bounds the rule count.
@@ -1488,14 +1495,23 @@ a `projects` one.
      clear message) rather than virtualising. A rule set large enough to need `RecycleScroller` is a
      rule set the operator has lost track of, which is its own product problem.
 
-2. **Whether `audit` is sweepable by the retention policy.**
+2. **Whether `audit` is sweepable by the retention policy.** — RESOLVED: **D-06**, implemented by
+   plan `05-06` task 3. The recommendation was accepted as an operator decision: `audit` is exempt
+   from the retention age bound and keeps only a raised row bound, and D-06 requires the exception be
+   visible in the sweep code rather than implicit — which is what `05-06`'s truth about the stated
+   exception in `retention.ts` carries.
    - What we know: `sweepRetention` bounds every table by rows and age; defaults are 50,000 rows and
      90 days.
    - What's unclear: whether an audit trail that ages out is acceptable.
    - Recommendation: exempt `audit` from the age bound and keep only the row bound, with the row
      bound raised. Escalate — it is a policy call.
 
-3. **Whether the export crosses the RPC as one string.**
+3. **Whether the export crosses the RPC as one string.** — RESOLVED: plan `05-02`'s Wave-0
+   measurement plus plan `05-11`'s chunking fallback. `05-02` task 3 measures a synthetic 50,000-row
+   export and derives `EXPORT_RPC_CHUNK_ROWS` from the measurement rather than assuming it, and
+   proves chunk concatenation byte-identical to a single pass; `05-11` consumes that constant and
+   emits the header on the first chunk only. Either measured outcome preserves D-04 exactly — still
+   no server file.
    - What we know: D-04 says "the export size is bounded by the row count that crosses the RPC in
      memory". A 50,000-row CSV is single-digit megabytes of JS string held on the single QuickJS
      thread while it is serialised and marshalled.
@@ -1504,7 +1520,12 @@ a `projects` one.
      chunk the export across several RPC calls that the frontend concatenates before building the
      Blob. That preserves D-04 exactly — still no server file.
 
-4. **UI-SPEC FLAG F1 — the evidence panel has no fixed frame for the score explanation.**
+4. **UI-SPEC FLAG F1 — the evidence panel has no fixed frame for the score explanation.** —
+   RESOLVED: plan `05-04` task 1. `EvidencePanelFrame` and `ScoreExplanation` in
+   `packages/engine/src/contract.ts` declare which fields are mandatory, which are target-controlled
+   and which carry monospace, and leave the signal vocabulary to Phase 3 plan `03-03` — exactly the
+   split F1 asked for. Plan `05-10` builds the frame; the fields with no data source render an
+   explicit not-yet-available line rather than an empty region.
    - What we know: UI-04 and success criterion 3 both require it; the panel contract does not name
      mandatory fields.
    - What's unclear: the signal vocabulary is Phase 3 plan 03-03's.
@@ -1512,7 +1533,15 @@ a `projects` one.
      *frame* (which fields are mandatory, which are target-controlled, which carry `font-mono`) as
      part of the upward contract, and leave the vocabulary to Phase 3 — exactly as F1 asks.
 
-5. **Three corrections to the approved `05-UI-SPEC.md` that this research produced.**
+5. **Three corrections to the approved `05-UI-SPEC.md` that this research produced.** — RESOLVED:
+   **D-07** for the first, and plan `05-07`'s `{total}` definition for the second; the third was
+   declined. D-07 amended the raw-export copy and the amendment is already applied. The `{total}`
+   copy stays exactly as approved — the operator reviewed the objection and kept it — and the
+   obligation CONTEXT.md left on the planner, to define what `{total}` counts, is discharged by
+   `05-04`'s `VisibleTotal` type and `05-07`'s assumption: for the artifacts and observations tables
+   there is no suppression mechanism, so the reachable count IS the count and the
+   hidden-by-suppression line does not render. O-05 was decided against the recommendation:
+   projection warns on `partial`/`failed`, it does not block.
    All three belong to the operator, not the planner:
    - The raw-export copy is wrong twice over — the D-04 "written to the Caido server" sentence
      already recorded in CONTEXT.md, **and** the promise of "{n} live secret values in cleartext"
