@@ -1,0 +1,35 @@
+{
+  // @defminer/frontend — the operator's workspace page.
+  //
+  // TWO TYPECHECKERS RUN AGAINST THIS PROJECT AND THEY SEE DIFFERENT FILE SETS.
+  //   `pnpm typecheck` (root `tsc --build`) — plain tsc. Its `include` globs
+  //       match .ts only, so the .vue files are simply not in its program and
+  //       `src/shims-vue.d.ts` is what makes `import App from "./App.vue"`
+  //       resolve. It checks the TypeScript half.
+  //   `vue-tsc --build` (this package's own `typecheck` script) — resolves the
+  //       single-file components for real and checks the templates.
+  // Neither is redundant: plain tsc keeps the frontend inside the repo-wide
+  // solution build, vue-tsc is the only one that can see inside a `<template>`.
+  //
+  // `types: ["node"]` and NOT @caido/quickjs-types. The frontend runs in a
+  // browser renderer, not in Caido's QuickJS; letting `caido:*` specifiers
+  // resolve here would make a backend-only import typecheck in the one package
+  // that can never execute it. Node types are present because vite's own config
+  // and the `.mjs` externals module are part of this project.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // The DOM is this package's runtime. `addPage` takes an `HTMLElement`
+    // (research P-03) and `init()` creates one, so without these libs the
+    // entry point does not typecheck at all.
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "jsxImportSource": "vue",
+    // `externals.mjs` is plain JavaScript on purpose — the CI gate imports it
+    // without a TypeScript loader. Type-INFERRED, not checked, exactly as the
+    // engine treats scripts/ci/gen-thresholds.mjs.
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "*.ts", "*.mjs"]
+}

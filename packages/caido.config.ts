@@ -36,5 +36,15 @@ export default defineConfig({
       name: "DefMiner Backend",
       root: "backend",
     },
+    {
+      // The frontend inherits the SAME layout constraint the header explains:
+      // `root` is "frontend", never ".". @caido-community/dev@0.1.7 deletes
+      // `<cwd>/dist` wholesale before assembling the package, and with `root: "."`
+      // that is the directory vite just wrote index.js into.
+      kind: "frontend",
+      id: "defminer-frontend",
+      name: "DefMiner",
+      root: "frontend",
+    },
   ],
 });

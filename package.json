@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "knip": "knip",
     "gen:thresholds": "node scripts/ci/gen-thresholds.mjs",
-    "build:backend": "caido-dev build packages",
+    "build": "caido-dev build packages",
+    "build:backend": "pnpm build",
     "check:bundle": "node scripts/ci/check-bundle-imports.mjs"
   },
   "license": "UNLICENSED",
@@ -28,17 +29,21 @@
     "@caido/sdk-client": "0.5.0",
     "@jridgewell/sourcemap-codec": "1.5.5",
     "@types/node": "26.2.0",
+    "@vitejs/plugin-vue": "6.0.1",
+    "@vue/test-utils": "2.4.11",
     "acorn": "8.18.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "eslint": "9.39.2",
+    "jsdom": "30.0.1",
     "knip": "5.86.0",
     "meriyah": "7.3.2",
     "playwright": "1.62.1",
     "prettier": "3.8.1",
     "re2js": "2.8.6",
     "typescript": "5.8.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "vue": "3.5.41"
   },
   "private": true
 }

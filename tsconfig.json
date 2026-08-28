@@ -4,5 +4,12 @@
   // project, so a file that belongs to neither is invisible to the typecheck and
   // that is a bug worth noticing.
   "files": [],
-  "references": [{ "path": "packages/engine" }, { "path": "packages/backend" }]
+  "references": [
+    { "path": "packages/engine" },
+    { "path": "packages/backend" },
+    // The frontend joins the solution build so `pnpm typecheck` covers it. This
+    // is PLAIN tsc and it does not parse .vue — see the two-typechecker note in
+    // packages/frontend/tsconfig.json. `vue-tsc` is what checks the templates.
+    { "path": "packages/frontend" }
+  ]
 }

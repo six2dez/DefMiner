@@ -1,0 +1,27 @@
+/*
+ * The DefMiner frontend's ONLY stylesheet entry.
+ *
+ * There are no authored rules in this file and there should never be many:
+ * everything visual in this plugin is a Tailwind utility applied in markup,
+ * drawn from the seven-value spacing scale, the four type sizes and the six
+ * Caido colour roles that 05-UI-SPEC.md fixes. A rule authored here is a rule
+ * that lives outside all three of those contracts.
+ *
+ * NO HEX LITERAL MAY APPEAR IN THIS FILE. Colours resolve to
+ * `hsl(var(--c-<role>-<step>))` through @caido/tailwindcss, and those CSS
+ * variables are OPERATOR-CUSTOMISABLE. A hardcoded hex would survive the
+ * operator's theme change and become the one unreadable element on their page.
+ *
+ * `base` is included even though preflight is off (tailwind.config.ts explains
+ * why it is off): the layer still carries Tailwind's variable declarations and
+ * the `*` border-colour default that the utilities are written against.
+ *
+ * Everything emitted below is rewritten by postcss-prefixwrap to sit under
+ * `#plugin--defminer` — see postcss.config.cjs — and that containment is
+ * asserted against the BUILT css by scripts/ci/prefixwrap.mjs, not against the
+ * config that is supposed to produce it.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

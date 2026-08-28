@@ -18,6 +18,14 @@
   },
   "include": [
     "packages/**/*.ts",
+    // Phase 5's frontend. `.vue` is here because typescript-eslint needs a file
+    // to be IN the program before it will type it, and the Vue parser feeds
+    // single-file components in through `extraFileExtensions`; `.cjs` is here
+    // for packages/frontend/postcss.config.cjs. Neither extension is picked up
+    // by plain `tsc` — the solution build in tsconfig.json still sees only .ts,
+    // which is exactly the split packages/frontend/tsconfig.json documents.
+    "packages/**/*.vue",
+    "packages/**/*.cjs",
     // `tests/**`, not the one named spec plan 01-02 authored. Which tests are
     // LINTED is eslint.config.js's decision (it names the Phase 0 gates it
     // deliberately leaves alone); this file only has to supply a type program
