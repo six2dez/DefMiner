@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 28
+open_count: 29
 waived_count: 0
 fixed_count: 22
-total_count: 50
-last_updated: 2026-08-28T11:58:40.533Z
+total_count: 51
+last_updated: 2026-08-28T12:25:05.499Z
 ---
 
 # Broken Windows Ledger
@@ -86,6 +86,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 48 | 05 | stub | tests/export-payload-budget.spec.ts |  | EXPORT_RPC_CHUNK_ROWS is exported from a spec in tests/; plan 05-11 must move it into the exporter's module — production code must not import from tests/ | open |  | 2026-08-28T11:58:40.360Z |  |
 | 49 | 05 | stub | tests/export-payload-budget.spec.ts |  | CSV serialiser is a measurement-only stand-in for packages/engine/src/csv.ts (UISEC-02), which plan 05-03 writes | open |  | 2026-08-28T11:58:40.447Z |  |
 | 50 | 05 | unmet-truth | tests/sqlite-346-query-plans.spec.ts |  | Query plans measured on SQLite 3.53.4, not Caido's target 3.46.0 — no 3.46 binary reachable; assumption A5 narrowed, not closed | open |  | 2026-08-28T11:58:40.533Z |  |
+| 51 | 05 | deviation | packages/engine/src/sanitise.ts |  | capped() makes one O(n) pass over a target-controlled string to report R2's total; disclosed in the module header, bounded by a named 2,000 ms ceiling on the 4 MiB case, and not the per-character-index shape DET-07 bans | open |  | 2026-08-28T12:25:05.499Z |  |
 
 ````json
 [
@@ -687,6 +688,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-28T11:58:40.533Z",
+    "resolved_at": null
+  },
+  {
+    "id": 51,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "packages/engine/src/sanitise.ts",
+    "line": null,
+    "description": "capped() makes one O(n) pass over a target-controlled string to report R2's total; disclosed in the module header, bounded by a named 2,000 ms ceiling on the 4 MiB case, and not the per-character-index shape DET-07 bans",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T12:25:05.499Z",
     "resolved_at": null
   }
 ]
