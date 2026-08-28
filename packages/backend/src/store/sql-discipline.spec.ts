@@ -62,12 +62,51 @@ function backendFiles(): string[] {
   return out.sort();
 }
 
-type Violation = { file: string; rule: string; detail: string };
+/**
+ * EVERY rule name this gate can emit.
+ *
+ * Declared as a closed list and used as the type of `add`'s first argument, so a
+ * new rule cannot be introduced without appearing here — which is what lets the
+ * non-vacuity block below assert the gate's REACH as a set rather than as a
+ * number somebody remembered to bump. The five names after `concatenated-sql`
+ * were added by plan 05-02 for the shapes `05-RESEARCH.md § O-01` measured this
+ * gate silent on.
+ */
+const RULE_NAMES = [
+  "named-parameter",
+  "returning",
+  "last-insert-rowid",
+  "unscoped-multi-row",
+  "interpolated-sql",
+  "concatenated-sql",
+  "exec-arity",
+  "array-bind",
+  "module-scope-await",
+  "module-scope-statement",
+  "cte-unscoped",
+  "insert-select",
+  "unscoped-subquery",
+  "unscoped-union-arm",
+  "fragment-composition",
+] as const;
+
+type RuleName = (typeof RULE_NAMES)[number];
+
+type Violation = { file: string; rule: RuleName; detail: string };
 
 /** Statement-execution methods that take BIND PARAMETERS, spread. */
 const BIND_METHODS = new Set(["run", "get", "all"]);
 /** The PARAMETERLESS form. `Database.exec(sql)` takes no bind values at all. */
 const PARAMETERLESS_METHOD = "exec";
+/**
+ * Every method a finished SQL string is handed to.
+ *
+ * `fragment-composition` is detected HERE and not at the concatenation, because
+ * `a + b` over two identifiers is ordinary string work everywhere else in the
+ * language. It only becomes a SQL defect at the moment the result is executed,
+ * and the sink is the one place that fact is visible without type information.
+ */
+const SQL_SINKS = new Set(["prepare", "exec", "run", "get", "all"]);
 
 /** Looks like SQL — used to decide whether a string literal is subject to the
  *  SQL rules at all. Deliberately generous: a false positive costs a comment, a
@@ -124,6 +163,168 @@ function tablesReferenced(text: string): string[] {
 /** Tables where an empty `project_id` is legal and a global row is the point. */
 const SETTINGS_TABLES = new Set(["settings"]);
 
+// ---------------------------------------------------------------------------
+// STATEMENT DECOMPOSITION — added because a WHOLE-STATEMENT predicate check can
+// be LAUNDERED.
+//
+// `05-RESEARCH.md § O-01` drove this file's own `auditSource` against twenty-four
+// candidate statements and found five silent. Two of the silences (probes Q2 and
+// Q7) have the same cause: the project-scoping check reads the text from the
+// FIRST `WHERE` onward, so a `project_id` anywhere in that tail satisfies it —
+// including one belonging to a completely different query. An outer query with
+// `WHERE project_id = ?` therefore vouched for an `IN (SELECT … FROM
+// suppressions)` that scoped on nothing, and the first arm of a UNION vouched for
+// the second.
+//
+// The fix is to check the PIECES independently rather than to make the tail scan
+// cleverer. A statement is split into its top-level set-operation arms and its
+// balanced-parenthesis subquery spans, and the SAME predicate rule is applied to
+// each piece on its own. A piece that reads a non-settings table and does not
+// scope itself is reported no matter what its siblings do.
+// ---------------------------------------------------------------------------
+
+/**
+ * Replace every single-quoted SQL string literal with same-length spaces.
+ *
+ * Every scan below is either paren-depth counting or keyword matching, and both
+ * are wrong inside a quoted value: `'a (b'` unbalances the depth counter forever,
+ * and `'UNION'` as a stored value would split a statement that has one arm. Blank
+ * runs rather than deletion so every index stays aligned with the original text,
+ * which is what lets the spans be sliced back out of `text` itself.
+ *
+ * SQLite escapes a quote by DOUBLING it (`''`), which needs no special case here:
+ * the closing quote of the first pair simply opens the next, and the whole run
+ * ends up masked either way.
+ */
+function maskSqlStrings(text: string): string {
+  let out = "";
+  let inString = false;
+  for (const ch of text) {
+    if (ch === "'") {
+      inString = !inString;
+      out += " ";
+    } else {
+      out += inString && ch !== "\n" ? " " : ch;
+    }
+  }
+  return out;
+}
+
+/** Indices of every match of `re` that sits at paren depth ZERO. */
+function topLevelMatches(
+  text: string,
+  re: RegExp,
+): { at: number; len: number }[] {
+  const masked = maskSqlStrings(text);
+  const depths: number[] = [];
+  let depth = 0;
+  for (const ch of masked) {
+    if (ch === "(") {
+      depths.push(depth);
+      depth += 1;
+    } else if (ch === ")") {
+      depth = Math.max(0, depth - 1);
+      depths.push(depth);
+    } else {
+      depths.push(depth);
+    }
+  }
+  const out: { at: number; len: number }[] = [];
+  const scan = new RegExp(
+    re.source,
+    re.flags.includes("g") ? re.flags : re.flags + "g",
+  );
+  let m: RegExpExecArray | null;
+  while ((m = scan.exec(masked)) !== null) {
+    if ((depths[m.index] ?? 0) === 0)
+      out.push({ at: m.index, len: m[0].length });
+    if (m[0].length === 0) scan.lastIndex += 1;
+  }
+  return out;
+}
+
+/** The arms of a top-level set operation. One element — the whole statement —
+ *  when there is no `UNION`/`INTERSECT`/`EXCEPT` at depth zero. */
+function topLevelArms(text: string): string[] {
+  const seps = topLevelMatches(
+    text,
+    /\b(?:UNION\s+ALL|UNION|INTERSECT|EXCEPT)\b/gi,
+  );
+  if (seps.length === 0) return [text];
+  const arms: string[] = [];
+  let cursor = 0;
+  for (const s of seps) {
+    arms.push(text.slice(cursor, s.at));
+    cursor = s.at + s.len;
+  }
+  arms.push(text.slice(cursor));
+  return arms.map((a) => a.trim()).filter((a) => a !== "");
+}
+
+/**
+ * Every balanced-parenthesis span whose body begins with `SELECT`, at any nesting
+ * depth.
+ *
+ * Nested spans are all returned, not just the outermost: a subquery two levels
+ * down reads rows exactly as freely as one at the top, and reporting only the
+ * outer one would let the inner hide behind a scoped parent.
+ */
+function subquerySpans(text: string): string[] {
+  const masked = maskSqlStrings(text);
+  const opens: number[] = [];
+  const out: string[] = [];
+  for (let i = 0; i < masked.length; i += 1) {
+    const ch = masked[i];
+    if (ch === "(") {
+      opens.push(i);
+    } else if (ch === ")") {
+      const start = opens.pop();
+      if (start === undefined) continue;
+      const body = text.slice(start + 1, i);
+      if (/^\s*SELECT\b/i.test(body)) out.push(body);
+    }
+  }
+  return out;
+}
+
+/** The scoping rule, applied to ONE piece of a statement. Predicate-only, for the
+ *  reason the `unscoped-multi-row` rule already records: `project_id` in a SELECT
+ *  LIST is a cross-project read that reports its own project id in every row it
+ *  should not have returned. */
+function scopesOnProjectId(piece: string): boolean {
+  const wherePos = piece.search(/\bWHERE\b/i);
+  return wherePos >= 0 && /project_id/.test(piece.slice(wherePos));
+}
+
+/** Non-settings tables a piece touches — the ones whose rows belong to exactly
+ *  one project and must therefore be scoped. */
+function scopedTables(piece: string): string[] {
+  return tablesReferenced(piece).filter((t) => !SETTINGS_TABLES.has(t));
+}
+
+/** An `INSERT` whose row source is a `SELECT` rather than a `VALUES` list.
+ *
+ *  Top-level only. `INSERT INTO t (a) VALUES ((SELECT max(x) FROM y))` writes ONE
+ *  row from a scalar subquery and is not this shape; the column list and the
+ *  VALUES tuple both sit at depth one, so a depth-zero `SELECT` is exactly the
+ *  `INSERT … SELECT` form and nothing else. */
+function insertsFromSelect(text: string): boolean {
+  return (
+    statementKind(text) === "INSERT" &&
+    topLevelMatches(text, /\bSELECT\b/gi).length > 0
+  );
+}
+
+/** Statement heads whose PIECES are worth decomposing. DDL and PRAGMA are
+ *  excluded deliberately: `CREATE TRIGGER … BEGIN SELECT RAISE(ABORT, …); END`
+ *  and a `CHECK (length(project_id) > 0)` column constraint are neither queries
+ *  nor arms, and running the scoping rule over them would report the migration
+ *  ladder as a cross-project read. */
+function isDecomposable(text: string): boolean {
+  const kind = statementKind(text);
+  return kind !== "" && kind !== "CREATE" && kind !== "PRAGMA";
+}
+
 /**
  * The ONE allowlisted interpolation in the package.
  *
@@ -156,7 +357,7 @@ export function auditSource(
   const base = file.split("/").pop() ?? file;
   const violations: Violation[] = [];
   const sqlStrings: string[] = [];
-  const add = (rule: string, detail: string): void => {
+  const add = (rule: RuleName, detail: string): void => {
     violations.push({ file: base, rule, detail });
   };
 
@@ -213,6 +414,139 @@ export function auditSource(
         );
       }
     }
+
+    // --- the four shapes the whole-statement checks above cannot see ---------
+    //
+    // `isMultiRowStatement` accepts SELECT, UPDATE and DELETE, and it is left
+    // exactly as it is: its name and its message are about multi-row READS and
+    // single-table writes, and every upsert in this package would start failing
+    // if `INSERT` were folded into it (`ON CONFLICT … DO UPDATE SET` touches one
+    // row on a fully-specified natural key). The scoping CONCERN is extended
+    // instead, one head at a time, each with its own rule name and its own reason.
+
+    // A CTE head. `statementKind` returns "WITH", so this statement never reached
+    // the multi-row check at all — probe Q5 reported [].
+    if (statementKind(text) === "WITH") {
+      const tables = scopedTables(text);
+      if (tables.length > 0 && !scopesOnProjectId(text)) {
+        add(
+          "cte-unscoped",
+          `${where}: a WITH statement over ${tables.join(", ")} does not scope on project_id. A CTE head takes the statement out of the multi-row check entirely, which is why this shape reported nothing (05-RESEARCH § O-01, probe Q5). sdk.meta.db() is ONE database for every project (T-01-20).`,
+        );
+      }
+    }
+
+    // A multi-row WRITE. The one-statement, idempotent-by-natural-key discipline
+    // this package is built on cannot cover it: the row set is decided by a query
+    // at execution time, ON CONFLICT cannot make an unknown row set idempotent,
+    // and this driver has no usable transaction to undo a partial write —
+    // `BEGIN` does not span `exec` calls and fails silently.
+    if (insertsFromSelect(text)) {
+      const tables = scopedTables(text);
+      add(
+        "insert-select",
+        `${where}: INSERT … SELECT is a MULTI-ROW write over ${tables.join(", ") || "an unnamed source"}. Its row set is decided at execution time, so ON CONFLICT cannot make it idempotent, and this driver has no transaction to undo a partial write (BEGIN does not span exec calls and fails silently). Write one row per statement from values the caller already holds.`,
+      );
+      if (tables.length > 0 && !scopesOnProjectId(text)) {
+        add(
+          "unscoped-multi-row",
+          `${where}: an INSERT … SELECT over ${tables.join(", ")} does not scope on project_id in its WHERE clause, so it copies every project's rows (05-RESEARCH § O-01, probe Q10). sdk.meta.db() is ONE database for every project (T-01-20).`,
+        );
+      }
+    }
+
+    // PIECES, checked independently — see the decomposition note above.
+    if (isDecomposable(text)) {
+      const arms = topLevelArms(text);
+      if (arms.length > 1) {
+        for (const arm of arms) {
+          const tables = scopedTables(arm);
+          if (tables.length > 0 && !scopesOnProjectId(arm)) {
+            add(
+              "unscoped-union-arm",
+              `${where}: a set-operation arm over ${tables.join(", ")} does not scope on project_id. Each arm is its own query — a sibling arm's predicate does not reach it, and the whole-statement check reads them as one string (05-RESEARCH § O-01, probe Q7).`,
+            );
+          }
+        }
+      }
+      for (const span of subquerySpans(text)) {
+        const tables = scopedTables(span);
+        if (tables.length > 0 && !scopesOnProjectId(span)) {
+          add(
+            "unscoped-subquery",
+            `${where}: a subquery over ${tables.join(", ")} does not scope on project_id. A scoped OUTER query does not scope its subqueries — the rows the subquery reads come from every project (05-RESEARCH § O-01, probe Q2). Correlate on project_id inside the subquery, or bind it there too.`,
+          );
+        }
+      }
+    }
+  };
+
+  // --- fragment composition ------------------------------------------------
+  //
+  // `concatenated-sql` only inspects `+` operands that are THEMSELVES SQL-looking
+  // string literals, so `BASE + ORDER + " LIMIT ?"` over two identifiers reported
+  // nothing (probe P1), and neither did a template whose head is not SQL-looking
+  // (P2) nor an array join (P3). All three are the natural spelling of a query
+  // BUILDER, which is what `05-RESEARCH § O-01` rejected for Phase 5 in favour of
+  // a fixed literal matrix — and rejected partly BECAUSE the gate could not see
+  // it, so an allowlist entry for a builder would have been an exemption whose
+  // stated reach exceeded its executed reach.
+  //
+  // Two passes, because the declaration may appear AFTER the sink that consumes
+  // it: the walk collects the names handed to a sink and the initializer of every
+  // variable declaration, and the composition check runs over the intersection.
+  const sinkArgNames = new Set<string>();
+  const declInit = new Map<string, ts.Expression>();
+  const reported = new Set<string>();
+
+  /** Flatten a `+` chain into its leaf operands. */
+  const plusOperands = (expr: ts.Expression): ts.Expression[] =>
+    ts.isBinaryExpression(expr) &&
+    expr.operatorToken.kind === ts.SyntaxKind.PlusToken
+      ? [...plusOperands(expr.left), ...plusOperands(expr.right)]
+      : [expr];
+
+  const isLiteralOperand = (e: ts.Expression): boolean =>
+    ts.isStringLiteral(e) ||
+    ts.isNoSubstitutionTemplateLiteral(e) ||
+    ts.isNumericLiteral(e);
+
+  const reportComposition = (expr: ts.Expression, where: string): void => {
+    const inner = ts.isAwaitExpression(expr)
+      ? expr.expression
+      : ts.isParenthesizedExpression(expr)
+        ? expr.expression
+        : expr;
+
+    let why = "";
+    if (
+      ts.isBinaryExpression(inner) &&
+      inner.operatorToken.kind === ts.SyntaxKind.PlusToken &&
+      plusOperands(inner).some((op) => !isLiteralOperand(op))
+    ) {
+      why =
+        "a + chain one of whose operands is a NAMED FRAGMENT rather than a literal";
+    } else if (
+      ts.isTemplateExpression(inner) &&
+      inner.templateSpans.length > 0 &&
+      !looksLikeSql(inner.head.text)
+    ) {
+      // A SQL-looking head is `interpolated-sql`'s business and is already
+      // reported there; this rule exists for the head that hides the statement.
+      why =
+        "a template literal whose HEAD is not SQL-looking, so interpolated-sql never saw it";
+    }
+    if (why === "") return;
+
+    const key = inner.getText(sf).slice(0, 200);
+    if (reported.has(key)) return;
+    reported.add(key);
+    add(
+      "fragment-composition",
+      `${where}: SQL assembled from fragments — ${why} (${JSON.stringify(
+        key.slice(0, 60),
+      )}). 05-RESEARCH § O-01 probes P1/P2 measured this reporting NOTHING. Write complete literal statements and choose between them; a fixed matrix of literals is the shipped pattern (observations.ts carries two).`,
+    );
   };
 
   const visit = (node: ts.Node): void => {
@@ -286,6 +620,56 @@ export function auditSource(
           `${method}() called with a single ARRAY argument. Parameters must be SPREAD: ${method}(...params), never ${method}(params).`,
         );
       }
+
+      // --- fragment composition, form (c): Array.join ------------------------
+      //
+      // Checked wherever it appears rather than only at a sink, because an array
+      // literal containing a SQL-looking string, being joined, has no innocent
+      // reading. `[a, b].join(" ")` over things that are not SQL is ordinary and
+      // is untouched.
+      if (
+        method === "join" &&
+        ts.isArrayLiteralExpression(node.expression.expression)
+      ) {
+        const sqlish = node.expression.expression.elements.find(
+          (el) =>
+            (ts.isStringLiteral(el) ||
+              ts.isNoSubstitutionTemplateLiteral(el)) &&
+            looksLikeSql(el.text),
+        );
+        if (sqlish !== undefined) {
+          add(
+            "fragment-composition",
+            `Array.join(): SQL assembled from array fragments (${JSON.stringify(
+              (sqlish as ts.StringLiteral).text.slice(0, 60),
+            )}). 05-RESEARCH § O-01 probe P3 measured this shape reporting NOTHING, because concatenated-sql only inspects binary + operands. Write complete literal statements and choose between them.`,
+          );
+        }
+      }
+
+      // --- fragment composition, forms (a) and (b): at the SINK --------------
+      if (SQL_SINKS.has(method) && args.length >= 1) {
+        const first = args[0];
+        if (first !== undefined) {
+          if (ts.isIdentifier(first)) {
+            // Resolved after the walk — the declaration may appear later in the
+            // file than the sink that consumes it.
+            sinkArgNames.add(first.text);
+          } else {
+            reportComposition(first, `${method}() argument`);
+          }
+        }
+      }
+    }
+
+    // --- every variable initializer, for the second composition pass ---------
+    //
+    // At ANY scope, not just module scope: the realistic spelling of the builder
+    // is `const sql = BASE + ORDER; ... db.prepare(sql)` inside the read
+    // function, and a module-scope-only collection would miss exactly that.
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      const init = node.initializer;
+      if (init !== undefined) declInit.set(node.name.text, init);
     }
 
     // --- module-scope statements and promises --------------------------------
@@ -316,6 +700,16 @@ export function auditSource(
   };
 
   visit(sf);
+
+  // Second composition pass. A name is only examined if a sink actually consumed
+  // it, which is what keeps `const label = a + b` — string work with nothing to
+  // do with SQL — out of this rule entirely.
+  for (const name of sinkArgNames) {
+    const init = declInit.get(name);
+    if (init !== undefined)
+      reportComposition(init, `${name} (passed to a sink)`);
+  }
+
   return { violations, sqlStrings };
 }
 
@@ -374,6 +768,42 @@ describe("SQL discipline over packages/backend/src (STORE-07, T-01-19)", () => {
       "index.ts contributes no SQL to the gate, so widening it bought nothing " +
         "measurable. If the probe statement moved, point this at wherever it went.",
     ).toBeGreaterThan(0);
+  });
+
+  it("emits exactly the rules it claims to — the gate's REACH, named", () => {
+    // Non-vacuity for the WIDENING. The other three assertions in this block
+    // guard the file set; this one guards the RULE set, which is the thing plan
+    // 05-02 changed. `RULE_NAMES` is the type of `add`'s first argument, so a
+    // rule added without appearing here is a typecheck failure rather than a
+    // silently wider gate — and a rule DELETED here is a visible edit rather
+    // than a quietly narrower one.
+    //
+    // FIFTEEN, not the fourteen 05-02-PLAN.md asks for. The plan's count comes
+    // from `05-RESEARCH.md § O-01`'s summary table, which lists
+    // `module-scope-statement / module-scope-audit` as ONE row because they share
+    // a cause. They are two names in the source and always have been: 10 + 5 = 15.
+    // Asserting 14 would assert something false about this file.
+    expect([...RULE_NAMES]).toEqual([
+      "named-parameter",
+      "returning",
+      "last-insert-rowid",
+      "unscoped-multi-row",
+      "interpolated-sql",
+      "concatenated-sql",
+      "exec-arity",
+      "array-bind",
+      "module-scope-await",
+      "module-scope-statement",
+      // Added by plan 05-02 — the five shapes § O-01 measured this gate silent on.
+      "cte-unscoped",
+      "insert-select",
+      "unscoped-subquery",
+      "unscoped-union-arm",
+      "fragment-composition",
+    ]);
+    expect(new Set(RULE_NAMES).size, "a duplicate rule name").toBe(
+      RULE_NAMES.length,
+    );
   });
 
   it("finds SQL to audit — the gate is not measuring an empty set", () => {
@@ -625,8 +1055,10 @@ describe("the gate's own failure paths", () => {
     expect(rulesOf(P2_TEMPLATE_FRAGMENTS)).toContain("fragment-composition");
     expect(rulesOf(P3_JOIN_FRAGMENTS)).toContain("fragment-composition");
     // A single COMPLETE literal handed to the same sink is the correct form.
+    expect(rulesOf(P1_COMPLETE_LITERAL)).not.toContain("fragment-composition");
     expect(rulesOf(P1_COMPLETE_LITERAL)).toEqual([]);
     // And a join over strings that are not SQL is not this repo's business.
+    expect(rulesOf(P3_JOIN_NON_SQL)).not.toContain("fragment-composition");
     expect(rulesOf(P3_JOIN_NON_SQL)).toEqual([]);
   });
 
