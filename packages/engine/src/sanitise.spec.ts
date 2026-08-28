@@ -30,6 +30,7 @@ import {
   C0_C1_CONTROLS,
   EVIDENCE_PANEL_MAX_GRAPHEMES,
   forDisplay,
+  forDisplayText,
   forEvidence,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "./sanitise";
@@ -236,6 +237,69 @@ describe("forDisplay — T-05-12, a multi-megabyte single-line value", () => {
         `measured linear cost is ~170 ms; this ceiling exists so an O(n^2) ` +
         `implementation fails the spec instead of merely being slow.`,
     ).toBeLessThan(FOUR_MB_BUDGET_MS);
+  });
+});
+
+describe("forDisplayText — the cell path, held to forDisplay's answer", () => {
+  // THE ANTI-DRIFT ASSERTION, AND THE ONLY REASON A SECOND TRUNCATION PATH IS
+  // ALLOWED TO EXIST. `forDisplayText` skips the `total` walk — O(cap) instead
+  // of O(n) — because a table cell never renders "Truncated at {shown} of
+  // {total}". That saving is worthless if the two paths ever disagree about
+  // what R2 means, and "two implementations of a security rule that nobody
+  // diffs" is the failure this module's header names. So they are diffed, over
+  // the WHOLE shared corpus, at both caps.
+  it.each([...HOSTILE_CASES])(
+    "$id: text is byte-identical to forDisplay's, at the cell cap",
+    (hostileCase) => {
+      expect(
+        forDisplayText(hostileCase.value, TABLE_CELL_MAX_GRAPHEMES),
+        hostileCase.why,
+      ).toBe(forDisplay(hostileCase.value, TABLE_CELL_MAX_GRAPHEMES).text);
+    },
+  );
+
+  it.each([...HOSTILE_CASES])(
+    "$id: text is byte-identical to forDisplay's, at the panel cap",
+    (hostileCase) => {
+      expect(
+        forDisplayText(hostileCase.value, EVIDENCE_PANEL_MAX_GRAPHEMES),
+        hostileCase.why,
+      ).toBe(forDisplay(hostileCase.value, EVIDENCE_PANEL_MAX_GRAPHEMES).text);
+    },
+  );
+
+  it("rejects an absent or nonsensical cap exactly as forDisplay does", () => {
+    // The cap has no default ON PURPOSE (P5-D13), so the surface being
+    // truncated for is named at every call site. A second entry point that
+    // quietly accepted a missing cap would be a hole in that.
+    expect(forDisplayText.length).toBe(2);
+    expect(() => forDisplayText("x", 0)).toThrow(RangeError);
+    expect(() => forDisplayText("x", 1.5)).toThrow(RangeError);
+  });
+
+  it(`truncates 4 MiB far faster than the counting path — the reason it exists`, () => {
+    // NOT A BENCHMARK, A SHAPE ASSERTION. `forDisplay` must walk the whole
+    // value to report `total`; this one stops at the cap. If a rewrite ever
+    // makes them the same cost, the cell path has silently gone back to being
+    // O(n) and `tests/frontend-load.spec.ts`'s frame budget is the next thing
+    // to fail — several seconds later and much harder to read.
+    const raw = "a".repeat(FOUR_MB);
+
+    const countingStarted = performance.now();
+    forDisplay(raw, TABLE_CELL_MAX_GRAPHEMES);
+    const counting = performance.now() - countingStarted;
+
+    const textStarted = performance.now();
+    const text = forDisplayText(raw, TABLE_CELL_MAX_GRAPHEMES);
+    const textOnly = performance.now() - textStarted;
+
+    expect(text).toBe("a".repeat(TABLE_CELL_MAX_GRAPHEMES));
+    expect(
+      textOnly,
+      `forDisplayText took ${String(Math.round(textOnly))} ms against ` +
+        `forDisplay's ${String(Math.round(counting))} ms over 4 MiB. The text ` +
+        `path must not be paying for the count it does not report.`,
+    ).toBeLessThan(Math.max(counting / 2, 1));
   });
 });
 

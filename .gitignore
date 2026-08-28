@@ -98,3 +98,9 @@ scripts/spike/__pycache__/
 # they contain deliberate v-html / eval violations and exist only for the
 # duration of that spec.
 packages/frontend/src/__r1_fixtures__/
+
+# Written and removed by tests/frontend-load.spec.ts for the life of one run.
+# It builds the real InventoryTable through the real vite/PostCSS pipeline so a
+# browser can measure the geometry jsdom cannot, and a crashed run must not leave
+# a build artifact behind that `pnpm lint` then reports.
+packages/frontend/.load-harness/

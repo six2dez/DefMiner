@@ -126,6 +126,11 @@ export default [
       // that leaves one behind cannot break `pnpm lint` with a violation it
       // deliberately authored.
       "packages/frontend/src/__r1_fixtures__/**",
+      // Same category: the harness tests/frontend-load.spec.ts generates and
+      // builds so a real browser can measure the row geometry jsdom cannot.
+      // Generated source, deleted at the end of the run, gitignored — and
+      // ignored here so a crashed run cannot break `pnpm lint`.
+      "packages/frontend/.load-harness/**",
     ],
   },
 
@@ -290,6 +295,23 @@ export default [
     },
     rules: {
       "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+
+  {
+    // -----------------------------------------------------------------------
+    // THE LOAD SPEC PRINTS ITS MEASUREMENTS, AND THAT IS ITS INTERFACE.
+    // -----------------------------------------------------------------------
+    // Same exception, and the same reason, as the CI gates below: a gate whose
+    // deliverable is a NUMBER has to emit the number. `tests/frontend-load.spec.ts`
+    // is the executed evidence for two of 05-UI-SPEC.md's `backstop` rows, and
+    // 05-09's acceptance criterion requires it to report the observed maximum
+    // and ninety-fifth-percentile frame times and the peak resident row count
+    // so the SUMMARY records measurements rather than a pass. A pass/fail with
+    // no numbers is the outcome the backstop classification exists to prevent.
+    files: ["tests/frontend-load.spec.ts"],
+    rules: {
+      "no-console": "off",
     },
   },
 

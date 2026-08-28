@@ -45,6 +45,7 @@
 import {
   EVIDENCE_PANEL_MAX_GRAPHEMES,
   forDisplay,
+  forDisplayText,
   forEvidence,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
@@ -98,6 +99,32 @@ type Displayed = { text: string; shown: number; total: number };
 /** R2 for a table cell: strip C0/C1, strip bidi, truncate grapheme-safe at 256. */
 export function forCell(value: string): Displayed {
   return forDisplay(value, TABLE_CELL_MAX_GRAPHEMES);
+}
+
+/**
+ * The same R2 for a table cell, returning ONLY the text.
+ *
+ * THE CELL PATH, AND THE ONE THE VIRTUALISED TABLE USES. A cell renders 256
+ * graphemes and stops; it never renders "Truncated at {shown} of {total}
+ * characters" — that affordance is the evidence panel's, and `total` is what
+ * forces `forCell` to walk the WHOLE value. On a 4 MiB single-line hostile value
+ * that walk is ~170 ms, and `tests/frontend-load.spec.ts` measured what it costs
+ * on the real surface. BOTH NUMBERS, because the delta is the argument:
+ *
+ *   through `forCell`      99 of 396 frames over the 32 ms budget,
+ *                          max 442 ms, p95 418 ms, scroll 37,395 ms
+ *   through `forCellText`   0 of 396 frames over budget,
+ *                          max 23.8 ms, p95 17.1 ms, scroll 4,010 ms
+ *
+ * Same rows, same corpus, same machine, one call changed.
+ *
+ * Same cap, same steps, same module — bound in the function name for the reason
+ * this file's header gives, so a call site cannot reach for the panel's 2,048 by
+ * mistyping. `sanitise.spec.ts` holds the two paths to the same answer over the
+ * whole hostile corpus.
+ */
+export function forCellText(value: string): string {
+  return forDisplayText(value, TABLE_CELL_MAX_GRAPHEMES);
 }
 
 /** R2 for the evidence panel: the same, at 2,048, with control characters shown

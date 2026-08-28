@@ -55,7 +55,7 @@ import { computed } from "vue";
 import { RecycleScroller } from "vue-virtual-scroller";
 
 import { RPC_ERROR_STATE_BODY } from "../api/client";
-import { forCell, TABLE_ROW_HEIGHT_PX } from "../safety/display";
+import { forCellText, TABLE_ROW_HEIGHT_PX } from "../safety/display";
 import HighlightSlices from "../safety/HighlightSlices.vue";
 import type { InventoryStore } from "../stores/inventory";
 import { KEYSET_PAGE_ROWS } from "../stores/inventory";
@@ -182,18 +182,50 @@ const filteredEmptyBody = computed<string>(() => {
 });
 
 /**
- * The rows as the scroller sees them, each carrying its stable key as a FIELD.
+ * The rows as the scroller sees them: the stable key as a FIELD, the row, and
+ * the DISPLAY TEXT of every target-controlled cell, precomputed.
  *
- * `RecycleScroller` keys by property NAME (`key-field`), not by a function, and
- * neither shipped row type has a single column that is unique on its own — an
- * artifact is keyed by (project, digest) and an observation by (project, digest,
- * request). Wrapping is therefore not an indirection to be optimised away: it is
- * how the row's real identity reaches a component that can only read one field.
- * Computed, so the wrap happens once per window change rather than once per
- * frame.
+ * TWO REASONS, AND THE SECOND ONE IS THE LOAD-BEARING ONE.
+ *
+ * THE KEY AS A FIELD: `RecycleScroller` keys by property NAME (`key-field`), not
+ * by a function, and neither shipped row type has a single column that is unique
+ * on its own — an artifact is keyed by (project, digest) and an observation by
+ * (project, digest, request). Wrapping is how the row's real identity reaches a
+ * component that can only read one field.
+ *
+ * THE DISPLAY TEXT, PRECOMPUTED: `forCell` is O(n) IN THE RAW VALUE and it has
+ * to be. R2 truncates to 256 graphemes but still counts the whole string, so the
+ * affordance can say "truncated at 256 OF 4,194,304" — a `total` that stopped at
+ * the cap would be a number that is always 256 and means nothing. On a 4 MiB
+ * single-line value (hostile fixture case `multi-megabyte-single-line`) that is
+ * a four-million-step grapheme walk, and calling it FROM THE TEMPLATE would run
+ * it on every re-render of that row — which on a virtualised list is every frame
+ * the row is on screen. That is the renderer freeze T-05-47 names, arriving
+ * through the mitigation rather than despite it.
+ *
+ * Computed here, the walk happens ONCE PER WINDOW CHANGE (a page load, a sort, a
+ * filter) and never on the scroll path. The cost is bounded by the same 2,000-row
+ * window that bounds everything else on this surface, and it is off the frame
+ * budget entirely. `tests/frontend-load.spec.ts` is what holds that true: it
+ * scrolls ten thousand rows with the hostile values seeded among them and reports
+ * the frame times it measured.
  */
-const scrollerItems = computed<{ __defminerRowKey: string; row: TRow }[]>(() =>
-  rows.value.map((row) => ({ __defminerRowKey: rowKey(row), row })),
+type ScrollerItem = {
+  __defminerRowKey: string;
+  row: TRow;
+  /** Display text per target-controlled column id. R2 already applied. */
+  display: Readonly<Record<string, string>>;
+};
+
+const scrollerItems = computed<ScrollerItem[]>(() =>
+  rows.value.map((row) => {
+    const display: Record<string, string> = {};
+    for (const column of columns) {
+      if (column.targetControlled)
+        display[column.id] = displayText(column, row);
+    }
+    return { __defminerRowKey: rowKey(row), row, display };
+  }),
 );
 
 /** Skeleton placeholders, one per row of the page that is being fetched. */
@@ -212,10 +244,31 @@ const skeletonRows = computed<number[]>(() =>
  * grapheme-safe truncation at the 256-character cell cap. The cap is bound in
  * the function name rather than passed here, so this call site cannot get it
  * wrong by reaching for the panel's 2,048.
+ *
+ * `forCellText`, NOT `forCell`. The cell renders 256 graphemes and never renders
+ * "Truncated at {shown} of {total} characters" — that affordance is the panel's,
+ * and `total` is what forces a walk over the whole value. See `forCellText`'s own
+ * note for the numbers `tests/frontend-load.spec.ts` measured when this path paid
+ * for a count it does not report.
  */
 function displayText(column: ColumnDefinition<TRow>, row: TRow): string {
-  return forCell(column.text(row)).text;
+  return forCellText(column.text(row));
 }
+
+/**
+ * Display text already computed, keyed by row identity.
+ *
+ * THE WINDOW MOVES BY ONE PAGE AND KEEPS 1,900 OF ITS 2,000 ROWS. Recomputing
+ * all of them on every page load throws away work that has not changed, and on
+ * the hostile values it is the expensive kind of work. Pruned to the current
+ * window on every recompute, so the cache is bounded by the same 2,000 rows that
+ * bound everything else here rather than growing for the life of the session.
+ *
+ * A PLAIN Map, NOT A REACTIVE ONE. Nothing reads it except the computed below,
+ * which already depends on `rows`; making it reactive would add a dependency
+ * cycle for no observer.
+ */
+const displayCache = new Map<string, Readonly<Record<string, string>>>();
 
 // ---------------------------------------------------------------------------
 // INTERACTIONS — ALL OF THEM SERVER-SIDE
@@ -456,7 +509,7 @@ function openEvidence(row: TRow): void {
             <slot :name="`cell-${column.id}`" :row="item.row" :column="column">
               <HighlightSlices
                 v-if="column.targetControlled"
-                :text="displayText(column, item.row)"
+                :text="item.display[column.id]"
               />
               <template v-else>{{ column.text(item.row) }}</template>
             </slot>

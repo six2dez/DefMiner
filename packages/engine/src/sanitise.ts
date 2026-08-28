@@ -263,6 +263,79 @@ function capped(stripped: string, cap: number): Displayed {
  * @param maxGraphemes {@link TABLE_CELL_MAX_GRAPHEMES} or
  *   {@link EVIDENCE_PANEL_MAX_GRAPHEMES}. No default — see the header.
  */
+/**
+ * Truncate an ALREADY-STRIPPED string, WITHOUT counting what was discarded.
+ *
+ * The difference from {@link capped} is one `break`, and it is the difference
+ * between O(n) in the raw value and O(cap). {@link capped} cannot short-circuit
+ * because `total` is the second number in the truncation affordance
+ * ("Truncated at 256 of 4,194,304 characters") and a `total` that stopped at
+ * the cap would always read 256 and mean nothing. A sink that renders only the
+ * TEXT never asks that question, and paying for the answer anyway is the whole
+ * cost — measured at ~170 ms per 4 MiB value on this toolchain.
+ */
+function cappedText(stripped: string, cap: number): string {
+  const segmenter = graphemeSegmenter();
+  const kept: string[] = [];
+
+  if (segmenter === undefined) {
+    for (const codePoint of stripped) {
+      if (kept.length >= cap) break;
+      kept.push(codePoint);
+    }
+  } else {
+    for (const { segment } of segmenter.segment(stripped)) {
+      if (kept.length >= cap) break;
+      kept.push(segment);
+    }
+  }
+
+  return kept.join("");
+}
+
+/**
+ * R2 steps 1–3 for a sink that renders the TEXT AND NOTHING ELSE.
+ *
+ * ===========================================================================
+ * WHY THIS EXISTS BESIDE `forDisplay`, WHICH ALREADY DOES R2
+ * ===========================================================================
+ * THE TABLE CELL DOES NOT ASK HOW LONG THE VALUE WAS. It renders 256 graphemes
+ * and stops; the "Truncated at {shown} of {total} characters" affordance is the
+ * EVIDENCE PANEL's, and the panel is where `total` is worth an O(n) walk.
+ *
+ * Paying for `total` on the cell path was measured by
+ * `tests/frontend-load.spec.ts` and it is not a rounding error. Scrolling ten
+ * thousand rows with the hostile corpus seeded through them:
+ *
+ *   with the counting path   99 of 396 frames over the 32 ms budget,
+ *                            max 442 ms, p95 418 ms, whole scroll 37.4 s
+ *   with this one             0 of 396 frames over budget,
+ *                            max 23.8 ms, p95 17.1 ms, whole scroll 4.0 s
+ *
+ * One visible stutter per page load, on the one surface Phase 5's success
+ * criterion 2 is about. The backstop row exists to catch exactly that, and it
+ * did — by measurement, which is why that row is marked backstop and not
+ * covered.
+ *
+ * The steps are UNCHANGED and share the same two expressions: strip C0/C1,
+ * strip bidi, then truncate grapheme-safe. `sanitise.spec.ts` asserts
+ * `forDisplayText(v, cap) === forDisplay(v, cap).text` over the WHOLE hostile
+ * corpus, so the two paths cannot drift into disagreeing about what R2 means —
+ * a comment could not have held that, and two implementations of a security
+ * rule that nobody diffs is the failure this codebase names repeatedly.
+ *
+ * @param raw target-controlled and assumed hostile.
+ * @param maxGraphemes {@link TABLE_CELL_MAX_GRAPHEMES} or
+ *   {@link EVIDENCE_PANEL_MAX_GRAPHEMES}. No default — see the header.
+ */
+export function forDisplayText(raw: string, maxGraphemes: number): string {
+  assertCap(maxGraphemes);
+  const stripped = raw
+    .replace(C0_C1_CONTROLS, "")
+    .replace(BIDI_OVERRIDES_ISOLATES, "");
+  return cappedText(stripped, maxGraphemes);
+}
+
 export function forDisplay(raw: string, maxGraphemes: number): Displayed {
   assertCap(maxGraphemes);
   const stripped = raw
