@@ -701,12 +701,22 @@ export function auditSource(
  * The modules this gate must have audited.
  *
  * A RENAME is then a visible change rather than a silently shrunk gate — the
- * same reason sql-discipline.spec.ts names its fourteen. Seeded by plan 05-05
- * with the three modules that exist at the moment the gate lands; `display.ts`
- * and `HighlightSlices.vue` join it in the same commit that creates them, which
- * is the only order in which both commits are green.
+ * same reason sql-discipline.spec.ts names its fourteen.
+ *
+ * Seeded by plan 05-05 task 1 with the three modules that existed when the gate
+ * landed, and EXTENDED by task 2 in the same commit that created `display.ts`
+ * and `HighlightSlices.vue`. Stated because the order is not arbitrary: naming
+ * a module before it exists makes the gate's own non-vacuity assertion fail,
+ * which would have left one of the two commits red for a reason unrelated to
+ * anything either commit was about.
  */
-const AUDITED_MODULES = ["index.ts", "backend.ts", "App.vue"];
+const AUDITED_MODULES = [
+  "index.ts",
+  "backend.ts",
+  "App.vue",
+  "display.ts",
+  "HighlightSlices.vue",
+];
 
 describe("rendering safety R1/R2 over packages/frontend/src (UISEC-01, UISEC-03)", () => {
   const { files, dirs } = frontendTree();
@@ -736,6 +746,16 @@ describe("rendering safety R1/R2 over packages/frontend/src (UISEC-01, UISEC-03)
     expect(
       dirs.filter((d) => d !== FRONTEND_SRC),
       "the walk never left packages/frontend/src, so anything in a subdirectory is ungated",
+    ).not.toEqual([]);
+
+    // And the stronger form, available since task 2 put real modules a level
+    // down: the walk did not merely ENTER a subdirectory, it YIELDED files from
+    // one. Both are kept — the first survives a future reorganisation that
+    // empties safety/, and an assertion that can only be satisfied by today's
+    // layout is an assertion that will be deleted rather than fixed.
+    expect(
+      files.filter((f) => f.includes("/safety/")),
+      "no file under src/safety/ reached the gate",
     ).not.toEqual([]);
   });
 

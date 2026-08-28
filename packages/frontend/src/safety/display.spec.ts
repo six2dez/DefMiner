@@ -26,27 +26,26 @@
 // literals, the same rule hostile.fixture.ts states: a literal C0 control or
 // RIGHT-TO-LEFT OVERRIDE is invisible in every diff and every review tool.
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
-
 import {
   BIDI_OVERRIDES_ISOLATES,
   C0_C1_CONTROLS,
   EVIDENCE_PANEL_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 
-import HighlightSlices from "./HighlightSlices.vue";
 import {
-  CELL_TEXT_CLASS,
-  HIGHLIGHT_CLASS,
-  TABLE_ROW_HEIGHT_PX,
   assertHighlightRanges,
+  CELL_TEXT_CLASS,
   copyToClipboard,
   forCell,
   forPanel,
+  HIGHLIGHT_CLASS,
+  TABLE_ROW_HEIGHT_PX,
   truncationNotice,
 } from "./display";
+import HighlightSlices from "./HighlightSlices.vue";
 
 /** A value that sits BETWEEN the two caps — the only length at which a bound
  *  cap and a defaulted one produce different answers. */
@@ -129,9 +128,11 @@ describe("forCell / forPanel — bound caps, no default", () => {
     expect(notice).toBe("Truncated at 256 of 257 characters.");
     // The rule that outranks the copy table: no sentence on this page ever
     // interpolates a target-controlled string. The notice is built from two
-    // integers and DefMiner-authored words, so there is no substring of the
-    // value it could carry.
-    expect(notice).not.toContain("d");
+    // integers and DefMiner-authored words. Asserted against a RUN of the value
+    // rather than a single character, because a single character of a
+    // single-character value is also a letter of "Truncated" — an assertion
+    // that fails on the correct implementation is not evidence of anything.
+    expect(notice).not.toContain(over.slice(0, 4));
   });
 
   it("groups the digits without Intl, so the copy reads the same on every runtime", () => {
@@ -258,8 +259,8 @@ describe("HighlightSlices — three plain strings, never a markup string", () =>
         ],
       },
     });
-    const highlighted = children(wrapper.element).filter((child) =>
-      child.className.includes(HIGHLIGHT_CLASS),
+    const highlighted = children(wrapper.element).filter((child): boolean =>
+      String(child.className).includes(HIGHLIGHT_CLASS),
     );
     expect(highlighted).toHaveLength(2);
     expect(highlighted[0]?.textContent).toBe("abc");
