@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-28T11:58:22.372Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-28T12:24:21.730Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: bfabe9da3762deec973efb3157730a2fc51c17da
+state_head: 30b9c61279f8792d317e1eaefe98e86156c84f0b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 49
+  completed_plans: 50
 ---
 
 # Project State
@@ -28,11 +28,21 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 3 of 12
+Plan: 4 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 05 WAVE 3: THE COUNTERS WERE RIGHT AND ONLY `state.update-progress`
+> WITHHELD. `state.advance-plan` moved the prose position 3 -> 4 of 12 and the
+> frontmatter 49 -> 50 of 62, both correct against the files on disk, so nothing
+> is corrected by hand this time. `state.update-progress` again returned
+> `progress percent withheld by buildStateFrontmatter` and left STATE.md
+> unchanged — the fourth consecutive occurrence, recorded so the run of them is
+> visible rather than rediscovered. The `Progress:` line below still describes
+> PHASE 01 plan execution and is deliberately untouched: phase 01's verdict is
+> not this phase's to move.
 
 > WAVE 45 REPEATED ONLY THE BODY HALF OF THE RECORDED COUNTER DRIFT.
 > `state.advance-plan` correctly returned `last_plan` at 45 of 45 and recomputed
@@ -235,6 +245,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 01 P45 | 14 min | 2 tasks | 1 files |
 | Phase 05 P01 | 34 min | 4 tasks | 38 files |
 | Phase 05 P02 | 21 min | 3 tasks | 4 files |
+| Phase 05 P03 | 19 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -418,6 +429,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: The SQL discipline gate now decomposes statements: UNION arms and subquery spans are project-scoped independently, so a scoped outer query cannot launder an unscoped inner one — Probes Q2 and Q7 in 05-RESEARCH § O-01 both reported [] because the predicate check reads the text from the first WHERE onward. Executed RED before the rules existed.
 - [Phase 05]: Query plans re-verified on SQLite 3.53.4, not Caido target 3.46.0 — no 3.46 binary reachable; assumption A5 narrowed (3.46->3.51 window), not closed — node:sqlite links 3.53.4; /usr/bin/sqlite3 is 3.51.0; Homebrew is 3.53.4. The uniform-seek and bounded-window plans reproduce the research 3.51.0 output exactly, so two independent versions now agree.
 - [Phase 05]: EXPORT_RPC_CHUNK_ROWS = 20,000 — the export is CHUNKED (3 calls for 50,000 rows), derived from a measured 366.87 bytes/row against an 8 MiB per-call budget — A 50,000-row export measures 13.87 MiB CSV / 17.49 MiB JSON. The RPC ceiling is live-only and unmeasurable from a spec, so 8 MiB is a stated budget. D-04 preserved exactly — still no server file.
+- [Phase 05]: P5-D9: forDisplay counts `shown` and `total` in the SAME unit as each other — graphemes where Intl.Segmenter exists, code points where it does not — rather than 05-RESEARCH Pattern 2's mixed grapheme/code-point pair — The research sketch's `total = [...stripped].length` reports `shown: 256, total: 512` for a value of exactly 256 base+combining-mark pairs — a value nothing was truncated from — so the UI would offer a "showing 256 of 512" affordance for an unchanged string, and the plan's own `shown === total` behaviour would be false. Both are now produced by the one walk in capped(). Measured: ~170 ms for 4 MiB through Intl.Segmenter, held under a named 2,000 ms ceiling by the spec so a quadratic rewrite fails rather than merely runs slowly.
+- [Phase 05]: P5-D10: TAB (U+0009) and CR (U+000D) stay in DANGEROUS_LEADS but are neutralised by REMOVAL, not by apostrophe — csvField's control strip runs before the lead test, so they never reach the output and whatever they were hiding becomes the first character and IS apostrophe-prefixed — Strictly stronger than R3's letter, and it closes T-05-14 (a control character used to hide a dangerous CSV lead) by construction rather than by a second rule. The plan's behaviour list expected six apostrophe cases; the executed behaviour is four apostrophe cases and two removals, each with its own asserted case. Both leads stay in the constant because DANGEROUS_LEADS IS R3's six-character list, not the subset one call path happens to reach — a future JSON serialiser reaching the lead test another way gets the complete rule. Stated in csv.ts's header because a reader of the constant would otherwise expect an apostrophe.
+- [Phase 05]: P5-D11: Intl.Segmenter is resolved from globalThis AT CALL TIME and cached against the constructor identity, never captured at module load — Capturing it at module load would make the QuickJS fallback path (Phase 0 measured 100 globals with no Intl entry — assumption A6) untestable from a spec, leaving it argued rather than executed. Keying the cache on the constructor means a spec that sets globalThis.Intl = undefined gets the code-point path on the very next call and the segmenter path on the call after it restores. Three sanitise.spec.ts cases run that way, and the returned object is identical in both paths on purpose: the difference is a CAPABILITY difference, not an API one, so a caller cannot start branching on it.
+- [Phase 05]: P5-D12: forEvidence's control-escape table is keyed by the CHARACTER and prebuilt over both ranges at module load, because digest.spec.ts's DET-07 scan bans charCodeAt / codePointAt / .charAt( / fromCharCode in every non-spec engine source — Found by execution, not review: the first implementation read character.charCodeAt(0) inside the replace callback and turned digest.spec.ts red. DET-07's measurement is Phase 0's — an EMPTY per-character JS loop at 9 ms/MB on a runtime SPIKE-01 measured as having no interrupt — so a per-character index read is a banned shape in engine source whatever it is computing. A 65-entry table built once costs nothing per call and reads no index at all; the regex engine finds the character natively and the map answers in one hop.
+- [Phase 05]: P5-D13: forDisplay and forEvidence take NO default cap parameter (asserted by Function.length === 2) and throw a RangeError on a non-positive or non-integer cap — A default is precisely how a 2,048-character evidence-panel cap leaks into a fixed 32px table row by omission, and the omission is invisible at the call site. The guard was added under deviation Rule 2: with no default, a caller passing 0 or NaN renders every cell empty, which reads as "no data" rather than as a defect.
 
 ### Known Risks Carried Forward
 
@@ -460,8 +476,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T11:58:07.672Z
-**Stopped at:** Completed 05-02-PLAN.md
+**Last session:** 2026-08-28T12:24:21.693Z
+**Stopped at:** Completed 05-03-PLAN.md
 **Resume file:** None
 
 ### Blockers
