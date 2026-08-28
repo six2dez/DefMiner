@@ -37,7 +37,17 @@ import { INVALIDATION_EVENT } from "@defminer/engine/contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ArtifactRow } from "../backend";
-import type { CountRequest, DefMinerBackendSdk, ObservationRow } from "./client";
+
+import type {
+  BackendClient,
+  ContractVersions,
+  CountRequest,
+  DefMinerBackendSdk,
+  ObservationRow,
+  RpcFailure,
+  RpcReason,
+  RpcResult,
+} from "./client";
 import {
   createBackendClient,
   FRONTEND_CONTRACT_VERSION,
@@ -109,7 +119,11 @@ const COUNT_REQUEST: CountRequest = {
 type Listener = (summary: InvalidationSummary) => void;
 
 type Stub = {
-  readonly sdk: DefMinerBackendSdk;
+  /** Mutable so the factory can attach it after the object exists. NOT spread
+   *  into a copy on the way out: a copy would leave the stub's own closure
+   *  reading the ORIGINAL object, so `stub.behaviour = "reject"` in a test
+   *  would change nothing and every failure case would silently pass. */
+  sdk: DefMinerBackendSdk;
   readonly calls: string[];
   readonly listeners: Listener[];
   emit: (summary: InvalidationSummary) => void;
@@ -147,7 +161,8 @@ function makeStub(): Stub {
 
   const sdk: DefMinerBackendSdk = {
     backend: {
-      getContractVersion: () => answer("getContractVersion", stub.backendVersion),
+      getContractVersion: () =>
+        answer("getContractVersion", stub.backendVersion),
       listArtifactsPage: (request) => {
         expect(request).toEqual(PAGE_REQUEST);
         return answer("listArtifactsPage", artifactPage(2));
@@ -173,7 +188,8 @@ function makeStub(): Stub {
     },
   };
 
-  return { ...stub, sdk };
+  stub.sdk = sdk;
+  return stub;
 }
 
 afterEach(() => {
@@ -185,9 +201,13 @@ afterEach(() => {
 describe("createBackendClient — the typed route to the backend", () => {
   it("forwards each endpoint and returns the typed response", async () => {
     const stub = makeStub();
-    const client = createBackendClient(stub.sdk);
+    // Annotated rather than inferred: the exported type is part of what this
+    // module ships, and a client that only satisfies its own inference is a
+    // client no other package can hold in a variable.
+    const client: BackendClient = createBackendClient(stub.sdk);
 
-    const artifacts = await client.listArtifactsPage(PAGE_REQUEST);
+    const artifacts: RpcResult<PageResponse<ArtifactRow>> =
+      await client.listArtifactsPage(PAGE_REQUEST);
     const observations = await client.listObservationsPage(PAGE_REQUEST);
     const total = await client.countInventory(COUNT_REQUEST);
 
@@ -220,21 +240,19 @@ describe("createBackendClient — the typed route to the backend", () => {
     const stub = makeStub();
     stub.backendVersion = FRONTEND_CONTRACT_VERSION + 1;
     const client = createBackendClient(stub.sdk);
+    const expected: ContractVersions = {
+      frontend: FRONTEND_CONTRACT_VERSION,
+      backend: FRONTEND_CONTRACT_VERSION + 1,
+    };
 
     const checked = await client.checkContractVersion();
 
     expect(checked).toEqual({
       ok: false,
       reason: "contract-version-mismatch",
-      versions: {
-        frontend: FRONTEND_CONTRACT_VERSION,
-        backend: FRONTEND_CONTRACT_VERSION + 1,
-      },
+      versions: expected,
     });
-    expect(client.contractMismatch()).toEqual({
-      frontend: FRONTEND_CONTRACT_VERSION,
-      backend: FRONTEND_CONTRACT_VERSION + 1,
-    });
+    expect(client.contractMismatch()).toEqual(expected);
 
     // THE ASSERTION THIS ENDPOINT EXISTS FOR: not that a mismatch is reported,
     // but that a mismatched client STOPS READING. A warning beside a rendered
@@ -246,10 +264,7 @@ describe("createBackendClient — the typed route to the backend", () => {
     expect(page).toEqual({
       ok: false,
       reason: "contract-version-mismatch",
-      versions: {
-        frontend: FRONTEND_CONTRACT_VERSION,
-        backend: FRONTEND_CONTRACT_VERSION + 1,
-      },
+      versions: expected,
     });
     expect(count.ok).toBe(false);
     expect(stub.calls).toEqual(["getContractVersion"]);
@@ -264,7 +279,12 @@ describe("createBackendClient — the typed route to the backend", () => {
 
     const page = await client.listArtifactsPage(PAGE_REQUEST);
 
-    expect(page).toEqual({ ok: false, reason: "rpc-rejected", versions: null });
+    const expected: RpcFailure = {
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    };
+    expect(page).toEqual(expected);
 
     // The general form, not a hand-picked substring: EVERY token of five
     // characters or more from what the backend said must be absent from what
@@ -277,9 +297,10 @@ describe("createBackendClient — the typed route to the backend", () => {
       .filter((token) => token.length >= 5);
     expect(tokens.length).toBeGreaterThan(3);
     for (const token of tokens) {
-      expect(serialised, `leaked \`${token}\` from the rejection`).not.toContain(
-        token,
-      );
+      expect(
+        serialised,
+        `leaked \`${token}\` from the rejection`,
+      ).not.toContain(token);
     }
   });
 
@@ -308,6 +329,36 @@ describe("createBackendClient — the typed route to the backend", () => {
     await vi.advanceTimersByTimeAsync(RPC_TIMEOUT_MS - 1);
 
     await expect(pending).resolves.toEqual({ ok: true, value: TOTAL });
+  });
+
+  it("answers only from the closed, DefMiner-authored reason vocabulary", async () => {
+    // The claim on `RpcReason` is that it is CLOSED — three members and no
+    // `"unknown"`. A reason outside this list is a reason the UI has no copy
+    // row for, which renders as a blank error state rather than as anything an
+    // operator can act on.
+    const vocabulary: readonly RpcReason[] = [
+      "rpc-rejected",
+      "rpc-timeout",
+      "contract-version-mismatch",
+    ];
+
+    const rejecting = makeStub();
+    rejecting.behaviour = "reject";
+    rejecting.rejectionMessage = "anything at all";
+    const mismatched = makeStub();
+    mismatched.backendVersion = FRONTEND_CONTRACT_VERSION + 9;
+    const mismatchedClient = createBackendClient(mismatched.sdk);
+    await mismatchedClient.checkContractVersion();
+
+    const observed: RpcResult<VisibleTotal>[] = [
+      await createBackendClient(rejecting.sdk).countInventory(COUNT_REQUEST),
+      await mismatchedClient.countInventory(COUNT_REQUEST),
+    ];
+
+    for (const result of observed) {
+      expect(result.ok).toBe(false);
+      if (result.ok === false) expect(vocabulary).toContain(result.reason);
+    }
   });
 
   it("states the timeout in the error copy from ONE constant", () => {
@@ -343,7 +394,9 @@ describe("subscribeInvalidation — the handle is returned, not swallowed", () =
     const client = createBackendClient(stub.sdk);
     const seen: InvalidationSummary[] = [];
 
-    const handle = client.subscribeInvalidation((summary) => seen.push(summary));
+    const handle = client.subscribeInvalidation((summary) =>
+      seen.push(summary),
+    );
     handle.stop();
     stub.emit({
       projectId: "p1",
