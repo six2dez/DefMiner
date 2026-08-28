@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     "./chunker": "./src/chunker.ts",
+    "./contract": "./src/contract.ts",
     "./csv": "./src/csv.ts",
     "./deadline": "./src/deadline.ts",
     "./decode": "./src/decode.ts",
