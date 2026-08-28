@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFixtureDb,
   listTables,
+  tableInfo,
   userVersion,
 } from "../../test/fixtures/sqlite-fixture";
 
@@ -248,6 +249,111 @@ describe("forward-only migration ladder (STORE-05)", () => {
       expect(failed?.step).toBe("ddl_v2");
     } finally {
       fx.close();
+    }
+  });
+
+  it("the ladder head is step v3 — the version bump IS the appended entry", () => {
+    // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
+    // whole version bump and there is no second place to forget. Asserted against
+    // the literal 3 rather than against `MIGRATIONS.length`: a step number that
+    // silently skipped or repeated would satisfy a length comparison.
+    expect(SCHEMA_VERSION).toBe(3);
+    expect(MIGRATIONS.find((m) => m.v === 3), "step v3 is missing").toBeDefined();
+  });
+
+  it("step v3 brings `audit` to a database that stopped at v1, losing no seeded row", async () => {
+    const fx = createFixtureDb();
+    try {
+      applyV1Only(fx);
+      seedArtifacts(fx);
+      const before = readArtifacts(fx);
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(report.version).toBe(3);
+      expect(userVersion(fx.raw)).toBe(3);
+      expect(readArtifacts(fx)).toEqual(before);
+
+      expect(listTables(fx.raw)).toContain("audit");
+
+      // The table is USABLE, not merely present: the natural key, the non-empty
+      // project scope and the closed `kind` vocabulary are all in force. A
+      // `listTables` assertion alone would pass against a table with the wrong
+      // shape entirely.
+      const cols = tableInfo(fx.raw, "audit").map((c) => c.name);
+      expect(cols).toEqual([
+        "project_id",
+        "event_id",
+        "at",
+        "kind",
+        "subject",
+        "detail",
+      ]);
+      const pk = tableInfo(fx.raw, "audit")
+        .filter((c) => c.pk > 0)
+        .sort((a, b) => a.pk - b.pk)
+        .map((c) => c.name);
+      expect(pk).toEqual(["project_id", "event_id"]);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("step v3's indexes exist and their DIRECTIONS are the ones the keyset reads need", async () => {
+    const fx = createFixtureDb();
+    try {
+      await migrate(fx.db);
+
+      const idx = fx.raw
+        .prepare(
+          `SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name LIKE 'idx_%'`,
+        )
+        .all()
+        .map((r) => ({ ...r })) as { name: string; sql: string | null }[];
+      const byName = new Map(idx.map((r) => [r.name, r.sql ?? ""]));
+
+      expect(byName.has("idx_audit_at")).toBe(true);
+
+      // UNIFORM DESC on both non-project columns. Read out of `sqlite_master`
+      // rather than out of the source text, so this asserts what the DATABASE
+      // built and not what the migration string says.
+      const artifactsKeyset = byName.get("idx_artifacts_keyset") ?? "";
+      expect(artifactsKeyset).toMatch(/last_seen_at\s+DESC/i);
+      expect(artifactsKeyset).toMatch(/sha256\s+DESC/i);
+
+      const observationsKeyset = byName.get("idx_observations_keyset") ?? "";
+      expect(observationsKeyset).toMatch(/observed_at\s+DESC/i);
+      expect(observationsKeyset).toMatch(/request_id\s+DESC/i);
+
+      // And the SHIPPED list statements' own indexes are untouched beside them —
+      // the new pair is an addition, not a replacement.
+      expect(byName.has("idx_artifacts_last_seen")).toBe(true);
+      expect(byName.has("idx_observations_observed_at")).toBe(true);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("EVERY statement in EVERY step is create-if-not-exists, so a partial prior run is recoverable", () => {
+    // The whole justification for batching a step's DDL into one `exec` is that
+    // no statement in it can fail on a re-run. A single statement without the
+    // guard makes the batch a write that CAN fail, which strands an open write
+    // transaction on an unreachable pooled connection. Checked over the WHOLE
+    // ladder rather than over the new step alone, so the rule cannot decay.
+    for (const m of MIGRATIONS) {
+      const statements = m.sql
+        .split(";")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0 && /^CREATE\b/i.test(t));
+      expect(statements.length, `step v${m.v} declared no DDL`).toBeGreaterThan(
+        0,
+      );
+      for (const st of statements) {
+        expect(
+          /^CREATE\s+(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\b/i.test(st),
+          `step v${m.v} has a statement without IF NOT EXISTS: ${st.slice(0, 80)}`,
+        ).toBe(true);
+      }
     }
   });
 

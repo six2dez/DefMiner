@@ -8,6 +8,10 @@
 // Step v2 (plan 01-04) adds `analyses` and `settings`, plus the two write-time
 // guards that retrofit STORE-02's non-empty `project_id` invariant onto the v1
 // tables WITHOUT editing v1 — see the note on triggers above step v2.
+// Step v3 (plan 05-06) adds `audit` — the fifth table, approved at this plan's
+// one-way checkpoint (option-a, 2026-08-28) — and two direction-explicit keyset
+// indexes on the v1 tables. Index additions, not table additions: the approved
+// table set grew by exactly one.
 
 import type { Database } from "sqlite";
 
@@ -134,6 +138,75 @@ CREATE TRIGGER IF NOT EXISTS trg_observations_project_scope
   BEFORE INSERT ON observations
   WHEN length(NEW.project_id) = 0 OR length(NEW.sha256) = 0
   BEGIN SELECT RAISE(ABORT, 'observations: project_id and sha256 must be non-empty'); END;
+`,
+  },
+  /**
+   * Step v3 — plan 05-06. `audit`, and the two keyset indexes plan 05-07 reads
+   * through. Approved at a `blocking-human` checkpoint on 2026-08-28 (option-a),
+   * because `schema.spec.ts` names its table set as the one THE OPERATOR approved
+   * at plan 01-01's one-way checkpoint — so a fifth table is an operator-visible
+   * addition by that file's own statement, and this ladder never takes a step back.
+   *
+   * WHAT `audit` IS FOR. Seven operator actions are each either irreversible, a
+   * disclosure, or a silent change to what the operator is shown: a projected
+   * Finding is permanent, a raw export leaves the tool in cleartext, a revealed
+   * value cannot be unseen, and triage and suppression quietly change which rows
+   * the operator is ever offered. This table is the only record that any of them
+   * happened. It is append-only — one insert with a do-nothing conflict clause on
+   * `(project_id, event_id)`, so a replay writes nothing new and no invariant ever
+   * needs two statements on a connection where `BEGIN` does not span `exec` calls.
+   *
+   * WHY THE IDENTIFIER COLUMN IS NOT THE OBVIOUS NAME. `event_id`, never `id`:
+   * `schema.spec.ts`'s `FORBIDDEN_COLUMNS` bans the bare name package-wide with
+   * the reason, and the reason is a measurement — `last_insert_rowid()` is
+   * unusable on this pooled connection (decision P1-D1), so a surrogate id would
+   * be a row identity nothing can read back. The key is therefore NATURAL and
+   * caller-generated: the call site mints a UUID, which makes the caller the owner
+   * of idempotency and makes a retry a no-op instead of a duplicate.
+   *
+   * WHY THE VOCABULARY IS COMPLETE BEFORE FOUR OF ITS MEMBERS HAVE CALLERS. Four
+   * of the seven kinds are only written by the deferred pass after Phase 4. They
+   * are listed here anyway, because the asymmetry is not close: an unused enum
+   * value costs nothing at runtime, while a MISSING one costs a second permanent
+   * step in a ladder whose entries can never be edited. The vocabulary is stated
+   * once, here and in `audit.ts`'s `AUDIT_KINDS`, and nowhere else restates a
+   * member string.
+   *
+   * WHY THE TWO NEW INDEXES RUN IN A DIFFERENT DIRECTION FROM THE SHIPPED LIST
+   * STATEMENTS, AND WHY THAT IS NOT A CONTRADICTION. `listArtifacts` orders
+   * `last_seen_at DESC, sha256 ASC` and `listObservations` orders
+   * `observed_at DESC, request_id ASC` — MIXED directions. Those statements are
+   * not changed here and keep their own indexes; they are separate statements
+   * serving a whole-page read. The two indexes below are UNIFORM `DESC, DESC`
+   * because they serve the NEW paginated reads, whose row-value cursor
+   * (`(a, b) < (?, ?)`) requires a single direction to be CORRECT at all, not
+   * merely fast — a mixed-direction pair makes the row-value comparison mean
+   * something other than "the next page". Plan 05-02 measured the cost half of
+   * this by contrast: a mixed-direction index under a uniform-direction ORDER BY
+   * plans a temporary sort structure where the uniform index seeks. THAT
+   * MEASUREMENT WAS TAKEN ON SQLite 3.51.0 AND 3.53.4, NOT on Caido's shipped
+   * 3.46.0 — no 3.46 binary was reachable — so it is a result narrowed to a
+   * 3.46 -> 3.51 window and disclosed as such, never claimed as verified on the
+   * shipped runtime. The CORRECTNESS half does not depend on a query plan.
+   */
+  {
+    v: 3,
+    sql: `
+CREATE TABLE IF NOT EXISTS audit (
+  project_id TEXT    NOT NULL CHECK (length(project_id) > 0),
+  event_id   TEXT    NOT NULL CHECK (length(event_id) > 0),
+  at         INTEGER NOT NULL,
+  kind       TEXT    NOT NULL CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed')),
+  subject    TEXT    NOT NULL,
+  detail     TEXT,
+  PRIMARY KEY (project_id, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_audit_at
+  ON audit (project_id, at);
+CREATE INDEX IF NOT EXISTS idx_artifacts_keyset
+  ON artifacts (project_id, last_seen_at DESC, sha256 DESC);
+CREATE INDEX IF NOT EXISTS idx_observations_keyset
+  ON observations (project_id, observed_at DESC, request_id DESC);
 `,
   },
 ];

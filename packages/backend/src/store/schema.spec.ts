@@ -27,9 +27,25 @@ import {
 
 import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
 
-/** The four tables the operator approved at plan 01-01's one-way checkpoint
- *  (option-a, 2026-08-20). Exactly these, in this order. */
-const EXPECTED_TABLES = ["analyses", "artifacts", "observations", "settings"];
+/** The five tables the operator approved, across TWO one-way checkpoints.
+ *  Exactly these, in this order.
+ *
+ *  - `analyses`, `artifacts`, `observations`, `settings` — plan 01-01's one-way
+ *    checkpoint (option-a, 2026-08-20).
+ *  - `audit` — plan 05-06's `blocking-human` checkpoint (option-a, 2026-08-28),
+ *    which was required precisely BECAUSE this comment named its table set as the
+ *    operator's rather than the planner's.
+ *
+ *  BOTH approval events are named on purpose. A comment reading "four" above an
+ *  array holding five is the exact drift shape this repo keeps catching, and it
+ *  would have been introduced here by the edit that added the fifth entry. */
+const EXPECTED_TABLES = [
+  "analyses",
+  "artifacts",
+  "audit",
+  "observations",
+  "settings",
+];
 
 /**
  * EVERY column of EVERY table, named.
@@ -412,6 +428,12 @@ const COLUMN_ALLOWLIST: Record<string, string[]> = {
     "error",
   ],
   settings: ["project_id", "key", "value", "updated_at"],
+  // `event_id`, NOT `id` — the forbidden-column map below states the reason, and
+  // the reason is a measurement rather than a preference. `subject` holds an
+  // entity key or a rule key and `detail` a DefMiner-authored reason code plus
+  // counts; neither may hold a raw value or a URL, which is what makes this
+  // allowlist the mitigation and not merely a manifest.
+  audit: ["project_id", "event_id", "at", "kind", "subject", "detail"],
 };
 
 /** Column names that must never exist anywhere, whatever the table. Named rather
