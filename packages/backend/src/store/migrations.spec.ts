@@ -258,7 +258,10 @@ describe("forward-only migration ladder (STORE-05)", () => {
     // the literal 3 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
     expect(SCHEMA_VERSION).toBe(3);
-    expect(MIGRATIONS.find((m) => m.v === 3), "step v3 is missing").toBeDefined();
+    expect(
+      MIGRATIONS.find((m) => m.v === 3),
+      "step v3 is missing",
+    ).toBeDefined();
   });
 
   it("step v3 brings `audit` to a database that stopped at v1, losing no seeded row", async () => {

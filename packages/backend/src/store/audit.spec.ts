@@ -12,16 +12,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { URL_REDACTION } from "../telemetry";
-
 import { createFixtureDb } from "../../test/fixtures/sqlite-fixture";
+import { URL_REDACTION } from "../telemetry";
 
 import {
   AUDIT_KINDS,
   AUDIT_LIST_DEFAULT_LIMIT,
+  type AuditKind,
   listAudit,
   recordAudit,
-  type AuditKind,
 } from "./audit";
 import { migrate } from "./migrations";
 
@@ -325,9 +324,9 @@ describe("listAudit — newest first, always bounded, never cross-project", () =
 
       expect(await listAudit(fx.db, PROJECT)).toHaveLength(4);
       expect(await listAudit(fx.db, PROJECT, 2)).toHaveLength(2);
-      expect((await listAudit(fx.db, PROJECT, 2)).map((r) => r.event_id)).toEqual(
-        ["evt-d", "evt-c"],
-      );
+      expect(
+        (await listAudit(fx.db, PROJECT, 2)).map((r) => r.event_id),
+      ).toEqual(["evt-d", "evt-c"]);
 
       // Zero, negative and non-finite are not "unbounded" — they fall back to
       // the default, the same way `boundOrDefault` guards the retention bounds.
