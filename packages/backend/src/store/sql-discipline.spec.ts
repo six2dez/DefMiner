@@ -541,4 +541,121 @@ describe("the gate's own failure paths", () => {
       rulesOf("async function w() { const stmt = await db.prepare(SQL); }"),
     ).toEqual([]);
   });
+
+  // -------------------------------------------------------------------------
+  // THE FIVE SHAPES `05-RESEARCH.md § O-01` MEASURED THE GATE SILENT ON.
+  //
+  // That section drove this file's own exported `auditSource` against twenty-four
+  // candidate statements. Five reported `[]`, and each fixture below is the probe
+  // text from that table rather than a paraphrase of it, so the thing asserted
+  // here and the thing measured there are the SAME statement.
+  //
+  // None of the five was a live exposure — no such statement existed in the tree.
+  // Four of them (CTE, unscoped subquery, unscoped UNION arm, INSERT … SELECT)
+  // are the natural spelling of a suppression filter, a tab-count aggregate and
+  // an audit write, which is precisely what Phase 5 is about to write. The rules
+  // therefore land BEFORE the first Phase 5 query, not after it.
+  //
+  // Every one is PAIRED. The positive proves the rule fires; the negative is the
+  // correct spelling of the same intent and proves the rule is a rule rather than
+  // a ban on the whole shape.
+  // -------------------------------------------------------------------------
+
+  /** Q5 — a CTE head. `statementKind` returns `"WITH"`, which `isMultiRowStatement`
+   *  rejects, so the project-scoping check never ran on it at all. */
+  const Q5_CTE_UNSCOPED = `const SQL = "WITH s AS (SELECT 1) SELECT a FROM entities LIMIT ?";`;
+  const Q5_CTE_SCOPED = `const SQL = "WITH s AS (SELECT 1) SELECT a FROM entities WHERE project_id = ? LIMIT ?";`;
+
+  /** Q10 — a multi-row WRITE. `statementKind` returns `"INSERT"`, which the
+   *  multi-row check also rejects, because an INSERT was assumed to touch one row. */
+  const Q10_INSERT_SELECT = `const SQL = "INSERT INTO audit (project_id, event_id) SELECT project_id, 'x' FROM entities";`;
+  const Q10_INSERT_VALUES = `const SQL = "INSERT INTO audit (project_id, event_id, kind, at) VALUES (?, ?, ?, ?)";`;
+
+  /** Q2 — the outer query IS scoped, so the whole-statement predicate check passes
+   *  while the subquery reads every project's suppressions. */
+  const Q2_SUBQUERY_UNSCOPED = `const SQL = "SELECT a FROM entities WHERE project_id = ? AND fingerprint IN (SELECT fingerprint FROM suppressions)";`;
+  const Q2_SUBQUERY_SCOPED = `const SQL = "SELECT a FROM entities WHERE project_id = ? AND fingerprint IN (SELECT s.fingerprint FROM suppressions s WHERE s.project_id = ?)";`;
+
+  /** Q7 — the FIRST arm carries `project_id`, and the predicate check reads the
+   *  text from the first WHERE onward, so the second arm rides in behind it. */
+  const Q7_UNION_UNSCOPED = `const SQL = "SELECT a FROM entities WHERE project_id = ? UNION ALL SELECT a FROM archived_entities";`;
+  const Q7_UNION_SCOPED = `const SQL = "SELECT a FROM entities WHERE project_id = ? UNION ALL SELECT a FROM archived_entities WHERE project_id = ?";`;
+
+  /** P1/P2/P3 — the three builder shapes. `concatenated-sql` only inspects `+`
+   *  operands that are THEMSELVES SQL-looking literals, so composing named
+   *  fragments was invisible in all three spellings. Detected at the SINK: `a + b`
+   *  over two identifiers is ordinary string work everywhere else in the language
+   *  and only becomes a SQL defect at the moment it is executed. */
+  //
+  //  Each is wrapped in a function because a module-scope `await` is a DIFFERENT
+  //  rule of this same gate, and a fixture that trips two rules cannot prove
+  //  which of them the correct form clears.
+  const P1_PLUS_FRAGMENTS = `async function q() { const stmt = await db.prepare(BASE + ORDER + " LIMIT ?"); }`;
+  const P1_COMPLETE_LITERAL =
+    "async function q() { const stmt = await db.prepare(`SELECT a FROM entities WHERE project_id = ? LIMIT ?`); }";
+  const P2_TEMPLATE_FRAGMENTS =
+    "async function q() { const stmt = await db.prepare(`${BASE} ORDER BY ${col} LIMIT ?`); }";
+  const P3_JOIN_FRAGMENTS = `async function q() { const stmt = await db.prepare(["SELECT a FROM entities WHERE project_id = ?", " ORDER BY a"].join(" ")); }`;
+  const P3_JOIN_NON_SQL = `const label = [a, b].join(" ");`;
+
+  it("fails on a CTE head that scopes on nothing (probe Q5)", () => {
+    expect(rulesOf(Q5_CTE_UNSCOPED)).toContain("cte-unscoped");
+    expect(rulesOf(Q5_CTE_SCOPED)).not.toContain("cte-unscoped");
+  });
+
+  it("fails on INSERT … SELECT, and not on INSERT … VALUES (probe Q10)", () => {
+    expect(rulesOf(Q10_INSERT_SELECT)).toContain("insert-select");
+    expect(rulesOf(Q10_INSERT_VALUES)).not.toContain("insert-select");
+    // The one-row INSERT is not merely un-flagged for this rule — it is clean.
+    expect(rulesOf(Q10_INSERT_VALUES)).toEqual([]);
+  });
+
+  it("fails on an unscoped subquery under a scoped outer query (probe Q2)", () => {
+    expect(rulesOf(Q2_SUBQUERY_UNSCOPED)).toContain("unscoped-subquery");
+    expect(rulesOf(Q2_SUBQUERY_SCOPED)).not.toContain("unscoped-subquery");
+  });
+
+  it("fails on a UNION arm that scopes on nothing (probe Q7)", () => {
+    expect(rulesOf(Q7_UNION_UNSCOPED)).toContain("unscoped-union-arm");
+    expect(rulesOf(Q7_UNION_SCOPED)).not.toContain("unscoped-union-arm");
+  });
+
+  it("fails on all three fragment-composition shapes (probes P1, P2, P3)", () => {
+    expect(rulesOf(P1_PLUS_FRAGMENTS)).toContain("fragment-composition");
+    expect(rulesOf(P2_TEMPLATE_FRAGMENTS)).toContain("fragment-composition");
+    expect(rulesOf(P3_JOIN_FRAGMENTS)).toContain("fragment-composition");
+    // A single COMPLETE literal handed to the same sink is the correct form.
+    expect(rulesOf(P1_COMPLETE_LITERAL)).toEqual([]);
+    // And a join over strings that are not SQL is not this repo's business.
+    expect(rulesOf(P3_JOIN_NON_SQL)).toEqual([]);
+  });
+
+  it("every one of the five new rule names is REACHABLE from a fixture", () => {
+    // Non-vacuity for the widening itself. A rule that no fixture can reach is a
+    // rule whose failing path has never run, which is the condition this file's
+    // header exists to forbid.
+    const reached = new Set(
+      [
+        Q5_CTE_UNSCOPED,
+        Q10_INSERT_SELECT,
+        Q2_SUBQUERY_UNSCOPED,
+        Q7_UNION_UNSCOPED,
+        P1_PLUS_FRAGMENTS,
+        P2_TEMPLATE_FRAGMENTS,
+        P3_JOIN_FRAGMENTS,
+      ].flatMap((src) => rulesOf(src)),
+    );
+    for (const name of [
+      "cte-unscoped",
+      "insert-select",
+      "unscoped-subquery",
+      "unscoped-union-arm",
+      "fragment-composition",
+    ]) {
+      expect(
+        [...reached],
+        `${name} is not reachable from any fixture`,
+      ).toContain(name);
+    }
+  });
 });
