@@ -31,5 +31,10 @@
     "allowJs": true,
     "checkJs": false
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "*.ts", "*.mjs"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "*.ts", "*.mjs"],
+  // scripts/ci/lint-r1.spec.ts writes deliberate rule violations here for the
+  // life of one test. They must be visible to the LINT program
+  // (tsconfig.eslint.json includes them) and invisible to the TYPECHECK, which
+  // has no business compiling a file that exists for three milliseconds.
+  "exclude": ["src/__r1_fixtures__/**"]
 }

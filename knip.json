@@ -41,6 +41,28 @@
         // @caido/quickjs-types. See scripts/ci/check-bundle-imports.mjs.
         "sqlite"
       ]
+    },
+    "packages/frontend": {
+      // `src/index.ts` is the plugin entry Caido calls. The vite / tailwind /
+      // postcss configs are NOT listed: knip already treats them as entries by
+      // default and naming them again is a redundant pattern it reports.
+      "entry": ["src/index.ts", "src/**/*.spec.ts", "externals.mjs"],
+      "project": ["src/**/*.{ts,vue}", "*.{ts,mjs,cjs}"],
+      "ignoreDependencies": [
+        // Declared by the plan so the frontend is a real workspace member with
+        // a resolvable path to the SDK-free engine, and NOT yet imported: the
+        // shared sanitisation and CSV helpers that will live there are plans
+        // 05-03 and 05-11. Remove this entry when the first import lands.
+        "@defminer/engine",
+        // Fixed by 05-UI-SPEC.md as the stack later Phase 5 plans build on —
+        // vue-virtual-scroller is the RecycleScroller plan 05-07's table needs
+        // and @vueuse/core the composables 05-08 needs. Both are pinned EXACTLY
+        // here so those plans cannot resolve a version other than the one this
+        // phase's design was measured against. Remove when 05-07 and 05-08
+        // import them.
+        "vue-virtual-scroller",
+        "@vueuse/core"
+      ]
     }
   },
   // RESTORED TO `error` BY PLAN 01-03, as plan 01-02 asked for in this file.
@@ -69,6 +91,9 @@
   //   but it is not nothing and should be revisited when the frontend in Phase 5
   //   gives most of these types a cross-module consumer.
   //
+  //   CLOSED BY PLAN 05-01 — `false`, see below. The note above named the exact
+  //   condition for closing it and Phase 5 met it.
+  //
   //   One `@public` JSDoc tag, on store/db.ts's `resetDbHandle` — the single
   //   remaining export with no consumer, named for plan 01-05 one wave away. The
   //   tag puts that claim in the file somebody would edit rather than in a config
@@ -77,7 +102,35 @@
   //   is now `resetDbHandleForTest`, consumed by the specs like the other three
   //   reset seams, and needs no tag.
   //
-  "ignoreExportsUsedInFile": true,
+  // Exports tagged `@internal` are excluded from reporting.
+  //
+  // This is what makes `ignoreExportsUsedInFile: false` liveable without either
+  // deleting seams that are spoken for or reinstating a flag that hides a whole
+  // class. The exemption moves from this file, which nobody reads while editing
+  // code, into a JSDoc tag on the declaration itself — the same reasoning plan
+  // 01-03 gave for the one `@public` tag it used, and `@internal` is a standard
+  // TSDoc tag that means exactly what is being claimed: not part of this
+  // package's public surface.
+  //
+  // A NEW dead export is still reported. Silencing one is a deliberate, visible,
+  // reviewable edit at the declaration.
+  "tags": ["-internal"],
+
+  // FALSE as of plan 05-01, discharging the note above.
+  //
+  // The hole was opened in Phase 1 for a stated reason — sixteen types exported
+  // but referenced only inside their own module — and left open with a stated
+  // condition for closing it: "when the frontend in Phase 5 gives most of these
+  // types a cross-module consumer". Phase 5 arrived, so the flag comes off
+  // rather than becoming permanent by default, which is how a temporary
+  // exemption normally ends its life.
+  //
+  // With it off, a genuinely dead export that happens to be referenced once in
+  // its own file is reported again. Any export that still needs an exemption is
+  // named INDIVIDUALLY below rather than the flag being reinstated wholesale:
+  // a per-export exemption states which one and invites the question why; a
+  // global flag hides the whole class and stops anyone asking.
+  "ignoreExportsUsedInFile": false,
   "rules": {
     "exports": "error",
     "types": "error"

@@ -9,22 +9,55 @@
 // to the API because Caido keeps some config repos private. See 01-02-SUMMARY.md
 // § "The human-approved package gate".
 //
-// `vue: false` — P1-D5 defers the frontend to Phase 5, so there is no .vue file
-// in this repo and enabling the Vue rules would only cost lint time. (The two
-// Vue packages still arrive transitively; that was accepted knowingly.)
+// `vue: true` — TURNED ON BY PLAN 05-01, which is what P1-D5 deferred it for.
+// packages/frontend now exists and App.vue is a real single-file component, so
+// the Vue rules have something to check. The two Vue packages were already
+// arriving transitively; this stops paying for them and getting nothing.
 // `node: true` — the engine, the CI gates and every script run on Node.
-// `compat: false` — eslint-plugin-compat checks BROWSERSLIST targets, and with
+// `compat: true` — ALSO turned on by plan 05-01, and it could not be turned on
+// before this one was. eslint-plugin-compat checks BROWSERSLIST targets; with
 // no browserslist config it falls back to `op_mini all` and reports `Promise`
-// and `URL` as unsupported. Nothing in this repo ships to a browser: the
-// backend runs in Caido's QuickJS (whose real capability surface is measured in
-// .../results/runs/20260820T121824Z-31596/raw/capabilities.json, not inferred
-// from a browser table) and the engine runs on Node. Re-enable it in Phase 5
-// WITH a browserslist, when a frontend exists.
+// and `URL` unsupported, which is why Phase 1 left it off rather than accept
+// permanent noise. `.browserslistrc` now carries a single measured target —
+// Caido 0.58.2's Electron renderer reports Chrome/148, and the file records
+// both the measurement and why the target sits below it.
+//
+// Note what compat does NOT cover, so nobody reads this as broader than it is:
+// the BACKEND runs in Caido's QuickJS, whose real capability surface is
+// measured in .../results/runs/20260820T121824Z-31596/raw/capabilities.json and
+// is not a browser table. A browserslist says nothing about QuickJS. The DIST-05
+// bundle gate remains the only thing that answers that question.
 
 import { defaultConfig } from "@caido/eslint-config";
 
+const preset = defaultConfig({ vue: true, node: true, compat: true });
+
+/**
+ * The `vue` plugin object, taken from the preset rather than imported.
+ *
+ * Flat config scopes plugin names PER CONFIG OBJECT: a block that sets
+ * `vue/no-v-html` must define `vue` itself, or ESLint refuses to start with
+ * "could not find plugin". The alternative is adding `eslint-plugin-vue` as a
+ * direct dependency — but it is already in the tree, underneath
+ * @caido/eslint-config, and declaring it separately would create a SECOND
+ * version to drift. Reaching into the preset guarantees the override applies to
+ * the same plugin instance the preset itself configured.
+ */
+const vuePlugin = preset.find((c) => c?.plugins?.vue)?.plugins.vue;
+
+if (vuePlugin === undefined) {
+  // Loud, not silent. If a preset bump moves the plugin, the R1 override below
+  // would otherwise vanish quietly and take rendering safety's lint half with
+  // it — a control that stops existing without anything failing is the exact
+  // shape of defect this repo keeps finding.
+  throw new Error(
+    "@caido/eslint-config no longer exposes the `vue` plugin; the R1 override " +
+      "in this file cannot be applied. Fix it here — do not delete the block.",
+  );
+}
+
 export default [
-  ...defaultConfig({ vue: false, node: true, compat: false }),
+  ...preset,
 
   {
     // The preset enables TYPED typescript-eslint rules, which need a TS program
@@ -88,6 +121,11 @@ export default [
       "scripts/spike/**",
       "caido.config.ts",
       "packages/engine/src/thresholds.generated.ts",
+      // Transient fixtures written by scripts/ci/lint-r1.spec.ts, which lints
+      // them EXPLICITLY with `--no-ignore`. Ignored here so a crashed spec run
+      // that leaves one behind cannot break `pnpm lint` with a violation it
+      // deliberately authored.
+      "packages/frontend/src/__r1_fixtures__/**",
     ],
   },
 
@@ -156,6 +194,92 @@ export default [
       // the type package as a capability list. These guards are the measured
       // shape, not dead code.
       "@typescript-eslint/strict-boolean-expressions": "off",
+    },
+  },
+
+  {
+    // -----------------------------------------------------------------------
+    // RENDERING SAFETY R1 — the LINT HALF. (UISEC-01, threat T-05-01)
+    // -----------------------------------------------------------------------
+    // 05-UI-SPEC.md § Rendering Safety Contract R1 says v-html is "banned by
+    // lint, as an error, on every file, with no per-line disable permitted".
+    // The shipped preset does not do that, and the gap was MEASURED rather than
+    // assumed, twice:
+    //
+    //   `vue/no-v-html` — @caido/eslint-config@0.10.0 applies
+    //   eslint-plugin-vue's `flat/recommended` restricted to **/*.vue, and in
+    //   eslint-plugin-vue@10.6.0 that config sets the rule to "warn". A warning
+    //   is not a ban: it prints alongside everything else and ships.
+    //
+    //   `no-eval` / `no-new-func` / `no-implied-eval` / `no-script-url` — the
+    //   preset applies eslint-plugin-no-unsanitized's recommended config, which
+    //   covers innerHTML, outerHTML, insertAdjacentHTML and document.write and
+    //   covers NEITHER dynamic-code-construction form. @eslint/js recommended
+    //   does not carry any of the four either. R1 names `new Function` and
+    //   `eval` explicitly and would otherwise be entirely unenforced — the same
+    //   "stated reach exceeds executed reach" defect this repo has a history of.
+    //
+    // THIS IS THE WEAKER OF TWO CONTROLS AND IS DOCUMENTED AS SUCH. A lint rule
+    // is a rule about source text that a person editing that text can turn off;
+    // `noInlineConfig` below closes the per-line escape, but the block itself
+    // is still one edit away from being deleted. The stronger control is the
+    // static AST gate in plan 05-05, for exactly the reason
+    // sql-discipline.spec.ts's header gives about behavioural tests: a spec-file
+    // gate cannot be disabled by a comment in the file it is judging.
+    files: ["packages/frontend/**/*.{ts,vue}"],
+    plugins: { vue: vuePlugin },
+    linterOptions: {
+      // So `// eslint-disable-next-line vue/no-v-html` cannot re-enable any of
+      // the five below. Without this the entire block is advisory.
+      noInlineConfig: true,
+    },
+    rules: {
+      // `noInlineConfig` ALONE DOES NOT CLOSE THE ESCAPE IN A .vue FILE, and
+      // this was measured rather than reasoned about. ESLint's `noInlineConfig`
+      // governs ESLint's own inline-comment mechanism. A `<template>` block is
+      // parsed by vue-eslint-parser, and `<!-- eslint-disable-next-line
+      // vue/no-v-html -->` inside it is honoured by eslint-plugin-vue's OWN
+      // rule, `vue/comment-directive`, which `noInlineConfig` does not touch.
+      //
+      // Measured this session: with `noInlineConfig: true` and `vue/no-v-html`
+      // at error, a probe component carrying `v-html` plus that HTML comment
+      // linted CLEAN — while the same probe without the comment reported the
+      // error. The ban was one comment away from being decorative, in exactly
+      // the file type it exists to protect. Turning the directive rule off is
+      // what makes template comments inert.
+      "vue/comment-directive": "off",
+
+      // Target-controlled bytes reach the DOM in this package for the first
+      // time in the project. They are rendered as TEXT, always.
+      // Target-controlled bytes reach the DOM in this package for the first
+      // time in the project. They are rendered as TEXT, always.
+      "vue/no-v-html": "error",
+      "no-eval": "error",
+      "no-new-func": "error",
+      "no-implied-eval": "error",
+      // `href="javascript:..."` built from an extracted URL. R1: an extracted
+      // URL is data to be displayed, never a destination to be offered.
+      "no-script-url": "error",
+    },
+  },
+
+  {
+    // packages/frontend/postcss.config.cjs is CommonJS by necessity —
+    // postcss-load-config reads it outside the package's `"type": "module"`
+    // context, so it cannot be ESM. `require`, `module` and `__dirname` are
+    // correct there and only there.
+    files: ["**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: {
+        require: "readonly",
+        module: "writable",
+        __dirname: "readonly",
+        __filename: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 

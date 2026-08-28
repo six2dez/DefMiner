@@ -75,6 +75,8 @@ import type { RetentionBounds } from "./settings";
  * stated three times in this file to be the ONLY bound on this database's
  * growth, and on a runtime whose measured HANDLER_ERROR_SURFACED is "neither",
  * discarding the error discards the only record that will ever exist.
+ *
+ * @internal
  */
 export type RetentionSweepSummary = {
   examined: number;

@@ -86,12 +86,19 @@ import { describeError } from "./telemetry";
  * Deliberately not the SDK's `Project`: the only thing lifecycle needs is the
  * id, and a narrow parameter is what lets the fake in
  * `test/fixtures/fake-sdk.ts` stay small enough to read.
+ *
+ * @internal
  */
 export type LifecycleProject = { getId(): string };
 
-/** What `sdk.events.onProjectChange` hands us, `null` included. */
+/**
+ * What `sdk.events.onProjectChange` hands us, `null` included.
+ *
+ * @internal
+ */
 export type ProjectOrNull = LifecycleProject | null | undefined;
 
+/** @internal */
 export type LifecycleSdk = {
   projects: { getCurrent(): Promise<unknown> };
   events: {
@@ -102,6 +109,7 @@ export type LifecycleSdk = {
   console: { log(msg: string): void };
 };
 
+/** @internal */
 export type LifecycleDeps = {
   /** Drained on every change. Entries queued under the previous project are
    *  DISCARDED rather than re-attributed (decision P5-D2). */
@@ -112,7 +120,11 @@ export type LifecycleDeps = {
   log?: (msg: string) => void;
 };
 
-/** What one applied change did, for the log line and for the specs. */
+/**
+ * What one applied change did, for the log line and for the specs.
+ *
+ * @internal
+ */
 export type ProjectChangeSummary = {
   previous: string | null;
   next: string | null;
@@ -127,6 +139,8 @@ export type ProjectChangeSummary = {
  * registered. It is returned rather than logged because a log line is not a
  * control-flow signal: the caller has to REFUSE, and it can only refuse if it is
  * told. See this file's header for what an unarmed lifecycle costs.
+ *
+ * @internal
  */
 export type LifecycleInstallation = ProjectChangeSummary & {
   projectChangeArmed: boolean;

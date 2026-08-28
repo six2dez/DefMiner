@@ -146,16 +146,21 @@ export function contentTypeOf(
 
 /** The narrow slice of the SDK the gate touches. Deliberately not `SDK`: the gate
  *  asks exactly one question of it, and a narrow parameter is what lets the fake
- *  in `test/fixtures/fake-sdk.ts` be small enough to read. */
+ * in `test/fixtures/fake-sdk.ts` be small enough to read.
+ *
+ * @internal
+ */
 export type AdmitSdk = {
   requests: { inScope(request: unknown): boolean };
 };
 
+/** @internal */
 export type AdmitRequest = {
   getId(): string;
   getUrl(): string;
 };
 
+/** @internal */
 export type AdmitResponse = {
   getCode(): number;
   getHeaders(): Record<string, unknown>;

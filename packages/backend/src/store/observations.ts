@@ -572,7 +572,11 @@ export async function recordObservation(
   }
 }
 
-/** One observation row, as it is stored. */
+/**
+ * One observation row, as it is stored.
+ *
+ * @internal
+ */
 export type ObservationRow = {
   project_id: string;
   sha256: string;
@@ -584,7 +588,10 @@ export type ObservationRow = {
 };
 
 /** Same reasoning as {@link ARTIFACT_LIST_DEFAULT_LIMIT}: an unbounded read over a
- *  table whose size the TARGET drives is a cost we do not control. */
+ * table whose size the TARGET drives is a cost we do not control.
+ *
+ * @internal
+ */
 export const OBSERVATION_LIST_DEFAULT_LIMIT = 500;
 
 // TWO COMPLETE LITERAL STATEMENTS, chosen between — never one string assembled

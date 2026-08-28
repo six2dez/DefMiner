@@ -50,6 +50,7 @@ export const MIN_CAIDO = "0.57.1";
  *  Plan 01-01 measured 3.46.0 inside Caido 0.57.1. */
 export const MIN_SQLITE = "3.24.0";
 
+/** @internal */
 export type CompatResult = { ok: true } | { ok: false; reason: string };
 
 /**
@@ -99,7 +100,11 @@ export function cmpCaidoVersion(a: string, b: string): number {
 // REQUIRED_SURFACES
 // ---------------------------------------------------------------------------
 
-/** Where a surface lives, which decides WHEN it can be probed. */
+/**
+ * Where a surface lives, which decides WHEN it can be probed.
+ *
+ * @internal
+ */
 export type SurfaceScope = "sdk" | "db" | "module" | "capability";
 
 /** Everything a probe may look at. Every field optional: a probe whose context
@@ -112,6 +117,7 @@ export type SurfaceContext = {
   createHash?: unknown;
 };
 
+/** @internal */
 export type RequiredSurface = {
   /** The surface's name, spelled exactly as
    *  `.planning/phases/01-skeleton-persistence-compatibility/COVERAGE.md`
@@ -276,7 +282,10 @@ export const REQUIRED_SURFACES: readonly RequiredSurface[] = [
 ];
 
 /** One surface's probe result, in the shape recorded into
- *  `results/compat-smoke.json` and returned by the `getCompat` RPC. */
+ * `results/compat-smoke.json` and returned by the `getCompat` RPC.
+ *
+ * @internal
+ */
 export type SurfaceOutcome = {
   name: string;
   scope: SurfaceScope;

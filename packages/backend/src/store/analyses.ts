@@ -81,7 +81,11 @@ export const TERMINAL_SCAN_STATES: readonly ScanState[] = [
   "failed",
 ];
 
-/** One analysis row, as it is stored. */
+/**
+ * One analysis row, as it is stored.
+ *
+ * @internal
+ */
 export type AnalysisRow = {
   project_id: string;
   sha256: string;
@@ -120,7 +124,11 @@ FROM analyses
 WHERE project_id = ? AND sha256 = ? AND detector_set_hash = ?
 `;
 
-/** The outcome of a claim attempt. */
+/**
+ * The outcome of a claim attempt.
+ *
+ * @internal
+ */
 export type AnalysisClaim =
   | {
       ok: true;

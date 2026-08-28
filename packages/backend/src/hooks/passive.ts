@@ -43,6 +43,7 @@ import { admit, type AdmitConfig, DEFAULT_ADMIT_CONFIG } from "./admit";
  */
 export type EnqueueClock = Map<string, number>;
 
+/** @internal */
 export type PassiveDeps = {
   queue: BoundedQueue;
   enqueuedAt: EnqueueClock;
@@ -97,16 +98,19 @@ export function resetPassiveForTest(): void {
   ready = false;
 }
 
+/** @internal */
 export type PassiveSdk = {
   console: { log(msg: string): void };
   requests: { inScope(request: unknown): boolean };
 };
 
+/** @internal */
 export type PassiveRequest = {
   getId(): string;
   getUrl(): string;
 };
 
+/** @internal */
 export type PassiveResponse = {
   getCode(): number;
   getHeaders(): Record<string, unknown>;

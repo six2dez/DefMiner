@@ -184,10 +184,14 @@ function formatTimestamp(ms: number): string {
             <div
               class="flex h-8 shrink-0 items-center gap-4 border-b border-surface-600 bg-surface-800 px-2 text-xs font-semibold"
             >
-              <span class="min-w-0 flex-1 overflow-hidden whitespace-pre">Digest</span>
+              <span class="min-w-0 flex-1 overflow-hidden whitespace-pre"
+                >Digest</span
+              >
               <span class="w-1/6 overflow-hidden whitespace-pre">Bytes</span>
               <span class="w-1/6 overflow-hidden whitespace-pre">Kind</span>
-              <span class="w-1/4 overflow-hidden whitespace-pre">Last seen</span>
+              <span class="w-1/4 overflow-hidden whitespace-pre"
+                >Last seen</span
+              >
             </div>
 
             <div class="min-h-0 flex-1 overflow-hidden">
@@ -202,11 +206,16 @@ function formatTimestamp(ms: number): string {
                      Interpolated as TEXT — there is no `v-html` in this
                      codebase and lint makes that an error that cannot be
                      disabled inline. -->
-                <span class="min-w-0 flex-1 overflow-hidden whitespace-pre font-mono">{{
-                  row.sha256
+                <span
+                  class="min-w-0 flex-1 overflow-hidden whitespace-pre font-mono"
+                  >{{ row.sha256 }}</span
+                >
+                <span class="w-1/6 overflow-hidden whitespace-pre">{{
+                  row.byte_len
                 }}</span>
-                <span class="w-1/6 overflow-hidden whitespace-pre">{{ row.byte_len }}</span>
-                <span class="w-1/6 overflow-hidden whitespace-pre font-mono">{{ row.kind }}</span>
+                <span class="w-1/6 overflow-hidden whitespace-pre font-mono">{{
+                  row.kind
+                }}</span>
                 <span class="w-1/4 overflow-hidden whitespace-pre font-mono">{{
                   formatTimestamp(row.last_seen_at)
                 }}</span>
@@ -224,9 +233,10 @@ function formatTimestamp(ms: number): string {
             Nothing analysed on this target yet
           </h2>
           <p class="mt-4 text-surface-400">
-            DefMiner analyses JavaScript as you browse, in the background. Browse
-            the target with the Caido proxy running and assets appear here as
-            they are analysed. DefMiner sends nothing to the target to do this.
+            DefMiner analyses JavaScript as you browse, in the background.
+            Browse the target with the Caido proxy running and assets appear
+            here as they are analysed. DefMiner sends nothing to the target to
+            do this.
           </p>
         </div>
       </section>

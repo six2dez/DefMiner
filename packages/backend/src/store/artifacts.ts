@@ -115,7 +115,10 @@ export async function upsertArtifact(
 }
 
 /** One artifact row, as it is stored. Declared rather than inferred so the reads
- *  below and every consumer agree on the shape without re-deriving it. */
+ * below and every consumer agree on the shape without re-deriving it.
+ *
+ * @internal
+ */
 export type ArtifactRow = {
   project_id: string;
   sha256: string;
@@ -134,6 +137,8 @@ export type ArtifactRow = {
  * "how many rows are there" has no upper bound the plugin controls. 500 is well
  * above any UI page and well below anything that would stall the single thread
  * marshalling it across the RPC boundary.
+ *
+ * @internal
  */
 export const ARTIFACT_LIST_DEFAULT_LIMIT = 500;
 

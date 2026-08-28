@@ -144,12 +144,19 @@ CREATE TRIGGER IF NOT EXISTS trg_observations_project_scope
  *  nothing in any log — the plugin simply runs on against a schema that is not
  *  the one it thinks it has. The `safe()`/`step()` shape below is taken from
  *  `probe/tier0-budgets/backend/script.js:195-212`, where it was used for exactly
- *  this reason (T-01-24). */
+ * this reason (T-01-24).
+ *
+ * @internal
+ */
 export type MigrationStepRecord =
   | { step: string; ok: true }
   | { step: string; ok: false; error: string };
 
-/** What {@link migrate} hands back so `init()` can log it. */
+/**
+ * What {@link migrate} hands back so `init()` can log it.
+ *
+ * @internal
+ */
 export type MigrationReport = {
   /** The ladder position after this run. */
   version: number;

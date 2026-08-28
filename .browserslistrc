@@ -1,0 +1,32 @@
+# Browserslist targets for eslint-plugin-compat.
+#
+# THIS FILE EXISTS BECAUSE `compat: true` IS MEANINGLESS WITHOUT IT.
+# eslint-plugin-compat checks API usage against BROWSERSLIST targets, and with
+# no browserslist config it falls back to browserslist's default query, which
+# includes `op_mini all` — Opera Mini, which supports almost nothing. The plugin
+# then reports `Promise` and `URL` as unsupported and the lint run becomes noise
+# somebody switches off. That is exactly why eslint.config.js carried
+# `compat: false` from Phase 1 until a frontend existed.
+#
+# THE TARGET, AND HOW IT WAS ARRIVED AT.
+# DefMiner's frontend runs in ONE renderer: the Electron renderer inside the
+# Caido desktop app. It is never served to a browser, so the usual "what do our
+# users run" question has a single measurable answer.
+#
+# MEASURED: Caido 0.58.2 on this machine reports Chrome/148.0.7778.180 —
+# read out of /Applications/Caido.app/Contents/Frameworks/Electron
+# Framework.framework this session, not inferred from a release table.
+#
+# The target below is set BELOW that measurement on purpose, and the direction
+# matters. A target lower than reality is STRICTER: the plugin flags more APIs,
+# so the cost of being wrong is a lint fix. A target higher than reality is
+# PERMISSIVE: it silently allows an API the operator's renderer does not have,
+# and the cost is a broken page on their machine. 140 leaves roughly two
+# Electron majors of headroom for an operator on an older Caido — Phase 0
+# measured against 0.57.1, which is not installed here and so was not measured —
+# while staying far above the point where anything this codebase uses
+# (Promise, URL, structuredClone, Array.prototype.at) became baseline.
+#
+# Revisit when a Caido release raises the floor and somebody MEASURES the new
+# one. Do not raise it from a changelog.
+chrome >= 140

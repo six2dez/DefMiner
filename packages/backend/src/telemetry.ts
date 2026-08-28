@@ -89,6 +89,7 @@ export function zeroedRejectCounters(
   return out;
 }
 
+/** @internal */
 export type Counters = {
   /** Proxied responses this hook was handed. */
   proxiedResponsesObserved: number;
@@ -586,7 +587,11 @@ export function recordError(e: unknown): void {
   }
 }
 
-/** What {@link slimStatus} returns. Numbers and one truncated string. */
+/**
+ * What {@link slimStatus} returns. Numbers and one truncated string.
+ *
+ * @internal
+ */
 export type SlimStatus = {
   counters: Counters;
   /** The largest uninterrupted synchronous stretch observed, float ms. */

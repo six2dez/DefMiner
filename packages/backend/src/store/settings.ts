@@ -57,7 +57,10 @@ const GET_SETTING_SQL = `SELECT value FROM settings WHERE project_id = ? AND key
 
 /** Read one setting for exactly one scope. Returns `null` when absent, which is
  *  distinguishable from an empty stored value — `settings.value` is NOT NULL, so
- *  `""` is a value somebody wrote and `null` is a row that does not exist. */
+ * `""` is a value somebody wrote and `null` is a row that does not exist.
+ *
+ * @internal
+ */
 export async function getSetting(
   db: Database,
   projectId: string,
@@ -70,7 +73,10 @@ export async function getSetting(
 
 /** Project row, else global row, else `null`. Two single-key reads rather than one
  *  `IN (?, ?)` with an ordering trick: two obvious statements beat one clever one
- *  in a module whose whole discipline is that a reader can see what binds where. */
+ * in a module whose whole discipline is that a reader can see what binds where.
+ *
+ * @internal
+ */
 export async function resolveSetting(
   db: Database,
   projectId: string,
@@ -86,6 +92,7 @@ export async function resolveSetting(
 /** The two settings keys `sweepRetention` reads. Named constants so a typo is a
  *  compile-time problem rather than a silently-defaulted bound. */
 export const RETENTION_MAX_ROWS_KEY = "retention.max_rows_per_table";
+/** @internal */
 export const RETENTION_MAX_AGE_MS_KEY = "retention.max_age_ms";
 
 /**
