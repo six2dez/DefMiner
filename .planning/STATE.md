@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-08-28T16:02:08.648Z"
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-08-28T16:39:21.270Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 1c8b7988da9046672159fa94d36b11ee93b1d169
+state_head: ad690e8a22314442b34127ad5c5af6d2f19c2cdd
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 54
+  completed_plans: 55
 ---
 
 # Project State
@@ -28,11 +28,31 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 8 of 12
+Plan: 9 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 05 WAVE 5 (plan 05-08): THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED
+> BY HAND. `state.advance-plan` was invoked EXACTLY ONCE — the lesson wave 4
+> recorded, obeyed — and moved the prose position 8 -> 9 of 12 and the
+> frontmatter 54 -> 55 of 62, both correct against the files on disk (12 PLAN
+> files, 8 SUMMARY files in this phase).
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the SIXTH consecutive occurrence in this phase, recorded so the run stays
+> visible rather than being rediscovered. The `Progress:` line above still
+> describes PHASE 01 plan execution and is deliberately untouched: phase 01's
+> verdict is not this phase's to move.
+>
+> ALSO RECORDED, because it silently discarded six writes before it was caught:
+> `state.add-decision --summary-file` REJECTS AN ABSOLUTE PATH OUTSIDE THE REPO
+> while EXITING 0 (`"added": false, "reason": "Path escapes allowed directory"`).
+> The first six decision writes of this close-out went to `/tmp` and were
+> dropped; they were re-run from a repo-local directory and all six returned
+> `"added": true`. Read the `added` field, never the exit code.
 
 > PHASE 05 WAVE 4: THE `Plan:` COUNTER DRIFTED BY MY OWN HAND AND IS CORRECTED
 > FROM THE FILE COUNT, RECORDED RATHER THAN QUIETLY FIXED, by the rule these
@@ -270,6 +290,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P05 | 24 min | 3 tasks | 6 files |
 | Phase 05 P06 | 24 min | 4 tasks | 8 files |
 | Phase 05 P07 | 20 min | 3 tasks | 14 files |
+| Phase 05 P08 | 20 min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -490,6 +511,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D43: the page and count endpoints DISCARD the caller's projectId and substitute the lifecycle-resolved one — PageRequest carries the field because the store layer needs one in every predicate, not because the frontend is the authority on which project is active. A read that trusted it would let anything holding the RPC handle page another project's rows out of the one shared SQLite file (T-05-34, T-01-20).
 - [Phase 05]: P5-D44: invalidation summaries are accumulated per category per DRAIN PASS and flushed in the drain loop's finally — Per row would hand the frontend the storm the coalescer exists to absorb. After the loop would never run: every exit from the drain is a return, including the 'stopped' exit, which is exactly when no later pass comes. A project change mid-pass discards what was accumulated under the previous project rather than re-attributing it.
 - [Phase 05]: P5-D45: {total} is the count of rows the operator can CURRENTLY REACH; suppressed rows are outside it — Settles CONTEXT.md's outstanding debt. artifacts and observations have no suppression mechanism, so the reachable count IS the whole count, hiddenBySuppression and suppressionRuleCount are both 0, and the second line does not render. A real state of a real table, not a placeholder; the entity tables that do have suppression are the deferred pass's.
+- [Phase 05]: P5-D51 (plan 05-08): FRONTEND_CONTRACT_VERSION is a deliberate SECOND copy of the backend's CONTRACT_VERSION, and a detected mismatch is a HARD state that suppresses page and count calls. — The two packages cannot import each other, and if they could the check would be vacuous — a number read out of the backend at build time cannot disagree at run time. A warning beside a rendered table is worse than no check: the wrong rows are on screen and they look right.
+- [Phase 05]: P5-D52 (plan 05-08): the frontend client wraps FIVE of the backend's eight endpoints — the two page reads, the count, the version and the subscription. getStatus, getCompat, getArtifacts and getObservations are not wrapped. — Wrapping one means restating its payload type in the frontend package (StatusPayload alone is eleven fields over SlimStatus), and a restated type with no consumer is a second copy that drifts before anybody reads it. The Health tab (05-12) is the first real consumer and owns wrapping the status pair.
+- [Phase 05]: P5-D54 (plan 05-08): the frontend stores are FACTORY COMPOSABLES over explicit dependencies, not pinia defineStore singletons. pinia stays installed and unused for state. — A store whose lifetime is a module-level singleton survives an unmount, which is precisely the shape research P-04's listener leak takes. A factory makes the lifetime explicit at the call site, makes stop() something an owner holds rather than something a global has, and makes every spec isolated for free.
+- [Phase 05]: P5-D60 (plan 05-08): the coalescer's debounce carries maxWait equal to the reaction cap's interval. NOT in the design contract, added after measuring what its absence does. — A pure trailing debounce never elapses while events keep arriving, so a sustained stream produces ZERO reactions — measured at 0 over three simulated seconds of 20 events/second — and the operator watches a table that has silently stopped updating. A coalescer that coalesces everything into nothing is worse than none.
+- [Phase 05]: P5-D61 (plan 05-08): the mid-triage suppression rule is checked TWICE — on arrival and again when the trailing window elapses. — The plan's own stated reason (a debounced reaction firing just after the operator selects a row is the same defect arriving late) is only closed by the second check. Checking on arrival alone leaves a 500 ms hole directly over the moment the operator clicks. Measured: removing the second check lets a reaction land on a selected row.
+- [Phase 05]: P5-D62 (plan 05-08): the coalescer's trailing WINDOW is overridable through an option and the CAP is not. — The asymmetry is what makes the throttle gate provable: with a window too short to hold the cap, the debounce cannot be what enforces it. Measured — 20 summaries in one simulated second produce 20 reactions with the throttle removed, and 2 with it. Disclosed residual: a caller passing a large window could delay a legitimate update, so the mounting component must not pass it.
 
 ### Known Risks Carried Forward
 
@@ -532,8 +559,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T16:02:08.612Z
-**Stopped at:** Completed 05-07-PLAN.md
+**Last session:** 2026-08-28T16:39:21.232Z
+**Stopped at:** Completed 05-08-PLAN.md
 **Resume file:** None
 
 ### Blockers

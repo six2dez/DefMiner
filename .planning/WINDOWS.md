@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 32
+open_count: 33
 waived_count: 0
 fixed_count: 22
-total_count: 54
-last_updated: 2026-08-28T15:11:18.513Z
+total_count: 55
+last_updated: 2026-08-28T16:39:28.707Z
 ---
 
 # Broken Windows Ledger
@@ -90,6 +90,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 52 | 05 | deviation | .planning/REQUIREMENTS.md |  | Plan 05-04 declared UI-03, UI-04, OPS-01, OPS-02, OPS-04, FIND-01 and FIND-02 but deliberately left their boxes [ ] — the deliverables are deferred to Phases 3/4 and are carried in 05-ENTITY-CONTRACT.md's Deferral Register (P5-D21) | open |  | 2026-08-28T12:53:40.633Z |  |
 | 53 | 05 | deviation | .planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md |  | D-01's one-way reversibility checkpoint is carried forward UNSPENT and is OWED to the first task that calls sdk.findings.create; no task in Phase 5 writes a Finding | open |  | 2026-08-28T12:53:40.720Z |  |
 | 54 | 05 | deviation | packages/backend/src/store/schema.spec.ts |  | 05-06: the plan's task-2 gate edit was folded into task 1's commit to avoid committing a red schema gate; the task boundary in 05-06-PLAN.md and the shipped commit boundary therefore differ | open |  | 2026-08-28T15:11:18.513Z |  |
+| 55 | 05 | deviation | packages/frontend/src/stores/coalescer.ts |  | 05-08: CoalescerOptions.trailingWindowMs is overridable and the reaction CAP is not. The seam exists so a spec can drive the debounce faster than the cap and prove the throttle gate load-bearing (P5-D62); a production caller passing a large window could delay a legitimate update. Disclosed, not closed — the mounting component (05-09) must not pass it. | open |  | 2026-08-28T16:39:28.707Z |  |
 
 ````json
 [
@@ -739,6 +740,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-28T15:11:18.513Z",
+    "resolved_at": null
+  },
+  {
+    "id": 55,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "packages/frontend/src/stores/coalescer.ts",
+    "line": null,
+    "description": "05-08: CoalescerOptions.trailingWindowMs is overridable and the reaction CAP is not. The seam exists so a spec can drive the debounce faster than the cap and prove the throttle gate load-bearing (P5-D62); a production caller passing a large window could delay a legitimate update. Disclosed, not closed — the mounting component (05-09) must not pass it.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-28T16:39:28.707Z",
     "resolved_at": null
   }
 ]
