@@ -74,14 +74,14 @@
       // has stopped being needed is an ignore that starts hiding the next real
       // one — and knip reports the stale entry itself as a configuration hint,
       // so leaving it costs a line of permanent noise beside a real finding.
-      "ignoreDependencies": [
-        // Fixed by 05-UI-SPEC.md as the stack a later Phase 5 plan builds on.
-        // `vue-virtual-scroller` is the RecycleScroller the virtualised table
-        // needs, pinned EXACTLY here so that plan cannot resolve a version
-        // other than the one this phase's design was measured against. Remove
-        // when the table imports it.
-        "vue-virtual-scroller"
-      ]
+      // `ignoreDependencies` IS GONE from this workspace as of plan 05-09.
+      // Its last entry was `vue-virtual-scroller`, carrying the note "Remove
+      // when the table imports it" — and 05-09's InventoryTable.vue imports
+      // `RecycleScroller` from it. Removed rather than left as a harmless
+      // no-op, for the same reason the `@defminer/engine` and `@vueuse/core`
+      // entries above were: an ignore that has stopped being needed is an
+      // ignore that starts hiding the next real one, and knip reports the
+      // stale entry itself as a configuration hint.
     }
   },
   // RESTORED TO `error` BY PLAN 01-03, as plan 01-02 asked for in this file.
