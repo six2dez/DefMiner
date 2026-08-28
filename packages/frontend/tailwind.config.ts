@@ -3,14 +3,29 @@
 // Loaded by name from postcss.config.cjs. Every setting below is a constraint
 // from 05-UI-SPEC.md, not a preference.
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import caido from "@caido/tailwindcss";
 import type { Config } from "tailwindcss";
 import primeui from "tailwindcss-primeui";
 
+// ABSOLUTE, resolved from THIS FILE. Tailwind resolves a relative content glob
+// against the PROCESS CWD, and the build runs from the repo root
+// (`caido-dev build packages`), where `./src` does not exist.
+//
+// The failure mode is why this is spelled out rather than left as a relative
+// path: a content glob that matches nothing is not an error. Tailwind emits its
+// base layer, generates ZERO utilities, and the build succeeds — shipping a
+// stylesheet that passes a containment check (every rule in it really is
+// scoped) while the page renders completely unstyled inside Caido. Measured
+// this session: the first build produced 4 rules, 2 of them keyframes.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
 export default {
   // `.vue` and `.ts` only. There is no `.html` in this package — the page's
   // root element is created in JavaScript by `init()`.
-  content: ["./src/**/*.{vue,ts}"],
+  content: [path.join(HERE, "src/**/*.{vue,ts}")],
 
   // OFF, and this is not optional. Preflight is a global reset: with prefixwrap
   // scoping it under `#plugin--defminer` it would reset the plugin's own subtree

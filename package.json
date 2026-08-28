@@ -12,7 +12,9 @@
     "gen:thresholds": "node scripts/ci/gen-thresholds.mjs",
     "build": "caido-dev build packages",
     "build:backend": "pnpm build",
-    "check:bundle": "node scripts/ci/check-bundle-imports.mjs"
+    "check:bundle": "node scripts/ci/check-bundle-imports.mjs",
+    "check:css": "node scripts/ci/prefixwrap.mjs packages/dist/plugin_package/defminer-frontend/index.css",
+    "check:externals": "node scripts/ci/frontend-externals.mjs packages/dist/plugin_package/defminer-frontend/index.js"
   },
   "license": "UNLICENSED",
   "devEngines": {
@@ -39,6 +41,7 @@
     "knip": "5.86.0",
     "meriyah": "7.3.2",
     "playwright": "1.62.1",
+    "postcss": "8.5.26",
     "prettier": "3.8.1",
     "re2js": "2.8.6",
     "typescript": "5.8.3",
