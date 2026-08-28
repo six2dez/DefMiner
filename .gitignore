@@ -90,3 +90,6 @@ scripts/spike/__pycache__/
 # convention; drop these lines and `git add` them to bring them in line.
 .planning/phases/00-runtime-reality-check/results/runs/recorder-20260820T180307Z/
 .planning/phases/01-skeleton-persistence-compatibility/results/runs/20260821T075936Z-12874/
+
+# GSD research digest cache (tooling-local, not source)
+.planning/research/.cache/
