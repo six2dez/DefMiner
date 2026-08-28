@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-28T12:24:21.730Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-08-28T12:52:55.359Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 30b9c61279f8792d317e1eaefe98e86156c84f0b
+state_head: 34b9bfec3e3898db949d9b9d932889b3156ed45d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 50
+  completed_plans: 51
 ---
 
 # Project State
@@ -28,11 +28,31 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 4 of 12
+Plan: 5 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 05 WAVE 4: THE `Plan:` COUNTER DRIFTED BY MY OWN HAND AND IS CORRECTED
+> FROM THE FILE COUNT, RECORDED RATHER THAN QUIETLY FIXED, by the rule these
+> notes have followed since 01-17. `state.advance-plan` was invoked TWICE in
+> this close-out — the first call's JSON was truncated in the executor's own
+> output and it was re-run to read the verdict, which is a read that MUTATES —
+> so the prose position went 4 -> 5 -> 6 while only one plan completed. The
+> truth on disk is 12 PLAN files and 4 SUMMARY files in this phase, so the next
+> plan is 05-05 and the line above now says 5 of 12; that is the only number
+> that cannot drift. THE FRONTMATTER IS UNTOUCHED AND WAS NEVER WRONG:
+> `completed_plans` moved 50 -> 51 exactly once across both calls, because the
+> handler RECOMPUTES it from disk rather than incrementing it, which is
+> precisely the difference between the two lines.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the FIFTH consecutive occurrence in this phase, recorded so the run stays
+> visible rather than being rediscovered. The `Progress:` line below still
+> describes PHASE 01 plan execution and is deliberately untouched: phase 01's
+> verdict is not this phase's to move.
 
 > PHASE 05 WAVE 3: THE COUNTERS WERE RIGHT AND ONLY `state.update-progress`
 > WITHHELD. `state.advance-plan` moved the prose position 3 -> 4 of 12 and the
@@ -246,6 +266,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P01 | 34 min | 4 tasks | 38 files |
 | Phase 05 P02 | 21 min | 3 tasks | 4 files |
 | Phase 05 P03 | 19 min | 3 tasks | 6 files |
+| Phase 05 P04 | 12 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -434,6 +455,14 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D11: Intl.Segmenter is resolved from globalThis AT CALL TIME and cached against the constructor identity, never captured at module load — Capturing it at module load would make the QuickJS fallback path (Phase 0 measured 100 globals with no Intl entry — assumption A6) untestable from a spec, leaving it argued rather than executed. Keying the cache on the constructor means a spec that sets globalThis.Intl = undefined gets the code-point path on the very next call and the segmenter path on the call after it restores. Three sanitise.spec.ts cases run that way, and the returned object is identical in both paths on purpose: the difference is a CAPABILITY difference, not an API one, so a caller cannot start branching on it.
 - [Phase 05]: P5-D12: forEvidence's control-escape table is keyed by the CHARACTER and prebuilt over both ranges at module load, because digest.spec.ts's DET-07 scan bans charCodeAt / codePointAt / .charAt( / fromCharCode in every non-spec engine source — Found by execution, not review: the first implementation read character.charCodeAt(0) inside the replace callback and turned digest.spec.ts red. DET-07's measurement is Phase 0's — an EMPTY per-character JS loop at 9 ms/MB on a runtime SPIKE-01 measured as having no interrupt — so a per-character index read is a banned shape in engine source whatever it is computing. A 65-entry table built once costs nothing per call and reads no index at all; the regex engine finds the character natively and the map answers in one hop.
 - [Phase 05]: P5-D13: forDisplay and forEvidence take NO default cap parameter (asserted by Function.length === 2) and throw a RangeError on a non-positive or non-integer cap — A default is precisely how a 2,048-character evidence-panel cap leaks into a fixed 32px table row by omission, and the omission is invisible at the call site. The guard was added under deviation Rule 2: with no default, a caller passing 0 or NaN renders every cell empty, which reads as "no data" rather than as a defect.
+- [Phase 05]: P5-D14: EntityRowBase's leading column is a discriminated union (EntityLead), and its state arm is typed `string` doc-commented as a member of the shipped SCAN_STATES rather than restating those five strings — A bare `string | number` would make the consumer guess which rendering it got. The engine may not import the backend (the dependency edge runs backend -> engine), and a second copy of a closed vocabulary is a second thing to drift.
+- [Phase 05]: P5-D15: PageRequest carries ONE `direction` governing the sort key AND the tie-break, not one per term — A row-value comparison under a mixed-direction sort skips rows and duplicates others and nothing errors. The type is written to be incapable of expressing the broken form rather than to document it.
+- [Phase 05]: P5-D16: the exhaustiveness guard over TriageState is `isOperatorDecided`, a real predicate, not a tautological identity switch — `new` is the absence of a decision and the other three are the three triage CTAs, so the predicate invents no vocabulary while still failing the typecheck if a fifth member lands. Mirrors TERMINAL_SCAN_STATES beside SCAN_STATES.
+- [Phase 05]: P5-D17: EVIDENCE_PANEL_MANDATORY_FIELDS is an exported constant with `satisfies readonly (keyof EvidencePanelFrame)[]`, so checker FLAG F1's mandatory-field list is assertable rather than only readable — A list in a document drifts from the type it describes. `satisfies` proves no member is a non-field; the spec's exhaustive `Record<keyof EvidencePanelFrame, true>` proves no field is a non-member.
+- [Phase 05]: P5-D18: INVALIDATION_CATEGORIES holds only the three shipped table categories, and contract.spec.ts asserts every member is inside schema.spec.ts's EXPECTED_TABLES — A speculative `entities` category would be the schema invention D-05(2) forbids arriving through the back door. It now fails a gate rather than lands.
+- [Phase 05]: P5-D19: every exported type is imported and given a conforming value in contract.spec.ts — Required mechanically — knip runs `ignoreExportsUsedInFile: false` with `types: error` since 05-01 closed that hole — and useful independently: a conforming literal is the cheapest check that a Phase 3 or Phase 4 author can actually construct the shape.
+- [Phase 05]: P5-D20: the proposed suppressions-list bound is 200 rules per project, enforced at CREATE time, answering the UI-SPEC's unresolved overflow row — A cap that filters on READ hides rules that are still suppressing findings, which is the exact failure the partial/suppressions-list row already forbids. The number is defensible not measured and is marked a proposal; the shape of the answer — a stated bound with an argument, enforced at write time — is what should survive if the number moves.
+- [Phase 05]: P5-D21 (close-out): the seven requirements plan 05-04 DECLARES are deliberately NOT flipped to complete in REQUIREMENTS.md. Their boxes stay `[ ]` and the deferral register carries them instead — UI-03, UI-04, OPS-01, OPS-02, OPS-04, FIND-01 and FIND-02 are declared by this plan so the deferral is VISIBLE rather than silently omitted (the plan says so in its own prohibitions) — not because they were delivered. Nothing here builds triage, suppression, an evidence table, a scorer or a Findings projection; every one is blocked on Phase 3 or Phase 4 with a named unblocking plan. Marking them complete would make the ledger claim a reach it has not executed, which is the exact defect CORE-11 was reverted for TWICE (`e7cc4b6` and `faca607`). `requirements.ready-ids` reported six of the seven ready and `mark-complete` was deliberately not run on them; UI-03 was blocked anyway by sibling plan 05-10. REQUIREMENTS.md is byte-untouched by this close-out, including the machine-owned DERIVED RESIDUAL span, which was hashed before and after and is identical.
 
 ### Known Risks Carried Forward
 
@@ -476,8 +505,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T12:24:21.693Z
-**Stopped at:** Completed 05-03-PLAN.md
+**Last session:** 2026-08-28T12:49:38.844Z
+**Stopped at:** Completed 05-04-PLAN.md
 **Resume file:** None
 
 ### Blockers

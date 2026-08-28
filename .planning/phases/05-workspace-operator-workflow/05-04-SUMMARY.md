@@ -223,6 +223,40 @@ None. Nothing in this plan is a placeholder: the contract is complete for what i
 
 None. No new network endpoint, auth path, file access pattern or schema change. The plan's own five threats (T-05-15 … T-05-19) are each mitigated by a shipped artifact: the target-controlled field is typed and doc-commented (T-05-15); D-01 is carried verbatim with its owed checkpoint (T-05-16); `InvalidationSummary` is four scalars with its key set asserted (T-05-17); `PageResponse` types `scanned` and `exhausted`, which only make sense with a bounded window (T-05-18); and the register states OPS-04's fixed negative and its mechanical cause while the triage vocabulary stays independent of any analysis row (T-05-19).
 
+## Close-out notes
+
+Three things happened during close-out that a reader is owed, and none of them is in the plan.
+
+**1. The seven declared requirements are deliberately NOT flipped to complete in `REQUIREMENTS.md`.
+Their boxes stay `[ ]`.** `requirements-completed` in this summary's frontmatter copies the plan's
+`requirements` array verbatim, as the template mandates — but that list exists so **the deferral is
+visible rather than silently omitted**, which is this plan's own stated prohibition. It is not a
+claim of delivery. Nothing here builds triage, suppression, an evidence table, a scorer or a
+Findings projection; every one of the seven is blocked on Phase 3 or Phase 4 with a named unblocking
+plan, and the register says so requirement by requirement. Marking them complete would make the
+ledger claim a reach it has not executed — **the exact defect CORE-11 was reverted for twice**, at
+`e7cc4b6` and `faca607`. `requirements.ready-ids` reported six of the seven ready (UI-03 was blocked
+anyway by sibling plan 05-10) and `mark-complete` was deliberately not run on any of them. Recorded
+as **P5-D21**.
+
+**2. `REQUIREMENTS.md` is byte-untouched, and the `DERIVED RESIDUAL` span was checked rather than
+assumed.** Plan 05-02 found that something reformatted `.planning/` during 05-01's close-out and
+inserted blank lines into the machine-owned span CORE-11 byte-compares, turning that gate red.
+05-03's close-out did not reproduce it and neither did this one. The span (lines 198–790) was
+SHA-256 hashed before the close-out began and again after every state mutation:
+`0233ac82…9a1b843` both times — **byte-identical, no drift**. `outbound-prohibition.spec.ts` was
+then executed as the real check rather than trusting the hash: 452 tests, all passing.
+
+**3. `state.advance-plan` was invoked twice and the prose `Plan:` counter drifted 4 → 5 → 6.** The
+first call's JSON was truncated in this executor's own output, so it was re-run to read the verdict
+— and that is a read which mutates. The line is corrected to `5 of 12` from the file count on disk
+(12 PLAN files, 4 SUMMARY files) and the correction is **recorded in STATE.md rather than made
+quietly**, by the rule that file has followed since 01-17. The frontmatter was never wrong:
+`completed_plans` moved 50 → 51 exactly once across both calls, because the handler recomputes it
+from disk instead of incrementing it. Also recorded there: `state.update-progress` withheld the
+project-wide bar again — `progress percent withheld by buildStateFrontmatter` — the fifth
+consecutive occurrence in this phase.
+
 ## User Setup Required
 
 None — no external service configuration required.
@@ -239,3 +273,19 @@ None — no external service configuration required.
 ---
 *Phase: 05-workspace-operator-workflow*
 *Completed: 2026-08-28*
+
+## Self-Check: PASSED
+
+- `packages/engine/src/contract.ts` — FOUND
+- `packages/engine/src/contract.spec.ts` — FOUND
+- `.planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md` — FOUND
+- `packages/engine/package.json` `exports["./contract"]` — present (`node -e` check exits 0)
+- Commits `dd872f5`, `61e81a2`, `4bb572e`, `34b9bfe` — all FOUND in `git log --all`
+- `pnpm typecheck` — exit 0
+- `pnpm vitest run packages/engine/src` — 11 files, 328 tests, all passing
+- `pnpm knip` — exit 0
+- `pnpm lint` — exit 0
+- Task 2 `<verify>` — 05-ENTITY-CONTRACT.md contains `03-01`, `04-03`, `FLAG F1`, `SEC-07`, `OPS-04`, `D-05`
+- Task 3 `<verify>` — all seven requirement ids, D-01/D-02/D-03, `Deferral Register` and `Carried covered rows` present; carried-row counts inside the gated section are `triage-controls: 4`, `suppressions-list: 9`, `findings-projection-preview: 8` against floors of 3/6/6, satisfied by the fifteen table rows and not by the heading
+- Task 1 no-restatement criterion — `grep -c 'false_positive' packages/backend/src packages/frontend/src -r | grep -v ':0$' | grep -v contract` prints nothing
+- `.planning/REQUIREMENTS.md` `DERIVED RESIDUAL` span — SHA-256 identical before and after close-out; `outbound-prohibition.spec.ts` 452 tests passing
