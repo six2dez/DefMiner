@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-28T11:30:46.695Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-28T11:58:22.372Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 43428b24ce5d0a07cc8de51ca38cf932f71fa1bc
+state_head: bfabe9da3762deec973efb3157730a2fc51c17da
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 48
+  completed_plans: 49
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 2 of 12
+Plan: 3 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -234,6 +234,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 01 P44 | 15 min | 2 tasks | 1 files |
 | Phase 01 P45 | 14 min | 2 tasks | 1 files |
 | Phase 05 P01 | 34 min | 4 tasks | 38 files |
+| Phase 05 P02 | 21 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -414,6 +415,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: Both low-download first-party Caido packages (@caido/primevue@0.3.3 at 279/wk, @caido/tailwindcss@0.1.0 at 258/wk) approved after registry verification (option-b); @caido/primevue's missing repository and absent provenance recorded as an unresolved residual
 - [Phase 05]: The frontend externals gate requires only 'vue' to be present; 'absent from the import set' cannot distinguish inlined from never-imported, so the rest of the set is enforced by the complementary rule that every bare import must be declared external
 - [Phase 05]: knip ignoreExportsUsedInFile is false (Phase 1 hole closed) via per-export @internal tags on 31 backend exports; the plan's premise that the frontend would give those types cross-module consumers is false because the frontend must not depend on @defminer/backend
+- [Phase 05]: The SQL discipline gate now decomposes statements: UNION arms and subquery spans are project-scoped independently, so a scoped outer query cannot launder an unscoped inner one — Probes Q2 and Q7 in 05-RESEARCH § O-01 both reported [] because the predicate check reads the text from the first WHERE onward. Executed RED before the rules existed.
+- [Phase 05]: Query plans re-verified on SQLite 3.53.4, not Caido target 3.46.0 — no 3.46 binary reachable; assumption A5 narrowed (3.46->3.51 window), not closed — node:sqlite links 3.53.4; /usr/bin/sqlite3 is 3.51.0; Homebrew is 3.53.4. The uniform-seek and bounded-window plans reproduce the research 3.51.0 output exactly, so two independent versions now agree.
+- [Phase 05]: EXPORT_RPC_CHUNK_ROWS = 20,000 — the export is CHUNKED (3 calls for 50,000 rows), derived from a measured 366.87 bytes/row against an 8 MiB per-call budget — A 50,000-row export measures 13.87 MiB CSV / 17.49 MiB JSON. The RPC ceiling is live-only and unmeasurable from a spec, so 8 MiB is a stated budget. D-04 preserved exactly — still no server file.
 
 ### Known Risks Carried Forward
 
@@ -456,8 +460,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T11:30:35.571Z
-**Stopped at:** Completed 05-01-PLAN.md
+**Last session:** 2026-08-28T11:58:07.672Z
+**Stopped at:** Completed 05-02-PLAN.md
 **Resume file:** None
 
 ### Blockers
