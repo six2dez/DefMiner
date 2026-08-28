@@ -358,15 +358,29 @@ Plans:
   7. Native Findings are created only for high-signal results with stable dedupe keys; entropy-only and hint-grade results provably never project
   8. Degraded and partial analyses are visibly marked
 
-**Plans**: 5 plans
+**Plans**: 12 plans
+
+> **Scope split, decision D-05 (2026-08-28).** Phase 5 nominally depends on Phase 4, and the
+> `entities` / `evidence` tables do not exist. Rather than re-sequence, the phase is split: what is
+> buildable over the shipped `artifacts` / `observations` / `analyses` tables is planned and built
+> now, and the entity read contract is published upward for Phases 3/4 to satisfy. UI-03 (byte
+> offsets), UI-04, OPS-01/02/04 and FIND-01/02 are deferred to a follow-on pass after Phase 4, each
+> with its blocker and unblocking plan recorded in `05-04`'s deferral register.
 
 Plans:
 
-- [ ] 05-01: Sidebar page shell, navigation, settings surface
-- [ ] 05-02: Findings tables — keyset pagination, virtualised scrolling, filtering, coalesced events
-- [ ] 05-03: Evidence view and score explanations
-- [ ] 05-04: Triage, suppression, retry, and their persistence across re-analysis
-- [ ] 05-05: Frontend safety contract, safe export, and native Findings projection
+- [ ] 05-01: Frontend workspace and the end-to-end tracer — page, sidebar item, build-output gates, lint enforcement
+- [ ] 05-02: SQL discipline gate widened, and the two measurements the query design rests on
+- [ ] 05-03: Engine safety primitives — strip and truncate, CSV neutralisation, the hostile-content fixture
+- [ ] 05-04: The entity read contract published upward, and the deferral register
+- [ ] 05-05: Rendering safety — the static AST gate, the display path, the hostile render proof
+- [ ] 05-06: Schema v3 — the `audit` table (STORE-08), keyset indexes, and the D-06 retention exemption
+- [ ] 05-07: The literal-statement matrix, keyset pagination, and the typed RPC contract
+- [ ] 05-08: Inventory store, event coalescer, and the typed frontend client
+- [ ] 05-09: The findings tables — virtualised, degradation-marked, load-backstopped at 10,000 rows
+- [ ] 05-10: The evidence panel frame and the retry path (OPS-03)
+- [ ] 05-11: Safe export — serialiser, dialog, and the browser download (D-04)
+- [ ] 05-12: Settings, Health, and the visible compatibility refusal surface
 
 ### Phase 6: Retroactive Scan & Deployment Reality
 
