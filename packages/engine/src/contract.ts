@@ -45,6 +45,98 @@
 // vocabulary membership, ordering, casing and exhaustiveness.
 
 // ---------------------------------------------------------------------------
+// THE SCAN-STATE VOCABULARY
+// ---------------------------------------------------------------------------
+
+/**
+ * The closed `scan_state` vocabulary, enforced by a CHECK constraint in
+ * migration step v2 (packages/backend/src/store/migrations.ts).
+ *
+ * MOVED HERE FROM packages/backend/src/store/analyses.ts BY PLAN 05-09, AND
+ * THE REASON IS A RESOLUTION FACT RATHER THAN A PREFERENCE. The frontend must
+ * bind its status badge to the SHIPPED values — 05-UI-SPEC.md § "Status
+ * vocabulary" says so explicitly, and UI-09 turns it into a correctness rule:
+ * a state added to the database with no badge here would render as nothing,
+ * which is a degraded analysis silently presented as complete. But the
+ * frontend package cannot import the backend package at all: the backend
+ * imports `caido:*` specifiers that resolve only inside Caido's QuickJS, so a
+ * dependency on it drags an unresolvable module graph into a browser build
+ * (packages/frontend/src/backend.ts opens with the argument, and the backend's
+ * own api/spec.ts keeps the specifier out of the frontend's source entirely).
+ *
+ * So the vocabulary is here, in the one module BOTH packages already import,
+ * and `analyses.ts` consumes it rather than declaring it. That is strictly
+ * better than the situation this replaces: {@link EntityLead}'s `state` field
+ * had to be typed `string` and carry a paragraph explaining that it was
+ * "really" a member of a vocabulary it could not name. It can name it now.
+ *
+ * `pending` is what makes the analyses table double as the DURABLE JOB QUEUE
+ * that Phase 2's ERR-02 recovery and CORE-09 both need, for the cost of one
+ * column: a `pending` row that survives a plugin restart IS the record that
+ * work was claimed and never finished. OBS-02 formally owns this vocabulary in
+ * Phase 2 — these values are picked now and must not be contradicted there.
+ */
+export const SCAN_STATES = [
+  "pending",
+  "running",
+  "done",
+  "partial",
+  "failed",
+] as const;
+
+/** One scan state. Derived from {@link SCAN_STATES}, never restated. */
+export type ScanState = (typeof SCAN_STATES)[number];
+
+/**
+ * States that mean "this digest has been through the detectors at this corpus
+ * version; do not re-analyse it".
+ *
+ * `failed` is TERMINAL HERE, deliberately. Phase 1 has no retry policy and no
+ * failure taxonomy — ERR-02 is Phase 2 — so treating `failed` as re-analysable
+ * today would mean re-walking the same bytes on every sighting, for ever, with
+ * nothing to break the loop. The row is still there, still says `failed`, and
+ * still carries its `error`; Phase 2 decides which failures are worth retrying
+ * and gets to make that decision with a taxonomy in hand.
+ */
+export const TERMINAL_SCAN_STATES: readonly ScanState[] = [
+  "done",
+  "partial",
+  "failed",
+];
+
+/**
+ * States that mean the analysis did NOT inspect every byte.
+ *
+ * The predicate behind UI-09's floor statement, defined once beside the
+ * vocabulary rather than re-derived at each surface — the same role
+ * {@link isOperatorDecided} plays for {@link TRIAGE_STATES}. `partial` stopped
+ * early and `failed` inspected nothing at all, and both make an aggregate over
+ * the containing view a FLOOR rather than a total.
+ *
+ * `pending` and `running` are NOT degraded: they are not finished, which is a
+ * different claim and one the badge already carries in words.
+ *
+ * THE `never` FALLTHROUGH IS THE POINT. Adding a sixth state without adding a
+ * case is a typecheck error here, so a vocabulary change cannot land silently
+ * and leave the floor statement judging five of six states.
+ */
+export function isDegradedScanState(state: ScanState): boolean {
+  switch (state) {
+    case "partial":
+    case "failed":
+      return true;
+    case "pending":
+    case "running":
+    case "done":
+      return false;
+    default: {
+      const unhandled: never = state;
+      return unhandled;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // THE FOUR ALWAYS-PRESENT COLUMNS
 // ---------------------------------------------------------------------------
 
@@ -58,19 +150,18 @@
  * an analysis lifecycle state (artifacts, observations) renders `state`; a
  * table whose rows carry a scored entity renders `score`.
  *
- * `state` is a member of the SHIPPED `scan_state` vocabulary — `SCAN_STATES`
- * in packages/backend/src/store/analyses.ts, enforced by a CHECK constraint in
- * migration step v2 — and is typed as `string` here rather than restated,
- * because the engine may not import the backend (the dependency edge runs
- * backend -> engine) and a second copy of a closed vocabulary is a second
- * thing to drift. OBS-02 formally owns that vocabulary in Phase 2.
+ * `state` IS {@link ScanState} AND NO LONGER A BARE `string`. It was typed
+ * `string` while the vocabulary lived in the backend, which the engine may not
+ * import; plan 05-09 moved `SCAN_STATES` here for the frontend's sake and this
+ * field is the second beneficiary. A lead state outside the shipped five is now
+ * a typecheck error rather than a badge that renders as nothing.
  *
  * `tier` is a DefMiner-authored word rendered beside the numeral. Its
  * vocabulary is Phase 3's (plan 03-03), for the same reason the signal labels
  * are.
  */
 export type EntityLead =
-  | { readonly kind: "state"; readonly state: string }
+  | { readonly kind: "state"; readonly state: ScanState }
   | { readonly kind: "score"; readonly score: number; readonly tier: string };
 
 /**
@@ -133,7 +224,7 @@ export type EntityRowBase = {
 
 /**
  * The closed triage vocabulary, in the same shape and the same snake_case
- * style as the shipped `SCAN_STATES` (packages/backend/src/store/analyses.ts):
+ * style as the shipped {@link SCAN_STATES} above:
  * an `as const` array plus a type derived from it.
  *
  * Fixed by 05-UI-SPEC.md § "Triage & suppression". **Nothing anywhere may
@@ -174,8 +265,9 @@ export type TriageState = (typeof TRIAGE_STATES)[number];
  * guard on {@link TRIAGE_STATES}: adding a fifth member without adding a case
  * makes `const unhandled: never = state` a typecheck error, so a vocabulary
  * change cannot land silently and leave a consumer switch handling four of
- * five states. Same role `TERMINAL_SCAN_STATES` plays for `SCAN_STATES` — a
- * derived predicate over a closed vocabulary, defined once beside it.
+ * five states. Same role {@link TERMINAL_SCAN_STATES} and
+ * {@link isDegradedScanState} play for {@link SCAN_STATES} — a derived
+ * predicate over a closed vocabulary, defined once beside it.
  */
 export function isOperatorDecided(state: TriageState): boolean {
   switch (state) {

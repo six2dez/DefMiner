@@ -38,8 +38,12 @@
 import type {
   InvalidationCategory,
   InvalidationSummary,
+  ScanState,
 } from "@defminer/engine/contract";
-import { INVALIDATION_EVENT } from "@defminer/engine/contract";
+import {
+  INVALIDATION_EVENT,
+  TERMINAL_SCAN_STATES,
+} from "@defminer/engine/contract";
 import { sha256Hex } from "@defminer/engine/digest";
 import {
   type AbortLike,
@@ -58,8 +62,6 @@ import {
   DETECTOR_CORPUS_VERSION,
   finishAnalysis,
   isAnalysed,
-  type ScanState,
-  TERMINAL_SCAN_STATES,
 } from "../store/analyses";
 import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";

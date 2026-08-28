@@ -16,6 +16,7 @@
 // finds nothing wrong with it has measured nothing — see 01-PATTERNS.md, and
 // tests/schema.spec.ts:44-53 where the same guard exists for the same reason.
 
+import { SCAN_STATES } from "@defminer/engine/contract";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -630,7 +631,12 @@ describe("schema shape (STORE-01, STORE-02, T-01-21)", () => {
       // OBS-02 owns the degradation vocabulary in Phase 2. These five values are
       // picked now and must not be contradicted later; `pending` is what makes
       // this table double as the durable job queue ERR-02 and CORE-09 need.
-      for (const state of ["pending", "running", "done", "partial", "failed"]) {
+      //
+      // READ FROM `SCAN_STATES`, NEVER RESTATED (plan 05-09). The list moved to
+      // @defminer/engine/contract so the frontend's status badge could bind to
+      // the shipped values without importing this package; a literal copy here
+      // would let the DDL and the vocabulary drift with this gate still green.
+      for (const state of SCAN_STATES) {
         await expect(
           stmt.run("p1", state.padEnd(64, "0"), "h", state, 1),
         ).resolves.toBeDefined();

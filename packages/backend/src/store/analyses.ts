@@ -12,6 +12,8 @@
 // this pooled connection — decision P4-D4, and the RESEARCH.md note it comes
 // from).
 
+import type { ScanState } from "@defminer/engine/contract";
+import { TERMINAL_SCAN_STATES } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 
 import { describeError } from "../telemetry";
@@ -45,41 +47,19 @@ export function isCorpusSentinel(detectorSetHash: string): boolean {
   return !/^[0-9a-f]{64}$/.test(detectorSetHash);
 }
 
-/**
- * The closed `scan_state` vocabulary, enforced by a CHECK constraint in migration
- * step v2.
- *
- * `pending` is what makes this table double as the DURABLE JOB QUEUE that Phase
- * 2's ERR-02 recovery and CORE-09 both need, for the cost of one column: a
- * `pending` row that survives a plugin restart IS the record that work was
- * claimed and never finished. OBS-02 owns the degradation vocabulary in Phase 2 —
- * these values are picked now and must not be contradicted there.
- */
-export const SCAN_STATES = [
-  "pending",
-  "running",
-  "done",
-  "partial",
-  "failed",
-] as const;
-export type ScanState = (typeof SCAN_STATES)[number];
-
-/**
- * States that mean "this digest has been through the detectors at this corpus
- * version; do not re-analyse it".
- *
- * `failed` is TERMINAL HERE, deliberately. Phase 1 has no retry policy and no
- * failure taxonomy — ERR-02 is Phase 2 — so treating `failed` as re-analysable
- * today would mean re-walking the same bytes on every sighting, for ever, with
- * nothing to break the loop. The row is still there, still says `failed`, and
- * still carries its `error`; Phase 2 decides which failures are worth retrying
- * and gets to make that decision with a taxonomy in hand.
- */
-export const TERMINAL_SCAN_STATES: readonly ScanState[] = [
-  "done",
-  "partial",
-  "failed",
-];
+// THE `scan_state` VOCABULARY NO LONGER LIVES HERE. `SCAN_STATES`,
+// `ScanState` and `TERMINAL_SCAN_STATES` moved to
+// @defminer/engine/contract in plan 05-09 and are imported above.
+//
+// NOT A TIDY-UP — A RESOLUTION FACT. The frontend's status badge has to bind to
+// the SHIPPED values (05-UI-SPEC.md § "Status vocabulary"), and UI-09 makes it a
+// correctness rule rather than a nicety: a state added to this database with no
+// badge on the other side renders as nothing, which is a degraded analysis
+// silently presented as complete. But the frontend package cannot import this
+// one at all — the backend imports `caido:*` specifiers that resolve only inside
+// Caido's QuickJS. The engine contract is the single module both packages
+// already import, so the vocabulary lives there and is consumed here. There is
+// still exactly ONE declaration of it; what changed is which package holds it.
 
 /**
  * One analysis row, as it is stored.

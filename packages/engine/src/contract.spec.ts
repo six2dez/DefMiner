@@ -38,7 +38,10 @@ import {
   EVIDENCE_PANEL_MANDATORY_FIELDS,
   INVALIDATION_CATEGORIES,
   INVALIDATION_EVENT,
+  isDegradedScanState,
   isOperatorDecided,
+  SCAN_STATES,
+  TERMINAL_SCAN_STATES,
   TRIAGE_STATES,
 } from "./contract";
 import type {
@@ -50,11 +53,72 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanState,
   ScoreExplanation,
   ScoreSignal,
   TriageState,
   VisibleTotal,
 } from "./contract";
+
+describe("SCAN_STATES — the SHIPPED analysis vocabulary (OBS-02, UI-09)", () => {
+  it("holds exactly the five values the migration's CHECK constraint enforces", () => {
+    // ORDER, not membership. 05-UI-SPEC.md § "Status vocabulary" renders them
+    // in this order and the order is the lifecycle: queued, in flight, and the
+    // three ways it can end. It is also the order migration step v2 writes into
+    // `CHECK (scan_state IN (...))`, so a reordering here is a diff a reviewer
+    // can put beside the DDL.
+    expect(SCAN_STATES).toEqual([
+      "pending",
+      "running",
+      "done",
+      "partial",
+      "failed",
+    ]);
+  });
+
+  it("is snake_case throughout, like TRIAGE_STATES", () => {
+    for (const state of SCAN_STATES) {
+      expect(state, `${state} is not snake_case`).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    }
+  });
+
+  it("marks the three ENDING states terminal and neither in-flight one", () => {
+    // `failed` is terminal DELIBERATELY: Phase 1 has no retry policy, so
+    // treating it as re-analysable would re-walk the same bytes on every
+    // sighting for ever with nothing to break the loop.
+    expect([...TERMINAL_SCAN_STATES]).toEqual(["done", "partial", "failed"]);
+    expect(TERMINAL_SCAN_STATES).not.toContain("pending");
+    expect(TERMINAL_SCAN_STATES).not.toContain("running");
+  });
+
+  it("calls exactly `partial` and `failed` degraded — the floor predicate", () => {
+    // UI-09's floor statement is derived from THIS and nowhere else. `pending`
+    // and `running` are not degraded: they are unfinished, which is a different
+    // claim and one the badge already carries in words.
+    const degraded = SCAN_STATES.filter((state) => isDegradedScanState(state));
+    expect(degraded).toEqual(["partial", "failed"]);
+  });
+
+  it("answers for EVERY member — the exhaustiveness the never-fallthrough enforces", () => {
+    // The `never` fallthrough fails `tsc`, not vitest, when a sixth state is
+    // added without a case. Asserted here so the mechanism is visible to a
+    // reader of the suite rather than only to the compiler.
+    for (const state of SCAN_STATES) {
+      expect(typeof isDegradedScanState(state)).toBe("boolean");
+    }
+  });
+
+  it("types the lead column's state — no longer a bare string", () => {
+    // The field was `string` while the vocabulary lived in the backend, which
+    // the engine may not import. Plan 05-09 moved it here, so a lead state
+    // outside the shipped five is a typecheck error rather than a badge that
+    // renders as nothing — which under UI-09 is a degraded analysis silently
+    // presented as complete.
+    const state: ScanState = "partial";
+    const lead: EntityLead = { kind: "state", state };
+    expect(lead).toEqual({ kind: "state", state: "partial" });
+  });
+});
 
 describe("TRIAGE_STATES — the closed triage vocabulary (OPS-01)", () => {
   it("holds exactly the four states 05-UI-SPEC.md fixes, in that order", () => {
