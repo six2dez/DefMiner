@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-28T13:28:39.149Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-08-28T15:11:11.613Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 2f1b912abddb9f0c265f9fc0cc66a48c1bb81769
+state_head: 82f9705f3e757b469d52885734de4b190897412d
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 6 of 12
+Plan: 7 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -268,6 +268,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P03 | 19 min | 3 tasks | 6 files |
 | Phase 05 P04 | 12 min | 3 tasks | 4 files |
 | Phase 05 P05 | 24 min | 3 tasks | 6 files |
+| Phase 05 P06 | 24 min | 4 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -473,6 +474,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D28: copyToClipboard has NO document.execCommand fallback — that path copies by putting the full value into a textarea in the document, exactly what R2 forbids, so a silent downgrade to it would be a security regression that looks like a convenience. On a runtime without the async clipboard API it throws and the caller surfaces the failure.
 - [Phase 05]: P5-D29: HighlightSlices renders the EMPTY gap element between two touching ranges, and one element for the whole value when there are no ranges — rendered spans then correspond one-to-one with the offsets the backend reported, which is what makes a wrong highlight auditable rather than merely wrong (EDGE UISEC-01 adjacency and empty).
 - [Phase 05]: P5-D30: the frontend asserts sanitisation using the engine's EXPORTED strip patterns rather than restating them — sanitise.ts exports them for exactly this, and noInlineConfig is on for packages/frontend so a no-control-regex disable comment is inert and a control-character regex literal cannot be written in that package at all. Asserted with replace rather than test, because both patterns carry the g flag and a global regex's test is stateful.
+- [Phase 05]: P5-D31: the fifth table `audit` is approved with the proposed shape and the FULL seven-kind vocabulary (option-a, 2026-08-28, blocking-human checkpoint, one-way) — Four of the seven kinds have no caller until the deferred pass after Phase 4. The asymmetry is not close: an unused enum value costs nothing at runtime, a missing one costs a second permanent step in a ladder whose entries can never be edited.
+- [Phase 05]: P5-D32: the schema.spec.ts two-place gate edit ships in the SAME commit as the migration step, not the following one — The plan split them across tasks 1 and 2, which would have left exactly one commit with a red schema gate. The gate firing is the designed P-09 signal during work; a committed red suite is a bisect hazard.
+- [Phase 05]: P5-D33: DEFAULT_AUDIT_RETENTION_MAX_ROWS = 200,000, derived as 4x the per-table default — The audit table has no age bound (D-06), so its row bound must carry alone the horizon that rows and age carry jointly elsewhere. ~1,000 operator-driven events per engagement gives ~200 engagements; the byte ceiling is ~70 MB worst case and ~24 MB realistic.
+- [Phase 05]: P5-D34: RetentionBounds.auditMaxRows is REQUIRED, not optional — A required field made the compiler enumerate all twelve construction sites. An optional one would have let each site silently inherit a default, which is how a retention bound goes wrong invisibly.
+- [Phase 05]: P5-D35: STORE-08 is NOT marked complete by this plan — Its text spans entities, evidence and audit. Only audit is delivered; entities and evidence are Phase 4 and do not exist in the ladder. requirements.ready-ids reports it ready because it only inspects sibling plans in this phase and cannot see the cross-phase span.
 
 ### Known Risks Carried Forward
 
@@ -515,8 +521,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T13:26:46.711Z
-**Stopped at:** Completed 05-05-PLAN.md
+**Last session:** 2026-08-28T15:10:30.594Z
+**Stopped at:** Completed 05-06-PLAN.md
 **Resume file:** None
 
 ### Blockers
