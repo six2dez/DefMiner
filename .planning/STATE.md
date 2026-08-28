@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-08-28T15:11:11.613Z"
+stopped_at: Completed 05-07-PLAN.md
+last_updated: "2026-08-28T16:02:08.648Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 82f9705f3e757b469d52885734de4b190897412d
+state_head: 1c8b7988da9046672159fa94d36b11ee93b1d169
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 52
+  completed_plans: 54
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 7 of 12
+Plan: 8 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -269,6 +269,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P04 | 12 min | 3 tasks | 4 files |
 | Phase 05 P05 | 24 min | 3 tasks | 6 files |
 | Phase 05 P06 | 24 min | 4 tasks | 8 files |
+| Phase 05 P07 | 20 min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -479,6 +480,16 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D33: DEFAULT_AUDIT_RETENTION_MAX_ROWS = 200,000, derived as 4x the per-table default — The audit table has no age bound (D-06), so its row bound must carry alone the horizon that rows and age carry jointly elsewhere. ~1,000 operator-driven events per engagement gives ~200 engagements; the byte ceiling is ~70 MB worst case and ~24 MB realistic.
 - [Phase 05]: P5-D34: RetentionBounds.auditMaxRows is REQUIRED, not optional — A required field made the compiler enumerate all twelve construction sites. An optional one would have let each site silently inherit a default, which is how a retention bound goes wrong invisibly.
 - [Phase 05]: P5-D35: STORE-08 is NOT marked complete by this plan — Its text spans entities, evidence and audit. Only audit is delivered; entities and evidence are Phase 4 and do not exist in the ladder. requirements.ready-ids reports it ready because it only inspects sibling plans in this phase and cannot see the cross-phase span.
+- [Phase 05]: P5-D36: every filtered statement carries an outer ORDER BY over the bounded candidate window — SQLite does not guarantee a subquery's row order without one; today's co-routine preserves it only because a LIMIT subquery under an outer WHERE cannot be flattened, which is a planner property, not a statement property. Costs a sorter over at most 500 rows; buys an order that is correct by construction rather than by accident.
+- [Phase 05]: P5-D37: a filtered read runs TWO statements — the page, and a key-columns-only read over the same window — The bounded window fixes a cost problem and creates a termination problem: without the window read the cursor could only advance to the last SURVIVING row, so a filter matching nothing would never move it. Cursor advance is two cases: a FULL page advances to the last returned row, a SHORT page to the window edge.
+- [Phase 05]: P5-D38: migration step v4 indexes the SECOND sort key on each pageable table — Step v3 shipped one keyset index per table and reads.ts offers two sort keys, so ORDER BY byte_len had nothing behind it — a whole-partition top-N sort per page, reached by clicking a column header, on the single QuickJS thread. Uniform DESC,DESC; SQLite reverses an index for the opposite ORDER BY, hence two indexes not four. No filter-leading index: the bounded window buys selectivity independence an index cannot.
+- [Phase 05]: P5-D39: unrecognised sort key, unrecognised filter column, empty projectId and absent handle all read an EMPTY EXHAUSTED PAGE — One fail-closed rule, no guessing. A default-sort fallback answers a question nobody asked; ignoring an unrecognised filter returns MORE rows than the caller narrowed to; a throw hands the frontend a promise that never settles on a runtime that surfaces neither throws nor rejections.
+- [Phase 05]: P5-D40: countInventory returns an EXACT count, accepting O(partition) cost on a filtered count — The one unbounded read in reads.ts. A capped count would make the UI-SPEC's '{total} secrets exist on this target' copy a claim the number does not support. Called once per filter change, never per page; if it ever stalls the thread the fix is a leading index, not a truncated total.
+- [Phase 05]: P5-D41: init() takes PluginSdk — sdk.api typed as APISDK<Spec['api'], Spec['events']>, the rest structural — Phase 0 measured how badly the shipped type packages under-declare this runtime and Phase 1 recorded 'sdk: any' at the wide boundary as honest; every module already takes the slice it uses. This follows that shape while still making a typo'd endpoint name or a drifted callback signature a typecheck failure.
+- [Phase 05]: P5-D42: Spec and CountRequest are not exported from api/spec.ts — Nothing outside the module can consume them — the frontend is a separate package, and the registration site infers the request shape from the API map. knip runs ignoreExportsUsedInFile:false, so an export with no cross-module consumer is a gate failure rather than a harmless seam.
+- [Phase 05]: P5-D43: the page and count endpoints DISCARD the caller's projectId and substitute the lifecycle-resolved one — PageRequest carries the field because the store layer needs one in every predicate, not because the frontend is the authority on which project is active. A read that trusted it would let anything holding the RPC handle page another project's rows out of the one shared SQLite file (T-05-34, T-01-20).
+- [Phase 05]: P5-D44: invalidation summaries are accumulated per category per DRAIN PASS and flushed in the drain loop's finally — Per row would hand the frontend the storm the coalescer exists to absorb. After the loop would never run: every exit from the drain is a return, including the 'stopped' exit, which is exactly when no later pass comes. A project change mid-pass discards what was accumulated under the previous project rather than re-attributing it.
+- [Phase 05]: P5-D45: {total} is the count of rows the operator can CURRENTLY REACH; suppressed rows are outside it — Settles CONTEXT.md's outstanding debt. artifacts and observations have no suppression mechanism, so the reachable count IS the whole count, hiddenBySuppression and suppressionRuleCount are both 0, and the second line does not render. A real state of a real table, not a placeholder; the entity tables that do have suppression are the deferred pass's.
 
 ### Known Risks Carried Forward
 
@@ -521,8 +532,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T15:10:30.594Z
-**Stopped at:** Completed 05-06-PLAN.md
+**Last session:** 2026-08-28T16:02:08.612Z
+**Stopped at:** Completed 05-07-PLAN.md
 **Resume file:** None
 
 ### Blockers
