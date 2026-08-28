@@ -877,7 +877,7 @@ MEASURED SILENCES - 26 entries.
 ### Workspace UI (UI)
 
 - [x] **UI-01**: A sidebar page providing a project-wide view — every secret, endpoint, and host for the target, not just the response currently open.
-- [ ] **UI-02**: Filterable, sortable tables with keyset pagination and virtualised scrolling, usable at thousands of rows.
+- [x] **UI-02**: Filterable, sortable tables with keyset pagination and virtualised scrolling, usable at thousands of rows.
 - [ ] **UI-03**: Every entity links back to its source request, artifact version, and byte offsets.
 - [ ] **UI-04**: Each finding shows a score explanation — which signals fired and why it scored as it did.
 - [ ] **UI-05**: Reconstructed-source viewer.
@@ -934,9 +934,9 @@ MEASURED SILENCES - 26 entries.
 
 ### Frontend safety (UISEC)
 
-- [ ] **UISEC-01**: All displayed content is target-controlled and is rendered as text, never as markup. No `v-html` on extracted content anywhere.
+- [x] **UISEC-01**: All displayed content is target-controlled and is rendered as text, never as markup. No `v-html` on extracted content anywhere.
 - [ ] **UISEC-02**: CSV export neutralises formula injection (`=`, `+`, `-`, `@`, tab, CR leading characters).
-- [ ] **UISEC-03**: Extremely long or adversarial extracted strings are truncated for display without breaking layout or freezing the renderer.
+- [x] **UISEC-03**: Extremely long or adversarial extracted strings are truncated for display without breaking layout or freezing the renderer.
 
 ### Deployment reality (DEPLOY)
 
