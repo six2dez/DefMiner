@@ -404,7 +404,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 05-09: The findings tables — virtualised, degradation-marked, load-backstopped at 10,000 rows
+- [x] 05-09: The findings tables — virtualised, degradation-marked, load-backstopped at 10,000 rows
 
 **Wave 6** *(blocked on Wave 5 completion)*
 

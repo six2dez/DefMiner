@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 36
+open_count: 38
 waived_count: 0
-fixed_count: 22
-total_count: 58
-last_updated: 2026-08-28T17:26:53.230Z
+fixed_count: 24
+total_count: 62
+last_updated: 2026-08-29T01:31:48.065Z
 ---
 
 # Broken Windows Ledger
@@ -91,9 +91,13 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 53 | 05 | deviation | .planning/phases/05-workspace-operator-workflow/05-ENTITY-CONTRACT.md |  | D-01's one-way reversibility checkpoint is carried forward UNSPENT and is OWED to the first task that calls sdk.findings.create; no task in Phase 5 writes a Finding | open |  | 2026-08-28T12:53:40.720Z |  |
 | 54 | 05 | deviation | packages/backend/src/store/schema.spec.ts |  | 05-06: the plan's task-2 gate edit was folded into task 1's commit to avoid committing a red schema gate; the task boundary in 05-06-PLAN.md and the shipped commit boundary therefore differ | open |  | 2026-08-28T15:11:18.513Z |  |
 | 55 | 05 | deviation | packages/frontend/src/stores/coalescer.ts |  | 05-08: CoalescerOptions.trailingWindowMs is overridable and the reaction CAP is not. The seam exists so a spec can drive the debounce faster than the cap and prove the throttle gate load-bearing (P5-D62); a production caller passing a large window could delay a legitimate update. Disclosed, not closed — the mounting component (05-09) must not pass it. | open |  | 2026-08-28T16:39:28.707Z |  |
-| 56 | 05 | stub | packages/frontend/src/App.vue |  | ArtifactsTable and ObservationsTable are mounted with :analyses="null" and :affected-filter="null" — the shipped paged reads carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. UI-09 deliberately left unmarked. | open |  | 2026-08-28T17:26:44.942Z |  |
+| 56 | 05 | stub | packages/frontend/src/App.vue |  | ArtifactsTable and ObservationsTable are mounted with :analyses="null" and :affected-filter="null" — the shipped paged reads carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. UI-09 deliberately left unmarked. | fixed |  | 2026-08-28T17:26:44.942Z | 2026-08-29T01:31:22.450Z |
 | 57 | 05 | stub | packages/frontend/src/components/ArtifactsTable.vue |  | The triage column renders empty text: the triage table does not exist yet (its key waits on Phase 4's stable entity identity, D-05(4)). The column holds its position so it does not shift every column right of it when the data lands. | open |  | 2026-08-28T17:26:53.143Z |  |
-| 58 | 05 | stub | packages/frontend/src/components/PartialBanner.vue |  | The show-only-affected action is suppressed on both shipped tables because the backend statement matrix has no scan-state filter column, so no single-column filter can express 'only the affected artifacts'. Component-level behaviour is proved; the wiring has no filter to bind to. | open |  | 2026-08-28T17:26:53.230Z |  |
+| 58 | 05 | stub | packages/frontend/src/components/PartialBanner.vue |  | The show-only-affected action is suppressed on both shipped tables because the backend statement matrix has no scan-state filter column, so no single-column filter can express 'only the affected artifacts'. Component-level behaviour is proved; the wiring has no filter to bind to. | fixed |  | 2026-08-28T17:26:53.230Z | 2026-08-29T01:31:22.560Z |
+| 59 | 05 | stub | packages/frontend/src/components/EvidencePanel.vue |  | The evidence panel's byteRange and snippet slots render an explicit not-yet-available line naming Phase 4 (plan 04-03): the evidence table does not exist, so there are no offsets to slice and no excerpt to show. App.vue passes :evidence="null". The rendering path is fully exercised by the panel spec against the shared hostile fixture; only the producer is absent. | open |  | 2026-08-29T01:31:47.734Z |  |
+| 60 | 05 | stub | packages/frontend/src/components/EvidencePanel.vue |  | The score-explanation slot renders an explicit not-yet-available line naming Phase 3 (plan 03-03): there is no signal vocabulary and no scorer, so no score has been computed. UI-04 stays open. | open |  | 2026-08-29T01:31:47.844Z |  |
+| 61 | 05 | stub | packages/frontend/src/components/EvidencePanel.vue |  | The source-request slot renders an explicit not-yet-available line: App.vue passes :source-request-id="null" because nothing links an artifact to the observation whose request still resolves (D-02's walk is the deferred pass's). UI-03 is deliberately NOT marked complete for this reason and the byte-offset one. | open |  | 2026-08-29T01:31:47.959Z |  |
+| 62 | 05 | deviation | packages/backend/src/store/retry.ts |  | A retry returns the analysis to the queued state but does NOT re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The panel states this in words. Phase 2's ERR-02 recovery is what drains a pending row without a fresh sighting. | open |  | 2026-08-29T01:31:48.065Z |  |
 
 ````json
 [
@@ -764,10 +768,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/frontend/src/App.vue",
     "line": null,
     "description": "ArtifactsTable and ObservationsTable are mounted with :analyses=\"null\" and :affected-filter=\"null\" — the shipped paged reads carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. UI-09 deliberately left unmarked.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-28T17:26:44.942Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-29T01:31:22.450Z"
   },
   {
     "id": 57,
@@ -788,9 +792,57 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/frontend/src/components/PartialBanner.vue",
     "line": null,
     "description": "The show-only-affected action is suppressed on both shipped tables because the backend statement matrix has no scan-state filter column, so no single-column filter can express 'only the affected artifacts'. Component-level behaviour is proved; the wiring has no filter to bind to.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-28T17:26:53.230Z",
+    "resolved_at": "2026-08-29T01:31:22.560Z"
+  },
+  {
+    "id": 59,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/components/EvidencePanel.vue",
+    "line": null,
+    "description": "The evidence panel's byteRange and snippet slots render an explicit not-yet-available line naming Phase 4 (plan 04-03): the evidence table does not exist, so there are no offsets to slice and no excerpt to show. App.vue passes :evidence=\"null\". The rendering path is fully exercised by the panel spec against the shared hostile fixture; only the producer is absent.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T01:31:47.734Z",
+    "resolved_at": null
+  },
+  {
+    "id": 60,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/components/EvidencePanel.vue",
+    "line": null,
+    "description": "The score-explanation slot renders an explicit not-yet-available line naming Phase 3 (plan 03-03): there is no signal vocabulary and no scorer, so no score has been computed. UI-04 stays open.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T01:31:47.844Z",
+    "resolved_at": null
+  },
+  {
+    "id": 61,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/components/EvidencePanel.vue",
+    "line": null,
+    "description": "The source-request slot renders an explicit not-yet-available line: App.vue passes :source-request-id=\"null\" because nothing links an artifact to the observation whose request still resolves (D-02's walk is the deferred pass's). UI-03 is deliberately NOT marked complete for this reason and the byte-offset one.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T01:31:47.959Z",
+    "resolved_at": null
+  },
+  {
+    "id": 62,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "packages/backend/src/store/retry.ts",
+    "line": null,
+    "description": "A retry returns the analysis to the queued state but does NOT re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The panel states this in words. Phase 2's ERR-02 recovery is what drains a pending row without a fresh sighting.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T01:31:48.065Z",
     "resolved_at": null
   }
 ]

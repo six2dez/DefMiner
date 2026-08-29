@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-09-PLAN.md
-last_updated: "2026-08-28T17:29:45.681Z"
+stopped_at: Completed 05-10-PLAN.md
+last_updated: "2026-08-29T01:33:25.010Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 61fd868fd9a7ffb3d5119323a1c46dde8a862c25
+state_head: 5f0697c96413dca4793fa2337ab0482de843853b
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 10 of 12
+Plan: 11 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -292,6 +292,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P07 | 20 min | 3 tasks | 14 files |
 | Phase 05 P08 | 20 min | 3 tasks | 7 files |
 | Phase 05 P09 | 42 min | 3 tasks | 25 files |
+| Phase 05 P10 | 35 min | 4 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -525,6 +526,19 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D67 (plan 05-09): UI-SPEC FLAG F3 resolved — the partial-view banner's CHROME is always info-500 and the COUNT inside it takes danger-500 only when the affected set includes a failed artifact, because failed means nothing was inspected. Two elements, two rules, stated in the component and asserted.
 - [Phase 05]: P5-D68 (plan 05-09): the table cell uses forCellText (O(cap)), never forCell (O(n)). forCell walks the whole value for the 'Truncated at {shown} of {total}' affordance, which is the PANEL's. The 10,000-row browser backstop measured what that cost on the cell path: 99 of 396 frames over the 32 ms budget, p95 418 ms, whole scroll 37.4 s; after, 0 over budget, p95 17.1 ms, 4.0 s. Legitimate only because sanitise.spec.ts asserts byte equality with forDisplay over the whole hostile corpus at both caps.
 - [Phase 05]: P5-D69 (plan 05-09): UI-09 is deliberately NOT marked complete although 05-09 is its only declarer. The badge, the banner and the floor statement ship and are exercised, but the shipped paged reads carry no scan_state and no endpoint returns one, so nothing is marked on the running page. Checking it off would present an incomplete thing as complete — the requirement's own subject.
+- [Phase 05]: P5-D70 (plan 05-10): RETRY_TARGET_SCAN_STATE and RETRYABLE_SCAN_STATES are declared in @defminer/engine/contract and retry.ts never spells a scan state; the retryable list's ARITY is asserted at module import. — Every statement in the backend is a complete literal, so an IN list cannot be sized at run time. A sixth degraded state would otherwise bind a short list and silently retry one state fewer — the same mechanism table-contract.ts's row-height lookup uses, for the same class of silent failure.
+- [Phase 05]: P5-D71 (plan 05-10): the analysis state reaches the artifact page through a CORRELATED SCALAR SUBQUERY on the analyses primary key, correlated on project_id, never a JOIN. — An artifact carries one analysis per corpus version, so a join multiplies rows — and inside the bounded candidate window the inner LIMIT would then count JOINED rows rather than artifacts, silently shrinking the window. The correlation on project_id is load-bearing and asserted: a spec seeds a NEWER analysis of the same digest in another project and the row still reports its own.
+- [Phase 05]: P5-D72 (plan 05-10): TWO scan-state filter columns — scan_state (one state) and analysis_degraded (the two degraded states) — rather than one conditional predicate. — A degraded analysis is two states and one bound equality cannot express it. A predicate branching on a bound value is the null-guard shape 05-RESEARCH O-01 disqualified by measurement (2,000,025 VM steps to return an EMPTY page over 200,000 rows against 24 on a leading index). Three filter columns over eight slots is 24 filtered literals, asserted against the source; combinations would have been 64.
+- [Phase 05]: P5-D73 (plan 05-10): the degraded state set is spelled once in SQL text and held to SCAN_STATES.filter(isDegradedScanState) by a source assertion. — SQL cannot import TypeScript, so the restatement is unavoidable. It is permitted only because something compares it to the original — the same device sanitise.spec.ts uses to allow forDisplayText beside forDisplay. Every IN clause in reads.ts is checked, not just one.
+- [Phase 05]: P5-D74 (plan 05-10): the scan-state counts use the SAME predicate the page does, accepting a correlated seek per candidate row, rather than a cheap index seek over analyses. — idx_analyses_state would answer 'how many analyses are failed' as a seek — a DIFFERENT question. The page selects each artifact's NEWEST analysis; a count over analyses counts every analysis at every corpus version, and the two disagree by exactly the rows a corpus bump produced. A total the operator can see is wrong by counting the rows on screen is worse than a slow one.
+- [Phase 05]: P5-D75 (plan 05-10): the panel's analysis projection OMITS analyses.error entirely; the column stays on the backend. — ERR-04's copy interpolates a {reason} into a sentence and the rule that outranks the copy table requires a DefMiner-authored code. The surest way to keep a hostile artifact's own error text out of a sentence is for it never to reach the package that writes the sentence — resolution rather than discipline (T-05-51). Asserted as a KEY SET on the object that actually crossed the boundary.
+- [Phase 05]: P5-D76 (plan 05-10): P5-D26 is paid — the byte range is stated from THREE BACKEND INTEGERS as its OWN sentence beside the grapheme truncation notice. — forPanel's object deliberately carries no byte count: bytes are the backend's length space and the display text is grapheme-truncated in the frontend's. Two sentences rather than one merged one, so neither length space is presented as a conversion of the other — which is the silently-wrong arithmetic assertHighlightRanges exists to make loud.
+- [Phase 05]: P5-D77 (plan 05-10): the panel's fixed height is asserted by DOM NODE IDENTITY and class equality across the loading/loaded transition, never by getBoundingClientRect. — P5-D65 measured that jsdom has no layout and reports every box as 0x0, so a pixel comparison passes in the COLLAPSED state too — a test that passes by measuring an empty set. Node identity proves the region was not unmounted, which is the property the design contract actually names.
+- [Phase 05]: P5-D78 (plan 05-10): the scan-state presentation map moved to components/scan-state-presentation.ts and gained a second renderer. — The panel must state an analysis state in words and cannot embed StatusBadge: that component carries a data-defminer-status-badge marker and the panel asserts, over its RENDERED SUBTREE, that no node inside it carries a title or a data-prefixed attribute (R2's absolute). Copying five labels into the panel would have been the second declaration the Record<ScanState, …> mechanism exists to prevent.
+- [Phase 05]: P5-D79 (plan 05-10): a retry's read-back state reaches the table through an OVERLAY map keyed by digest, never through a refetch. — A retry happens with the panel open BY CONSTRUCTION — it is invoked from inside it — so refetching the page to pick the new state up would re-order the table at the exact moment the operator is mid-triage. That is the row shift the coalescer exists to prevent, arriving through the one path the coalescer does not watch.
+- [Phase 05]: P5-D80 (plan 05-10): the coalescer is SUBSCRIBED by App.vue and its triage gate spans BOTH inventory stores. — Plan 05-08 built the coalescer and nothing subscribed it, so UI-07's mid-triage guarantee was a property of a module rather than of the page. A gate watching only the active store would let a reaction land the moment the operator switched tabs, and a panel opened from either tab means they are mid-triage.
+- [Phase 05]: P5-D81 (plan 05-10): UI-03 is deliberately NOT marked complete, although both of its declaring plans have now produced summaries. — Its text is 'every entity links back to its source request, artifact version, and byte offsets'. The artifact-version line ships and is exercised; the source request and the byte offsets do not exist to link to — the evidence table is Phase 4 plan 04-03's. Checking it off would present an incomplete thing as complete, which is the same discipline P5-D69 applied to UI-09.
+- [Phase 05]: P5-D82 (plan 05-10): OPS-03 is marked complete and its LIMIT is stated on the surface that creates it. — A retry returns the row to the queued state and does not re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The queued state is a durable record that work is outstanding, which is what it is for, and Phase 2's ERR-02 recovery is what drains such a row. The panel says so in words rather than leaving one word to carry it.
 
 ### Known Risks Carried Forward
 
@@ -567,8 +581,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-28T17:29:17.714Z
-**Stopped at:** Completed 05-09-PLAN.md
+**Last session:** 2026-08-29T01:33:24.964Z
+**Stopped at:** Completed 05-10-PLAN.md
 **Resume file:** None
 
 ### Blockers
