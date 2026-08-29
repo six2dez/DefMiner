@@ -58,6 +58,7 @@ import {
   type CompatPayload,
   CONTRACT_VERSION,
   type PluginSdk,
+  type RetryOutcome,
   type StatusPayload,
 } from "./api/spec";
 import {
@@ -82,15 +83,21 @@ import {
   installLifecycle,
   projectEpoch,
 } from "./lifecycle";
-import { type ArtifactRow, listArtifacts } from "./store/artifacts";
+import {
+  DETECTOR_CORPUS_VERSION,
+  getLatestAnalysisForArtifact,
+} from "./store/analyses";
+import { listArtifacts } from "./store/artifacts";
 import { getDb, readSqliteVersion } from "./store/db";
 import { migrate } from "./store/migrations";
 import { listObservations, type ObservationRow } from "./store/observations";
 import {
+  type ArtifactPageRow,
   countInventory,
   listArtifactsPage,
   listObservationsPage,
 } from "./store/reads";
+import { retryAnalysis } from "./store/retry";
 import { describeError, slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
@@ -156,6 +163,16 @@ const NO_ROWS_VISIBLE: VisibleTotal = {
   hiddenBySuppression: 0,
   suppressionRuleCount: 0,
 };
+
+/**
+ * The outcome a retry answers with when it could not be attempted at all.
+ *
+ * `ok: false` AND `state: null` TOGETHER, never `ok: true` with no change. The
+ * panel distinguishes "the guard declined to move this row" from "the write
+ * did not happen", and collapsing the two would show the operator a decline
+ * that never ran (T-05-55).
+ */
+const NO_RETRY: RetryOutcome = { ok: false, changed: false, state: null };
 
 /**
  * Replace the caller's `projectId` with the one the plugin resolved.
@@ -408,7 +425,7 @@ export async function init(sdk: PluginSdk): Promise<void> {
     });
     sdk.api.register("listArtifactsPage", async (_s, req) => {
       const pid = currentProjectId();
-      if (!db || pid === null) return emptyPage<ArtifactRow>();
+      if (!db || pid === null) return emptyPage<ArtifactPageRow>();
       return listArtifactsPage(db, scopedTo(req, pid));
     });
     sdk.api.register("listObservationsPage", async (_s, req) => {
@@ -420,6 +437,57 @@ export async function init(sdk: PluginSdk): Promise<void> {
       const pid = currentProjectId();
       if (!db || pid === null) return NO_ROWS_VISIBLE;
       return countInventory(db, pid, req.table, req.filter);
+    });
+    sdk.api.register("getArtifactAnalysis", async (_s, req) => {
+      const pid = currentProjectId();
+      // FAIL CLOSED, AND `null` IS NOT THE SAME CLAIM AS AN EMPTY PANEL. The
+      // panel reads `null` as "this artifact has no analysis to show" and says
+      // so in words; it never renders a state nobody knows.
+      if (!db || pid === null) return null;
+      const row = await getLatestAnalysisForArtifact(db, pid, req.sha256);
+      if (row === undefined) return null;
+      // MAPPED FIELD BY FIELD, not spread. `analyses.error` is on the row and
+      // is deliberately not on the contract type; a spread would carry it
+      // across the boundary the day somebody widens the select list.
+      return {
+        sha256: row.sha256,
+        detectorSetHash: row.detector_set_hash,
+        scanState: row.scan_state,
+        bytesWalked: row.bytes_walked,
+        byteLen: row.byte_len,
+        startedAt: row.started_at,
+        finishedAt: row.finished_at,
+      };
+    });
+    sdk.api.register("retryAnalysis", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return NO_RETRY;
+      const outcome = await retryAnalysis(
+        db,
+        pid,
+        req.sha256,
+        // The corpus version the caller named, NOT a substituted current one:
+        // it is part of the key, and substituting it would aim the retry at a
+        // reading of these bytes the operator is not looking at. The sentinel
+        // is imported so this file does not restate it.
+        req.detectorSetHash === ""
+          ? DETECTOR_CORPUS_VERSION
+          : req.detectorSetHash,
+        Date.now(),
+      );
+      if (!outcome.ok) {
+        // LOGGED HERE, NOT RETURNED. The description is already redacted, and
+        // it still does not cross the boundary: ERR-04's copy interpolates a
+        // DefMiner-authored reason code into a sentence, and a message that
+        // reached the panel is a message somebody eventually interpolates.
+        log(sdk, "retryAnalysis failed: " + outcome.error);
+        return NO_RETRY;
+      }
+      return {
+        ok: true,
+        changed: outcome.changes > 0,
+        state: outcome.state ?? null,
+      };
     });
     // Not `async`, and it touches nothing: a version check that could fail for
     // any reason other than the plugin being absent would be a check the

@@ -27,7 +27,14 @@
 // `test/fixtures/sqlite-fixture.ts` for what that means it cannot prove. Nothing
 // here claims anything about connection affinity or transaction stranding.
 
-import type { PageRequest } from "@defminer/engine/contract";
+import { readFileSync } from "node:fs";
+
+import type { PageRequest, ScanState } from "@defminer/engine/contract";
+import {
+  DEGRADED_ANALYSIS_FILTER,
+  isDegradedScanState,
+  SCAN_STATES,
+} from "@defminer/engine/contract";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -35,9 +42,15 @@ import {
   type SqliteFixture,
 } from "../../test/fixtures/sqlite-fixture";
 
+import {
+  DETECTOR_CORPUS_VERSION,
+  getLatestAnalysisForArtifact,
+} from "./analyses";
 import { migrate } from "./migrations";
 import {
   ARTIFACT_FILTER_COLUMN,
+  ARTIFACT_FILTER_COLUMNS,
+  ARTIFACT_SCAN_STATE_FILTER_COLUMN,
   ARTIFACT_SORT_KEYS,
   type ArtifactSortKey,
   CANDIDATE_WINDOW_ROWS,
@@ -111,6 +124,38 @@ function insertObservation(
       status,
       contentType,
       observedAt,
+    );
+}
+
+/**
+ * One analysis row for an artifact, at the shipped corpus sentinel.
+ *
+ * `startedAt` is a parameter because the page reads pick the artifact's NEWEST
+ * analysis, and "newest" is only assertable if a case can make one row newer
+ * than another on purpose.
+ */
+function insertAnalysis(
+  projectId: string,
+  sha256: string,
+  state: ScanState,
+  options: {
+    detectorSetHash?: string;
+    startedAt?: number;
+    bytesWalked?: number | null;
+  } = {},
+): void {
+  fx.raw
+    .prepare(
+      "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, bytes_walked, started_at, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .run(
+      projectId,
+      sha256,
+      options.detectorSetHash ?? DETECTOR_CORPUS_VERSION,
+      state,
+      options.bytesWalked ?? 1024,
+      options.startedAt ?? 1_700_000_000_000,
+      1_700_000_100_000,
     );
 }
 
@@ -827,5 +872,284 @@ describe("every declared vocabulary member has a statement behind it", () => {
       const total = await countInventory(fx.db, PROJECT, table, null);
       expect(total.visible, `${table} counted nothing`).toBe(6);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE ANALYSIS STATE THE PAGE CARRIES (UI-09)
+// ---------------------------------------------------------------------------
+//
+// UI-09 reads "degraded and partial analyses are visibly marked, never silently
+// presented as complete". Plan 05-09 shipped the badge, the banner and the
+// floor statement and could mark NOTHING on the running page, because the paged
+// statements carried no `scan_state` and no endpoint returned one. These cases
+// are the other half: what the page hands the frontend, and what happens when
+// there is nothing to hand it.
+
+describe("an artifact page carries its newest analysis state", () => {
+  beforeEach(() => {
+    for (let i = 0; i < 6; i += 1) {
+      insertArtifact(PROJECT, digest(i), 100 + i, "script", 1_700_000_000 + i);
+    }
+    insertAnalysis(PROJECT, digest(0), "done");
+    insertAnalysis(PROJECT, digest(1), "partial");
+    insertAnalysis(PROJECT, digest(2), "failed");
+    insertAnalysis(PROJECT, digest(3), "running");
+    insertAnalysis(PROJECT, digest(4), "pending");
+    // digest(5) is deliberately UNANALYSED.
+  });
+
+  it("reports the shipped state per row, and null for an artifact never analysed", async () => {
+    const page = await listArtifactsPage(fx.db, req({ direction: "asc" }));
+    const byDigest = new Map(page.rows.map((r) => [r.sha256, r.scan_state]));
+
+    expect(byDigest.get(digest(0))).toBe("done");
+    expect(byDigest.get(digest(1))).toBe("partial");
+    expect(byDigest.get(digest(2))).toBe("failed");
+    expect(byDigest.get(digest(3))).toBe("running");
+    expect(byDigest.get(digest(4))).toBe("pending");
+    // NULL, NOT A FABRICATED STATE. A sighting writes the artifact row before
+    // any analysis is claimed, so this is a real state of a real row — and
+    // answering `done` for it is exactly the silence UI-09 forbids.
+    expect(byDigest.get(digest(5))).toBeNull();
+  });
+
+  it("picks the NEWEST analysis when an artifact has been read under two corpus versions", async () => {
+    // The corpus version is part of the KEY, so an artifact accumulates one
+    // analysis per version. The panel and the badge show the reading IN FORCE.
+    insertAnalysis(PROJECT, digest(0), "failed", {
+      detectorSetHash: "0".repeat(64),
+      startedAt: 1_800_000_000_000,
+    });
+
+    const page = await listArtifactsPage(fx.db, req({ direction: "asc" }));
+    const row = page.rows.find((r) => r.sha256 === digest(0));
+    expect(row?.scan_state).toBe("failed");
+  });
+
+  it("never reports another project's analysis (T-01-20)", async () => {
+    insertArtifact(OTHER_PROJECT, digest(0), 1, "script", 1_700_000_000);
+    insertAnalysis(OTHER_PROJECT, digest(0), "failed", {
+      startedAt: 1_900_000_000_000,
+    });
+
+    const page = await listArtifactsPage(fx.db, req({ direction: "asc" }));
+    const row = page.rows.find((r) => r.sha256 === digest(0));
+    // The other project's analysis is NEWER, so an uncorrelated subquery would
+    // return it. The correlation on `project_id` is what stops that, and one
+    // SQLite file serves every Caido project.
+    expect(row?.scan_state).toBe("done");
+  });
+
+  it("carries the state on the FILTERED path too, not only the unfiltered one", async () => {
+    const page = await listArtifactsPage(
+      fx.db,
+      req({
+        direction: "asc",
+        filter: { column: ARTIFACT_FILTER_COLUMN, value: "script" },
+      }),
+    );
+    expect(page.rows.length).toBe(6);
+    expect(page.rows.find((r) => r.sha256 === digest(2))?.scan_state).toBe(
+      "failed",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE SCAN-STATE FILTER COLUMNS
+// ---------------------------------------------------------------------------
+
+describe("filtering by analysis state", () => {
+  beforeEach(() => {
+    for (let i = 0; i < 10; i += 1) {
+      insertArtifact(PROJECT, digest(i), 100 + i, "script", 1_700_000_000 + i);
+    }
+    insertAnalysis(PROJECT, digest(0), "done");
+    insertAnalysis(PROJECT, digest(1), "done");
+    insertAnalysis(PROJECT, digest(2), "partial");
+    insertAnalysis(PROJECT, digest(3), "partial");
+    insertAnalysis(PROJECT, digest(4), "failed");
+    insertAnalysis(PROJECT, digest(5), "pending");
+    insertAnalysis(PROJECT, digest(6), "running");
+    // 7, 8, 9 unanalysed.
+  });
+
+  it("serves each shipped state as its own single-column filter", async () => {
+    const counts: Record<string, number> = {};
+    for (const state of SCAN_STATES) {
+      const page = await listArtifactsPage(
+        fx.db,
+        req({
+          filter: { column: ARTIFACT_SCAN_STATE_FILTER_COLUMN, value: state },
+        }),
+      );
+      counts[state] = page.rows.length;
+      for (const row of page.rows) expect(row.scan_state).toBe(state);
+    }
+    expect(counts).toEqual({
+      done: 2,
+      partial: 2,
+      failed: 1,
+      pending: 1,
+      running: 1,
+    });
+  });
+
+  it("narrows to exactly the degraded set, which one equality cannot express", async () => {
+    const page = await listArtifactsPage(
+      fx.db,
+      req({ filter: { ...DEGRADED_ANALYSIS_FILTER } }),
+    );
+
+    // THE WHOLE POINT OF THE SECOND FILTER COLUMN. `partial` AND `failed`, in
+    // one narrowing — three rows, not the two a single `scan_state = ?` could
+    // reach.
+    expect(page.rows.map((r) => r.sha256).sort()).toEqual([
+      digest(2),
+      digest(3),
+      digest(4),
+    ]);
+    for (const row of page.rows) {
+      expect(row.scan_state).not.toBeNull();
+      expect(isDegradedScanState(row.scan_state as ScanState)).toBe(true);
+    }
+  });
+
+  it("keeps the matrix LINEAR: one filtered literal per column, never per combination", () => {
+    // THE CONSTRAINT THIS PLAN WAS GIVEN, ASSERTED AGAINST THE SOURCE. Three
+    // filter columns over eight (sort key x direction x cursor) slots is
+    // 3 x 8 = 24 filtered literals. A matrix that had gone exponential in
+    // combinations would be 2^3 x 8 = 64, and the difference is visible as a
+    // count rather than as an argument.
+    const source = readFileSync("packages/backend/src/store/reads.ts", "utf8");
+    const filteredLiterals = source.match(
+      /^const ARTIFACTS_[A-Z_]+_FILTERED_BY_[A-Z_]+ = `/gm,
+    );
+    expect(ARTIFACT_FILTER_COLUMNS.length).toBe(3);
+    expect(filteredLiterals?.length).toBe(ARTIFACT_FILTER_COLUMNS.length * 8);
+  });
+
+  it("holds the degraded SQL to the vocabulary's own predicate", () => {
+    // SQL CANNOT IMPORT TYPESCRIPT, so the degraded set is spelled once in the
+    // statement text and bound HERE to the single declaration. This is the same
+    // device `sanitise.spec.ts` uses to allow a second, cheaper path through a
+    // security rule: the restatement is permitted only because something
+    // compares it to the original.
+    const source = readFileSync("packages/backend/src/store/reads.ts", "utf8");
+    const derived = SCAN_STATES.filter((state) => isDegradedScanState(state));
+    const expected = derived.map((state) => `'${state}'`).join(", ");
+    const occurrences = source.match(/IN \('[a-z']+(?:, '[a-z]+')*'?\)/g) ?? [];
+    expect(occurrences.length).toBeGreaterThan(0);
+    for (const clause of occurrences) {
+      expect(clause).toBe(`IN (${expected})`);
+    }
+  });
+
+  it("answers an unrecognised filter column with an empty exhausted page", async () => {
+    const page = await listArtifactsPage(
+      fx.db,
+      req({ filter: { column: "scan_state_or_something", value: "failed" } }),
+    );
+    expect(page.rows).toEqual([]);
+    expect(page.exhausted).toBe(true);
+  });
+
+  it("counts the SAME rows the page returns, for both new filter columns", async () => {
+    // A count and the page it belongs under that disagree produce a total the
+    // operator can see is wrong by counting the rows on screen.
+    for (const filter of [
+      { column: ARTIFACT_SCAN_STATE_FILTER_COLUMN, value: "partial" },
+      { ...DEGRADED_ANALYSIS_FILTER },
+    ]) {
+      const page = await listArtifactsPage(fx.db, req({ filter }));
+      const total = await countInventory(fx.db, PROJECT, "artifacts", filter);
+      expect(total.visible, `${filter.column} disagreed`).toBe(
+        page.rows.length,
+      );
+    }
+  });
+
+  it("does not offer the analysis-state columns on observations", async () => {
+    // An observation is a SIGHTING of an artifact; the analysis lives on the
+    // artifact. Accepting the column here would return rows the caller did not
+    // ask for, silently.
+    const page = await listObservationsPage(
+      fx.db,
+      req({
+        sortKey: "observed_at",
+        filter: { column: ARTIFACT_SCAN_STATE_FILTER_COLUMN, value: "failed" },
+      }),
+    );
+    expect(page.rows).toEqual([]);
+    expect(
+      (
+        await countInventory(fx.db, PROJECT, "observations", {
+          ...DEGRADED_ANALYSIS_FILTER,
+        })
+      ).visible,
+    ).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PANEL'S PER-ROW READ
+// ---------------------------------------------------------------------------
+
+describe("getLatestAnalysisForArtifact — the evidence panel's subject", () => {
+  beforeEach(() => {
+    insertArtifact(PROJECT, digest(0), 8192, "script", 1_700_000_000);
+  });
+
+  it("returns the newest analysis with the artifact's own byte length beside it", async () => {
+    insertAnalysis(PROJECT, digest(0), "done", {
+      startedAt: 1,
+      bytesWalked: 8192,
+    });
+    insertAnalysis(PROJECT, digest(0), "partial", {
+      detectorSetHash: "0".repeat(64),
+      startedAt: 2,
+      bytesWalked: 4096,
+    });
+
+    const row = await getLatestAnalysisForArtifact(fx.db, PROJECT, digest(0));
+    expect(row?.scan_state).toBe("partial");
+    expect(row?.detector_set_hash).toBe("0".repeat(64));
+    // The two numbers UI-09's degraded marker renders. Both measured by the
+    // backend; neither derived in the frontend.
+    expect(row?.bytes_walked).toBe(4096);
+    expect(row?.byte_len).toBe(8192);
+  });
+
+  it("carries no `error` column at all", async () => {
+    insertAnalysis(PROJECT, digest(0), "failed");
+    const row = await getLatestAnalysisForArtifact(fx.db, PROJECT, digest(0));
+    // A NEGATIVE PROPERTY ASSERTED ON THE OBJECT THAT CROSSED THE BOUNDARY,
+    // not on the code that built it. `analyses.error` is a plugin diagnostic
+    // whose text sits next to the artifact; ERR-04 interpolates a reason into a
+    // sentence, so the column stays on this side (T-05-51).
+    expect(Object.keys(row ?? {}).sort()).toEqual([
+      "byte_len",
+      "bytes_walked",
+      "detector_set_hash",
+      "finished_at",
+      "scan_state",
+      "sha256",
+      "started_at",
+    ]);
+  });
+
+  it("is undefined for an artifact that has never been analysed", async () => {
+    expect(
+      await getLatestAnalysisForArtifact(fx.db, PROJECT, digest(0)),
+    ).toBeUndefined();
+  });
+
+  it("never crosses the project boundary", async () => {
+    insertArtifact(OTHER_PROJECT, digest(0), 1, "script", 1_700_000_000);
+    insertAnalysis(OTHER_PROJECT, digest(0), "failed", { startedAt: 9 });
+    expect(
+      await getLatestAnalysisForArtifact(fx.db, PROJECT, digest(0)),
+    ).toBeUndefined();
   });
 });

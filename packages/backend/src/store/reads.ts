@@ -75,8 +75,10 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanState,
   VisibleTotal,
 } from "@defminer/engine/contract";
+import { DEGRADED_ANALYSIS_FILTER } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 
 import type { ArtifactRow } from "./artifacts";
@@ -167,9 +169,52 @@ export type ObservationSortKey = (typeof OBSERVATION_SORT_KEYS)[number];
  */
 export const ARTIFACT_FILTER_COLUMN = "kind";
 
+/**
+ * The analysis-state filter column on `artifacts`.
+ *
+ * NOT A COLUMN OF `artifacts`. It is the state of the artifact's newest
+ * analysis, carried into every artifact statement by a correlated scalar
+ * subquery on the `analyses` primary key — see the statement matrix's header.
+ * A filter over it is applied on the OUTER arm of the same bounded candidate
+ * window every other filter uses, so it costs what the other filters cost and
+ * needs no index of its own (which is why migration step v4's stated decision
+ * not to add filter-leading indexes still holds).
+ */
+export const ARTIFACT_SCAN_STATE_FILTER_COLUMN = "scan_state";
+
+/**
+ * Every filterable column on `artifacts`, in one list.
+ *
+ * THREE COLUMNS, THREE STATEMENTS PER SLOT — LINEAR, NOT EXPONENTIAL. That is
+ * the property {@link ARTIFACT_FILTER_COLUMN}'s note is about and it is the
+ * reason a second simultaneous filter is a type-level impossibility rather
+ * than a convention: `k` filter columns cost `k + 1` literals per slot, and
+ * `k` filter COMBINATIONS would cost `2^k`.
+ *
+ * The third member is {@link DEGRADED_ANALYSIS_FILTER}'s column and it exists
+ * because a degraded analysis is TWO states — `partial` and `failed` — which
+ * one bound equality cannot express. It gets its own complete literal rather
+ * than a conditional predicate inside the scan-state one: a predicate that
+ * branches on a bound value is the null-guard shape `05-RESEARCH § O-01`
+ * disqualified by measurement (2,000,025 VM steps to return an EMPTY page over
+ * a 200,000-row partition, against 24 on a leading index).
+ */
+export const ARTIFACT_FILTER_COLUMNS: readonly string[] = [
+  ARTIFACT_FILTER_COLUMN,
+  ARTIFACT_SCAN_STATE_FILTER_COLUMN,
+  DEGRADED_ANALYSIS_FILTER.column,
+];
+
 /** The single filterable column on `observations`. See
  *  {@link ARTIFACT_FILTER_COLUMN}. */
 export const OBSERVATION_FILTER_COLUMN = "content_type";
+
+/** Every filterable column on `observations`. One, today: there is no analysis
+ *  state to filter an observation by — an observation is a SIGHTING of an
+ *  artifact, and the artifact is where the analysis lives. */
+export const OBSERVATION_FILTER_COLUMNS: readonly string[] = [
+  OBSERVATION_FILTER_COLUMN,
+];
 
 // ---------------------------------------------------------------------------
 // THE STATEMENT MATRIX — ARTIFACTS
@@ -194,7 +239,10 @@ export const OBSERVATION_FILTER_COLUMN = "content_type";
 // moved, and the caller would refetch the same window forever.
 
 const ARTIFACTS_LAST_SEEN_DESC_FIRST = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ?
 ORDER BY last_seen_at DESC, sha256 DESC
@@ -202,17 +250,23 @@ LIMIT ?
 `;
 
 const ARTIFACTS_LAST_SEEN_DESC_NEXT = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ? AND (last_seen_at, sha256) < (?, ?)
 ORDER BY last_seen_at DESC, sha256 DESC
 LIMIT ?
 `;
 
-const ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ?
   ORDER BY last_seen_at DESC, sha256 DESC
@@ -223,16 +277,87 @@ ORDER BY e.last_seen_at DESC, e.sha256 DESC
 LIMIT ?
 `;
 
-const ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY last_seen_at DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.last_seen_at DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY last_seen_at DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
+ORDER BY e.last_seen_at DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ? AND (last_seen_at, sha256) < (?, ?)
   ORDER BY last_seen_at DESC, sha256 DESC
   LIMIT ?
 ) e
 WHERE e.kind = ?
+ORDER BY e.last_seen_at DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (last_seen_at, sha256) < (?, ?)
+  ORDER BY last_seen_at DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.last_seen_at DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (last_seen_at, sha256) < (?, ?)
+  ORDER BY last_seen_at DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
 ORDER BY e.last_seen_at DESC, e.sha256 DESC
 LIMIT ?
 `;
@@ -254,7 +379,10 @@ LIMIT ?
 `;
 
 const ARTIFACTS_LAST_SEEN_ASC_FIRST = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ?
 ORDER BY last_seen_at ASC, sha256 ASC
@@ -262,17 +390,23 @@ LIMIT ?
 `;
 
 const ARTIFACTS_LAST_SEEN_ASC_NEXT = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ? AND (last_seen_at, sha256) > (?, ?)
 ORDER BY last_seen_at ASC, sha256 ASC
 LIMIT ?
 `;
 
-const ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ?
   ORDER BY last_seen_at ASC, sha256 ASC
@@ -283,16 +417,87 @@ ORDER BY e.last_seen_at ASC, e.sha256 ASC
 LIMIT ?
 `;
 
-const ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY last_seen_at ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.last_seen_at ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY last_seen_at ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
+ORDER BY e.last_seen_at ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ? AND (last_seen_at, sha256) > (?, ?)
   ORDER BY last_seen_at ASC, sha256 ASC
   LIMIT ?
 ) e
 WHERE e.kind = ?
+ORDER BY e.last_seen_at ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (last_seen_at, sha256) > (?, ?)
+  ORDER BY last_seen_at ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.last_seen_at ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (last_seen_at, sha256) > (?, ?)
+  ORDER BY last_seen_at ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
 ORDER BY e.last_seen_at ASC, e.sha256 ASC
 LIMIT ?
 `;
@@ -314,7 +519,10 @@ LIMIT ?
 `;
 
 const ARTIFACTS_BYTE_LEN_DESC_FIRST = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ?
 ORDER BY byte_len DESC, sha256 DESC
@@ -322,17 +530,23 @@ LIMIT ?
 `;
 
 const ARTIFACTS_BYTE_LEN_DESC_NEXT = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ? AND (byte_len, sha256) < (?, ?)
 ORDER BY byte_len DESC, sha256 DESC
 LIMIT ?
 `;
 
-const ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ?
   ORDER BY byte_len DESC, sha256 DESC
@@ -343,16 +557,87 @@ ORDER BY e.byte_len DESC, e.sha256 DESC
 LIMIT ?
 `;
 
-const ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY byte_len DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.byte_len DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY byte_len DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
+ORDER BY e.byte_len DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ? AND (byte_len, sha256) < (?, ?)
   ORDER BY byte_len DESC, sha256 DESC
   LIMIT ?
 ) e
 WHERE e.kind = ?
+ORDER BY e.byte_len DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (byte_len, sha256) < (?, ?)
+  ORDER BY byte_len DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.byte_len DESC, e.sha256 DESC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (byte_len, sha256) < (?, ?)
+  ORDER BY byte_len DESC, sha256 DESC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
 ORDER BY e.byte_len DESC, e.sha256 DESC
 LIMIT ?
 `;
@@ -374,7 +659,10 @@ LIMIT ?
 `;
 
 const ARTIFACTS_BYTE_LEN_ASC_FIRST = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ?
 ORDER BY byte_len ASC, sha256 ASC
@@ -382,17 +670,23 @@ LIMIT ?
 `;
 
 const ARTIFACTS_BYTE_LEN_ASC_NEXT = `
-SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+       (SELECT an.scan_state FROM analyses an
+        WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+        ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
 FROM artifacts
 WHERE project_id = ? AND (byte_len, sha256) > (?, ?)
 ORDER BY byte_len ASC, sha256 ASC
 LIMIT ?
 `;
 
-const ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ?
   ORDER BY byte_len ASC, sha256 ASC
@@ -403,16 +697,87 @@ ORDER BY e.byte_len ASC, e.sha256 ASC
 LIMIT ?
 `;
 
-const ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED = `
-SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count
+const ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
 FROM (
-  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY byte_len ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.byte_len ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ?
+  ORDER BY byte_len ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
+ORDER BY e.byte_len ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_KIND = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
   FROM artifacts
   WHERE project_id = ? AND (byte_len, sha256) > (?, ?)
   ORDER BY byte_len ASC, sha256 ASC
   LIMIT ?
 ) e
 WHERE e.kind = ?
+ORDER BY e.byte_len ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_SCAN_STATE = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (byte_len, sha256) > (?, ?)
+  ORDER BY byte_len ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE e.scan_state = ?
+ORDER BY e.byte_len ASC, e.sha256 ASC
+LIMIT ?
+`;
+
+const ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_DEGRADED = `
+SELECT e.project_id, e.sha256, e.byte_len, e.kind, e.first_seen_at, e.last_seen_at, e.seen_count, e.scan_state
+FROM (
+  SELECT project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count,
+         (SELECT an.scan_state FROM analyses an
+          WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+          ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) AS scan_state
+  FROM artifacts
+  WHERE project_id = ? AND (byte_len, sha256) > (?, ?)
+  ORDER BY byte_len ASC, sha256 ASC
+  LIMIT ?
+) e
+WHERE CASE WHEN e.scan_state IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
 ORDER BY e.byte_len ASC, e.sha256 ASC
 LIMIT ?
 `;
@@ -687,12 +1052,22 @@ LIMIT ?
 // THE LOOKUP — PLAIN TYPESCRIPT OVER A DEEPLY FROZEN RECORD
 // ---------------------------------------------------------------------------
 
-/** The three statements one (sort key, direction, cursor presence) slot needs. */
+/** The statements one (sort key, direction, cursor presence) slot needs. */
 type SlotStatements = {
   /** The unfiltered page. Its own `LIMIT` is the page size. */
   readonly page: string;
-  /** The filtered page: the outer filter over the bounded candidate window. */
-  readonly filtered: string;
+  /**
+   * The filtered pages, ONE COMPLETE LITERAL PER FILTER COLUMN, keyed by that
+   * column's DefMiner-authored identifier.
+   *
+   * A RECORD RATHER THAN A SINGLE STATEMENT, and the record is what keeps the
+   * matrix linear: adding a filter column adds one literal per slot, never a
+   * literal per combination. The key is the same identifier `PageRequest`
+   * carries, so the lookup IS the validation — a request naming a column with
+   * no literal behind it reads an empty exhausted page rather than falling
+   * back to a wider one.
+   */
+  readonly filtered: Readonly<Record<string, string>>;
   /** The candidate window's key columns — {@link CANDIDATE_WINDOW_ROWS} rows at
    *  most, from the covering keyset index. Read ONLY on the filtered path. */
   readonly window: string;
@@ -717,8 +1092,14 @@ type DirectionSlot = { readonly asc: CursorSlot; readonly desc: CursorSlot };
  */
 function freezeDirections(d: DirectionSlot): DirectionSlot {
   for (const dir of [d.asc, d.desc]) {
-    Object.freeze(dir.first);
-    Object.freeze(dir.next);
+    for (const slot of [dir.first, dir.next]) {
+      // The per-filter-column record is a LEVEL OF ITS OWN and is frozen here
+      // rather than left as the one writable leaf. It holds the statements a
+      // request actually reaches, which makes it the single most valuable
+      // thing on this object to be able to reassign.
+      Object.freeze(slot.filtered);
+      Object.freeze(slot);
+    }
     Object.freeze(dir);
   }
   return Object.freeze(d);
@@ -730,24 +1111,52 @@ const ARTIFACT_READS: Readonly<Record<ArtifactSortKey, DirectionSlot>> =
       desc: {
         first: {
           page: ARTIFACTS_LAST_SEEN_DESC_FIRST,
-          filtered: ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_LAST_SEEN_DESC_FIRST_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_LAST_SEEN_DESC_FIRST_WINDOW,
         },
         next: {
           page: ARTIFACTS_LAST_SEEN_DESC_NEXT,
-          filtered: ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_LAST_SEEN_DESC_NEXT_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_LAST_SEEN_DESC_NEXT_WINDOW,
         },
       },
       asc: {
         first: {
           page: ARTIFACTS_LAST_SEEN_ASC_FIRST,
-          filtered: ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_LAST_SEEN_ASC_FIRST_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_LAST_SEEN_ASC_FIRST_WINDOW,
         },
         next: {
           page: ARTIFACTS_LAST_SEEN_ASC_NEXT,
-          filtered: ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_LAST_SEEN_ASC_NEXT_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_LAST_SEEN_ASC_NEXT_WINDOW,
         },
       },
@@ -756,24 +1165,52 @@ const ARTIFACT_READS: Readonly<Record<ArtifactSortKey, DirectionSlot>> =
       desc: {
         first: {
           page: ARTIFACTS_BYTE_LEN_DESC_FIRST,
-          filtered: ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_BYTE_LEN_DESC_FIRST_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_BYTE_LEN_DESC_FIRST_WINDOW,
         },
         next: {
           page: ARTIFACTS_BYTE_LEN_DESC_NEXT,
-          filtered: ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_BYTE_LEN_DESC_NEXT_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_BYTE_LEN_DESC_NEXT_WINDOW,
         },
       },
       asc: {
         first: {
           page: ARTIFACTS_BYTE_LEN_ASC_FIRST,
-          filtered: ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_BYTE_LEN_ASC_FIRST_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_BYTE_LEN_ASC_FIRST_WINDOW,
         },
         next: {
           page: ARTIFACTS_BYTE_LEN_ASC_NEXT,
-          filtered: ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED,
+          filtered: {
+            [ARTIFACT_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_KIND,
+            [ARTIFACT_SCAN_STATE_FILTER_COLUMN]:
+              ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_SCAN_STATE,
+            [DEGRADED_ANALYSIS_FILTER.column]:
+              ARTIFACTS_BYTE_LEN_ASC_NEXT_FILTERED_BY_DEGRADED,
+          },
           window: ARTIFACTS_BYTE_LEN_ASC_NEXT_WINDOW,
         },
       },
@@ -786,24 +1223,36 @@ const OBSERVATION_READS: Readonly<Record<ObservationSortKey, DirectionSlot>> =
       desc: {
         first: {
           page: OBSERVATIONS_OBSERVED_AT_DESC_FIRST,
-          filtered: OBSERVATIONS_OBSERVED_AT_DESC_FIRST_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]:
+              OBSERVATIONS_OBSERVED_AT_DESC_FIRST_FILTERED,
+          },
           window: OBSERVATIONS_OBSERVED_AT_DESC_FIRST_WINDOW,
         },
         next: {
           page: OBSERVATIONS_OBSERVED_AT_DESC_NEXT,
-          filtered: OBSERVATIONS_OBSERVED_AT_DESC_NEXT_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]:
+              OBSERVATIONS_OBSERVED_AT_DESC_NEXT_FILTERED,
+          },
           window: OBSERVATIONS_OBSERVED_AT_DESC_NEXT_WINDOW,
         },
       },
       asc: {
         first: {
           page: OBSERVATIONS_OBSERVED_AT_ASC_FIRST,
-          filtered: OBSERVATIONS_OBSERVED_AT_ASC_FIRST_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]:
+              OBSERVATIONS_OBSERVED_AT_ASC_FIRST_FILTERED,
+          },
           window: OBSERVATIONS_OBSERVED_AT_ASC_FIRST_WINDOW,
         },
         next: {
           page: OBSERVATIONS_OBSERVED_AT_ASC_NEXT,
-          filtered: OBSERVATIONS_OBSERVED_AT_ASC_NEXT_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]:
+              OBSERVATIONS_OBSERVED_AT_ASC_NEXT_FILTERED,
+          },
           window: OBSERVATIONS_OBSERVED_AT_ASC_NEXT_WINDOW,
         },
       },
@@ -812,24 +1261,33 @@ const OBSERVATION_READS: Readonly<Record<ObservationSortKey, DirectionSlot>> =
       desc: {
         first: {
           page: OBSERVATIONS_STATUS_DESC_FIRST,
-          filtered: OBSERVATIONS_STATUS_DESC_FIRST_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]:
+              OBSERVATIONS_STATUS_DESC_FIRST_FILTERED,
+          },
           window: OBSERVATIONS_STATUS_DESC_FIRST_WINDOW,
         },
         next: {
           page: OBSERVATIONS_STATUS_DESC_NEXT,
-          filtered: OBSERVATIONS_STATUS_DESC_NEXT_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]: OBSERVATIONS_STATUS_DESC_NEXT_FILTERED,
+          },
           window: OBSERVATIONS_STATUS_DESC_NEXT_WINDOW,
         },
       },
       asc: {
         first: {
           page: OBSERVATIONS_STATUS_ASC_FIRST,
-          filtered: OBSERVATIONS_STATUS_ASC_FIRST_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]: OBSERVATIONS_STATUS_ASC_FIRST_FILTERED,
+          },
           window: OBSERVATIONS_STATUS_ASC_FIRST_WINDOW,
         },
         next: {
           page: OBSERVATIONS_STATUS_ASC_NEXT,
-          filtered: OBSERVATIONS_STATUS_ASC_NEXT_FILTERED,
+          filtered: {
+            [OBSERVATION_FILTER_COLUMN]: OBSERVATIONS_STATUS_ASC_NEXT_FILTERED,
+          },
           window: OBSERVATIONS_STATUS_ASC_NEXT_WINDOW,
         },
       },
@@ -853,13 +1311,82 @@ const COUNT_ARTIFACTS_ALL = `SELECT COUNT(*) AS n FROM artifacts WHERE project_i
 
 const COUNT_ARTIFACTS_BY_KIND = `SELECT COUNT(*) AS n FROM artifacts WHERE project_id = ? AND kind = ?`;
 
+// THE SAME PREDICATE THE PAGE USES, NOT A CHEAPER ONE OVER `analyses`.
+//
+// `idx_analyses_state (project_id, scan_state, started_at)` would answer
+// "how many analyses are failed" as an index seek, which is far cheaper — and
+// a different question. The page selects each ARTIFACT's NEWEST analysis and
+// filters on that; a count over `analyses` would count every analysis at every
+// corpus version, and the two would disagree by exactly the rows a corpus bump
+// produced. A total the operator can see is wrong by counting the rows on
+// screen is worse than a slow one (P5-D45's argument, applied one level down).
+//
+// So this is a correlated seek per candidate row on top of the O(partition)
+// cost P5-D40 already accepted for a filtered count. It is called once per
+// filter change, never once per page. If it becomes the thing that stalls the
+// thread the fix is a materialised state column on `artifacts`, not a
+// truncated total.
+const COUNT_ARTIFACTS_BY_SCAN_STATE = `
+SELECT COUNT(*) AS n
+FROM artifacts
+WHERE project_id = ?
+  AND (SELECT an.scan_state FROM analyses an
+       WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+       ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1) = ?
+`;
+
+const COUNT_ARTIFACTS_BY_DEGRADED = `
+SELECT COUNT(*) AS n
+FROM artifacts
+WHERE project_id = ?
+  AND CASE WHEN (SELECT an.scan_state FROM analyses an
+                 WHERE an.project_id = artifacts.project_id AND an.sha256 = artifacts.sha256
+                 ORDER BY an.started_at DESC, an.detector_set_hash DESC LIMIT 1)
+                IN ('partial', 'failed') THEN 'yes' ELSE 'no' END = ?
+`;
+
+/**
+ * The count statement for one `artifacts` filter column, by the same lookup
+ * rule the page statements use: no statement means no read.
+ */
+const ARTIFACT_COUNTS: Readonly<Record<string, string>> = Object.freeze({
+  [ARTIFACT_FILTER_COLUMN]: COUNT_ARTIFACTS_BY_KIND,
+  [ARTIFACT_SCAN_STATE_FILTER_COLUMN]: COUNT_ARTIFACTS_BY_SCAN_STATE,
+  [DEGRADED_ANALYSIS_FILTER.column]: COUNT_ARTIFACTS_BY_DEGRADED,
+});
+
 const COUNT_OBSERVATIONS_ALL = `SELECT COUNT(*) AS n FROM observations WHERE project_id = ?`;
 
 const COUNT_OBSERVATIONS_BY_CONTENT_TYPE = `SELECT COUNT(*) AS n FROM observations WHERE project_id = ? AND content_type = ?`;
 
+/** As {@link ARTIFACT_COUNTS}. One entry, because `observations` has one
+ *  filter column. */
+const OBSERVATION_COUNTS: Readonly<Record<string, string>> = Object.freeze({
+  [OBSERVATION_FILTER_COLUMN]: COUNT_OBSERVATIONS_BY_CONTENT_TYPE,
+});
+
 // ---------------------------------------------------------------------------
 // THE READS
 // ---------------------------------------------------------------------------
+
+/**
+ * One artifact row AS THE WORKSPACE PAGES IT.
+ *
+ * `ArtifactRow` plus the state of the artifact's newest analysis. Declared
+ * here rather than added to `artifacts.ts`'s row type on purpose: `scan_state`
+ * is NOT a column of `artifacts` and never becomes one by being read beside
+ * it. The shipped `listArtifacts` still answers the shipped shape, byte for
+ * byte, and `artifacts.ts` is untouched.
+ *
+ * `scan_state` IS `null` FOR AN ARTIFACT THAT HAS NEVER BEEN ANALYSED, and
+ * that is a real state rather than a missing value: a sighting writes an
+ * artifact row before any analysis is claimed. The frontend reads `null` as
+ * UNKNOWN and renders nothing (P5-D66) — never as "Complete", which is the
+ * silence UI-09 forbids.
+ */
+export type ArtifactPageRow = ArtifactRow & {
+  scan_state: ScanState | null;
+};
 
 /** One row of a candidate-window read: the two key columns and nothing else. */
 type WindowRow = {
@@ -910,7 +1437,6 @@ function cursorOf(
 async function readPage<TRow extends object>(
   db: Database,
   reads: Readonly<Record<string, DirectionSlot>>,
-  filterColumn: string,
   req: PageRequest,
   sortValueOf: (row: TRow) => string | number,
   tieBreakOf: (row: TRow) => string | number,
@@ -955,7 +1481,20 @@ async function readPage<TRow extends object>(
     };
   }
 
-  if (req.filter.column !== filterColumn) return emptyPage<TRow>();
+  // THE LOOKUP IS THE VALIDATION. There is one complete literal per filter
+  // column and a request naming a column with no literal behind it reads
+  // nothing — the same fail-closed rule an unrecognised sort key gets, and for
+  // the same reason: ignoring an unrecognised filter would return MORE rows
+  // than the caller narrowed to, which is the opposite of what a filter is for
+  // (P5-D39). `hasOwnProperty` rather than a truthiness check, so an inherited
+  // property name cannot resolve to a statement this file did not write.
+  const filteredSql = Object.prototype.hasOwnProperty.call(
+    slot.filtered,
+    req.filter.column,
+  )
+    ? slot.filtered[req.filter.column]
+    : undefined;
+  if (filteredSql === undefined) return emptyPage<TRow>();
 
   // --- the filtered path --------------------------------------------------
   //
@@ -977,7 +1516,7 @@ async function readPage<TRow extends object>(
           CANDIDATE_WINDOW_ROWS,
         );
 
-  const pageStmt = await db.prepare(slot.filtered);
+  const pageStmt = await db.prepare(filteredSql);
   const rows =
     req.cursor === null
       ? await pageStmt.all<TRow>(
@@ -1045,11 +1584,10 @@ async function readPage<TRow extends object>(
 export async function listArtifactsPage(
   db: Database,
   req: PageRequest,
-): Promise<PageResponse<ArtifactRow>> {
-  return readPage<ArtifactRow>(
+): Promise<PageResponse<ArtifactPageRow>> {
+  return readPage<ArtifactPageRow>(
     db,
     ARTIFACT_READS,
-    ARTIFACT_FILTER_COLUMN,
     req,
     (row) => (req.sortKey === "byte_len" ? row.byte_len : row.last_seen_at),
     (row) => row.sha256,
@@ -1076,7 +1614,6 @@ export async function listObservationsPage(
   return readPage<ObservationRow>(
     db,
     OBSERVATION_READS,
-    OBSERVATION_FILTER_COLUMN,
     req,
     (row) => (req.sortKey === "status" ? row.status : row.observed_at),
     (row) => row.request_id,
@@ -1118,20 +1655,30 @@ export async function countInventory(
   };
   if (projectId === "") return none;
 
-  const expectedColumn =
-    table === "artifacts" ? ARTIFACT_FILTER_COLUMN : OBSERVATION_FILTER_COLUMN;
-  if (filter !== null && filter.column !== expectedColumn) return none;
-
-  let sql: string;
+  let unfiltered: string;
+  let byColumn: Readonly<Record<string, string>>;
   if (table === "artifacts") {
-    sql = filter === null ? COUNT_ARTIFACTS_ALL : COUNT_ARTIFACTS_BY_KIND;
+    unfiltered = COUNT_ARTIFACTS_ALL;
+    byColumn = ARTIFACT_COUNTS;
   } else if (table === "observations") {
-    sql =
-      filter === null
-        ? COUNT_OBSERVATIONS_ALL
-        : COUNT_OBSERVATIONS_BY_CONTENT_TYPE;
+    unfiltered = COUNT_OBSERVATIONS_ALL;
+    byColumn = OBSERVATION_COUNTS;
   } else {
     return none;
+  }
+
+  // The SAME lookup-is-the-validation rule the page reads use, over the same
+  // column identifiers, so the count and the page it belongs under cannot
+  // disagree about which filters exist.
+  let sql: string;
+  if (filter === null) {
+    sql = unfiltered;
+  } else {
+    const found = Object.prototype.hasOwnProperty.call(byColumn, filter.column)
+      ? byColumn[filter.column]
+      : undefined;
+    if (found === undefined) return none;
+    sql = found;
   }
 
   const stmt = await db.prepare(sql);

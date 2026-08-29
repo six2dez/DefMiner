@@ -30,6 +30,7 @@ import type {
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  ScanState,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import type { APISDK } from "caido:plugin";
@@ -39,7 +40,7 @@ import type { SurfaceOutcome } from "../compat";
 import type { LifecycleSdk } from "../lifecycle";
 import type { ArtifactRow } from "../store/artifacts";
 import type { ObservationRow } from "../store/observations";
-import type { InventoryTable } from "../store/reads";
+import type { ArtifactPageRow, InventoryTable } from "../store/reads";
 import type { SlimStatus } from "../telemetry";
 
 /**
@@ -59,9 +60,17 @@ import type { SlimStatus } from "../telemetry";
  * first mismatch cannot be detected even in principle. Plan 05-08 adds the
  * frontend half; UPGRADE-01 is Phase 11.
  *
+ * BUMPED TO 2 BY PLAN 05-10, and by the SHAPE rule rather than by the
+ * endpoint-count one. `listArtifactsPage` now answers rows carrying the
+ * artifact's analysis state, so a frontend built against version 1 would read
+ * the new shape with the old expectations — and on this runtime that is
+ * silent. The two endpoints added in the same plan (`retryAnalysis`,
+ * `getArtifactAnalysis`) would not have obliged a bump on their own: a
+ * frontend that does not know a name simply never calls it.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 1;
+export const CONTRACT_VERSION = 2;
 
 /**
  * What `getStatus` returns.
@@ -128,6 +137,76 @@ type CountRequest = {
 };
 
 /**
+ * The key of one analysis, as the panel and the retry action address it.
+ *
+ * `projectId` is carried for the same reason `PageRequest` carries it and is
+ * DISCARDED for the same reason (P5-D43): the store layer needs one in every
+ * predicate; the frontend is not the authority on which project is active.
+ *
+ * `detectorSetHash` is part of the analysis KEY, not a column beside it — a
+ * corpus bump must invalidate exactly the analyses at the old value — so a
+ * retry that omitted it would be a retry aimed at every reading of these
+ * bytes rather than at the one the operator is looking at.
+ */
+type AnalysisKey = {
+  readonly projectId: string;
+  readonly sha256: string;
+  readonly detectorSetHash: string;
+};
+
+/** The subject the panel asks about: one artifact, in the active project. */
+type ArtifactAnalysisRequest = {
+  readonly projectId: string;
+  readonly sha256: string;
+};
+
+/**
+ * The analysis as the EVIDENCE PANEL receives it.
+ *
+ * A PROJECTION, NOT THE ROW. `analyses.error` is deliberately absent: it is a
+ * plugin-generated diagnostic, already redacted by `describeError` before it
+ * was stored, and it is still the one string on that row whose text is
+ * ADJACENT to the artifact. ERR-04's copy interpolates a `{reason}` into a
+ * sentence, and 05-UI-SPEC.md's rule that outranks its copy table requires
+ * that reason be a DefMiner-authored code. Keeping the column on the backend
+ * means the class of bytes T-05-51 is about cannot reach the panel to be
+ * interpolated by a later edit — the guarantee is resolution, not discipline.
+ *
+ * `bytesWalked` and `byteLen` are the two numbers UI-09's degraded marker
+ * renders ("Analysis stopped at {bytes_walked} of {byte_len} bytes"). Both are
+ * integers the backend measured; neither is derived in the frontend.
+ */
+export type PanelAnalysis = {
+  readonly sha256: string;
+  readonly detectorSetHash: string;
+  readonly scanState: ScanState;
+  readonly bytesWalked: number | null;
+  readonly byteLen: number | null;
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+};
+
+/**
+ * What an operator-invoked retry answers with.
+ *
+ * `state` IS READ BACK FROM THE ROW, never assumed from the request — this
+ * driver cannot report what a write did, and the panel renders this value. A
+ * state the operator is shown that was not persisted is threat T-05-55.
+ *
+ * NO MESSAGE FIELD, DELIBERATELY. A driver rejection is logged on the backend
+ * and reported here as `ok: false` and nothing more; the panel maps that to
+ * its own DefMiner-authored copy. A message crossing this boundary is a
+ * sentence somebody eventually interpolates.
+ */
+export type RetryOutcome = {
+  readonly ok: boolean;
+  /** True only when the guard let the row move. */
+  readonly changed: boolean;
+  /** The row's state AFTER the write, or `null` when there is no such row. */
+  readonly state: ScanState | null;
+};
+
+/**
  * The plugin package specification.
  *
  * NOT EXPORTED, deliberately. Nothing outside this module can consume it — the
@@ -165,8 +244,11 @@ type Spec = DefinePluginPackageSpec<{
     getArtifacts: () => Promise<readonly ArtifactRow[]>;
     /** The whole recent observation list, unpaginated. As `getArtifacts`. */
     getObservations: () => Promise<readonly ObservationRow[]>;
-    /** One keyset page of `artifacts`. */
-    listArtifactsPage: (req: PageRequest) => Promise<PageResponse<ArtifactRow>>;
+    /** One keyset page of `artifacts`, each row carrying the analysis state
+     *  UI-09 marks it with. */
+    listArtifactsPage: (
+      req: PageRequest,
+    ) => Promise<PageResponse<ArtifactPageRow>>;
     /** One keyset page of `observations`. */
     listObservationsPage: (
       req: PageRequest,
@@ -174,6 +256,15 @@ type Spec = DefinePluginPackageSpec<{
     /** How many rows the operator can currently reach, for one table and one
      *  filter — the number behind the filtered-empty copy. */
     countInventory: (req: CountRequest) => Promise<VisibleTotal>;
+    /** The newest analysis of one artifact, as the evidence panel renders it.
+     *  `null` when the artifact has never been analysed — which is a real
+     *  state and not an error. */
+    getArtifactAnalysis: (
+      req: ArtifactAnalysisRequest,
+    ) => Promise<PanelAnalysis | null>;
+    /** Move ONE stopped analysis back out of its terminal state, on operator
+     *  command (OPS-03). Nothing re-analyses on its own as a result. */
+    retryAnalysis: (req: AnalysisKey) => Promise<RetryOutcome>;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

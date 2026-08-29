@@ -32,6 +32,7 @@ import { CONTRACT_VERSION } from "./api/spec";
 import { resetPassiveForTest } from "./hooks/passive";
 import { drainConsumerForTest, resetConsumerForTest } from "./ingest/consumer";
 import { resetLifecycleForTest } from "./lifecycle";
+import { DETECTOR_CORPUS_VERSION } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
 import { resetTelemetryForTest } from "./telemetry";
@@ -189,6 +190,14 @@ describe("the Phase 5 RPC surface", () => {
       .run("p1", sha256, 100, "script", lastSeenAt, lastSeenAt);
   }
 
+  function seedAnalysis(sha256: string, state: string): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, bytes_walked, started_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("p1", sha256, DETECTOR_CORPUS_VERSION, state, 64, 1_700_000_000_000);
+  }
+
   const PAGE_REQUEST = {
     projectId: "p1",
     sortKey: "last_seen",
@@ -210,6 +219,8 @@ describe("the Phase 5 RPC surface", () => {
       "listArtifactsPage",
       "listObservationsPage",
       "countInventory",
+      "getArtifactAnalysis",
+      "retryAnalysis",
       "getContractVersion",
     ]) {
       expect(names, `${expected} was not registered`).toContain(expected);
@@ -297,9 +308,162 @@ describe("the Phase 5 RPC surface", () => {
     ).toEqual({ visible: 0, hiddenBySuppression: 0, suppressionRuleCount: 0 });
   });
 
-  it("returns the contract version constant", async () => {
+  it("returns the contract version constant, and it is past version 1", async () => {
     const { rpc } = await boot();
     expect(rpc.getContractVersion()).toBe(CONTRACT_VERSION);
+    // THE BUMP IS PART OF THE CONTRACT, not bookkeeping. `listArtifactsPage`
+    // answers a WIDER ROW than version 1 did, and a frontend built against the
+    // old shape would read the new one with the old expectations — silently, on
+    // this runtime. Asserted as an inequality rather than as a literal so the
+    // next bump does not have to edit a number in two places.
+    expect(CONTRACT_VERSION).toBeGreaterThan(1);
+  });
+
+  it("carries the analysis state onto the paged artifact rows", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    seedArtifact("d2", 1_700_000_001);
+    seedAnalysis("d1", "partial");
+    const { rpc } = await boot();
+
+    const page = (await rpc.listArtifactsPage(null, PAGE_REQUEST)) as {
+      rows: { sha256: string; scan_state: string | null }[];
+    };
+    expect(page.rows.map((r) => [r.sha256, r.scan_state])).toEqual([
+      ["d1", "partial"],
+      // NULL for the artifact with no analysis. Not "done", which is the
+      // silence UI-09 forbids, and not an omitted field, which the frontend
+      // would read the same way.
+      ["d2", null],
+    ]);
+  });
+
+  it("serves the panel's analysis WITHOUT the stored error column", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    seedAnalysis("d1", "failed");
+    const { rpc } = await boot();
+
+    const analysis = (await rpc.getArtifactAnalysis(null, {
+      projectId: "p1",
+      sha256: "d1",
+    })) as Record<string, unknown>;
+
+    // THE KEY SET OF THE OBJECT THAT ACTUALLY CROSSED THE BOUNDARY, not the
+    // code that built it — the same device the invalidation payload's own case
+    // uses. A mapping that quietly grew an `error` field fails here rather than
+    // at a panel that has not sanitised it (T-05-51).
+    expect(Object.keys(analysis).sort()).toEqual([
+      "byteLen",
+      "bytesWalked",
+      "detectorSetHash",
+      "finishedAt",
+      "scanState",
+      "sha256",
+      "startedAt",
+    ]);
+    expect(analysis.scanState).toBe("failed");
+    expect(analysis.byteLen).toBe(100);
+  });
+
+  it("answers null for an artifact with no analysis, and when no project is resolved", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    const withProject = await boot();
+    expect(
+      await withProject.rpc.getArtifactAnalysis(null, {
+        projectId: "p1",
+        sha256: "d1",
+      }),
+    ).toBeNull();
+
+    resetDbHandleForTest();
+    const noProject = await boot(null);
+    expect(
+      await noProject.rpc.getArtifactAnalysis(null, {
+        projectId: "p1",
+        sha256: "d1",
+      }),
+    ).toBeNull();
+  });
+
+  it("moves a failed analysis and reports the state it READ BACK", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    seedAnalysis("d1", "failed");
+    const { rpc } = await boot();
+
+    const outcome = (await rpc.retryAnalysis(null, {
+      projectId: "p1",
+      sha256: "d1",
+      detectorSetHash: DETECTOR_CORPUS_VERSION,
+    })) as { ok: boolean; changed: boolean; state: string | null };
+
+    expect(outcome).toEqual({ ok: true, changed: true, state: "pending" });
+
+    // And the panel's own read agrees, which is the only way an operator can
+    // tell a reported state from a persisted one.
+    const after = (await rpc.getArtifactAnalysis(null, {
+      projectId: "p1",
+      sha256: "d1",
+    })) as { scanState: string };
+    expect(after.scanState).toBe("pending");
+  });
+
+  it("declines to move a running analysis, and says so as changed: false", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    seedAnalysis("d1", "running");
+    const { rpc } = await boot();
+
+    expect(
+      await rpc.retryAnalysis(null, {
+        projectId: "p1",
+        sha256: "d1",
+        detectorSetHash: DETECTOR_CORPUS_VERSION,
+      }),
+    ).toEqual({ ok: true, changed: false, state: "running" });
+  });
+
+  it("fails CLOSED when no project is resolved — never ok with no change", async () => {
+    seedArtifact("d1", 1_700_000_002);
+    seedAnalysis("d1", "failed");
+    const { rpc } = await boot(null);
+
+    // `ok: false`, NOT `ok: true, changed: false`. The panel distinguishes "the
+    // guard declined" from "the write did not happen", and collapsing the two
+    // shows the operator a decline that never ran (T-05-55).
+    expect(
+      await rpc.retryAnalysis(null, {
+        projectId: "p1",
+        sha256: "d1",
+        detectorSetHash: DETECTOR_CORPUS_VERSION,
+      }),
+    ).toEqual({ ok: false, changed: false, state: null });
+  });
+
+  it("ignores a caller-supplied project id on the retry path too", async () => {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES (?, ?, ?, ?, ?, ?, 1)",
+      )
+      .run("p2", "theirs", 100, "script", 1, 1);
+    fx.raw
+      .prepare(
+        "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, started_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("p2", "theirs", DETECTOR_CORPUS_VERSION, "failed", 1);
+    const { rpc } = await boot("p1");
+
+    // The caller names p2 and owns nothing there. The server substitutes p1,
+    // finds no such row, and the other project's analysis is untouched.
+    expect(
+      await rpc.retryAnalysis(null, {
+        projectId: "p2",
+        sha256: "theirs",
+        detectorSetHash: DETECTOR_CORPUS_VERSION,
+      }),
+    ).toEqual({ ok: true, changed: false, state: null });
+
+    const row = fx.raw
+      .prepare("SELECT scan_state FROM analyses WHERE project_id = ?")
+      .get("p2") as { scan_state: string };
+    expect(row.scan_state).toBe("failed");
   });
 
   it("registers the surface TWICE without a throw escaping init()", async () => {

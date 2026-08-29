@@ -269,6 +269,73 @@ export async function getAnalysis(
   return stmt.get<AnalysisRow>(projectId, sha256, detectorSetHash);
 }
 
+/**
+ * The NEWEST analysis of one artifact, with the artifact's own byte length
+ * beside it — the evidence panel's whole subject in one statement.
+ *
+ * WHY "NEWEST" AND NOT "THE ONE": the corpus version is part of the KEY, so an
+ * artifact can carry one analysis per corpus version it has been read under.
+ * The panel shows the reading in force, which is the most recent one, and the
+ * tie-break on `detector_set_hash` makes that choice DETERMINISTIC rather than
+ * whatever the planner returns first — two reads of the same panel that
+ * disagreed would be two different claims about the same artifact.
+ *
+ * ONE STATEMENT rather than two point reads, because `byte_len` is the
+ * denominator of UI-09's degraded marker ("Analysis stopped at {bytes_walked}
+ * of {byte_len} bytes") and a numerator and denominator fetched separately can
+ * be fetched either side of a retention sweep.
+ *
+ * `error` IS NOT SELECTED. It is a plugin diagnostic whose text is adjacent to
+ * the artifact, and the panel interpolates a reason into a sentence; leaving
+ * the column on this side of the boundary means the bytes T-05-51 is about
+ * cannot arrive at the panel at all. That is resolution rather than discipline.
+ */
+const LATEST_ANALYSIS_FOR_ARTIFACT_SQL = `
+SELECT an.sha256, an.detector_set_hash, an.scan_state, an.bytes_walked,
+       an.started_at, an.finished_at, a.byte_len
+FROM analyses an
+JOIN artifacts a ON a.project_id = an.project_id AND a.sha256 = an.sha256
+WHERE an.project_id = ? AND an.sha256 = ?
+ORDER BY an.started_at DESC, an.detector_set_hash DESC
+LIMIT 1
+`;
+
+/**
+ * The analysis row the evidence panel reads, in the store's own snake_case.
+ *
+ * @internal
+ */
+export type LatestAnalysisRow = {
+  sha256: string;
+  detector_set_hash: string;
+  scan_state: ScanState;
+  bytes_walked: number | null;
+  started_at: number;
+  finished_at: number | null;
+  byte_len: number | null;
+};
+
+/**
+ * The newest analysis of one artifact, or `undefined` when it has never been
+ * analysed.
+ *
+ * `undefined` IS A REAL STATE, not an error: a sighting writes the artifact
+ * row before any analysis is claimed, so an artifact with no analysis is an
+ * ordinary thing for the panel to be looking at. The panel says so in words
+ * rather than rendering a state nobody knows.
+ *
+ * Does NOT try/catch — this package's split is that writes report their own
+ * outcome and list reads do not, and this is a read.
+ */
+export async function getLatestAnalysisForArtifact(
+  db: Database,
+  projectId: string,
+  sha256: string,
+): Promise<LatestAnalysisRow | undefined> {
+  const stmt = await db.prepare(LATEST_ANALYSIS_FOR_ARTIFACT_SQL);
+  return stmt.get<LatestAnalysisRow>(projectId, sha256);
+}
+
 const COUNT_ANALYSES_SQL = `SELECT COUNT(*) AS n FROM analyses WHERE project_id = ?`;
 
 /** How many analyses this project holds. */
