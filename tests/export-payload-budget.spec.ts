@@ -47,6 +47,8 @@
 
 import { describe, expect, it } from "vitest";
 
+import { EXPORT_RPC_CHUNK_ROWS } from "../packages/backend/src/store/export";
+
 /** The largest export the product contemplates — the figure `§ Open Questions`
  *  item 3 names and the size everything below is measured at. */
 const ROW_COUNT = 50_000;
@@ -84,20 +86,22 @@ const MAX_SERIALISE_MS = 5_000;
 const MAX_RPC_PAYLOAD_BYTES = 8 * 1024 * 1024;
 
 /**
- * Rows per export RPC call.
+ * THE CONSTANT NOW LIVES IN PRODUCTION CODE, AND THIS FILE STILL DERIVES IT.
  *
- * THE CONSTANT PLAN 05-11 BINDS TO. Its value is not asserted as a bare number:
- * the tests below multiply it by the MEASURED worst-case bytes-per-row and assert
- * the product fits inside {@link MAX_RPC_PAYLOAD_BYTES}, AND that one step larger
- * would not. So it is derived from a serialisation that actually ran, and it goes
- * stale loudly rather than silently if the row shape widens.
+ * `EXPORT_RPC_CHUNK_ROWS` was exported from THIS SPEC while no production
+ * statement needed it. Plan 05-11 moved it to
+ * `packages/backend/src/store/export.ts` — production code must not import from
+ * `tests/` — and the derivation stayed here, where the 50,000-row measurement
+ * it is derived FROM lives. Moving the derivation too would have meant carrying
+ * a copy of that fixture into the backend package, which is the second copy this
+ * whole file exists to avoid.
  *
- * ITS HOME IS TEMPORARY. Plan 05-11 owns the export RPC and must MOVE this
- * constant (and the two tests that derive it) into the exporter's own module —
- * production code must not import from `tests/`. It lives here now because this
- * plan writes no production statement.
+ * So: the value is the exporter's, and the tests below still multiply it by the
+ * MEASURED worst-case bytes-per-row and assert the product fits inside
+ * {@link MAX_RPC_PAYLOAD_BYTES} AND that one step larger would not. It is
+ * derived from a serialisation that actually ran, and it goes stale loudly
+ * rather than silently if the row shape widens.
  */
-export const EXPORT_RPC_CHUNK_ROWS = 20_000;
 
 /** The step used to prove the constant is near its budget rather than
  *  arbitrarily conservative. */

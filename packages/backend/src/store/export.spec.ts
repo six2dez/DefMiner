@@ -461,9 +461,9 @@ describe("chunking costs no correctness", () => {
             .length,
         ).toBe(1);
       } else {
-        expect((JSON.parse(first + second) as { rows: unknown[] }).rows).toHaveLength(
-          6,
-        );
+        expect(
+          (JSON.parse(first + second) as { rows: unknown[] }).rows,
+        ).toHaveLength(6);
       }
     });
   }
@@ -513,7 +513,9 @@ describe("🧪 backstop `long-text / export-dialog` — the whole hostile fixtur
           for (const value of values) {
             // R2 step 1 and step 2: nothing invisible survives into the bytes.
             expect(ANY_CONTROL.test(value), "a control survived").toBe(false);
-            expect(ANY_BIDI.test(value), "a bidi override survived").toBe(false);
+            expect(ANY_BIDI.test(value), "a bidi override survived").toBe(
+              false,
+            );
             if (format === "csv") {
               // R3: no field's first CONTENT character is a dangerous lead. A
               // neutralised field's first content character is the apostrophe,
@@ -653,7 +655,14 @@ describe("readExportChunk over real rows", () => {
     }
 
     expect(joined).toBe(whole.chunk.text);
-    expect(index + 1).toBe(3);
+    // FOUR CALLS FOR SIX ROWS AT A CEILING OF TWO, AND THE FOURTH IS NOT WASTE.
+    // A keyset page that FILLS cannot know whether the partition ended at its
+    // last row, so the call that returns zero rows is the call that learns the
+    // export is over — and in the structured format it is also the call that
+    // CLOSES the document. Asserting three here would be asserting a lookahead
+    // this module deliberately does not do, because a lookahead costs the same
+    // page read one call earlier.
+    expect(index + 1).toBe(4);
   });
 
   it("names the file and the content type itself — DefMiner-authored, no target bytes", () => {
