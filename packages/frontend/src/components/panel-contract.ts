@@ -130,6 +130,25 @@ export const LOAD_FAILED_BODY =
 export const NEVER_ANALYSED_BODY =
   "This artifact has not been analysed yet. DefMiner analyses in the background, on one thread; it appears here once the walk has run.";
 
+/**
+ * What a queued analysis actually means here, said rather than left to be
+ * inferred from one word.
+ *
+ * THE LIMIT OF OPS-03, STATED ON THE SURFACE THAT CREATES IT. A retry clears
+ * the row and returns it to the queued state; it does NOT re-walk the bytes,
+ * because DefMiner does not retain them — the `artifacts` table stores a
+ * digest, a length and a kind, and no body. The row is a durable record that
+ * work is outstanding (which is exactly what the queued state is for), and the
+ * walk happens the next time the target serves those bytes.
+ *
+ * Leaving this unsaid would be the more comfortable choice and the wrong one:
+ * an operator who read "Queued" and waited would be waiting for something that
+ * is not going to happen on its own. DefMiner never requests anything from the
+ * target, and this is one of the places that costs something.
+ */
+export const QUEUED_BODY =
+  "Queued for re-analysis. DefMiner re-walks these bytes the next time the target serves them — it never requests them itself.";
+
 /** The label of the analysis-state line, so the word beside it is never a bare
  *  noun the operator has to guess the subject of. */
 export const ARTIFACT_VERSION_LABEL = "Analysed under rule corpus";

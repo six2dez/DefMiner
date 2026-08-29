@@ -80,6 +80,7 @@ import {
   NEVER_ANALYSED_BODY,
   NO_SELECTION_BODY,
   type PanelEvidence,
+  QUEUED_BODY,
   RE_ANALYSE_LABEL,
   RE_ANALYSING_LABEL,
   RETRY_FAILED_BODY,
@@ -167,6 +168,8 @@ const presentation = computed(() =>
 );
 
 const isFailedAnalysis = computed(() => shownState.value === "failed");
+/** The queued state carries its own sentence — see {@link QUEUED_BODY}. */
+const isQueued = computed(() => shownState.value === "pending");
 const isDegraded = computed(
   () => shownState.value !== null && isDegradedScanState(shownState.value),
 );
@@ -355,6 +358,14 @@ const sourceRequestLine = computed<string>(() =>
             {{ failureLine }}
           </p>
         </template>
+
+        <p
+          v-if="isQueued"
+          id="defminer-evidence-queued"
+          class="text-surface-400"
+        >
+          {{ QUEUED_BODY }}
+        </p>
 
         <!-- UI-09's per-artifact line. Both counts are integers the backend
              measured; neither is derived from the other. -->

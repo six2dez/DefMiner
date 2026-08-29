@@ -65,6 +65,7 @@ import {
   NEVER_ANALYSED_BODY,
   NO_SELECTION_BODY,
   type PanelEvidence,
+  QUEUED_BODY,
   RE_ANALYSE_LABEL,
   RE_ANALYSING_LABEL,
   RETRY_FAILED_BODY,
@@ -245,6 +246,19 @@ describe("EvidencePanel — ERR-04, in words (05-UI-SPEC § Copywriting Contract
     expect(wrapper.get("#defminer-evidence-degraded").text()).toContain(
       "a floor, not a total",
     );
+  });
+
+  it("says what a queued analysis is waiting for, rather than leaving one word to carry it", () => {
+    const wrapper = mountPanel({
+      selectedSha256: SHA,
+      analysis: analysis({ scanState: "pending" }),
+    });
+    // THE LIMIT OF OPS-03, ON THE SURFACE THAT CREATES IT. A retry returns the
+    // row to the queue; it does not re-walk the bytes, because DefMiner does
+    // not retain them. An operator who read "Queued" and waited would be
+    // waiting for something that will not happen on its own.
+    expect(wrapper.get("#defminer-evidence-queued").text()).toBe(QUEUED_BODY);
+    expect(QUEUED_BODY).toContain("never requests them itself");
   });
 
   it("marks nothing for a complete analysis", () => {
