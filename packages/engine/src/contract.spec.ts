@@ -35,14 +35,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEGRADED_ANALYSIS_FILTER,
   EVIDENCE_PANEL_MANDATORY_FIELDS,
   INVALIDATION_CATEGORIES,
   INVALIDATION_EVENT,
   isDegradedScanState,
   isOperatorDecided,
+  RETRY_TARGET_SCAN_STATE,
+  RETRYABLE_SCAN_STATES,
   SCAN_STATES,
   TERMINAL_SCAN_STATES,
   TRIAGE_STATES,
+  UNCLASSIFIED_ANALYSIS_FAILURE_REASON,
 } from "./contract";
 import type {
   EntityLead,
@@ -117,6 +121,57 @@ describe("SCAN_STATES — the SHIPPED analysis vocabulary (OBS-02, UI-09)", () =
     const state: ScanState = "partial";
     const lead: EntityLead = { kind: "state", state };
     expect(lead).toEqual({ kind: "state", state: "partial" });
+  });
+});
+
+describe("the retry vocabulary (OPS-03)", () => {
+  it("returns a stopped analysis to a SHIPPED, NON-TERMINAL state", () => {
+    // Two claims, and both matter. A target outside the vocabulary would be
+    // rejected by the migration's CHECK constraint at run time, on a driver
+    // that reports a rejection nobody sees. A target that was TERMINAL would
+    // put the row straight back where the retry found it, so the operator
+    // would press the button and watch nothing change.
+    expect(SCAN_STATES).toContain(RETRY_TARGET_SCAN_STATE);
+    expect(TERMINAL_SCAN_STATES).not.toContain(RETRY_TARGET_SCAN_STATE);
+  });
+
+  it("moves out of exactly the two terminal states that did not inspect every byte", () => {
+    // DERIVED FROM THE TWO PREDICATES, ASSERTED AS A SET. The retry statement
+    // binds this list into a fixed-arity `IN (?, ?)`, so its LENGTH is part of
+    // the statement's shape: a sixth degraded state would need a new literal,
+    // and retry.ts throws at import rather than binding a short list.
+    expect([...RETRYABLE_SCAN_STATES].sort()).toEqual(["failed", "partial"]);
+    for (const state of RETRYABLE_SCAN_STATES) {
+      expect(TERMINAL_SCAN_STATES).toContain(state);
+      expect(isDegradedScanState(state)).toBe(true);
+    }
+    // `done` is terminal and COMPLETE. Retrying it discards a finished result
+    // to redo work whose answer is already known.
+    expect(RETRYABLE_SCAN_STATES).not.toContain("done");
+  });
+
+  it("carries a DefMiner-authored failure reason code, not a message", () => {
+    // ERR-04's `{reason}` is an identifier the UI maps to its own copy. The
+    // assertion is that it holds no punctuation a sentence would carry — a
+    // code that had grown into a message is a message that can quote an
+    // artifact (T-05-51).
+    expect(UNCLASSIFIED_ANALYSIS_FAILURE_REASON).toMatch(/^[a-z][a-z-]*[a-z]$/);
+  });
+});
+
+describe("DEGRADED_ANALYSIS_FILTER — the narrowing action's one filter", () => {
+  it("is a single column filter with a bound value, frozen", () => {
+    // ONE COLUMN AND ONE VALUE, which is what `PageRequest["filter"]` permits
+    // and what keeps the backend's statement matrix linear rather than
+    // exponential. Frozen because both packages read the same object and a
+    // mutated column name would silently read an empty exhausted page.
+    expect(Object.keys(DEGRADED_ANALYSIS_FILTER).sort()).toEqual([
+      "column",
+      "value",
+    ]);
+    expect(Object.isFrozen(DEGRADED_ANALYSIS_FILTER)).toBe(true);
+    expect(DEGRADED_ANALYSIS_FILTER.column).not.toBe("");
+    expect(DEGRADED_ANALYSIS_FILTER.value).not.toBe("");
   });
 });
 

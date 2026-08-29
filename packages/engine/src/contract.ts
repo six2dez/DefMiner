@@ -105,6 +105,80 @@ export const TERMINAL_SCAN_STATES: readonly ScanState[] = [
 ];
 
 /**
+ * The state an operator-invoked retry returns a stopped analysis to.
+ *
+ * DECLARED HERE, IN THE MODULE THAT OWNS THE VOCABULARY, AND NOWHERE ELSE.
+ * `packages/backend/src/store/retry.ts` binds this constant into its update
+ * statement rather than writing the word: a retry path that spelled a state
+ * out would be a second declaration of a closed vocabulary whose whole value
+ * is that the database's CHECK constraint and every surface agree on one list.
+ * contract.spec.ts asserts it is a member of {@link SCAN_STATES} and is NOT
+ * terminal — a retry that moved a row to a terminal state would put it
+ * straight back where it started.
+ */
+export const RETRY_TARGET_SCAN_STATE: ScanState = "pending";
+
+/**
+ * States a retry is allowed to move OUT of. DERIVED, never restated.
+ *
+ * The intersection of {@link TERMINAL_SCAN_STATES} and
+ * {@link isDegradedScanState}: the two terminal states that did not inspect
+ * every byte. `done` is terminal and complete, so retrying it would discard a
+ * finished result to redo work whose answer is already known; `pending` and
+ * `running` are not terminal at all, and resetting a RUNNING walk underneath
+ * itself is threat T-05-50.
+ *
+ * The guard that uses this list lives INSIDE the update statement, not in a
+ * caller-side check before it. A caller-side check is two operations this
+ * driver cannot make atomic, and the interleaving it permits is exactly the
+ * running walk being reset.
+ */
+export const RETRYABLE_SCAN_STATES: readonly ScanState[] =
+  TERMINAL_SCAN_STATES.filter((state) => isDegradedScanState(state));
+
+/**
+ * The single filter that narrows an inventory to its degraded analyses.
+ *
+ * ONE OBJECT, DECLARED ONCE, IMPORTED BY BOTH PACKAGES. The frontend's
+ * "Show only affected artifacts" action binds it and the backend's statement
+ * matrix answers it; a column name spelled in two places is a filter that
+ * silently returns nothing the day one of them is edited (the backend answers
+ * an unrecognised filter column with an empty exhausted page, by design — see
+ * P5-D39 — so the failure is silent by construction).
+ *
+ * WHY A SECOND FILTER COLUMN RATHER THAN A CLEVERER FIRST ONE. `PageRequest`
+ * carries at most ONE column filter with ONE bound value, deliberately: that
+ * is what keeps the statement matrix linear in filter columns instead of
+ * exponential in their combinations. A degraded analysis is TWO states, which
+ * a single equality cannot express, so it gets its own column rather than a
+ * conditional predicate inside the scan-state one. A conditional predicate
+ * would be the null-guard shape 05-RESEARCH § O-01 disqualified by
+ * measurement.
+ */
+export const DEGRADED_ANALYSIS_FILTER = Object.freeze({
+  column: "analysis_degraded",
+  value: "yes",
+});
+
+/**
+ * The one failure reason code Phase 1 can honestly emit.
+ *
+ * ERR-04's copy reads "Analysis failed: {reason}." and 05-UI-SPEC.md's rule
+ * that outranks its own copy table requires `{reason}` be a DefMiner-authored
+ * reason code, NEVER a message quoting the artifact. Phase 1 has no failure
+ * taxonomy — ERR-02 is Phase 2's, and `TERMINAL_SCAN_STATES` already records
+ * that the failed state is terminal here for exactly that reason — so the
+ * honest code is one that says the classification does not exist yet rather
+ * than one invented to look informative.
+ *
+ * The stored `analyses.error` column is NOT this string and never reaches the
+ * frontend: the analysis projection the panel reads omits it entirely, so the
+ * class of bytes T-05-51 is about cannot arrive at the panel to be
+ * interpolated by mistake.
+ */
+export const UNCLASSIFIED_ANALYSIS_FAILURE_REASON = "unclassified";
+
+/**
  * States that mean the analysis did NOT inspect every byte.
  *
  * The predicate behind UI-09's floor statement, defined once beside the
