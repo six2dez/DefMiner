@@ -134,6 +134,16 @@ export const NEVER_ANALYSED_BODY =
  *  noun the operator has to guess the subject of. */
 export const ARTIFACT_VERSION_LABEL = "Analysed under rule corpus";
 
+/** The panel's own dismissal. A TEXT LABEL, never an icon — DefMiner ships no
+ *  icon package and a 10,000-row triage surface is a keyboard surface.
+ *
+ *  CLOSING CLEARS THE SELECTION AND THE PANEL FLAG AND DOES NOTHING ELSE. In
+ *  particular it does not apply the coalescing pill's pending count: the pill
+ *  never auto-applies (UI-SPEC Open Decision D4), and a close that silently
+ *  re-ordered the table would be the row shift the flag exists to prevent,
+ *  arriving at the moment the operator stopped looking. */
+export const CLOSE_LABEL = "Close evidence";
+
 /** 05-UI-SPEC.md § "Copywriting Contract", Retry CTA. */
 export const RE_ANALYSE_LABEL = "Re-analyse this artifact";
 

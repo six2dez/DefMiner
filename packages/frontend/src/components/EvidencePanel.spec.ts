@@ -58,6 +58,7 @@ import {
   BYTE_RANGE_PENDING,
   degradedMarker,
   EVIDENCE_PANEL_HEIGHT_CLASS,
+  EVIDENCE_PANEL_HEIGHT_PX,
   failureDetail,
   LOAD_FAILED_BODY,
   LOADING_LABEL,
@@ -128,6 +129,16 @@ async function settle(wrapper: VueWrapper): Promise<void> {
 const root = (wrapper: VueWrapper) => wrapper.get("#defminer-evidence-panel");
 
 describe("EvidencePanel — the persistent region (UI-03, 05-UI-SPEC § Data & Interaction Contract)", () => {
+  it("resolves its height class from the one height constant", () => {
+    // P5-D64's mechanism, applied to the panel. An interpolated arbitrary
+    // value is invisible to Tailwind's JIT, which emits no rule and renders the
+    // region at its content's height — the collapsing panel the contract
+    // forbids, arriving through a build that SUCCEEDED.
+    expect(EVIDENCE_PANEL_HEIGHT_PX).toBeGreaterThan(0);
+    expect(EVIDENCE_PANEL_HEIGHT_CLASS).not.toBe("");
+    expect(EVIDENCE_PANEL_HEIGHT_CLASS).toMatch(/^h-/);
+  });
+
   it("renders its frame at the fixed height with no row selected", () => {
     const wrapper = mountPanel();
     expect(root(wrapper).classes()).toContain(EVIDENCE_PANEL_HEIGHT_CLASS);

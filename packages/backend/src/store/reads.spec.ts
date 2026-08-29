@@ -61,6 +61,7 @@ import {
   listArtifactsPage,
   listObservationsPage,
   OBSERVATION_FILTER_COLUMN,
+  OBSERVATION_FILTER_COLUMNS,
   OBSERVATION_SORT_KEYS,
   type ObservationSortKey,
 } from "./reads";
@@ -1067,6 +1068,21 @@ describe("filtering by analysis state", () => {
       expect(total.visible, `${filter.column} disagreed`).toBe(
         page.rows.length,
       );
+    }
+  });
+
+  it("declares one filter column on observations, and serves exactly it", async () => {
+    // The declared list and the served set, held to each other. An entry added
+    // to the list without a literal behind it reads an empty exhausted page,
+    // silently and by design (P5-D39), so the list is only trustworthy if
+    // something checks it.
+    expect(OBSERVATION_FILTER_COLUMNS).toEqual([OBSERVATION_FILTER_COLUMN]);
+    for (const column of OBSERVATION_FILTER_COLUMNS) {
+      const page = await listObservationsPage(
+        fx.db,
+        req({ sortKey: "observed_at", filter: { column, value: "text/html" } }),
+      );
+      expect(page.exhausted).toBe(true);
     }
   });
 

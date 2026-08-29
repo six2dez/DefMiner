@@ -12,15 +12,31 @@
 // 05-12 own their bodies, and reaching into them here would put two plans in one
 // file for no gain.
 
-import { computed, inject, onMounted, ref } from "vue";
+import type { PageRequest, ScanState } from "@defminer/engine/contract";
+import { DEGRADED_ANALYSIS_FILTER } from "@defminer/engine/contract";
+import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
-import type { DefMinerBackendSdk, ObservationRow } from "./api/client";
+import type {
+  AnalysisKey,
+  DefMinerBackendSdk,
+  ObservationRow,
+  PanelAnalysis,
+  RetryOutcome,
+  RpcResult,
+} from "./api/client";
 import { createBackendClient } from "./api/client";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
 import ArtifactsTable from "./components/ArtifactsTable.vue";
+import EvidencePanel from "./components/EvidencePanel.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
-import type { InventoryStore, PageReader } from "./stores/inventory";
+import type { InvalidationCoalescer } from "./stores/coalescer";
+import { createCoalescer } from "./stores/coalescer";
+import type {
+  InventoryStore,
+  PageReader,
+  TriageGate,
+} from "./stores/inventory";
 import { createInventoryStore } from "./stores/inventory";
 
 /**
@@ -134,6 +150,239 @@ const observations: InventoryStore<ObservationRow> =
 
 const activePanelId = computed(() => `defminer-panel-${activeTab.value}`);
 
+// ---------------------------------------------------------------------------
+// UI-07 — THE COALESCER, SUBSCRIBED
+// ---------------------------------------------------------------------------
+//
+// PLAN 05-08 BUILT THE COALESCER AND NOTHING SUBSCRIBED IT. Left that way its
+// mid-triage guarantee is a property of a module rather than of the page: the
+// backend emits an invalidation summary per category per drain pass, the
+// frontend receives none of them, and the counts on screen simply go stale.
+// Wiring it here is what makes "the table does not re-order while a row is
+// selected or the panel is open" true of the running page.
+//
+// THE GATE SPANS BOTH TABLES, not just the active one. `triageLocked` is the
+// flag the suppression rule reads, and a panel opened from the observations
+// tab locks triage exactly as one opened from artifacts does — the operator is
+// mid-triage either way, and a gate that watched one store would let a
+// reaction land the moment they switched tabs.
+const triageGate: TriageGate = {
+  projectId: computed(() => artifacts.projectId.value),
+  triageLocked: computed(
+    () => artifacts.triageLocked.value || observations.triageLocked.value,
+  ),
+  refresh: async () => {
+    await artifacts.refresh();
+    await observations.refresh();
+  },
+};
+
+const coalescer: InvalidationCoalescer | null =
+  client === null
+    ? null
+    : createCoalescer({
+        gate: triageGate,
+        subscribe: client.subscribeInvalidation,
+      });
+
+// THE STOP HANDLE IS OWNED, NOT DROPPED. Research P-04 is entirely about this
+// being forgotten: a subscription that outlives its component keeps a dead
+// page's handler alive for the life of the Caido session.
+onUnmounted(() => {
+  coalescer?.stop();
+});
+
+const pendingCount = computed<number>(() => coalescer?.pendingTotal.value ?? 0);
+
+/** 05-UI-SPEC.md § "Copywriting Contract": **{n} new since you opened this —
+ *  Refresh**. DefMiner-authored end to end; the only interpolation is an
+ *  integer. */
+const pillLabel = computed<string>(
+  () => `${String(pendingCount.value)} new since you opened this — Refresh`,
+);
+
+/** The pill's ONLY caller. The count never auto-applies (UI-SPEC Open Decision
+ *  D4): applying it re-orders the table, and the operator asks for that. */
+async function applyPending(): Promise<void> {
+  await coalescer?.applyPending();
+}
+
+// ---------------------------------------------------------------------------
+// UI-09's MARKING, ON THE RUNNING PAGE
+// ---------------------------------------------------------------------------
+//
+// PLAN 05-09 SHIPPED THE MARKING MECHANISM AND COULD MARK NOTHING. Its own
+// summary records why, measured against the shipped reads rather than assumed:
+// the paged statements carried no `scan_state` and no endpoint returned one, so
+// this file passed `:analyses="null"` and the badge and banner stayed dark. It
+// refused to mark UI-09 complete for exactly that reason.
+//
+// The page rows now carry the state. The map below is built from what the
+// operator can currently SEE — the resident window — which is what makes the
+// banner's floor statement true rather than decorative: it counts the artifacts
+// actually contributing to the numbers on screen.
+//
+// AN ARTIFACT WITH NO ANALYSIS IS ABSENT FROM THE MAP, NOT PRESENT WITH A
+// GUESS. `scan_state` is `null` for a sighted-but-unanalysed artifact, and the
+// table reads an absent entry as UNKNOWN and renders nothing (P5-D66).
+
+/**
+ * States a retry moved, keyed by digest.
+ *
+ * WHY AN OVERLAY RATHER THAN A REFETCH. 05-UI-SPEC.md: "the table does not
+ * re-order or re-render rows while a row is selected or the panel is open".
+ * A retry happens with the panel open BY CONSTRUCTION — it is invoked from
+ * inside it — so refetching the page to pick the new state up would re-order
+ * the table underneath the operator at the exact moment they are mid-triage,
+ * which is the row shift the coalescer exists to prevent, arriving through the
+ * one path the coalescer does not watch.
+ *
+ * Every value here was READ BACK from the row by the backend. Nothing
+ * optimistic is ever written into it.
+ */
+const retriedStates = ref<Map<string, ScanState>>(new Map());
+
+const artifactAnalyses = computed<ReadonlyMap<string, ScanState>>(() => {
+  const states = new Map<string, ScanState>();
+  for (const row of artifacts.rows.value) {
+    if (row.scan_state !== null) states.set(row.sha256, row.scan_state);
+  }
+  for (const [sha256, state] of retriedStates.value) {
+    if (states.has(sha256)) states.set(sha256, state);
+  }
+  return states;
+});
+
+/**
+ * The narrowing filter the partial-view banner offers.
+ *
+ * ONE OBJECT, DECLARED IN THE ENGINE CONTRACT AND IMPORTED BY BOTH SIDES. The
+ * backend answers an unrecognised filter column with an empty exhausted page,
+ * by design (P5-D39), so a column name spelled twice is a "Show only affected
+ * artifacts" button that silently narrows to nothing.
+ */
+const AFFECTED_FILTER: PageRequest["filter"] = DEGRADED_ANALYSIS_FILTER;
+
+// ---------------------------------------------------------------------------
+// THE EVIDENCE PANEL'S SUBJECT
+// ---------------------------------------------------------------------------
+
+/**
+ * The digest the panel is showing.
+ *
+ * BOTH TABLES CAN NAME ONE, and they name it differently: an artifact row is
+ * keyed by its digest and an observation row by `digest:requestId`, because an
+ * observation is a SIGHTING of an artifact and two sightings of the same bytes
+ * are two rows. The panel's subject is the ARTIFACT either way — that is where
+ * the analysis lives — so the observation key is split rather than a second
+ * panel subject being invented.
+ */
+const selectedSha256 = computed<string | null>(() => {
+  if (activeTab.value === "artifacts") return artifacts.selectedRowKey.value;
+  if (activeTab.value === "observations") {
+    const key = observations.selectedRowKey.value;
+    if (key === null) return null;
+    const [sha256] = key.split(":");
+    return sha256 ?? null;
+  }
+  return null;
+});
+
+const panelAnalysis = ref<PanelAnalysis | null>(null);
+const panelLoading = ref(false);
+const panelFailed = ref(false);
+
+/**
+ * Bumped on every selection change, and checked after the await.
+ *
+ * A read that resolves after the operator has clicked a second row is
+ * answering a question nobody is asking any more, and applying it puts one
+ * artifact's analysis under another artifact's heading — the same generation
+ * guard the inventory store uses, for the same reason.
+ */
+let panelGeneration = 0;
+
+async function loadPanelAnalysis(sha256: string | null): Promise<void> {
+  panelGeneration += 1;
+  const mine = panelGeneration;
+  panelFailed.value = false;
+
+  if (sha256 === null) {
+    panelAnalysis.value = null;
+    panelLoading.value = false;
+    return;
+  }
+  if (client === null) {
+    // A FAILURE, NOT AN EMPTY PANEL. An empty frame over a plugin that is not
+    // connected tells the operator there is no evidence for this row, which is
+    // the opposite of the truth about what they are looking at.
+    panelAnalysis.value = null;
+    panelLoading.value = false;
+    panelFailed.value = true;
+    return;
+  }
+
+  panelLoading.value = true;
+  const result = await client.getArtifactAnalysis({
+    projectId: SERVER_SCOPED_PROJECT,
+    sha256,
+  });
+  if (panelGeneration !== mine) return;
+  panelLoading.value = false;
+  if (!result.ok) {
+    panelAnalysis.value = null;
+    panelFailed.value = true;
+    return;
+  }
+  panelAnalysis.value = result.value;
+}
+
+watch(selectedSha256, (sha256) => {
+  void loadPanelAnalysis(sha256);
+});
+
+/** The retry, routed through the typed client. Answers a VALUE on every path —
+ *  a component that had to catch would be a component whose failure Caido
+ *  swallows. */
+function retryAnalysis(key: AnalysisKey): Promise<RpcResult<RetryOutcome>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.retryAnalysis(key);
+}
+
+/** Record what the backend read back, without refetching the page. See
+ *  {@link retriedStates}. */
+/**
+ * Dismiss the panel.
+ *
+ * CLEARS THE SELECTION AND THE PANEL FLAG ON BOTH STORES, AND NOTHING ELSE. It
+ * does not apply the pending count — that is the pill's, and only the operator
+ * presses it. A close that silently re-ordered the table would be the row
+ * shift the flags exist to prevent, arriving the moment they stopped looking.
+ */
+function closePanel(): void {
+  artifacts.clearSelection();
+  artifacts.closePanel();
+  observations.clearSelection();
+  observations.closePanel();
+}
+
+function onRetried(state: ScanState | null): void {
+  const sha256 = selectedSha256.value;
+  if (sha256 === null || state === null) return;
+  const next = new Map(retriedStates.value);
+  next.set(sha256, state);
+  retriedStates.value = next;
+  if (panelAnalysis.value !== null) {
+    panelAnalysis.value = { ...panelAnalysis.value, scanState: state };
+  }
+}
+
 onMounted(() => {
   // Deliberately not `await`ed in an async `onMounted`: the tab strip and the
   // rest of the shell must be on screen before any of this resolves, and a
@@ -171,6 +420,19 @@ function openHealth(): void {
       class="flex h-12 shrink-0 items-center border-b border-surface-600 bg-surface-800 px-4"
     >
       <h1 class="text-2xl font-semibold leading-tight">DefMiner</h1>
+
+      <!-- The coalescing pill slot. It renders ONLY when there is something
+           pending: a pill reading "0 new" is chrome that says nothing and
+           trains the operator to stop reading it. -->
+      <button
+        v-if="pendingCount > 0"
+        id="defminer-coalescing-pill"
+        type="button"
+        class="ml-4 border border-surface-600 px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-primary-500"
+        @click="void applyPending()"
+      >
+        {{ pillLabel }}
+      </button>
     </header>
 
     <!-- Region 2 — tab strip. `flex-wrap` is the whole layout decision: when the
@@ -212,21 +474,20 @@ function openHealth(): void {
         role="tabpanel"
         :aria-labelledby="`defminer-tab-${activeTab}`"
       >
-        <!-- `:analyses` and `:affected-filter` ARE EXPLICITLY NULL, and the
-             null is the honest answer rather than an omission. The shipped
-             paged reads select no `scan_state` and there is no endpoint that
-             returns one, so this page has nothing to say about analysis state
-             yet; a per-row badge would have to be invented, and inventing
-             "Complete" for an unknown analysis is precisely the silence UI-09
-             forbids. Same for the narrowing filter: the backend's statement
-             matrix has no scan-state filter column, so no single-column filter
-             can express "only the affected artifacts". Both become real when
-             the reads carry the state — see ArtifactsTable.vue's header. -->
+        <!-- THE ARTIFACTS TABLE IS MARKED; THE OBSERVATIONS TABLE IS NOT,
+             AND THE NULL THERE IS THE HONEST ANSWER RATHER THAN AN OMISSION.
+             An observation is a SIGHTING of an artifact and carries no analysis
+             of its own — the analysis lives on the bytes, which is where the
+             read carries it. Marking observation rows would mean attributing an
+             artifact's state to each of its sightings, and a sighting whose
+             artifact is outside the resident window would be marked as unknown
+             beside identical ones that were not. The column keeps its position
+             either way. -->
         <ArtifactsTable
           v-if="activeTab === 'artifacts'"
           :store="artifacts"
-          :analyses="null"
-          :affected-filter="null"
+          :analyses="artifactAnalyses"
+          :affected-filter="AFFECTED_FILTER"
           @open-health="openHealth"
         />
 
@@ -255,13 +516,25 @@ function openHealth(): void {
         </div>
       </section>
 
-      <aside
-        class="flex w-1/3 shrink-0 flex-col border-l border-surface-600 pl-4"
-        aria-label="Evidence"
-      >
-        <h2 class="text-xs font-semibold">Evidence</h2>
-        <p class="mt-2 text-surface-400">No row selected.</p>
-      </aside>
+      <!-- THE PANEL IS A REGION OF THE SPLIT BODY, NOT AN OVERLAY, AND IT IS
+           MOUNTED UNCONDITIONALLY. It keeps its width here and its own fixed
+           height inside the component, across a selection change and across a
+           tab change between the two entity tables — a panel that came and
+           went would reflow the body on every row click. -->
+      <div class="w-1/3 shrink-0">
+        <EvidencePanel
+          :project-id="SERVER_SCOPED_PROJECT"
+          :selected-sha256="selectedSha256"
+          :analysis="panelAnalysis"
+          :loading="panelLoading"
+          :failed="panelFailed"
+          :evidence="null"
+          :source-request-id="null"
+          :retry="retryAnalysis"
+          @retried="onRetried"
+          @close="closePanel"
+        />
+      </div>
     </div>
   </div>
 </template>

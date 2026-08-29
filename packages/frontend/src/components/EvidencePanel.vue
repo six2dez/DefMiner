@@ -70,6 +70,7 @@ import { byteRangeNotice, forPanel, truncationNotice } from "../safety/display";
 import {
   ARTIFACT_VERSION_LABEL,
   BYTE_RANGE_PENDING,
+  CLOSE_LABEL,
   degradedMarker,
   EVIDENCE_HEADING,
   EVIDENCE_PANEL_HEIGHT_CLASS,
@@ -127,7 +128,7 @@ const {
   retry: (key: AnalysisKey) => Promise<RpcResult<RetryOutcome>>;
 }>();
 
-const emit = defineEmits<{ retried: [ScanState | null] }>();
+const emit = defineEmits<{ retried: [ScanState | null]; close: [] }>();
 
 // ---------------------------------------------------------------------------
 // THE RETRY'S OWN STATE
@@ -289,7 +290,21 @@ const sourceRequestLine = computed<string>(() =>
     :aria-label="EVIDENCE_HEADING"
     aria-live="polite"
   >
-    <h2 class="shrink-0 text-xs font-semibold">{{ EVIDENCE_HEADING }}</h2>
+    <div class="flex shrink-0 items-center justify-between">
+      <h2 class="text-xs font-semibold">{{ EVIDENCE_HEADING }}</h2>
+      <button
+        v-if="selectedSha256 !== null"
+        id="defminer-evidence-close"
+        type="button"
+        :class="[
+          FOCUS_RING_CLASS,
+          'text-xs font-semibold text-surface-400 underline',
+        ]"
+        @click="emit('close')"
+      >
+        {{ CLOSE_LABEL }}
+      </button>
+    </div>
 
     <!-- THE SCROLL CONTAINER. The overflow rule is a property of the panel's
          own layout, not of any value it renders: it holds for an empty panel

@@ -175,8 +175,13 @@ type ArtifactAnalysisRequest = {
  * `bytesWalked` and `byteLen` are the two numbers UI-09's degraded marker
  * renders ("Analysis stopped at {bytes_walked} of {byte_len} bytes"). Both are
  * integers the backend measured; neither is derived in the frontend.
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not: the registration site
+ * infers this shape from the API map rather than importing it, so an export
+ * would have no cross-module consumer and knip runs with
+ * `ignoreExportsUsedInFile: false`.
  */
-export type PanelAnalysis = {
+type PanelAnalysis = {
   readonly sha256: string;
   readonly detectorSetHash: string;
   readonly scanState: ScanState;

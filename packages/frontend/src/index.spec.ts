@@ -53,7 +53,14 @@ function stubSdk() {
     sdk: {
       navigation: { addPage },
       sidebar: { registerItem },
-      backend: { getArtifacts: vi.fn(() => Promise.resolve([])) },
+      backend: {
+        getArtifacts: vi.fn(() => Promise.resolve([])),
+        // `onEvent` IS PART OF THE MINIMAL SURFACE NOW. The page subscribes the
+        // coalescer on mount (UI-07), and a stub without it makes `init` throw
+        // where the real SDK would not — the same reason the three members
+        // above are here rather than the whole forty-sub-SDK object.
+        onEvent: vi.fn(() => ({ stop: vi.fn() })),
+      },
     },
     addPage,
     registerItem,

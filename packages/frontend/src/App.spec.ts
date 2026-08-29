@@ -23,11 +23,18 @@ import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 
-import type { DefMinerBackendSdk, ObservationRow } from "./api/client";
+import type {
+  AnalysisKey,
+  DefMinerBackendSdk,
+  ObservationRow,
+  PanelAnalysis,
+  RetryOutcome,
+} from "./api/client";
 import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
+import { EVIDENCE_PANEL_HEIGHT_CLASS } from "./components/panel-contract";
 
 /**
  * Two rows with DELIBERATELY LOOKALIKE digests.
@@ -84,6 +91,17 @@ type StubOptions = {
   readonly artifacts?: readonly ArtifactRow[];
   /** Reject every paged read — the RPC failure path. */
   readonly reject?: boolean;
+  /** The analysis `getArtifactAnalysis` answers with, per digest. */
+  readonly analyses?: ReadonlyMap<string, PanelAnalysis>;
+  /** What a retry answers with. Defaults to a persisted move to `pending`. */
+  readonly retryOutcome?: RetryOutcome;
+  /** Records every retry the page issued, so a case can assert the KEY. */
+  readonly retries?: AnalysisKey[];
+  /** Receives the invalidation handler the page subscribed, so a case can
+   *  emit a summary the way the backend would. */
+  readonly captureHandler?: (
+    handler: (summary: InvalidationSummary) => void,
+  ) => void;
 };
 
 /**
@@ -110,17 +128,29 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
       getContractVersion: () => Promise.resolve(FRONTEND_CONTRACT_VERSION),
       listArtifactsPage: (_request: PageRequest) => page(rows),
       listObservationsPage: (_request: PageRequest) => page<ObservationRow>([]),
-      getArtifactAnalysis: () => Promise.resolve(null),
-      retryAnalysis: () =>
-        Promise.resolve({ ok: true, changed: true, state: "pending" as const }),
+      getArtifactAnalysis: (request: { readonly sha256: string }) =>
+        Promise.resolve(options.analyses?.get(request.sha256) ?? null),
+      retryAnalysis: (request: AnalysisKey) => {
+        options.retries?.push(request);
+        return Promise.resolve(
+          options.retryOutcome ?? {
+            ok: true,
+            changed: true,
+            state: "pending" as const,
+          },
+        );
+      },
       countInventory: () =>
         options.reject === true
           ? Promise.reject(new Error("backend exploded"))
           : Promise.resolve(TOTAL),
       onEvent: (
         _event: "defminer:invalidated",
-        _callback: (summary: InvalidationSummary) => void,
-      ) => ({ stop: () => undefined }),
+        callback: (summary: InvalidationSummary) => void,
+      ) => {
+        options.captureHandler?.(callback);
+        return { stop: () => undefined };
+      },
     },
   };
 }
@@ -309,5 +339,248 @@ describe("App", () => {
     // …and inert as markup. No element was created from them.
     expect(wrapper.find("img").exists()).toBe(false);
     expect(wrapper.element.querySelector("script")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE SPLIT BODY, AND THE FLAGS THE COALESCER READS
+// ---------------------------------------------------------------------------
+
+describe("App — the split body (05-UI-SPEC § Data & Interaction Contract)", () => {
+  const analysisOf = (
+    sha256: string,
+    over: Partial<PanelAnalysis> = {},
+  ): PanelAnalysis => ({
+    sha256,
+    detectorSetHash: "phase1-no-corpus",
+    scanState: "failed",
+    bytesWalked: 0,
+    byteLen: 4096,
+    startedAt: 1_756_000_000_000,
+    finishedAt: 1_756_000_100_000,
+    ...over,
+  });
+
+  const panel = (wrapper: VueWrapper) =>
+    wrapper.get("#defminer-evidence-panel");
+
+  it("renders the table and the panel side by side, at the spacing-scale gap", async () => {
+    const wrapper = mountWith(stubSdk({ artifacts: ROWS }));
+    await settle(wrapper);
+
+    // `gap-4` is the design contract's `lg` step, and the split body is the one
+    // place it separates two REGIONS rather than two controls.
+    const body = wrapper.get('[role="tabpanel"]').element.parentElement;
+    expect(body?.className).toContain("gap-4");
+    expect(panel(wrapper).classes()).toContain(EVIDENCE_PANEL_HEIGHT_CLASS);
+  });
+
+  it("opens the panel on a row click without navigating away", async () => {
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        analyses: new Map([[ROWS[0].sha256, analysisOf(ROWS[0].sha256)]]),
+      }),
+    );
+    await settle(wrapper);
+
+    const before = window.location.href;
+    const activeBefore = wrapper
+      .findAll('[role="tab"]')
+      .find((t) => t.attributes("aria-selected") === "true")
+      ?.text();
+
+    await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(wrapper);
+
+    // A ROW CLICK OPENS THE PANEL AND DOES NOT NAVIGATE. The panel is a region
+    // of this page, not a destination.
+    expect(window.location.href).toBe(before);
+    expect(
+      wrapper
+        .findAll('[role="tab"]')
+        .find((t) => t.attributes("aria-selected") === "true")
+        ?.text(),
+    ).toBe(activeBefore);
+    expect(wrapper.text()).toContain("Analysis failed");
+  });
+
+  it("accrues an invalidation summary into the pill instead of reacting, while the panel is open", async () => {
+    let emitSummary: ((summary: InvalidationSummary) => void) | undefined;
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        analyses: new Map([[ROWS[0].sha256, analysisOf(ROWS[0].sha256)]]),
+        captureHandler: (handler) => {
+          emitSummary = handler;
+        },
+      }),
+    );
+    await settle(wrapper);
+    expect(emitSummary).toBeDefined();
+
+    await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(wrapper);
+
+    // The suppression rule keys on exactly the two flags the row click sets. A
+    // panel that opened WITHOUT setting them would leave the operator exposed
+    // to the row shift the coalescer exists to prevent (T-05-54).
+    emitSummary?.({
+      projectId: "server-scoped",
+      category: "artifacts",
+      changedCount: 7,
+      newestId: "d1",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await wrapper.vm.$nextTick();
+
+    const pill = wrapper.get("#defminer-coalescing-pill");
+    expect(pill.text()).toContain("7 new since you opened this");
+    // ZERO REACTIONS: the rows on screen are the rows that were on screen when
+    // the operator clicked.
+    expect(wrapper.text()).toContain(ROWS[0].sha256);
+  });
+
+  it("closing the panel clears both flags and applies nothing by itself", async () => {
+    let emitSummary: ((summary: InvalidationSummary) => void) | undefined;
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        analyses: new Map([[ROWS[0].sha256, analysisOf(ROWS[0].sha256)]]),
+        captureHandler: (handler) => {
+          emitSummary = handler;
+        },
+      }),
+    );
+    await settle(wrapper);
+
+    await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(wrapper);
+    emitSummary?.({
+      projectId: "server-scoped",
+      category: "artifacts",
+      changedCount: 3,
+      newestId: "d1",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await wrapper.vm.$nextTick();
+
+    await wrapper.get("#defminer-evidence-close").trigger("click");
+    await wrapper.vm.$nextTick();
+
+    // The panel is back to its unselected frame…
+    expect(wrapper.get("#defminer-evidence-panel").text()).toContain(
+      "No row selected",
+    );
+    // …and the pending count is STILL PENDING. The pill never auto-applies
+    // (UI-SPEC Open Decision D4); closing is not the operator asking.
+    expect(wrapper.get("#defminer-coalescing-pill").text()).toContain(
+      "3 new since you opened this",
+    );
+  });
+
+  it("keeps the panel region across a selection change and a tab change", async () => {
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        analyses: new Map([
+          [ROWS[0].sha256, analysisOf(ROWS[0].sha256)],
+          [ROWS[1].sha256, analysisOf(ROWS[1].sha256, { scanState: "done" })],
+        ]),
+      }),
+    );
+    await settle(wrapper);
+
+    const region = panel(wrapper).element.parentElement;
+    const classes = [...panel(wrapper).classes()].sort();
+
+    const rows = wrapper.findAll('[role="row"][tabindex="0"]');
+    await rows[0].trigger("click");
+    await settle(wrapper);
+    await rows[1].trigger("click");
+    await settle(wrapper);
+
+    expect(panel(wrapper).element.parentElement).toBe(region);
+    expect([...panel(wrapper).classes()].sort()).toEqual(classes);
+
+    const observations = wrapper
+      .findAll('[role="tab"]')
+      .find((t) => t.text() === "Observations");
+    await observations?.trigger("click");
+    await settle(wrapper);
+
+    // ACROSS A TAB CHANGE TOO. The panel is a region of the page, not of the
+    // table it happens to be beside.
+    expect(panel(wrapper).element.parentElement).toBe(region);
+    expect([...panel(wrapper).classes()].sort()).toEqual(classes);
+  });
+
+  it("updates the panel on a successful retry WITHOUT re-ordering the table", async () => {
+    const retries: AnalysisKey[] = [];
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        analyses: new Map([[ROWS[0].sha256, analysisOf(ROWS[0].sha256)]]),
+        retries,
+      }),
+    );
+    await settle(wrapper);
+
+    /** ORDER, BY IDENTITY. The row's TEXT is expected to change — the badge
+     *  updates in place, which is the point — so comparing whole rows would
+     *  assert the opposite of what this case is about. */
+    const order = (): string[] =>
+      wrapper
+        .findAll('[role="row"][tabindex="0"]')
+        .map(
+          (row) =>
+            ROWS.find((r) => row.text().includes(r.sha256))?.sha256 ?? "?",
+        );
+    const orderBefore = order();
+
+    await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(wrapper);
+    await wrapper.get("#defminer-evidence-retry").trigger("click");
+    await settle(wrapper);
+
+    expect(retries).toEqual([
+      {
+        projectId: "server-scoped",
+        sha256: ROWS[0].sha256,
+        detectorSetHash: "phase1-no-corpus",
+      },
+    ]);
+    expect(wrapper.get("#defminer-evidence-state").text()).toContain("Queued");
+
+    // THE TABLE IS UNMOVED. A retry happens with the panel open by
+    // construction, so refetching the page to pick the new state up would
+    // re-order the rows at the exact moment the operator is mid-triage.
+    expect(order()).toEqual(orderBefore);
+
+    // AND THE ROW'S OWN BADGE MOVED WITH THE PANEL, in place. The state the
+    // backend read back reaches the table through an overlay rather than
+    // through a refetch, so the marking is current without the rows shifting.
+    expect(
+      wrapper.findAll("[data-defminer-status-badge]").map((b) => b.text()),
+    ).toEqual(["Queued"]);
+  });
+
+  it("marks UI-09's degradation on the running page, from the paged rows", async () => {
+    // THE GAP PLAN 05-09 RECORDED AND COULD NOT CLOSE. Its components were
+    // fully exercised against fixtures; nothing was marked on the page because
+    // the reads carried no state. These rows carry one.
+    const wrapper = mountWith(stubSdk({ artifacts: ROWS }));
+    await settle(wrapper);
+
+    // ROWS[0] is `failed`; ROWS[1] has never been analysed.
+    expect(
+      wrapper.findAll("[data-defminer-status-badge]").map((b) => b.text()),
+    ).toEqual(["Failed"]);
+    const banner = wrapper.get("[data-defminer-partial-banner]");
+    expect(banner.text()).toContain("are Partial or Failed");
+    expect(banner.text()).toContain("a floor, not a total");
+    // The narrowing action is offered, because a scan-state filter column now
+    // exists behind it.
+    expect(banner.text()).toContain("Show only affected artifacts");
   });
 });
