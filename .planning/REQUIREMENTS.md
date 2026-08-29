@@ -884,7 +884,7 @@ MEASURED SILENCES - 26 entries.
 - [ ] **UI-06**: JSON and CSV export, redacted by default with an explicit opt-in to include raw values.
 - [x] **UI-07**: Backend-to-frontend events are coalesced so a heavy browsing session cannot flood the UI.
 - [ ] **UI-08**: A settings surface for every toggle, threshold, and budget.
-- [ ] **UI-09**: Degraded and partial analyses are visibly marked, never silently presented as complete.
+- [x] **UI-09**: Degraded and partial analyses are visibly marked, never silently presented as complete.
 
 ### Caido integration (FIND)
 
@@ -929,7 +929,7 @@ MEASURED SILENCES - 26 entries.
 
 - [ ] **OPS-01**: Findings can be triaged — marked reviewed, false positive, or accepted — and that state persists.
 - [ ] **OPS-02**: A suppression mechanism so a known-benign pattern on a given target stops reappearing, without editing the rule corpus.
-- [ ] **OPS-03**: A failed or partial artifact analysis can be retried on demand.
+- [x] **OPS-03**: A failed or partial artifact analysis can be retried on demand.
 - [ ] **OPS-04**: Triage and suppression state survives re-analysis after a corpus version bump.
 
 ### Frontend safety (UISEC)
