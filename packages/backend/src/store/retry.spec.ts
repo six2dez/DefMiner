@@ -160,7 +160,13 @@ describe("retryAnalysis — one case per shipped state (OPS-03, EDGE OPS-03/uncl
     // report that a queued analysis had already walked 4,096 bytes — a number
     // the UI-09 degraded marker renders verbatim.
     seed(P1, SHA, "partial", { bytesWalked: 4096, error: "stopped early" });
-    await retryAnalysis(fx.db, P1, SHA, DETECTOR_CORPUS_VERSION, 1_756_999_000_000);
+    await retryAnalysis(
+      fx.db,
+      P1,
+      SHA,
+      DETECTOR_CORPUS_VERSION,
+      1_756_999_000_000,
+    );
 
     const moved = await getAnalysis(fx.db, P1, SHA, DETECTOR_CORPUS_VERSION);
     expect(moved?.bytes_walked).toBeNull();
@@ -170,8 +176,19 @@ describe("retryAnalysis — one case per shipped state (OPS-03, EDGE OPS-03/uncl
 
     const other = "b".repeat(64);
     seed(P1, other, "done", { bytesWalked: 512, error: null });
-    await retryAnalysis(fx.db, P1, other, DETECTOR_CORPUS_VERSION, 1_756_999_000_000);
-    const untouched = await getAnalysis(fx.db, P1, other, DETECTOR_CORPUS_VERSION);
+    await retryAnalysis(
+      fx.db,
+      P1,
+      other,
+      DETECTOR_CORPUS_VERSION,
+      1_756_999_000_000,
+    );
+    const untouched = await getAnalysis(
+      fx.db,
+      P1,
+      other,
+      DETECTOR_CORPUS_VERSION,
+    );
     expect(untouched?.bytes_walked).toBe(512);
     expect(untouched?.finished_at).toBe(1_756_000_100_000);
   });
@@ -232,26 +249,38 @@ describe("retryAnalysis — one case per shipped state (OPS-03, EDGE OPS-03/uncl
   });
 
   it("returns a REDACTED description when the driver rejects", async () => {
-    seed(P1, SHA, "failed");
-    fx.close();
+    // A HANDLE THAT REJECTS, rather than a closed fixture. Two reasons: the
+    // rejection message is chosen here, so the assertion can be about
+    // REDACTION rather than about whatever `node:sqlite` happens to say; and
+    // closing the fixture mid-test leaves the teardown with nothing to close.
+    //
+    // The message carries a URL on purpose. A driver rejection quotes the
+    // bound parameters, and one of the things this plugin binds elsewhere is
+    // an observation URL — which is why `describeError` redacts URL-shaped
+    // substrings BEFORE truncating rather than after.
+    const rejecting = {
+      prepare: () =>
+        Promise.reject(
+          new Error(
+            "SQLITE_BUSY while writing https://internal.example.test/v1/secret?k=v",
+          ),
+        ),
+    } as unknown as Parameters<typeof retryAnalysis>[0];
 
     const result = await retryAnalysis(
-      fx.db,
+      rejecting,
       P1,
       SHA,
       DETECTOR_CORPUS_VERSION,
       1_756_999_000_000,
     );
+
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error).not.toBe("");
-    // The description is produced by `describeError`, which prepends the class
-    // name for an Error instance. A bare stringification would not carry it,
-    // so this is the cheapest way to assert the value went through the
-    // redactor rather than through `String(e)`.
-    expect(result.error).toMatch(/^[A-Za-z]+Error:/);
-
-    // Re-open so the fixture's own teardown has something to close.
-    fx = createFixtureDb();
+    expect(result.error).not.toContain("internal.example.test");
+    expect(result.error).not.toContain("https://");
+    expect(result.error).toContain("SQLITE_BUSY");
+    // Not a bare stringification: `describeError` prepends the class name.
+    expect(result.error.startsWith("Error: ")).toBe(true);
   });
 });
