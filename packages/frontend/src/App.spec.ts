@@ -45,6 +45,7 @@ const ROWS: ArtifactRow[] = [
     first_seen_at: 1_756_000_000_000,
     last_seen_at: 1_756_000_500_000,
     seen_count: 3,
+    scan_state: "failed",
   },
   {
     project_id: "p1",
@@ -54,6 +55,7 @@ const ROWS: ArtifactRow[] = [
     first_seen_at: 1_756_000_100_000,
     last_seen_at: 1_756_000_600_000,
     seen_count: 1,
+    scan_state: null,
   },
 ];
 
@@ -108,6 +110,9 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
       getContractVersion: () => Promise.resolve(FRONTEND_CONTRACT_VERSION),
       listArtifactsPage: (_request: PageRequest) => page(rows),
       listObservationsPage: (_request: PageRequest) => page<ObservationRow>([]),
+      getArtifactAnalysis: () => Promise.resolve(null),
+      retryAnalysis: () =>
+        Promise.resolve({ ok: true, changed: true, state: "pending" as const }),
       countInventory: () =>
         options.reject === true
           ? Promise.reject(new Error("backend exploded"))

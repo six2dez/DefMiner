@@ -3,6 +3,19 @@
 // vocabulary, rendered.
 //
 // ===========================================================================
+// THE LABEL MAP MOVED TO ./scan-state-presentation.ts (PLAN 05-10)
+// ===========================================================================
+// It is imported below and is still the same single declaration; what changed
+// is that it now has TWO renderers. The evidence panel has to state an
+// analysis state in words and cannot reuse this component to do it — this one
+// carries a `data-defminer-status-badge` marker and the panel asserts, over
+// its rendered subtree, that no node inside it carries a `title` or a
+// `data-`prefixed attribute (R2's absolute). Copying the five labels into the
+// panel would have been the second declaration the map exists to prevent.
+//
+// The argument for the map's SHAPE is unchanged and now lives beside it:
+//
+// ===========================================================================
 // THE LABEL MAP IS DERIVED FROM THE VOCABULARY, NEVER RESTATED BESIDE IT
 // ===========================================================================
 // `SCAN_STATES` is the closed list the database's own CHECK constraint
@@ -40,33 +53,14 @@
 import type { ScanState } from "@defminer/engine/contract";
 import { computed } from "vue";
 
-/** One badge's presentation: the operator-facing word and its Caido role. */
-type Presentation = { readonly label: string; readonly toneClass: string };
-
-/**
- * The five states, exhaustively.
- *
- * `Record<ScanState, …>` and not `Partial<Record<…>>`: the compiler is the
- * mechanism here, not the comment. Colours are the six Caido roles — there is
- * no hex literal in this file and there cannot be one, because `--c-*` is
- * operator-customisable and a hardcoded colour survives their theme change as
- * the one unreadable element on the page.
- *
- * `surface-400` carries the two not-yet-finished states: they are the design
- * contract's level-4 tone, which is neither good news nor bad (UI-SPEC FLAG F4
- * asked for that step to be enumerated; this is a use of it).
- */
-const PRESENTATION: Readonly<Record<ScanState, Presentation>> = Object.freeze({
-  pending: { label: "Queued", toneClass: "text-surface-400" },
-  running: { label: "Analysing", toneClass: "text-surface-400" },
-  done: { label: "Complete", toneClass: "text-success-500" },
-  partial: { label: "Partial", toneClass: "text-info-500" },
-  failed: { label: "Failed", toneClass: "text-danger-500" },
-});
+import type { ScanStatePresentation } from "./scan-state-presentation";
+import { SCAN_STATE_PRESENTATION } from "./scan-state-presentation";
 
 const { state } = defineProps<{ state: ScanState }>();
 
-const presentation = computed<Presentation>(() => PRESENTATION[state]);
+const presentation = computed<ScanStatePresentation>(
+  () => SCAN_STATE_PRESENTATION[state],
+);
 
 // THE TEMPLATE IS ONE ELEMENT, carrying BOTH the tone class and the word. They
 // are not separable: an implementation that put the colour on a dot and the

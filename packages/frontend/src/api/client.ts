@@ -53,6 +53,7 @@ import type {
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  ScanState,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import { INVALIDATION_EVENT } from "@defminer/engine/contract";
@@ -73,8 +74,15 @@ import type { ArtifactRow } from "../backend";
  * depends on these being two independently shipped numbers. The bump rule is
  * the backend's and is restated here so the obligation is visible at the place
  * somebody edits: bump when an argument type or a return type changes shape.
+ *
+ * BUMPED TO 2 IN LOCKSTEP WITH PLAN 05-10's BACKEND BUMP, and the lockstep is
+ * the point: a page row now carries the artifact's analysis state, so a bundle
+ * built against version 1 would read the wider row with the old expectations.
+ * The two numbers are still two independently shipped constants — that is what
+ * makes the check able to fail at all — and this edit is the one place a
+ * reviewer sees them move together.
  */
-export const FRONTEND_CONTRACT_VERSION = 1;
+export const FRONTEND_CONTRACT_VERSION = 2;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -124,6 +132,63 @@ export type ObservationRow = {
   status: number;
   content_type: string | null;
   observed_at: number;
+};
+
+/**
+ * The analysis of one artifact, as the evidence panel receives it.
+ *
+ * Mirrors `PanelAnalysis` in packages/backend/src/api/spec.ts, for the reason
+ * this file's header gives — the two packages cannot import each other.
+ *
+ * THERE IS NO `error` FIELD AND THERE MUST NOT BE ONE. The backend's
+ * projection omits `analyses.error` deliberately: ERR-04's copy interpolates a
+ * `{reason}` into a sentence, and 05-UI-SPEC.md's rule that outranks its copy
+ * table requires that reason be a DefMiner-authored code rather than a message
+ * quoting the artifact. Adding the field here would be adding the first place
+ * somebody could interpolate one (T-05-51).
+ *
+ * `byteLen` and `bytesWalked` are both integers the BACKEND measured. The
+ * panel renders them and never derives one from the other or from the display
+ * text — bytes are the backend's length space and display text has been
+ * grapheme-truncated in the frontend's (safety/display.ts states the same
+ * rule where it bites).
+ */
+export type PanelAnalysis = {
+  readonly sha256: string;
+  readonly detectorSetHash: string;
+  readonly scanState: ScanState;
+  readonly bytesWalked: number | null;
+  readonly byteLen: number | null;
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+};
+
+/**
+ * The key one retry addresses.
+ *
+ * `detectorSetHash` is carried because the corpus version is part of the
+ * analysis KEY. A retry that omitted it would aim at every reading of these
+ * bytes rather than at the one the panel is showing.
+ */
+export type AnalysisKey = {
+  readonly projectId: string;
+  readonly sha256: string;
+  readonly detectorSetHash: string;
+};
+
+/**
+ * What a retry answers with.
+ *
+ * `state` IS THE STATE THE BACKEND READ BACK from the row, never one assumed
+ * from the request. The panel renders it, and a state the operator is shown
+ * that was not persisted is threat T-05-55 — the same rule 05-UI-SPEC.md
+ * states for triage controls, applied here because it is the same class of
+ * write.
+ */
+export type RetryOutcome = {
+  readonly ok: boolean;
+  readonly changed: boolean;
+  readonly state: ScanState | null;
 };
 
 /** Which inventory table a read addresses. The two the backend actually pages;
@@ -214,6 +279,11 @@ export type DefMinerBackendSdk = {
       request: PageRequest,
     ) => Promise<PageResponse<ObservationRow>>;
     countInventory: (request: CountRequest) => Promise<VisibleTotal>;
+    getArtifactAnalysis: (request: {
+      readonly projectId: string;
+      readonly sha256: string;
+    }) => Promise<PanelAnalysis | null>;
+    retryAnalysis: (request: AnalysisKey) => Promise<RetryOutcome>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
       callback: (summary: InvalidationSummary) => void,
@@ -236,6 +306,14 @@ export type BackendClient = {
     request: PageRequest,
   ) => Promise<RpcResult<PageResponse<ObservationRow>>>;
   countInventory: (request: CountRequest) => Promise<RpcResult<VisibleTotal>>;
+  /** The selected artifact's newest analysis, or `null` when it has never been
+   *  analysed — which is a real state and not a failure. */
+  getArtifactAnalysis: (request: {
+    readonly projectId: string;
+    readonly sha256: string;
+  }) => Promise<RpcResult<PanelAnalysis | null>>;
+  /** Move ONE stopped analysis back out of its terminal state (OPS-03). */
+  retryAnalysis: (request: AnalysisKey) => Promise<RpcResult<RetryOutcome>>;
   /** Subscribe to the one backend event, RETURNING THE STOP HANDLE. */
   subscribeInvalidation: (
     handler: (summary: InvalidationSummary) => void,
@@ -340,6 +418,16 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
 
     countInventory: (request) =>
       guarded(() => sdk.backend.countInventory(request)),
+
+    getArtifactAnalysis: (request) =>
+      guarded(() => sdk.backend.getArtifactAnalysis(request)),
+
+    // GUARDED like every other read, and it is a WRITE. A stale bundle whose
+    // contract version disagrees must not issue a state transition: it would be
+    // reading the outcome shape with the old expectations, on the one surface
+    // where showing a state that was not persisted is the whole hazard.
+    retryAnalysis: (request) =>
+      guarded(() => sdk.backend.retryAnalysis(request)),
 
     // NOT guarded by the mismatch, and not by a timeout either. Subscribing is
     // not a read: it delivers a summary of four scalars whose shape a version

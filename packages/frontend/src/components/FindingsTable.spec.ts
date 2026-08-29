@@ -93,6 +93,7 @@ function artifactRows(count: number): ArtifactRow[] {
       kind: "script",
       first_seen_at: 1_756_000_000_000,
       last_seen_at: 1_756_000_500_000 + index,
+      scan_state: null,
       seen_count: 1,
     });
   }

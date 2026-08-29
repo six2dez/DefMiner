@@ -161,6 +161,29 @@ export function truncationNotice(displayed: Displayed): string | undefined {
 }
 
 /**
+ * The byte range of what the panel is showing, as R2 step 3 requires it stated.
+ *
+ * THREE INTEGERS, ALL THREE FROM THE BACKEND, AND THAT IS THE WHOLE POINT.
+ * {@link forPanel}'s object deliberately carries no byte count — this module's
+ * header says why — so this sentence is built from what the backend supplied
+ * BESIDE the value rather than from the display text. Deriving a byte count
+ * from a grapheme-truncated string is the silently-wrong arithmetic
+ * {@link assertHighlightRanges} exists to make loud, and doing it inside a copy
+ * string would put it somewhere nothing checks.
+ *
+ * It is a SEPARATE SENTENCE from {@link truncationNotice}, not a merged one:
+ * that counts GRAPHEMES in the frontend's space and this counts BYTES in the
+ * backend's, and a single sentence carrying both invites a reader to treat one
+ * as a conversion of the other. Decision P5-D26, owed by plan 05-10.
+ */
+export function byteRangeNotice(
+  byteRange: { readonly start: number; readonly end: number },
+  byteTotal: number,
+): string {
+  return `Showing bytes ${grouped(byteRange.start)}–${grouped(byteRange.end)} of ${grouped(byteTotal)} bytes.`;
+}
+
+/**
  * "Copy full value" — clipboard only.
  *
  * THE FULL VALUE NEVER ENTERS THE DOM, and that is this function's entire

@@ -73,6 +73,7 @@ function artifactPage(count: number): PageResponse<ArtifactRow> {
       first_seen_at: 1,
       last_seen_at: 2,
       seen_count: 1,
+      scan_state: null,
     });
   }
   return { rows, nextCursor: null, scanned: count, exhausted: true };
@@ -171,6 +172,9 @@ function makeStub(): Stub {
         expect(request).toEqual(PAGE_REQUEST);
         return answer("listObservationsPage", OBSERVATION_PAGE);
       },
+      getArtifactAnalysis: () => answer("getArtifactAnalysis", null),
+      retryAnalysis: () =>
+        answer("retryAnalysis", { ok: true, changed: true, state: "pending" }),
       countInventory: (request) => {
         expect(request).toEqual(COUNT_REQUEST);
         return answer("countInventory", TOTAL);

@@ -45,8 +45,12 @@ import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AnalysisKey, PanelAnalysis, RetryOutcome } from "../api/client";
-import type { RpcResult } from "../api/client";
+import type {
+  AnalysisKey,
+  PanelAnalysis,
+  RetryOutcome,
+  RpcResult,
+} from "../api/client";
 
 import EvidencePanel from "./EvidencePanel.vue";
 import {
@@ -55,8 +59,8 @@ import {
   degradedMarker,
   EVIDENCE_PANEL_HEIGHT_CLASS,
   failureDetail,
-  LOADING_LABEL,
   LOAD_FAILED_BODY,
+  LOADING_LABEL,
   NEVER_ANALYSED_BODY,
   NO_SELECTION_BODY,
   type PanelEvidence,
@@ -85,9 +89,7 @@ function analysis(over: Partial<PanelAnalysis> = {}): PanelAnalysis {
   };
 }
 
-const OK_RETRY = (
-  state: RetryOutcome["state"],
-): RpcResult<RetryOutcome> => ({
+const OK_RETRY = (state: RetryOutcome["state"]): RpcResult<RetryOutcome> => ({
   ok: true,
   value: { ok: true, changed: true, state },
 });
@@ -270,7 +272,8 @@ describe("EvidencePanel — the re-analyse action (OPS-03)", () => {
   });
 
   it("cannot be double-submitted: disabled in flight, with its own label", async () => {
-    let resolveRetry: (value: RpcResult<RetryOutcome>) => void = () => undefined;
+    let resolveRetry: (value: RpcResult<RetryOutcome>) => void = () =>
+      undefined;
     const retry = vi.fn(
       () =>
         new Promise<RpcResult<RetryOutcome>>((resolve) => {
@@ -294,10 +297,36 @@ describe("EvidencePanel — the re-analyse action (OPS-03)", () => {
     await wrapper.vm.$nextTick();
     expect(retry).toHaveBeenCalledTimes(1);
 
-    resolveRetry(OK_RETRY("pending"));
+    // RESOLVED WITH A STATE THAT IS STILL DEGRADED, deliberately: the action
+    // is offered only for the states the backend's guard will move, so a
+    // successful retry to `pending` UNMOUNTS the button and there would be
+    // nothing left to assert had re-enabled. A decline that read the row back
+    // unchanged keeps it on screen, which is the case this assertion is for.
+    resolveRetry({
+      ok: true,
+      value: { ok: true, changed: false, state: "failed" },
+    });
     await settle(wrapper);
-    expect(button.attributes("disabled")).toBeUndefined();
-    expect(button.text()).toBe(RE_ANALYSE_LABEL);
+    const after = wrapper.get("#defminer-evidence-retry");
+    expect(after.attributes("disabled")).toBeUndefined();
+    expect(after.text()).toBe(RE_ANALYSE_LABEL);
+  });
+
+  it("removes the action once the row is no longer in a state the guard would move", async () => {
+    const wrapper = mountPanel({
+      selectedSha256: SHA,
+      analysis: analysis({ scanState: "failed" }),
+    });
+    expect(wrapper.find("#defminer-evidence-retry").exists()).toBe(true);
+
+    await wrapper.get("#defminer-evidence-retry").trigger("click");
+    await settle(wrapper);
+
+    // Offering a re-analyse on a queued analysis would teach the operator that
+    // the affordance does nothing — the same argument the partial banner makes
+    // for hiding its narrowing action when no narrowing filter exists.
+    expect(wrapper.get("#defminer-evidence-state").text()).toContain("Queued");
+    expect(wrapper.find("#defminer-evidence-retry").exists()).toBe(false);
   });
 
   it("leaves the PRIOR state visibly in place when the retry fails", async () => {
@@ -340,7 +369,9 @@ describe("EvidencePanel — the re-analyse action (OPS-03)", () => {
     await settle(wrapper);
 
     expect(wrapper.get("#defminer-evidence-state").text()).toContain("Failed");
-    expect(wrapper.get("#defminer-evidence-retry-failure").exists()).toBe(true);
+    expect(wrapper.find("#defminer-evidence-retry-failure").exists()).toBe(
+      true,
+    );
   });
 });
 
@@ -399,14 +430,14 @@ describe("EvidencePanel — the published frame (EvidencePanelFrame, UI-SPEC FLA
     const offenders: string[] = [];
     for (const element of root(wrapper).element.querySelectorAll("*")) {
       for (const attribute of element.attributes) {
-        const name = attribute.name.toLowerCase();
+        const name = String(attribute.name).toLowerCase();
         if (name === "title" || name.startsWith("data-")) {
-          offenders.push(`${element.tagName}[${name}]`);
+          offenders.push(`${String(element.tagName)}[${name}]`);
         }
       }
     }
     for (const attribute of root(wrapper).element.attributes) {
-      const name = attribute.name.toLowerCase();
+      const name = String(attribute.name).toLowerCase();
       if (name === "title" || name.startsWith("data-")) {
         offenders.push(`ROOT[${name}]`);
       }
@@ -455,8 +486,11 @@ describe("EvidencePanel — the hostile long-text sweep, through the REAL panel"
   const FREEZE_BOUND_MS = 2_000;
 
   const graphemes = (text: string): number =>
-    [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)]
-      .length;
+    [
+      ...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(
+        text,
+      ),
+    ].length;
 
   it("covers exactly the three long-text cases the backstop row names", () => {
     // NON-VACUITY. A sweep that quietly stopped covering a case would keep
@@ -508,10 +542,9 @@ describe("EvidencePanel — the hostile long-text sweep, through the REAL panel"
       expect(root(wrapper).classes()).toContain(EVIDENCE_PANEL_HEIGHT_CLASS);
 
       // 5 — NO RENDERER FREEZE, inside a named bound.
-      expect(
-        elapsed,
-        `${id} took ${String(elapsed)}ms to mount`,
-      ).toBeLessThan(FREEZE_BOUND_MS);
+      expect(elapsed, `${id} took ${String(elapsed)}ms to mount`).toBeLessThan(
+        FREEZE_BOUND_MS,
+      );
     });
   }
 

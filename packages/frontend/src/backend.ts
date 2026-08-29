@@ -15,6 +15,8 @@
 // remains is the ROW SHAPE — declared here, not imported, for the resolution
 // reason above.
 
+import type { ScanState } from "@defminer/engine/contract";
+
 /**
  * One artifact row exactly as the paged read returns it.
  *
@@ -34,6 +36,17 @@ export type ArtifactRow = {
   first_seen_at: number;
   last_seen_at: number;
   seen_count: number;
+  /**
+   * The state of the artifact's NEWEST analysis, or `null` when it has never
+   * been analysed.
+   *
+   * NOT A COLUMN OF `artifacts` — the backend reads it beside the row and says
+   * so (`ArtifactPageRow` in packages/backend/src/store/reads.ts). `null` is a
+   * REAL STATE and not a missing value: a sighting writes the artifact row
+   * before any analysis is claimed. It is rendered as NOTHING (P5-D66), never
+   * as "Complete", which is the silence UI-09 forbids.
+   */
+  scan_state: ScanState | null;
 };
 
 // `DefMinerEndpoints` AND `DefMinerSDK` ARE GONE, AND THIS FILE'S OWN HEADER
