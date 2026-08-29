@@ -43,6 +43,8 @@ import type {
   ContractVersions,
   CountRequest,
   DefMinerBackendSdk,
+  ExportChunkOutcome,
+  ExportChunkRequest,
   ObservationRow,
   RpcFailure,
   RpcReason,
@@ -117,6 +119,32 @@ const COUNT_REQUEST: CountRequest = {
   filter: null,
 };
 
+const EXPORT_REQUEST: ExportChunkRequest = {
+  projectId: "p1",
+  table: "observations",
+  format: "csv",
+  mode: "redacted",
+  filter: null,
+  sortKey: "observed_at",
+  direction: "desc",
+  chunkIndex: 0,
+  cursor: null,
+  chunkRows: null,
+};
+
+const EXPORT_CHUNK: ExportChunkOutcome = {
+  outcome: "chunk",
+  chunk: {
+    filename: "defminer-observations-redacted-20260829T000000Z.csv",
+    contentType: "text/csv;charset=utf-8",
+    text: '"project_id"\r\n',
+    chunkIndex: 0,
+    rows: 1,
+    hasMore: false,
+    nextCursor: null,
+  },
+};
+
 type Listener = (summary: InvalidationSummary) => void;
 
 type Stub = {
@@ -178,6 +206,10 @@ function makeStub(): Stub {
       countInventory: (request) => {
         expect(request).toEqual(COUNT_REQUEST);
         return answer("countInventory", TOTAL);
+      },
+      exportInventory: (request) => {
+        expect(request).toEqual(EXPORT_REQUEST);
+        return answer("exportInventory", EXPORT_CHUNK);
       },
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);
@@ -411,5 +443,50 @@ describe("subscribeInvalidation — the handle is returned, not swallowed", () =
 
     expect(seen).toEqual([]);
     expect(stub.listeners).toEqual([]);
+  });
+});
+
+describe("exportInventory — the export crosses as a VALUE, and a stale bundle may not take one", () => {
+  it("forwards the request and answers the typed chunk outcome", async () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+
+    const result = await client.exportInventory(EXPORT_REQUEST);
+    expect(result).toEqual({ ok: true, value: EXPORT_CHUNK });
+    expect(stub.calls).toContain("exportInventory");
+  });
+
+  it("is GUARDED by the contract mismatch — an export is the last thing a stale bundle should take", async () => {
+    // It is a READ of every row the operator can reach and it lands on their
+    // disk. A bundle that is already known to be misreading the return shape
+    // must not produce a file somebody will later trust.
+    const stub = makeStub();
+    stub.backendVersion = FRONTEND_CONTRACT_VERSION + 1;
+    const client = createBackendClient(stub.sdk);
+    await client.checkContractVersion();
+
+    const before = stub.calls.length;
+    const result = await client.exportInventory(EXPORT_REQUEST);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("contract-version-mismatch");
+    expect(stub.calls.length, "the endpoint was called anyway").toBe(before);
+  });
+
+  it("answers a VALUE and never a rejection when the backend rejects", async () => {
+    const stub = makeStub();
+    stub.behaviour = "reject";
+    stub.rejectionMessage = "failed reading https://victim.example/app.js";
+    const client = createBackendClient(stub.sdk);
+
+    const result = await client.exportInventory(EXPORT_REQUEST);
+    expect(result).toEqual({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+    // The rejection's text is discarded WITHOUT INSPECTION. The reason is a
+    // DefMiner-authored code and shares no token with what the backend said.
+    expect(JSON.stringify(result)).not.toContain("victim.example");
   });
 });

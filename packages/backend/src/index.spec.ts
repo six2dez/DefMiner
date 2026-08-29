@@ -16,6 +16,7 @@
 // failure is written down somewhere an operator can reach it.
 
 import { INVALIDATION_EVENT } from "@defminer/engine/contract";
+import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -221,6 +222,7 @@ describe("the Phase 5 RPC surface", () => {
       "countInventory",
       "getArtifactAnalysis",
       "retryAnalysis",
+      "exportInventory",
       "getContractVersion",
     ]) {
       expect(names, `${expected} was not registered`).toContain(expected);
@@ -615,5 +617,293 @@ describe("the invalidation summary the consumer emits", () => {
   it("emits nothing at all when nothing was written", async () => {
     const sdk = await ingest(0);
     expect(sdk.calls.apiSend).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE EXPORT ENDPOINT (UI-06, STORE-08, decision D-04)
+// ---------------------------------------------------------------------------
+//
+// The one behaviour a chunked export gets wrong INVISIBLY is the audit row: a
+// naive implementation writes one per call, so a five-chunk export leaves five
+// records of a single disclosure and the log becomes unreadable at exactly the
+// moment somebody is reading it to answer "what did I export". The
+// one-row-per-completed-export assertion below is why this block exists.
+//
+// The double-registration case is NOT repeated here — it is already covered by
+// "registers the surface TWICE without a throw escaping init()" above, which
+// drives the whole surface including this endpoint.
+
+describe("the export endpoint (UI-06, D-04)", () => {
+  let fx: SqliteFixture;
+  /** Observation reads to allow before the driver starts rejecting. Reset per
+   *  case; `Infinity` is the healthy database. */
+  let allowObservationReads = Number.POSITIVE_INFINITY;
+  let observationReads = 0;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+    allowObservationReads = Number.POSITIVE_INFINITY;
+    observationReads = 0;
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  /** The fixture handle with a failure injected at a chosen read.
+   *
+   *  A WRAPPER RATHER THAN A SPY: the store prepares its statement INSIDE the
+   *  read, so the only place a driver rejection can be introduced is `prepare`,
+   *  which is also where the real one comes from. */
+  function guardedDb(): Database {
+    return {
+      exec: (sql: string) => fx.db.exec(sql),
+      prepare: async (sql: string) => {
+        if (sql.includes("FROM observations")) {
+          observationReads += 1;
+          if (observationReads > allowObservationReads) {
+            throw new Error("simulated driver rejection");
+          }
+        }
+        return fx.db.prepare(sql);
+      },
+    } as unknown as Database;
+  }
+
+  async function boot(projectId: string | null = "p1"): Promise<{
+    rpc: Record<string, (...a: unknown[]) => unknown>;
+    sdk: ReturnType<typeof makeFakeSdk>;
+  }> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const db = guardedDb();
+    const sdk = makeFakeSdk({
+      projectId,
+      db: () => Promise.resolve(db),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+    return { rpc, sdk };
+  }
+
+  function seedObservation(i: number): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO observations (project_id, sha256, request_id, url, status, content_type, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        "p1",
+        String(i).padStart(64, "0"),
+        `req_${String(i).padStart(4, "0")}`,
+        `https://assets.example.test/a${String(i)}.js?token=<redacted>`,
+        200,
+        "application/javascript",
+        1_767_000_000_000 + i,
+      );
+  }
+
+  function seedDegradedArtifact(sha256: string): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES (?, ?, ?, ?, ?, ?, 1)",
+      )
+      .run("p1", sha256, 100, "script", 1, 1);
+    fx.raw
+      .prepare(
+        "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, bytes_walked, started_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("p1", sha256, DETECTOR_CORPUS_VERSION, "partial", 64, 1);
+  }
+
+  const REQUEST = {
+    projectId: "p1",
+    table: "observations" as const,
+    format: "csv" as const,
+    mode: "redacted" as const,
+    filter: null,
+    sortKey: "observed_at",
+    direction: "asc" as const,
+    chunkIndex: 0,
+    cursor: null as unknown,
+    chunkRows: 2,
+  };
+
+  type Chunk = {
+    outcome: string;
+    reason?: string;
+    chunk?: {
+      filename: string;
+      contentType: string;
+      text: string;
+      chunkIndex: number;
+      rows: number;
+      hasMore: boolean;
+      nextCursor: unknown;
+    };
+  };
+
+  function auditRows(): { kind: string; detail: string | null }[] {
+    return fx.raw
+      .prepare("SELECT kind, detail FROM audit WHERE project_id = ?")
+      .all("p1") as { kind: string; detail: string | null }[];
+  }
+
+  /** Drive the whole export to completion, returning the concatenated bytes and
+   *  the number of calls it took. */
+  async function drain(
+    rpc: Record<string, (...a: unknown[]) => unknown>,
+    overrides: Partial<typeof REQUEST> = {},
+  ): Promise<{ text: string; calls: number; last: Chunk }> {
+    let text = "";
+    let cursor: unknown = null;
+    let index = 0;
+    let last: Chunk = { outcome: "empty" };
+    for (;;) {
+      last = (await rpc.exportInventory(null, {
+        ...REQUEST,
+        ...overrides,
+        chunkIndex: index,
+        cursor,
+      })) as Chunk;
+      if (last.outcome !== "chunk" || last.chunk === undefined) break;
+      text += last.chunk.text;
+      if (!last.chunk.hasMore) break;
+      cursor = last.chunk.nextCursor;
+      index += 1;
+      expect(index, "the chunk loop did not terminate").toBeLessThan(20);
+    }
+    return { text, calls: index + 1, last };
+  }
+
+  it("is registered on the success path", async () => {
+    const { sdk } = await boot();
+    expect(sdk.calls.apiRegister).toContain("exportInventory");
+    expect(new Set(sdk.calls.apiRegister).size).toBe(
+      sdk.calls.apiRegister.length,
+    );
+  });
+
+  it("returns a filename, a content type, the bytes, the index and a more flag", async () => {
+    seedObservation(0);
+    const { rpc } = await boot();
+    const result = (await rpc.exportInventory(null, REQUEST)) as Chunk;
+    expect(result.outcome).toBe("chunk");
+    expect(result.chunk?.filename).toMatch(
+      /^defminer-observations-redacted-\d{8}T\d{6}Z\.csv$/,
+    );
+    expect(result.chunk?.contentType).toContain("text/csv");
+    expect(result.chunk?.chunkIndex).toBe(0);
+    expect(result.chunk?.rows).toBe(1);
+    expect(typeof result.chunk?.hasMore).toBe("boolean");
+  });
+
+  it("emits the header on chunk zero and NOT on a later chunk", async () => {
+    for (let i = 0; i < 4; i += 1) seedObservation(i);
+    const { rpc } = await boot();
+
+    const first = (await rpc.exportInventory(null, REQUEST)) as Chunk;
+    expect(first.chunk?.text.startsWith('"project_id"')).toBe(true);
+
+    const second = (await rpc.exportInventory(null, {
+      ...REQUEST,
+      chunkIndex: 1,
+      cursor: first.chunk?.nextCursor,
+    })) as Chunk;
+    expect(second.chunk?.text).not.toContain('"project_id"');
+  });
+
+  it("fails closed with an explicit outcome when no project is resolved", async () => {
+    seedObservation(0);
+    const { rpc } = await boot(null);
+    expect(await rpc.exportInventory(null, REQUEST)).toEqual({
+      outcome: "refused",
+      reason: "no-project",
+    });
+  });
+
+  it("answers the empty outcome for a zero-row export — never a header-only file", async () => {
+    const { rpc } = await boot();
+    expect(await rpc.exportInventory(null, REQUEST)).toEqual({
+      outcome: "empty",
+    });
+    expect(auditRows()).toHaveLength(0);
+  });
+
+  it("writes EXACTLY ONE audit row for a five-call export, not one per chunk", async () => {
+    for (let i = 0; i < 8; i += 1) seedObservation(i);
+    const { rpc } = await boot();
+
+    const { calls } = await drain(rpc);
+    expect(calls, "the fixture must actually chunk, or this proves nothing").toBe(
+      5,
+    );
+
+    const rows = auditRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("export_redacted");
+  });
+
+  it("writes NO audit row on an intermediate chunk", async () => {
+    for (let i = 0; i < 8; i += 1) seedObservation(i);
+    const { rpc } = await boot();
+
+    const first = (await rpc.exportInventory(null, REQUEST)) as Chunk;
+    expect(first.chunk?.hasMore).toBe(true);
+    expect(auditRows()).toHaveLength(0);
+  });
+
+  it("writes NO audit row when the export fails partway", async () => {
+    for (let i = 0; i < 8; i += 1) seedObservation(i);
+    const { rpc } = await boot();
+
+    // init() and the first two chunks read; the third rejects. A failed export
+    // is not a disclosure that happened.
+    allowObservationReads = observationReads + 2;
+    await expect(drain(rpc)).rejects.toThrow();
+    expect(auditRows()).toHaveLength(0);
+  });
+
+  it("names the mode in the audit KIND — raw and redacted are different records", async () => {
+    seedObservation(0);
+    const { rpc } = await boot();
+
+    await drain(rpc, { mode: "raw" });
+    expect(auditRows().map((r) => r.kind)).toEqual(["export_raw"]);
+  });
+
+  it("carries the row count and the format in the detail, and NO value and NO URL", async () => {
+    for (let i = 0; i < 3; i += 1) seedObservation(i);
+    const { rpc } = await boot();
+
+    const { text } = await drain(rpc);
+    const detail = auditRows()[0]?.detail ?? "";
+
+    expect(detail).toContain("rows=3");
+    expect(detail).toContain("format=csv");
+    // NO URL-SHAPED SUBSTRING, and no field value from any exported row. The
+    // audit writer redacts, and the caller must not rely on that to launder
+    // something it should not have passed.
+    expect(detail).not.toMatch(/[a-z][a-z0-9+.-]*:\/\//i);
+    expect(detail).not.toContain("assets.example.test");
+    expect(detail).not.toContain("req_0000");
+    expect(text).toContain("assets.example.test");
+  });
+
+  it("embeds the floor statement in the FILE when a contributing artifact is degraded", async () => {
+    seedObservation(0);
+    seedDegradedArtifact("f".repeat(64));
+    const { rpc } = await boot();
+
+    const { text } = await drain(rpc);
+    expect(text.split("\r\n")[0]?.startsWith("# ")).toBe(true);
+    expect(text).toContain("floor, not a total");
+  });
+
+  it("bumps the contract version — the API map changed", () => {
+    expect(CONTRACT_VERSION).toBeGreaterThan(2);
   });
 });
