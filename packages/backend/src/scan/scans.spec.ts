@@ -47,6 +47,7 @@ import {
   resumeScan,
   SCAN_LIST_DEFAULT_LIMIT,
   startScan,
+  suspendForRetentionEviction,
   suspendOnEpochChange,
   suspendRunningOnInit,
 } from "./scans";
@@ -454,7 +455,13 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
       nowMs: NOW + 1,
     });
 
-    const discarded = await discardScan(fx.db, PROJECT, "s1", NOW + 2);
+    const discarded = await discardScan(
+      fx.db,
+      PROJECT,
+      "s1",
+      NOW + 2,
+      "evt-discard-1",
+    );
     expect(discarded.ok, discarded.ok ? "" : discarded.error).toBe(true);
     expect(discarded.ok && discarded.changes).toBe(1);
     expect(discarded.ok && discarded.row?.state).toBe("discarded");
@@ -474,7 +481,7 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
     await pauseScan(fx.db, PROJECT, "s1", NOW + 1);
     expect(
-      (await discardScan(fx.db, PROJECT, "s1", NOW + 2)).ok &&
+      (await discardScan(fx.db, PROJECT, "s1", NOW + 2, "evt-discard-2")).ok &&
         (await getScan(fx.db, PROJECT, "s1"))?.state,
     ).toBe("discarded");
 
@@ -482,7 +489,13 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     await completeScan(fx.db, PROJECT, "s2", NOW + 11);
     // Moving a `completed` row into `discarded` would be a rewrite of what
     // happened, on the one list whose whole job is to say what happened.
-    const terminal = await discardScan(fx.db, PROJECT, "s2", NOW + 12);
+    const terminal = await discardScan(
+      fx.db,
+      PROJECT,
+      "s2",
+      NOW + 12,
+      "evt-discard-3",
+    );
     expect(terminal.ok && terminal.changes).toBe(0);
     expect(terminal.ok && terminal.row?.state).toBe("completed");
   });
@@ -559,6 +572,190 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     await startScan(fx.db, "other", "s-other", "", 0, NOW);
     expect(await getScan(fx.db, PROJECT, "s-other")).toBeUndefined();
     expect((await getScan(fx.db, "other", "s-other"))?.scan_id).toBe("s-other");
+  });
+});
+
+describe("the two DESTRUCTIVE writes, and the audit rows that record them (D-16)", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    const report = await migrate(fx.db);
+    expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+  });
+
+  afterEach(() => {
+    fx.close();
+  });
+
+  /** Every audit row in this project, oldest first. Read raw rather than through
+   *  `listAudit`, because what is under test is what LANDED and not how it
+   *  renders. */
+  function auditRows(): { kind: string; subject: string; detail: string | null }[] {
+    return fx.raw
+      .prepare(
+        "SELECT kind, subject, detail FROM audit WHERE project_id = ? ORDER BY at ASC, event_id ASC",
+      )
+      .all(PROJECT)
+      .map((r) => ({ ...r })) as {
+      kind: string;
+      subject: string;
+      detail: string | null;
+    }[];
+  }
+
+  it("DISCARD writes exactly one `scan_discarded` row, naming the position it destroyed", async () => {
+    await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
+    await advanceScan(fx.db, PROJECT, "s1", {
+      lastRequestId: "9001",
+      lastCursor: "cursor-9001",
+      lastCreatedAt: CAPTURED_AT,
+      seen: 20,
+      admitted: 4,
+      skippedDone: 1,
+      rejected: 15,
+      queued: 4,
+      nowMs: NOW + 1,
+    });
+
+    const discarded = await discardScan(
+      fx.db,
+      PROJECT,
+      "s1",
+      NOW + 2,
+      "evt-a",
+    );
+    expect(discarded.ok, discarded.ok ? "" : discarded.error).toBe(true);
+    expect(discarded.ok && discarded.changes).toBe(1);
+
+    const rows = auditRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("scan_discarded");
+    expect(rows[0]?.subject).toBe("s1");
+    // THE POSITION IS IN THE DETAIL, and it has to be captured BEFORE the
+    // update: `DISCARD_SQL` sets `last_request_id` back to `''`, so a detail
+    // assembled from the read-back would record the destruction of nothing.
+    // This assertion is the only thing that distinguishes those two orders.
+    expect(rows[0]?.detail).toContain("9001");
+    // And it is a DefMiner-authored reason code, not a pasted value: no URL, no
+    // cursor, nothing target-controlled.
+    expect(rows[0]?.detail).not.toContain("cursor-9001");
+  });
+
+  it("a discard the GUARD DECLINES writes no audit row at all", async () => {
+    // A record of something that did not happen is worse than no record. The
+    // audit write is conditional on `changes > 0` — the guard is in the
+    // statement's predicate, so this is the only place the caller can see
+    // whether the row actually moved.
+    await startScan(fx.db, PROJECT, "s2", "", 0, NOW);
+    await completeScan(fx.db, PROJECT, "s2", NOW + 1);
+
+    const terminal = await discardScan(fx.db, PROJECT, "s2", NOW + 2, "evt-b");
+    expect(terminal.ok && terminal.changes).toBe(0);
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("a REPLAYED discard writes no second row — twice over", async () => {
+    await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
+
+    const first = await discardScan(fx.db, PROJECT, "s1", NOW + 1, "evt-same");
+    expect(first.ok && first.changes).toBe(1);
+    expect(auditRows()).toHaveLength(1);
+
+    // Retry after an AMBIGUOUS failure: the caller re-presents the SAME event
+    // id, and the conflict clause makes it a no-op rather than a duplicate.
+    const retried = await discardScan(fx.db, PROJECT, "s1", NOW + 2, "evt-same");
+    expect(retried.ok).toBe(true);
+    expect(auditRows()).toHaveLength(1);
+
+    // A genuine SECOND discard mints a FRESH id — the conflict clause cannot
+    // help there, and the state guard is what does: the row is already
+    // `discarded`, so nothing moved and nothing is recorded.
+    const again = await discardScan(fx.db, PROJECT, "s1", NOW + 3, "evt-fresh");
+    expect(again.ok && again.changes).toBe(0);
+    expect(auditRows()).toHaveLength(1);
+  });
+
+  it("RETENTION EVICTION suspends the running scan at its cursor and records why", async () => {
+    await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
+    await advanceScan(fx.db, PROJECT, "s1", {
+      lastRequestId: "9001",
+      lastCursor: "cursor-9001",
+      lastCreatedAt: CAPTURED_AT,
+      seen: 20,
+      admitted: 4,
+      skippedDone: 1,
+      rejected: 15,
+      queued: 4,
+      nowMs: NOW + 1,
+    });
+
+    const moved = await suspendForRetentionEviction(
+      fx.db,
+      PROJECT,
+      "s1",
+      3,
+      NOW + 2,
+      "evt-r",
+    );
+    expect(moved.ok, moved.ok ? "" : moved.error).toBe(true);
+    expect(moved.ok && moved.changes).toBe(1);
+    expect(moved.ok && moved.row?.state).toBe("suspended");
+    expect(moved.ok && moved.row?.suspend_reason).toBe("retention_eviction");
+    // THE POSITION IS KEPT. This is a suspension, not a discard — the whole
+    // point is that the operator can raise the cap and resume from here.
+    expect(moved.ok && moved.row?.last_request_id).toBe("9001");
+
+    const rows = auditRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("scan_suspended_by_retention");
+    expect(rows[0]?.subject).toBe("s1");
+    expect(rows[0]?.detail).toContain("3");
+  });
+
+  it("retention eviction moves a RUNNING scan only, and records nothing otherwise", async () => {
+    await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
+    await pauseScan(fx.db, PROJECT, "s1", NOW + 1);
+
+    const declined = await suspendForRetentionEviction(
+      fx.db,
+      PROJECT,
+      "s1",
+      3,
+      NOW + 2,
+      "evt-r2",
+    );
+    expect(declined.ok && declined.changes).toBe(0);
+    // The reason is NOT rewritten: a paused scan carrying `operator_paused` must
+    // keep it, exactly as a second pause must not overwrite `project_changed`.
+    expect(declined.ok && declined.row?.suspend_reason).toBe("operator_paused");
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("neither write touches ANOTHER project's scan", async () => {
+    await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
+
+    const wrongProject = await discardScan(
+      fx.db,
+      "p2",
+      "s1",
+      NOW + 1,
+      "evt-x",
+    );
+    expect(wrongProject.ok && wrongProject.changes).toBe(0);
+    expect((await getScan(fx.db, PROJECT, "s1"))?.state).toBe("running");
+
+    const wrongProjectSuspend = await suspendForRetentionEviction(
+      fx.db,
+      "p2",
+      "s1",
+      1,
+      NOW + 2,
+      "evt-y",
+    );
+    expect(wrongProjectSuspend.ok && wrongProjectSuspend.changes).toBe(0);
+    expect((await getScan(fx.db, PROJECT, "s1"))?.state).toBe("running");
+    expect(auditRows()).toEqual([]);
   });
 });
 

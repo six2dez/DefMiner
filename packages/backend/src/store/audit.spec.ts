@@ -16,6 +16,7 @@ import { createFixtureDb } from "../../test/fixtures/sqlite-fixture";
 import { URL_REDACTION } from "../telemetry";
 
 import {
+  assertNoOtherAuditKind,
   AUDIT_KINDS,
   AUDIT_LIST_DEFAULT_LIMIT,
   type AuditKind,
@@ -42,12 +43,21 @@ function countAudit(fx: Awaited<ReturnType<typeof migrated>>): number {
 }
 
 describe("the audit log's vocabulary (STORE-08)", () => {
-  it("has exactly the seven kinds approved at plan 05-06's checkpoint", () => {
-    // Seven, not "at least seven". The vocabulary is a CLOSED set duplicated into
-    // a CHECK constraint in migration step v3, and step v3 is immutable — so a
-    // member added here without a new migration step would be a value the
-    // database refuses at write time, which this count is what catches.
-    expect(AUDIT_KINDS).toHaveLength(7);
+  it("has exactly the nine kinds: 05-06's seven plus D-16's two", () => {
+    // Nine, not "at least nine". The vocabulary is a CLOSED set duplicated into
+    // a CHECK constraint in the migration ladder — step v3 declared seven and
+    // step v6 REBUILT the table to admit two more, because SQLite has no
+    // `ALTER TABLE … DROP CONSTRAINT` and shipped steps are immutable. A member
+    // added here without a further step would be a value the database refuses
+    // at write time, which this count is what catches.
+    //
+    // THE TWO NEW MEMBERS ARE APPENDED, NEVER INTERLEAVED. The read-back below
+    // compares this array to the DDL's list IN ORDER, so an alphabetised
+    // insertion would fail there rather than here — but the reason to append is
+    // not the assertion: the seven that shipped are what a database written by
+    // the old build holds, and a reader comparing the two vocabularies should
+    // see the additions at the end where the diff put them.
+    expect(AUDIT_KINDS).toHaveLength(9);
     expect([...AUDIT_KINDS]).toEqual([
       "triage_set",
       "suppression_create",
@@ -56,11 +66,80 @@ describe("the audit log's vocabulary (STORE-08)", () => {
       "export_raw",
       "export_redacted",
       "value_revealed",
+      "scan_discarded",
+      "scan_suspended_by_retention",
     ]);
-    expect(new Set(AUDIT_KINDS).size).toBe(7);
+    expect(new Set(AUDIT_KINDS).size).toBe(9);
   });
 
-  it("the DDL's CHECK constraint lists the SAME seven values, with no member restated by hand", async () => {
+  it("`assertNoOtherAuditKind` has a CALL SITE, so its compile-time claim is load-bearing", () => {
+    // Its own JSDoc says its job is to STOP COMPILING when a member is added to
+    // `AUDIT_KINDS` without a matching migration step. That claim was NOT TRUE
+    // while nothing called it: an exhaustiveness helper with no exhaustive
+    // switch behind it is a comment. The switch below is that switch — add a
+    // tenth member to `AUDIT_KINDS` and this file stops type-checking, because
+    // the new value has no arm and the parameter is no longer assignable to
+    // `never`.
+    //
+    // It lives in the SPEC rather than in `audit.ts` deliberately: production
+    // code has no reason to branch on every kind, and inventing one to give the
+    // helper a home would be a switch written for the gate rather than for the
+    // program.
+    const category = (kind: AuditKind): "silent-change" | "disclosure" | "destruction" => {
+      switch (kind) {
+        case "triage_set":
+        case "suppression_create":
+        case "suppression_remove":
+          return "silent-change";
+        case "finding_projected":
+        case "export_raw":
+        case "export_redacted":
+        case "value_revealed":
+          return "disclosure";
+        case "scan_discarded":
+        case "scan_suspended_by_retention":
+          return "destruction";
+        default:
+          return assertNoOtherAuditKind(kind);
+      }
+    };
+
+    // Non-vacuous: every member is routed, and the two D-16 added are the only
+    // two in the category that did not exist before them.
+    expect(AUDIT_KINDS.map(category)).toHaveLength(9);
+    expect(
+      AUDIT_KINDS.filter((k) => category(k) === "destruction"),
+    ).toEqual(["scan_discarded", "scan_suspended_by_retention"]);
+  });
+
+  it("the two D-16 members are ACCEPTED by the database after the rebuild", async () => {
+    // The TypeScript half agreeing with itself proves nothing about the CHECK.
+    // These two writes are what proves step v6 actually reached the database
+    // this fixture migrated.
+    const fx = await migrated();
+    try {
+      for (const [i, kind] of (
+        ["scan_discarded", "scan_suspended_by_retention"] as const
+      ).entries()) {
+        const res = await recordAudit(
+          fx.db,
+          PROJECT,
+          kind,
+          "scan:s1",
+          "position destroyed",
+          1_700_000_000_000 + i,
+          `evt-d16-${String(i)}`,
+        );
+        expect(res.ok, res.ok ? "" : res.error).toBe(true);
+        expect(res.ok && res.changes).toBe(1);
+      }
+      expect(countAudit(fx)).toBe(2);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("the DDL's CHECK constraint lists the SAME nine values, in the same order, with no member restated by hand", async () => {
     // The one place the vocabulary is legitimately written twice is TypeScript
     // and SQL, which cannot share a literal. So the agreement is asserted rather
     // than assumed: read the shipped constraint out of `sqlite_master` and
@@ -149,7 +228,7 @@ describe("recordAudit — one idempotent statement, append-only", () => {
     }
   });
 
-  it("a kind outside the seven is refused by the DATABASE, and reported rather than thrown", async () => {
+  it("a kind outside the nine is refused by the DATABASE, and reported rather than thrown", async () => {
     const fx = await migrated();
     try {
       const res = await recordAudit(

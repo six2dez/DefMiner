@@ -97,6 +97,90 @@ function readArtifacts(fx: ReturnType<typeof createFixtureDb>): object[] {
     .map((r) => ({ ...r }));
 }
 
+/** Apply every step UP TO AND INCLUDING v5 and stop there — the ladder exactly
+ *  as plan 06-01's build shipped it, before `audit`'s `kind` CHECK was widened.
+ *  Raw handle deliberately, for the reason {@link applyV1Only} uses one: this is
+ *  simulating a PREVIOUS RELEASE, so it must not go through this build's
+ *  `migrate()`. */
+function applyThroughV5(fx: ReturnType<typeof createFixtureDb>): void {
+  for (const m of MIGRATIONS) {
+    if (m.v > 5) break;
+    fx.raw.exec(m.sql);
+  }
+  fx.raw.exec("PRAGMA user_version = 5");
+}
+
+/** The SEVEN kinds step v3 shipped, written out rather than imported from
+ *  `audit.ts`.
+ *
+ *  Importing `AUDIT_KINDS` here would be wrong in a way that matters: this array
+ *  stands for the rows a database written by the OLD build actually holds, and
+ *  `AUDIT_KINDS` is the vocabulary of the NEW one. Bound to the live constant,
+ *  this seed would silently start writing the two new members and the
+ *  preservation case would stop being about preservation at all. */
+const SHIPPED_AUDIT_KINDS = [
+  "triage_set",
+  "suppression_create",
+  "suppression_remove",
+  "finding_projected",
+  "export_raw",
+  "export_redacted",
+  "value_revealed",
+];
+
+/** One audit row per shipped kind, in TWO projects.
+ *
+ *  Two projects rather than one because the rebuild's copy carries NO
+ *  `project_id` predicate — copying every project is the point of a table
+ *  rebuild rather than the cross-project leak that predicate normally prevents —
+ *  and a single-project seed could not tell a correct whole-table copy from a
+ *  copy that silently dropped everyone else. */
+function seedAudit(fx: ReturnType<typeof createFixtureDb>): void {
+  const stmt = fx.raw.prepare(
+    `INSERT INTO audit (project_id, event_id, at, kind, subject, detail)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  let n = 0;
+  for (const project of ["proj-alpha", "proj-beta"]) {
+    for (const kind of SHIPPED_AUDIT_KINDS) {
+      n += 1;
+      stmt.run(
+        project,
+        `evt-${String(n).padStart(4, "0")}`,
+        1_700_000_000_000 + n,
+        kind,
+        `subject-${kind}`,
+        // A NULL detail on one row per project, so "every column survives"
+        // covers the nullable one too. `INSERT OR IGNORE` skipping a row is
+        // SILENT, and a defaulted NULL would look identical to a preserved one
+        // if no row carried it.
+        n % 7 === 0 ? null : `detail-${String(n)}`,
+      );
+    }
+  }
+}
+
+function readAudit(fx: ReturnType<typeof createFixtureDb>): object[] {
+  return fx.raw
+    .prepare(
+      `SELECT project_id, event_id, at, kind, subject, detail
+       FROM audit ORDER BY project_id ASC, event_id ASC`,
+    )
+    .all()
+    .map((r) => ({ ...r }));
+}
+
+/** Every index this database holds, by name. */
+function indexNames(fx: ReturnType<typeof createFixtureDb>): string[] {
+  return (
+    fx.raw
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC",
+      )
+      .all() as { name: string }[]
+  ).map((r) => String(r.name));
+}
+
 function countRows(
   fx: ReturnType<typeof createFixtureDb>,
 ): Record<string, number> {
@@ -252,24 +336,40 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v5 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v6 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
-    // the literal 5 rather than against `MIGRATIONS.length`: a step number that
+    // the literal 6 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(
-      MIGRATIONS.find((m) => m.v === 3),
-      "step v3 is missing",
-    ).toBeDefined();
-    expect(
-      MIGRATIONS.find((m) => m.v === 4),
-      "step v4 is missing",
-    ).toBeDefined();
-    expect(
-      MIGRATIONS.find((m) => m.v === 5),
-      "step v5 is missing",
-    ).toBeDefined();
+    expect(SCHEMA_VERSION).toBe(6);
+    for (const v of [3, 4, 5, 6]) {
+      expect(
+        MIGRATIONS.find((m) => m.v === v),
+        `step v${String(v)} is missing`,
+      ).toBeDefined();
+    }
+  });
+
+  it("step v6 is its OWN step and step v5 was not edited to carry it", () => {
+    // D-16 widens `audit`'s closed `kind` CHECK. The ladder is forward-only and
+    // shipped steps are immutable, so the widening MUST arrive as a new entry —
+    // folding it into v5 would change the schema of new installs only and
+    // silently fork them from every database already at v5.
+    const v5 = MIGRATIONS.find((m) => m.v === 5)?.sql ?? "";
+    const v6 = MIGRATIONS.find((m) => m.v === 6)?.sql ?? "";
+    expect(v5).not.toContain("scan_discarded");
+    expect(v5).not.toContain("scan_suspended_by_retention");
+    expect(v5).not.toMatch(/\baudit\b/);
+    expect(v6).toContain("scan_discarded");
+    expect(v6).toContain("scan_suspended_by_retention");
+
+    // And step v3 — the step that CREATED the constraint being widened — is
+    // untouched: it still declares exactly the seven it shipped with.
+    const v3 = MIGRATIONS.find((m) => m.v === 3)?.sql ?? "";
+    expect(v3).toContain(
+      "CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed'))",
+    );
+    expect(v3).not.toContain("scan_discarded");
   });
 
   it("step v5's DDL is a COMPLETE LITERAL — no column arrives by computation", () => {
@@ -478,35 +578,172 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("EVERY statement in EVERY step is create-if-not-exists, so a partial prior run is recoverable", () => {
-    // The whole justification for batching a step's DDL into one `exec` is that
-    // no statement in it can fail on a re-run. A single statement without the
-    // guard makes the batch a write that CAN fail, which strands an open write
-    // transaction on an unreachable pooled connection. Checked over the WHOLE
-    // ladder rather than over the new step alone, so the rule cannot decay.
+  it("EVERY statement in EVERY step is one that CANNOT FAIL on a re-run", () => {
+    // ==================================================================
+    // THE RULE, RESTATED AS THE PROPERTY IT ACTUALLY DEPENDS ON
+    // ==================================================================
+    // The whole justification for batching a step's statements into one `exec`
+    // is that no statement in it can fail on a re-run: an `exec` that FAILS
+    // strands an open write transaction on a pooled connection nothing in the
+    // plugin API can reach, and every subsequent write then reports "database
+    // is locked" until the plugin restarts.
+    //
+    // THIS GATE USED TO SAY `IF NOT EXISTS`, AND IT USED TO LOOK ONLY AT
+    // STATEMENTS BEGINNING WITH `CREATE`. Both were narrower than the rule.
+    // `IF NOT EXISTS` is the usual WAY of being unable to fail, not the
+    // property itself; and filtering to `CREATE` meant a step could add an
+    // `UPDATE`, a bare `INSERT` or an unguarded `DROP` and this gate would not
+    // look at it at all. Step v6 is the first step with non-`CREATE`
+    // statements, so the gate is widened to the rule rather than the step being
+    // written around the gate.
+    //
+    // Each allowed form below carries its OWN argument for why it cannot fail.
+    // A form not on this list is not "probably fine" — it is a form nobody has
+    // made the argument for, and adding one means adding the paragraph.
+    const FORMS: { name: string; re: RegExp; why: string }[] = [
+      {
+        name: "CREATE … IF NOT EXISTS",
+        re: /^CREATE\s+(UNIQUE\s+)?(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\b/i,
+        why: "the guard makes a second application a no-op",
+      },
+      {
+        name: "DROP … IF EXISTS",
+        re: /^DROP\s+(TABLE|INDEX)\s+IF\s+EXISTS\b/i,
+        why: "the guard makes an absent target a no-op",
+      },
+      {
+        name: "INSERT OR IGNORE … SELECT",
+        re: /^INSERT\s+OR\s+IGNORE\s+INTO\b/i,
+        why: "OR IGNORE turns every constraint conflict into a skipped row, so a re-run over rows already copied writes nothing and raises nothing",
+      },
+      {
+        name: "ALTER TABLE … RENAME TO",
+        re: /^ALTER\s+TABLE\s+[A-Za-z_][A-Za-z0-9_]*\s+RENAME\s+TO\s+[A-Za-z_][A-Za-z0-9_]*$/i,
+        why: "cannot fail ONLY because the target name is dropped earlier in the same step — asserted positionally below, not assumed",
+      },
+      {
+        name: "a trigger body's END",
+        re: /^END$/i,
+        why: "not a statement: splitting a CREATE TRIGGER on the `;` inside its own body leaves this fragment",
+      },
+    ];
+
     for (const m of MIGRATIONS) {
       const statements = m.sql
         .split(";")
         .map((t) => t.trim())
-        .filter((t) => t.length > 0 && /^CREATE\b/i.test(t));
-      expect(statements.length, `step v${m.v} declared no DDL`).toBeGreaterThan(
+        .filter((t) => t.length > 0);
+      expect(statements.length, `step v${m.v} declared nothing`).toBeGreaterThan(
         0,
       );
       for (const st of statements) {
-        // `UNIQUE` is OPTIONAL and appears between CREATE and INDEX. Step v5's
-        // one-scan-per-project invariant is a partial UNIQUE index, and it is
-        // exactly as idempotent as any other `IF NOT EXISTS` form — the guard
-        // this rule is about is the `IF NOT EXISTS`, not the uniqueness. The
-        // pattern was narrower than the rule it enforces until step v5 needed
-        // the shape, so it is widened here rather than the step being written
-        // around the gate.
+        const form = FORMS.find((f) => f.re.test(st));
         expect(
-          /^CREATE\s+(UNIQUE\s+)?(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\b/i.test(
-            st,
-          ),
-          `step v${m.v} has a statement without IF NOT EXISTS: ${st.slice(0, 80)}`,
-        ).toBe(true);
+          form,
+          `step v${m.v} has a statement in no argued-safe form: ${st.slice(0, 90)}`,
+        ).toBeDefined();
       }
+
+      // A form the list deliberately does NOT contain, asserted as an absence so
+      // the omission is a rule rather than an oversight: a step may not carry a
+      // bare INSERT, an UPDATE or a DELETE. Each of those CAN fail on a re-run
+      // or CAN destroy a row, and neither belongs inside a batched `exec`.
+      for (const banned of [
+        /^INSERT\s+INTO\b/i,
+        /^UPDATE\b/i,
+        /^DELETE\s+FROM\b/i,
+        /^DROP\s+TABLE\s+(?!IF\s+EXISTS)/i,
+      ]) {
+        for (const st of statements) {
+          expect(
+            banned.test(st),
+            `step v${m.v} carries a statement that can fail or destroy: ${st.slice(0, 90)}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("a RENAME's target name is DROPPED earlier in the same step", () => {
+    // The `ALTER TABLE … RENAME TO` form's cannot-fail argument is the ONLY one
+    // on the list that is not self-contained: a rename onto an occupied name
+    // fails, so the form is safe because of the statement BEFORE it and for no
+    // other reason. Asserted by position, because an argument that depends on
+    // ordering and is not checked for ordering is a comment.
+    for (const m of MIGRATIONS) {
+      const statements = m.sql
+        .split(";")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      statements.forEach((st, i) => {
+        const rename = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+RENAME\s+TO\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(
+          st,
+        );
+        if (rename === null) return;
+        const target = rename[2] ?? "";
+        const droppedEarlier = statements
+          .slice(0, i)
+          .some((prev) =>
+            new RegExp(`^DROP\\s+TABLE\\s+IF\\s+EXISTS\\s+${target}$`, "i").test(
+              prev,
+            ),
+          );
+        expect(
+          droppedEarlier,
+          `step v${m.v} renames onto \`${target}\` without dropping it first`,
+        ).toBe(true);
+      });
+    }
+  });
+
+  it("an INSERT … SELECT reads a table an EARLIER step created, and writes one this step just created", () => {
+    // The copy's cannot-fail argument has two halves and both are structural.
+    // The SOURCE must exist when the step runs — it does, because an earlier
+    // step created it and the ladder is ordered. The DESTINATION must exist too,
+    // and it does because the same step creates it two statements earlier. Left
+    // unchecked, a future rebuild that copied from a table added in a LATER step
+    // would be a statement that fails on a fresh install and strands the
+    // connection, which is the exact outcome this whole discipline exists to
+    // prevent.
+    for (const m of MIGRATIONS) {
+      const statements = m.sql
+        .split(";")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      statements.forEach((st, i) => {
+        const copy =
+          /^INSERT\s+OR\s+IGNORE\s+INTO\s+([A-Za-z_][A-Za-z0-9_]*)[\s\S]*\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)/i.exec(
+            st,
+          );
+        if (copy === null) return;
+        const dest = copy[1] ?? "";
+        const src = copy[2] ?? "";
+
+        const createdEarlierInStep = statements
+          .slice(0, i)
+          .some((prev) =>
+            new RegExp(
+              `^CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+${dest}\\b`,
+              "i",
+            ).test(prev),
+          );
+        expect(
+          createdEarlierInStep,
+          `step v${m.v} copies INTO \`${dest}\` without creating it first`,
+        ).toBe(true);
+
+        const createdByEarlierStep = MIGRATIONS.filter((e) => e.v < m.v).some(
+          (e) =>
+            new RegExp(
+              `CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s+${src}\\b`,
+              "i",
+            ).test(e.sql),
+        );
+        expect(
+          createdByEarlierStep,
+          `step v${m.v} copies FROM \`${src}\`, which no earlier step creates`,
+        ).toBe(true);
+      });
     }
   });
 
