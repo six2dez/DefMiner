@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
 status: executing
-stopped_at: Completed 05-10-PLAN.md
-last_updated: "2026-08-29T01:33:25.010Z"
+stopped_at: Completed 05-11-PLAN.md
+last_updated: "2026-08-31T08:20:05.487Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: 5f0697c96413dca4793fa2337ab0482de843853b
+state_head: ec07910ca9f785fc39b860cc4027e7c40f8b77d1
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 62
-  completed_plans: 56
+  completed_plans: 58
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
-Plan: 11 of 12
+Plan: 12 of 12
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 05 execution started
 
@@ -293,6 +293,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P08 | 20 min | 3 tasks | 7 files |
 | Phase 05 P09 | 42 min | 3 tasks | 25 files |
 | Phase 05 P10 | 35 min | 4 tasks | 24 files |
+| Phase 05 P11 | 40 min | 3 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -539,6 +540,16 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D80 (plan 05-10): the coalescer is SUBSCRIBED by App.vue and its triage gate spans BOTH inventory stores. — Plan 05-08 built the coalescer and nothing subscribed it, so UI-07's mid-triage guarantee was a property of a module rather than of the page. A gate watching only the active store would let a reaction land the moment the operator switched tabs, and a panel opened from either tab means they are mid-triage.
 - [Phase 05]: P5-D81 (plan 05-10): UI-03 is deliberately NOT marked complete, although both of its declaring plans have now produced summaries. — Its text is 'every entity links back to its source request, artifact version, and byte offsets'. The artifact-version line ships and is exercised; the source request and the byte offsets do not exist to link to — the evidence table is Phase 4 plan 04-03's. Checking it off would present an incomplete thing as complete, which is the same discipline P5-D69 applied to UI-09.
 - [Phase 05]: P5-D82 (plan 05-10): OPS-03 is marked complete and its LIMIT is stated on the surface that creates it. — A retry returns the row to the queued state and does not re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The queued state is a durable record that work is outstanding, which is what it is for, and Phase 2's ERR-02 recovery is what drains such a row. The panel says so in words rather than leaving one word to carry it.
+- [Phase 05]: P5-D83: the export's redaction policy is PER COLUMN, and over the two shipped inventory tables it covers exactly one — observations.url, whose query and fragment the redacted mode withholds and the raw mode emits as stored — Withholding the whole URL would leave the safe default useless and every operator would pick raw, defeating the design. What the query actually carries is the residual observations.ts DISCLOSES rather than closes: values were replaced at write time, but the NAME half of a genuine pair is retained whatever it contains, including a credential pasted where a parameter name goes. That residual is exactly what raw exposes and redacted withholds, which is what makes the two modes a real choice.
+- [Phase 05]: P5-D84: a raw export of a table with NO covered column is byte-identical to a redacted one, and the ceremony in front of it is NOT weakened for that table — artifacts carries no target-controlled column, so raw reveals nothing there. Skipping the confirmation would teach the operator which tables are safe, and that knowledge stops being true the moment a table with a covered column is added — which is precisely what the deferred entity pass adds. Asserted as a byte equality in export.spec.ts rather than left as a claim.
+- [Phase 05]: P5-D85: every exported value is emitted as a STRING in both formats, including the numeric columns — The two formats then carry byte-identical field values and any difference between them can only come from the format's own syntax. A structured export that emitted numbers as numbers would be a second projection of the same row, and the two would eventually disagree about a null.
+- [Phase 05]: P5-D86: the embedded floor statement is a leading unquoted '# ' comment line in the delimited format and an ABSENT-or-present top-level 'floor' field in the structured one — RFC 4180 has no comment syntax, so a leading # line is what every spreadsheet shows as the top row and every text reader shows as a sentence — visibility is the point, and a metadata field nobody renders would put the caveat back where UI-09 says it must not be. It is emitted unquoted and csvFloorComment THROWS on a quote or line terminator, so the DefMiner-authored sentence cannot break the row grammar the day somebody edits it. The structured field is absent rather than null when the analysis was complete: a null floor is a field a consumer has to interpret.
+- [Phase 05]: P5-D87: the export endpoint takes BOTH a keyset cursor and a chunk index, and they are not redundant — The cursor is how the rows are found — 05-UI-SPEC.md bans OFFSET and reads.ts has no offset statement to answer one with — while the index is what decides whether the chunk carries the header and the floor comment, and, with the more-chunks flag, whether this is the call that writes the audit row.
+- [Phase 05]: P5-D88: a chunk is assembled from WHOLE keyset pages, so chunkRows is a ceiling a chunk can fall short of and never exceed — A page's cursor addresses the page; stopping mid-page and resuming from that cursor would skip every row after the cut. The cost is several hundred page reads per chunk at the measured ceiling, and that is the price of not opening a second, ungated SQL surface over the same partition.
+- [Phase 05]: P5-D89: the export's audit row is written ONCE, on the chunk that completes it, and never on an intermediate chunk or a failure — Per call, a five-chunk export leaves five records of one disclosure and the log becomes unreadable at exactly the moment somebody is reading it to answer 'what did I export'. Written at the start, a failed export would be recorded as a disclosure that never happened. The residual, disclosed: a RETRIED last chunk mints a new id and records a second export, which is the safe direction for an audit log.
+- [Phase 05]: P5-D90: CONTRACT_VERSION 2 to 3 is a DELIBERATE OVER-BUMP, recorded as one rather than justified after the fact — Adding an endpoint name obliges no bump under the shape rule — a frontend that does not know a name never calls it. It is bumped because the export is the first result the frontend ASSEMBLES across several calls into a FILE on the operator's disk, which outlives the session with nothing on its face saying which version wrote it. The cost of the bump is one forced reload.
+- [Phase 05]: P5-D91: EXPORT_FORMATS and EXPORT_REDACTION_MODES live in packages/engine/src/contract.ts, not in the exporter — Both packages need them as VALUES — the backend to select a serialiser and name an audit kind, the frontend to render the radios — and the two packages cannot import each other. The redaction list's ORDER is a safety property (the first member is what a positional mistake lands on), so a second copy is the one kind of duplication that fails silently and in the dangerous direction.
+- [Phase 05]: P5-D92: the raw-export confirmation copy is asserted VERBATIM against 05-UI-SPEC.md's own row read off disk at test time, not against a second copy of the sentence — The copy was wrong twice and both wrong versions read perfectly well. A comparison against a second in-repo copy would pass just as happily if both copies were the old one.
 
 ### Known Risks Carried Forward
 
@@ -581,8 +592,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-29T01:33:24.964Z
-**Stopped at:** Completed 05-10-PLAN.md
+**Last session:** 2026-08-31T08:20:05.440Z
+**Stopped at:** Completed 05-11-PLAN.md
 **Resume file:** None
 
 ### Blockers
