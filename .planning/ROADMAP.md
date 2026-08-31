@@ -436,20 +436,43 @@ Plans:
 **The three placeholder plan titles above this line are superseded, and the divergence is stated rather than smuggled.** `06-03: Hosted-file delivery, quotas, orphan cleanup, and storage labelling` names four things, three of which decision D-17 makes impossible or unnecessary: `HostedFileSDK` is `getAll()` and `create()` and nothing else — no delete, no expiry — so DEPLOY-03's "expiry" and DEPLOY-04's "orphan cleanup" are not expressible against that surface. DEPLOY-03's own wording offers "**or** a bounded authenticated frontend download" as an equal alternative, and Phase 5 already built and measured exactly that. What ships instead is the shipped chunked RPC download plus the two gates that keep the guarantee true (06-07) and the honest Settings statement (06-08).
 
 Plans:
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — TRACER: one operator action walks one page end-to-end, plus the one-way `scans` migration — *wave 1*
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — O-07 probe: which byte count `Body.length` reports on the two read paths — *wave 2*
 - [ ] 06-04-PLAN.md — The HTTPQL composer, the operator-clause validator, and the static gate over filter sinks — *wave 2*
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-03-PLAN.md — The derived backpressure watermark, the skip-done read, the yielding page walk, and the retro counters — *wave 3*
 - [ ] 06-05-PLAN.md — Scan lifecycle: pause, resume, discard, the epoch suspend and the startup sweep — *wave 3*
 - [ ] 06-07-PLAN.md — DEPLOY-03/04 by construction: the filesystem and hosted-file ban, and the no-BLOB schema gate — *wave 3*
 - [ ] 06-11-PLAN.md — D-06's push-down superset proof over a captured fixture corpus, with its non-vacuity negative — *wave 3*
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 06-06-PLAN.md — Retention self-eviction suspends the scan, and the forward step widening the audit vocabulary — *wave 4*
 - [ ] 06-08-PLAN.md — The Settings subtraction: no path, ever, plus the row-count footprint — *wave 4*
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 06-09-PLAN.md — Scan progress on the existing event as a second payload variant, and the lifecycle badge — *wave 5*
 - [ ] 06-10-PLAN.md — The four-shape deployment matrix, its result schema and its artifact gate — *wave 5*
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 06-12-PLAN.md — The Scan tab: start form, progress readout, controls and the discard confirmation — *wave 6*
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 06-13-PLAN.md — The scan history list, the per-scan detail, and the toolbar scan indicator — *wave 7*
+
+**Cross-cutting constraints:**
+
+- The result artifact is written under this phase's own results directory and never into `.planning/phases/00-runtime-reality-check/results/` (Pitfall 7).
 
 ### Phase 7: Sourcemap Reconstruction
 

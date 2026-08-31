@@ -30,15 +30,15 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
 
 ### Ingestion path for retroactive traffic
 
-- **D-01: The scan is a backpressured producer into the SAME `BoundedQueue` and the SAME
-  consumer.** It pages only while queue depth is below a watermark; the hook offers
+- **D-01: The scan is a backpressured producer into the SAME `BoundedQueue` and the SAME consumer.**
+  It pages only while queue depth is below a watermark; the hook offers
   unconditionally, so live browsing always wins. No second analysis path, no duplicated
   admit/digest/store logic. The watermark is a number the planner must pick and defend, not
   inherit. Rejected: an unthrottled producer — the queue drops oldest at cap, so a backfill
   provably discards live entries the hook just admitted.
 
-- **D-02: Retro admissions and rejections are counted separately from live ones, over the SAME
-  closed `REJECT_REASONS` vocabulary.** One counters object with two sub-maps — `telemetry.ts`
+- **D-02: Retro admissions and rejections are counted separately from live ones, over the SAME closed `REJECT_REASONS` vocabulary.**
+  One counters object with two sub-maps — `telemetry.ts`
   remains the only place counters live, because `telemetry.spec.ts` scans the package AST and fails
   on a second counters object anywhere. A 40,000-request backfill must not make OBS-01's drop count
   and reject reasons stop describing live proxying.
@@ -46,27 +46,27 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   `getStatus`, so it is part of the Health panel's contract, and every counter call site learns
   which caller it is serving.
 
-- **D-03: Before offering, the scan skips request ids already carried to a terminal `done`
-  analysis, and RE-OFFERS anything `partial` or `failed`.** One bounded read per page instead of
+- **D-03: Before offering, the scan skips request ids already carried to a terminal `done` analysis, and RE-OFFERS anything `partial` or `failed`.**
+  One bounded read per page instead of
   thousands of megabyte reloads through `sdk.requests.get`, and the scan repairs earlier failures
   rather than cementing them. `partial`/`failed` is exactly the pair `store/retry.ts` already
   treats as movable.
 
-- **D-04: A running scan SUSPENDS when the project epoch changes, keeps its cursor, and resumes
-  only on explicit operator action.** Nothing is written under a stale epoch and nothing silently
+- **D-04: A running scan SUSPENDS when the project epoch changes, keeps its cursor, and resumes only on explicit operator action.**
+  Nothing is written under a stale epoch and nothing silently
   restarts — consistent with Phase 5's coalescing pill never auto-applying.
 
 ### Scan scope and the HTTPQL filter
 
-- **D-05: The pushed-down filter is DefMiner's own asset predicate AND an optional operator HTTPQL
-  clause.** The operator may narrow, never widen: no scan can be turned into pulling every stored
+- **D-05: The pushed-down filter is DefMiner's own asset predicate AND an optional operator HTTPQL clause.**
+  The operator may narrow, never widen: no scan can be turned into pulling every stored
   response in history.
   — **Reversibility:** costly — the two clauses are combined by building an HTTPQL string, which is
   the same class of concern `sql-discipline.spec.ts` exists to police. It needs its own gate, and
   the composition rule becomes part of the scan RPC's contract. **Open:** see O-06.
 
-- **D-06: DefMiner's push-down clause is narrow, and a fixture suite proves it is a SUPERSET of
-  `admit()`'s kind axis.** A disagreement between HTTPQL's matching semantics and `admit.ts`'s
+- **D-06: DefMiner's push-down clause is narrow, and a fixture suite proves it is a SUPERSET of `admit()`'s kind axis.**
+  A disagreement between HTTPQL's matching semantics and `admit.ts`'s
   `indexOf`/`endsWith` classification must be a red test, never a silently missed bundle. The proof
   needs real fixtures against a live Caido — it cannot be derived from the type definitions. **Open:**
   see O-03.
@@ -79,8 +79,8 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   — **Reversibility:** costly — loosening it later means rows already exist for hosts the operator
   had excluded, and the promise appears in operator-facing copy.
 
-- **D-08: When a scan starts evicting its own results under the retention cap, it suspends at its
-  cursor and says so.** `sweepRetention` already returns `deleted`; a row-cap eviction while a scan
+- **D-08: When a scan starts evicting its own results under the retention cap, it suspends at its cursor and says so.**
+  `sweepRetention` already returns `deleted`; a row-cap eviction while a scan
   is running means the backfill is consuming itself. Copy states the cause and the two remedies
   (raise the cap, narrow the filter); the cursor still resumes. Rejected: letting retention silently
   truncate a completed backfill, which looks to the operator like the scan failed.
@@ -102,8 +102,8 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   and a mis-clicked cancel on a multi-hour backfill costs nothing. Rejected: two adjacent controls
   where one is destructive.
 
-- **D-11: `init()` moves any `running` scan row to suspended, with a reason, and never
-  auto-resumes.** This applies ERR-02's rule — never left permanently `running` — to the one table
+- **D-11: `init()` moves any `running` scan row to suspended, with a reason, and never auto-resumes.**
+  This applies ERR-02's rule — never left permanently `running` — to the one table
   that needs it now. **Phase 6 therefore ships a slice of a Phase 2 requirement; the plan must say
   so out loud rather than let a verifier discover it**, and Phase 2 inherits the pattern rather
   than inventing a second one.
@@ -117,8 +117,8 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
 
 ### Progress surface
 
-- **D-13: A fifth `Scan` tab owns the filter form, scan history and per-scan detail; a compact live
-  indicator in the existing 48px toolbar shows a running scan from every tab.** A long serial job
+- **D-13: A fifth `Scan` tab owns the filter form, scan history and per-scan detail; a compact live indicator in the existing 48px toolbar shows a running scan from every tab.**
+  A long serial job
   the operator cannot see from the Artifacts tab is the exact confusion `PITFALLS.md` P3 describes
   — a frozen-looking page that is really the backend's blocked QuickJS thread. The tab strip
   already wraps; the toolbar gains its first stateful element.
@@ -150,9 +150,7 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
 
 ### Delivery path — the load-bearing decision
 
-- **D-17: Phase 5's D-04 is extended project-wide. The chunked RPC download is the ONLY path by
-  which anything DefMiner produces reaches the operator. Nothing is ever written to server disk.
-  `sdk.hostedFile` is explicitly DECLINED.**
+- **D-17: Phase 5's D-04 is extended project-wide. The chunked RPC download is the ONLY path by which anything DefMiner produces reaches the operator. Nothing is ever written to server disk. `sdk.hostedFile` is explicitly DECLINED.**
 
   Three facts drove it, one of which the roadmap did not have:
   1. `HostedFileSDK` (`@caido/quickjs-types@0.26.0`, `caido/hostedFile.d.ts`) is exactly
@@ -202,14 +200,14 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   — **Reversibility:** costly — it is the phase's largest single build, and the Docker legs need an
   image this machine has never pulled.
 
-- **D-21: The matrix declares and asserts its OWN pinned version constant, separate from Phase 1's
-  `EXPECTED_CAIDO_VERSION = "0.57.1"`.** That constant is a deliberate fail-closed tripwire
+- **D-21: The matrix declares and asserts its OWN pinned version constant, separate from Phase 1's `EXPECTED_CAIDO_VERSION = "0.57.1"`.**
+  That constant is a deliberate fail-closed tripwire
   protecting threshold artifacts (`tests/phase1-load.spec.ts`, `tests/phase1-runtime.spec.ts`);
   reusing it would make every matrix leg fail by design, and contaminating it would be worse. Every
   result artifact says which build it describes, and the harness refuses to write one if the binary
   reports something else. **Open:** see O-05.
 
-- **D-22: Each leg asserts four things, chosen because each genuinely differs by shape:** the
+- **D-22: Each leg asserts four things, chosen because each genuinely differs by shape.** The
   plugin package installs and `init()` reports compatible on `caido-cli` as well as the desktop
   app; migrations run and `EXPECTED_TABLES` is present; one proxied JS response produces an
   artifact and an observation; and after a restart the data is present — **except on
@@ -217,8 +215,8 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   database rather than erroring.** Rejected: full end-to-end per leg, which needs a browser driven
   inside four deployment shapes — a harness larger than the feature it tests.
 
-- **D-23: An unreachable leg is recorded NOT RUN with the reason, never as a pass, and the phase
-  can still complete.** The verifier reports the matrix partial, DEPLOY-01's checkbox does not move
+- **D-23: An unreachable leg is recorded NOT RUN with the reason, never as a pass, and the phase can still complete.**
+  The verifier reports the matrix partial, DEPLOY-01's checkbox does not move
   on the strength of a leg that never executed, and the leg becomes a named carried obligation.
   Same discipline `05-VERIFICATION.md` applied to its two `insufficient_spec_items` — "must not be
   recorded as a silent pass".
@@ -237,8 +235,8 @@ contradicts a roadmap assumption, that is stated rather than smoothed over.
   disposition: no sweep was shipped because the branch is unreachable, not merely small.
   — **Reversibility:** costly — it is D-17's corollary and falls with it.
 
-- **D-25: The workspace reports row counts against their retention caps, beside the D-19
-  statement.** "Your findings live on the Caido server; 12,400 of 50,000 artifact rows, oldest 41
+- **D-25: The workspace reports row counts against their retention caps, beside the D-19 statement.**
+  "Your findings live on the Caido server; 12,400 of 50,000 artifact rows, oldest 41
   days." Uses `countArtifacts` / `countObservations` / `countAnalyses` as already shipped — no
   PRAGMA, no new SQL discipline exception. It is also the surface that shows retention working,
   which now matters because a scan can be suspended by it (D-08). Rejected: bytes via
