@@ -218,7 +218,7 @@ type DbCall = { sql: string; args: Parameter[] };
  * this path. The cast has ONE place and this comment.
  */
 function recordingDb(db: Database, log: DbCall[]): Database {
-  return {
+  const recording = {
     prepare: async (sql: string) => {
       const stmt = await db.prepare(sql);
       return {
@@ -236,7 +236,30 @@ function recordingDb(db: Database, log: DbCall[]): Database {
         },
       };
     },
-  };
+  } as unknown as Database;
+  return recording;
+}
+
+/**
+ * Every maximal run of digits in a source text.
+ *
+ * A LOOP AND NOT A PATTERN, in this codebase's habit — and because the answer
+ * wanted is "which whole numbers are written here", which a substring search
+ * gets wrong in exactly the way that made this case fail first time round.
+ */
+function numericTokens(code: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  for (const ch of code) {
+    if (ch >= "0" && ch <= "9") current += ch;
+    else if (ch === "_" && current !== "") continue;
+    else {
+      if (current !== "") out.push(current);
+      current = "";
+    }
+  }
+  if (current !== "") out.push(current);
+  return out;
 }
 
 /** The skip-done read, picked out of the log by the two tables it joins. */
@@ -1060,20 +1083,31 @@ describe("producer.ts holds no local copy of a tunable number", () => {
       .split("\n")
       .filter((line) => !line.trimStart().startsWith("*"))
       .filter((line) => !line.trimStart().startsWith("//"))
+      .filter((line) => !line.trimStart().startsWith("/*"))
       .join("\n");
 
     expect(code).toContain("SCAN_BACKPRESSURE_WATERMARK");
     expect(code).toContain("SCAN_PAGE_SIZE");
+
+    // WHOLE NUMERIC TOKENS, not substrings. A substring search reported
+    // `describeError(e).slice(0, 200)` as a copy of the page size, because "20"
+    // is inside "200" — a gate that cries wolf is a gate somebody deletes.
+    const numbers = numericTokens(code);
     expect(
-      code.includes(String(SCAN_PAGE_SIZE)),
-      `packages/backend/src/scan/producer.ts contains the literal ${String(SCAN_PAGE_SIZE)} ` +
-        "outside a comment — the page size is an imported identifier, never a copy.",
-    ).toBe(false);
+      numbers,
+      `packages/backend/src/scan/producer.ts writes the page size ` +
+        `(${String(SCAN_PAGE_SIZE)}) out as a literal. It is an imported identifier, ` +
+        "never a copy — a literal keeps passing while thresholds.ts moves underneath it.",
+    ).not.toContain(String(SCAN_PAGE_SIZE));
     expect(
-      code.includes(String(SCAN_BACKPRESSURE_WATERMARK)),
-      `packages/backend/src/scan/producer.ts contains the literal ` +
-        `${String(SCAN_BACKPRESSURE_WATERMARK)} outside a comment — the watermark is an ` +
-        "imported identifier, never a copy.",
-    ).toBe(false);
+      numbers,
+      `packages/backend/src/scan/producer.ts writes the watermark ` +
+        `(${String(SCAN_BACKPRESSURE_WATERMARK)}) out as a literal. It is an imported ` +
+        "identifier, never a copy.",
+    ).not.toContain(String(SCAN_BACKPRESSURE_WATERMARK));
+    // Non-vacuity: the tokeniser found the numbers that ARE legitimately there
+    // (the fixed-bind count, the error truncation bound), so an empty result
+    // would mean it had stopped looking.
+    expect(numbers.length).toBeGreaterThan(0);
   });
 });

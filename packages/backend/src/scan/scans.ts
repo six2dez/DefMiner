@@ -123,16 +123,32 @@ const FINISHED_ANALYSIS_STATES: readonly ScanState[] =
 
 /** Same mechanism as {@link ACTIVE_STATE_PLACEHOLDERS}, for the skip read's
  *  single placeholder. A second non-degraded terminal state would silently stop
- *  being skipped; this stops the module loading instead. */
+ *  being skipped; this stops the module loading instead.
+ *
+ *  The statement that binds it lives in `scan/producer.ts` as of plan 06-03 —
+ *  see {@link FINISHED_ANALYSIS_STATE} — but the DERIVATION stays here, beside
+ *  the other vocabulary derivations this module owns. */
 const FINISHED_STATE_PLACEHOLDERS = 1;
 if (FINISHED_ANALYSIS_STATES.length !== FINISHED_STATE_PLACEHOLDERS) {
   throw new Error(
-    `scan/scans.ts: IS_REQUEST_FINISHED_SQL binds ${String(FINISHED_STATE_PLACEHOLDERS)} ` +
+    `scan/scans.ts: the skip-done statement binds ${String(FINISHED_STATE_PLACEHOLDERS)} ` +
       `state placeholder but FINISHED_ANALYSIS_STATES now holds ` +
-      `${String(FINISHED_ANALYSIS_STATES.length)}. Widen the statement and this bound ` +
-      `in one edit.`,
+      `${String(FINISHED_ANALYSIS_STATES.length)}. Widen the statement in ` +
+      `scan/producer.ts and this bound in one edit.`,
   );
 }
+
+/**
+ * The one analysis state the scan skips, as a scalar.
+ *
+ * Exported so `scan/producer.ts` can bind it without re-deriving it. A second
+ * `TERMINAL_SCAN_STATES.filter(...)` in that module would be a second
+ * declaration of the same rule, which is precisely what deriving it once was
+ * for; the assertion above is what makes taking element zero safe.
+ *
+ * @internal
+ */
+export const FINISHED_ANALYSIS_STATE: ScanState = FINISHED_ANALYSIS_STATES[0];
 
 /**
  * One scan row, as it is stored. Column names, not camelCase: this is the
@@ -378,57 +394,16 @@ export async function getActiveScan(
   );
 }
 
-// Has this REQUEST already been carried to a finished analysis in THIS project?
+// ===========================================================================
+// THE SKIP-DONE READ MOVED TO `scan/producer.ts` (plan 06-03, D-03)
+// ===========================================================================
+// `isRequestFinished` lived here and asked the question ONCE PER ITEM. At twenty
+// items a page that is 40,000 indexed round trips for a 40,000-request backfill
+// instead of 2,000, every one of them on a pooled connection. D-03 replaces it
+// with ONE bounded read per page, which has to live where the page is.
 //
-// The request id is the join: `observations` binds a request to the digest of
-// the bytes it delivered, and `analyses` holds that digest's state at a corpus
-// version. Expressed as a scalar subquery rather than a JOIN so that BOTH
-// pieces carry `project_id` in their own predicate — `sql-discipline.spec.ts`
-// decomposes a statement into its arms and asks each one separately, and a JOIN
-// whose scoping lived only in the outer WHERE would be a cross-project read one
-// edit away.
-//
-// The corpus version is bound: an analysis finished under a DIFFERENT detector
-// set has not answered the question this scan is asking, so it must not silence
-// it.
-const IS_REQUEST_FINISHED_SQL = `
-SELECT 1 AS finished
-FROM analyses
-WHERE project_id = ?
-  AND detector_set_hash = ?
-  AND scan_state = ?
-  AND sha256 IN (
-    SELECT sha256 FROM observations WHERE project_id = ? AND request_id = ?
-  )
-LIMIT 1
-`;
-
-/**
- * Should the scan skip this request because DefMiner already finished it?
- *
- * TRUE ONLY FOR A FINISHED ANALYSIS. A `partial` or `failed` one is re-offered,
- * so a retroactive scan REPAIRS earlier failures rather than cementing them —
- * the promise 06-UI-SPEC.md's `Skipped` help text makes to the operator. The
- * state is bound from {@link FINISHED_ANALYSIS_STATES}, derived from the
- * shipped vocabulary rather than written here.
- *
- * Costs one indexed read per item and saves a full re-analysis of bytes whose
- * answer is already known. It cannot save the TRANSFER — the page carried the
- * body before this runs — which is why plan 06-11's push-down proof matters and
- * why this is a work saving rather than a bandwidth one.
- */
-export async function isRequestFinished(
-  db: Database,
-  projectId: string,
-  requestId: string,
-): Promise<boolean> {
-  const stmt = await db.prepare(IS_REQUEST_FINISHED_SQL);
-  const row = await stmt.get<{ finished: number }>(
-    projectId,
-    DETECTOR_CORPUS_VERSION,
-    FINISHED_ANALYSIS_STATES[0],
-    projectId,
-    requestId,
-  );
-  return row !== undefined;
-}
+// DELETED RATHER THAN LEFT AS A SECOND WAY TO ASK. Two readers of the same
+// question drift, and the one nobody calls is the one that stops being right
+// without anything failing. The derivation it hung off — which terminal state
+// counts as finished — stays above, and the producer binds
+// {@link FINISHED_ANALYSIS_STATE}.
