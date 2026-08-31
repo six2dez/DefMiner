@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-08-31T16:12:12.206Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-08-31T16:37:49.473Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: f2f0fe22080072bbc40da4306128cc22fa5c67cb
+state_head: 7eee9b750ebda09f0d1a13f9ec44963c3e578a26
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 59
+  completed_plans: 61
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 2 of 13
+Plan: 3 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -296,6 +296,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P11 | 40 min | 3 tasks | 16 files |
 | Phase 05 P12 | 45 min | 3 tasks | 23 files |
 | Phase 06 P01 | 25 min | 2 tasks | 19 files |
+| Phase 06 P02 | 17 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -565,6 +566,14 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: Migration step v5 creates `scans` with the eighteen-column list approved at plan 06-01 blocking-human checkpoint (approve-as-specified, 2026-08-31): scan_id caller-minted, state never scan_state, last_request_id authoritative and last_cursor opportunistic, only the aggregate rejected durable, and one-scan-per-project enforced by a PARTIAL UNIQUE index rather than a read-then-write the pool cannot make atomic. — Shipped steps are immutable and EXPECTED_TABLES is asserted exactly, so the column list can only change by another forward step. O-04 (cursor stability across restart) is unmeasured and is designed around rather than bet on: the position is a plain integer boundary that survives anything.
 - [Phase 06]: SCAN_KIND_CLAUSE lives in @defminer/engine/contract, not in packages/backend/src/scan/filter.ts. — The start form renders DefMiner own clause read-only BEFORE any scan exists, which is what makes D-05 "you can narrow, you cannot widen" checkable rather than promised. There is no scan row to carry it across the RPC at that moment and the frontend cannot import the backend, so the engine contract — the one module both packages already import — is the only place it can live. filter.ts remains the ONLY producer of a composed filter string.
 - [Phase 06]: ScanStatusPayload.analysed is number | null — absent rather than zero — until plan 06-06 wires it. — There is no analysed column on scans: the number belongs to the consumer at the far end of the queue, not to the producer. 06-UI-SPEC.md rule is that a number DefMiner does not have is absent, never zero; a 0 would read as "nothing has been analysed" on a scan that is analysing.
+- [Phase 06]: [Phase 06, plan 06-02] O-07 IS ANSWERED BY MEASUREMENT ON BOTH READ PATHS, on Caido 0.58.2 (binary SHA-256 in the artifact): sdk.requests.get() and sdk.requests.query() BOTH report the DECOMPRESSED identity byte count — 457,965 B on all four encodings, against wire counts of 122,370 (gzip, 3.74x), 101,727 (br, 4.50x) and 127,907 (zstd, 3.58x). counters.byteLenMismatch = 0 over 4 reload comparisons. The 7.25x retro-path size-gate hole O-07 was opened for is NOT present on this build. This is the FIRST measurement of either read path in this project: SPIKE-08's method names only onInterceptResponse, and SIZE_GATE_SOURCE / BODY_STORED_DECOMPRESSED / BODY_LENGTH_EQUALS_RAW_LENGTH are cited nowhere as evidence about a read path. Re-run: bash scripts/phase6/o07-body-length.sh
+- [Phase 06]: [Phase 06, plan 06-02] THE VERDICT IS DECIDED ON THE THREE COMPRESSED ENCODINGS ONLY, with identity as the CONTROL. Under identity the wire byte count and the decompressed byte count are the same number, so that block agrees with whichever hypothesis is proposed and decides nothing; it proves the plumbing measured something. A split across gzip/br/zstd is recorded as not_measured, never as a majority vote.
+- [Phase 06]: [Phase 06, plan 06-02] THE O-07 query() WALK IS UNFILTERED, AND THE VERDICT THEREFORE DOES NOT COVER A FILTERED query() PAGE. Caido's req.path / req.query / cont implementations are this phase's own unmeasured O-03/O-06, so a filtered walk returning nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. The walk is descending("req","id").first(50) and items are matched by the request id the hook recorded. Named gap, WINDOWS entry 69, owned by 06-11's push-down proof.
+- [Phase 06]: [Phase 06, plan 06-02] THE SHIPPED BUILD CANNOT REACH THE query() PATH AT ALL, which is why probe/phase6-o07 exists. index.ts startScan returns refused/operator-clause-unsupported for ANY non-empty operatorFilter until 06-04 ships the validator, and runScanProducer has no caller until 06-03 ships the watermark (06-01's own stub, WINDOWS entry 67). The plan's task-2 step 5 — startScan with an operator clause, producer walks one page — is not executable as written. The shipped plugin is still installed and still the sole source of counters.byteLenMismatch. WINDOWS entry 68.
+- [Phase 06]: [Phase 06, plan 06-02] MEASURED AT THE PLUGIN-FUNCTION RPC BOUNDARY, on 0.58.2, and stated nowhere else in this repo: every element of the POST /plugin/backend/<id>/function `args` array must be a STRING (a nested array is rejected `invalid type: sequence, expected a string`), AND the route JSON-DECODES each element ONCE before the handler sees it — so a singly-encoded list arrives as an array, String()s to `1,2` and fails to re-parse with `unexpected data at the end`. Arguments must be DOUBLE-encoded; scripts/spike/run-spike-09-12.sh's `jargs` is the correct shape and scripts/spike/run-spike-02.sh's singly-encoded numeric args are silently hitting their defaults.
+- [Phase 06]: [Phase 06, plan 06-02] PHASE 6 OWNS PORTS 8961-8965 (caido 8961, origin 8962), a new block below Phase 0's 8999/8998/8991-8996/8981-8985/8081-8083 and Phase 1's 8971-8975. instance.sh is BYTE-UNCHANGED and its 0.57.1 default — Phase 1's tripwire — is untouched; EXPECT_VERSION=0.58.2 is passed IN from MATRIX_EXPECTED_VERSION (D-21). Both refusals were EXECUTED rather than claimed: PORT=8080 exits 1 before launching and CAIDO_BIN=$HOME/.caido/caido-cli (the stale 0.55.3 that owns PATH) exits 1, with the artifact byte-identical after both.
+- [Phase 06]: [Phase 06, plan 06-02] .gitignore GAINED PHASE 6 TOKEN AND HOST-LOG RULES, and this is a class of gap rather than a one-off: threat T-00-14's controls are PATH-SPECIFIC, one block per results root, and any phase that sources scripts/spike/instance.sh into a NEW results root must add its own three lines in the same commit or a run that dies before teardown can commit a live guest bearer token.
+- [Phase 06]: [Phase 06, plan 06-02] state.update-progress WITHHELD THE PROJECT-WIDE BAR AGAIN — 'progress percent withheld by buildStateFrontmatter — STATE.md left unchanged'. That is the SEVENTH consecutive occurrence across phases 05 and 06, recorded so the run stays visible rather than being rediscovered. state.advance-plan was invoked EXACTLY ONCE and moved the position 2 -> 3 of 13, correct against the files on disk.
 
 ### Known Risks Carried Forward
 
@@ -607,8 +616,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T16:11:36.936Z
-**Stopped at:** Completed 06-01-PLAN.md
+**Last session:** 2026-08-31T16:37:49.390Z
+**Stopped at:** Completed 06-02-PLAN.md
 **Resume file:** None
 
 ### Blockers
