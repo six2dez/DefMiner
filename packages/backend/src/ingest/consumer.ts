@@ -35,6 +35,8 @@
 // while `admitted` climbed, `queueDepth` climbed to QUEUE_CAP, `queueOverflow`
 // climbed, and `processed` never moved again.
 
+import { randomUUID } from "crypto";
+
 import type {
   InvalidationCategory,
   InvalidationSummary,
@@ -51,12 +53,22 @@ import {
   walk,
 } from "@defminer/engine/pipeline";
 import type { BoundedQueue, Entry } from "@defminer/engine/queue";
-import { RETENTION_SWEEP_EVERY_N } from "@defminer/engine/thresholds";
+import {
+  PASSIVE_MAX_BYTES,
+  RETENTION_SWEEP_EVERY_N,
+} from "@defminer/engine/thresholds";
 import { yieldToLoop } from "@defminer/engine/yield";
 import type { Database } from "sqlite";
 
+// `randomUUID` comes from the SAME `crypto` specifier the digest already pulls
+// in, so the shipped bundle's import set is unchanged and
+// `scripts/ci/check-bundle-imports.mjs` has nothing new to approve. It is a
+// MEASURED export of Caido's `crypto` module (Phase 0's capability probe), which
+// is why `index.ts` mints scan ids and export ids the same way.
+
 import { contentTypeOf } from "../hooks/admit";
 import type { EnqueueClock } from "../hooks/passive";
+import { getActiveScan, suspendForRetentionEviction } from "../scan/scans";
 import {
   claimAnalysis,
   DETECTOR_CORPUS_VERSION,
@@ -415,6 +427,52 @@ export function startConsumer(
       );
       counters.retentionSweeps++;
       counters.retentionDeleted += summary.deleted;
+
+      // =====================================================================
+      // D-08 — THE ONE BRANCH THAT COUPLES RETENTION TO THE SCAN STATE MACHINE
+      // =====================================================================
+      // A ROW-CAP eviction while a retroactive scan is running means the
+      // backfill is CONSUMING ITSELF: every page it walks costs a page it
+      // already walked, and it will never finish however long it runs. The scan
+      // is stopped at its cursor and told why.
+      //
+      // NOT `summary.deleted`. An AGE-BOUND eviction is retention working
+      // exactly as the operator configured it, and stopping a multi-hour
+      // backfill over routine housekeeping would be DefMiner cancelling work
+      // nobody asked it to cancel. `rowCapDeleted` exists precisely because the
+      // single `deleted` count cannot tell the two apart —
+      // `store/retention.ts` carries that argument in full.
+      //
+      // ONE BRANCH, AT ONE CALL SITE, AND THAT IS THE WHOLE COUPLING. D-08
+      // names the coupling of two subsystems as its own cost; this is the one
+      // place `sweepRetention` runs, so putting the branch anywhere else would
+      // spread a cost that is currently bounded to these ten lines.
+      // `consumer.spec.ts` asserts the call appears exactly once in this file.
+      //
+      // THE DETECTION IS LATE BY UP TO ONE CADENCE, AND THE COPY SAYS SO. The
+      // sweep runs once per RETENTION_SWEEP_EVERY_N processed artifacts, so the
+      // scan ran a little PAST the first evicted row rather than stopping at it
+      // — which is what `06-UI-SPEC.md`'s suspension copy claims, deliberately,
+      // instead of claiming a precision this cadence cannot deliver.
+      if (summary.rowCapDeleted > 0) {
+        const active = await getActiveScan(deps.db, projectId);
+        // `running` ONLY. A suspended scan already carries the reason it
+        // actually stopped for, and overwriting that would erase the only
+        // record of why — the statement's own guard declines anyway, and
+        // checking here keeps the audit write from being attempted at all.
+        if (active !== undefined && active.state === "running") {
+          await suspendForRetentionEviction(
+            deps.db,
+            projectId,
+            active.scan_id,
+            summary.rowCapDeleted,
+            Date.now(),
+            // Minted at the CALL SITE, so a retry re-presents the same id and
+            // lands as a no-op on the do-nothing conflict clause.
+            randomUUID(),
+          );
+        }
+      }
       if (summary.errors > 0) {
         // Retention is the ONLY bound on this database's growth, and its failure
         // used to be the one thing on this path that reported nothing: sweeps
@@ -495,6 +553,47 @@ export function startConsumer(
       return;
     }
     if (got.byteLen !== entry.bytes) c.byteLenMismatch++;
+
+    // =======================================================================
+    // THE AUTHORITATIVE SIZE CHECK, WHERE THE BYTE COUNT IS KNOWN GOOD (O-07)
+    // =======================================================================
+    // A NO-OP ON THE LIVE PATH AND THE REAL GATE ON THE RETRO PATH, and both
+    // halves are the point. On the live path `hooks/admit.ts` already refused
+    // anything over this ceiling against a count it measured itself, so this
+    // check can only ever agree with it. On the RETROACTIVE path the size that
+    // got the request into the queue came from a QUERY-SIDE count, which is a
+    // FILTER — it decides what to reload — and this is the check, because the
+    // bytes are in hand and their length is not an estimate.
+    //
+    // WHAT PLAN 06-02 DID AND DID NOT ESTABLISH. Its recorded O-07 verdict is
+    // at `.planning/phases/06-retroactive-scan-deployment-reality/06-02-SUMMARY.md`;
+    // cited by path rather than restated as a number, so this comment cannot
+    // drift from it. What matters here is the SCOPE of that work and of the
+    // three constants beside it: `SIZE_GATE_SOURCE`,
+    // `BODY_STORED_DECOMPRESSED` and `BODY_LENGTH_EQUALS_RAW_LENGTH` all
+    // describe the HOOK path. None of them is evidence about either read path,
+    // and reading them as though they were is exactly the mistake this gate
+    // makes unnecessary — with the check here, 06-02's verdict stops being
+    // load-bearing on the retro path at all.
+    //
+    // `>` AND NOT `>=`: PASSIVE_MAX_BYTES is the largest body DefMiner
+    // analyses, not the smallest it refuses. `hooks/admit.ts` admits at exactly
+    // the ceiling and a stricter comparison here would silently drop every
+    // artifact the live path already accepted.
+    if (got.byteLen > PASSIVE_MAX_BYTES) {
+      c.reloadOverSize++;
+      // BEFORE the identity write, so an oversized body costs a counter and
+      // nothing else: no artifact row, no observation, no analysis claim. The
+      // bytes go out of scope with this iteration.
+      log(
+        "reloaded body over the size ceiling; dropping " +
+          entry.id +
+          " at " +
+          String(got.byteLen) +
+          " bytes",
+      );
+      return;
+    }
 
     const queuedAt = deps.enqueuedAt.get(entry.id);
     if (queuedAt !== undefined) {

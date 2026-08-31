@@ -5,9 +5,12 @@
 // the project, and it survives a force-reinstall (DB_SURVIVES_REINSTALL). Nothing
 // else will ever reclaim a row.
 //
-// ONE TABLE IS EXEMPT FROM THE AGE BOUND AND FROM IT ONLY: `audit` is bounded by
-// rows alone (decision D-06). The reasoning is stated in full beside its
-// statements below, where the missing over-age statement is.
+// TWO EXEMPTIONS FROM THE AGE BOUND EXIST, AND THEY ARE DIFFERENT SHAPES.
+// `audit` — a TABLE — is bounded by rows alone (decision D-06), expressed by the
+// ABSENCE of an over-age statement. The `suspended` STATE of `scans` (decision
+// D-26) is exempt too, and cannot be an absence because it attaches to a state
+// rather than to a table: it is a PREDICATE in the statement text. Both are
+// reasoned in full below, beside the statements they are about.
 //
 // ---------------------------------------------------------------------------
 // THIS IS A LIBRARY FUNCTION WITH EXACTLY ONE CALLER, AND THE CALLER IS NOT HERE.
@@ -59,7 +62,19 @@ import type { RetentionBounds } from "./settings";
 /**
  * What one bounded pass did.
  *
- * FIXED SHAPE — plan 01-03's call site compiles against exactly this.
+ * THE SHAPE, AND WHAT IT IS FIXED AGAINST NOW.
+ *
+ * This comment used to read "FIXED SHAPE — plan 01-03's call site compiles
+ * against exactly this", and it is amended in the same commit that grows the
+ * type rather than left claiming a fixity the type no longer has. The shape has
+ * now grown twice: `auditDeleted` in Phase 5 and `rowCapDeleted` in plan 06-06,
+ * each because a caller needed to tell one KIND of deletion from another and the
+ * single `deleted` count could not say. What is FIXED is the direction — every
+ * field here is ADDED, never removed or renamed, so the one call site
+ * (`ingest/consumer.ts`'s `runRetentionPass`) keeps compiling and a reader of an
+ * older summary can still read a newer one. A field is added when, and only
+ * when, a caller must BRANCH on the distinction; a number nobody branches on
+ * belongs in a log line.
  *
  * `examined` counts the candidate ROWS this pass identified as eligible for
  * deletion, BEFORE the per-pass cap was applied. `deleted` is what it actually
@@ -91,6 +106,30 @@ export type RetentionSweepSummary = {
    *  to be able to say "and N audit events aged out of the row cap" rather than
    *  folding an irreplaceable record into one opaque number. */
   auditDeleted: number;
+  /**
+   * Artifacts the ROW CAP evicted that the age bound would not have — counted
+   * SEPARATELY and also included in `deleted`.
+   *
+   * ITS OWN CATEGORY BECAUSE A CALLER BRANCHES ON IT, which is the bar for
+   * adding a field here. `ingest/consumer.ts` suspends a running retroactive
+   * scan when this is positive (D-08): a row-cap eviction during a backfill
+   * means the backfill is CONSUMING ITSELF — every page it walks costs a page it
+   * already walked — and it will never finish however long it runs. An
+   * age-bound eviction means nothing of the sort, and folding the two into
+   * `deleted` would make DefMiner cancel an operator's multi-hour scan over
+   * routine housekeeping.
+   *
+   * THE DE-DUPLICATION IS WHAT MAKES THE NUMBER MEAN THAT. `pushVictims` skips a
+   * digest it has already seen and the over-age candidates are pushed FIRST, so
+   * a digest eligible under BOTH bounds is attributed to age. What is left is
+   * exactly "artifacts the row cap evicted that age would not have".
+   *
+   * DIGESTS REMOVED, NOT CANDIDATES ENUMERATED. A digest whose cascade ran out
+   * of per-pass budget still has its artifact row, so counting the candidate
+   * list would report an eviction that did not happen — and suspend a scan for
+   * it.
+   */
+  rowCapDeleted: number;
   moreWork: boolean;
   /** Deletes that failed, plus one for a pass that threw outright. */
   errors: number;
@@ -252,6 +291,70 @@ const DELETE_AUDIT_SQL = `
 DELETE FROM audit WHERE project_id = ? AND event_id = ?
 `;
 
+// ===========================================================================
+// THE SECOND EXEMPTION: THE `suspended` STATE OF `scans` IS EXEMPT FROM THE AGE
+// BOUND (decision D-26). THE TABLE IS NOT.
+// ===========================================================================
+// The paragraph above ends by saying that a second exemption is a new decision
+// and needs its own paragraph here. This is that second exemption, and this is
+// that paragraph.
+//
+// WHY. A suspended scan's ROW IS ITS CURSOR. `scans` holds no content — no body,
+// no digest, no URL — and exists for exactly one purpose: to remember where a
+// multi-hour backfill had got to across restarts and project switches. Nothing
+// else in the system can re-derive that position. So an age bound applied to a
+// suspended row is not "trimming old data", it is DELETING AN OPERATOR'S
+// RESUMABLE WORK on a ninety-day timer they never asked for and would never see
+// fire. `scan/scans.ts` exempts the same state from the scan-history read bound
+// for the same reason; this is that argument reaching the sweep.
+//
+// WHY IT IS A PREDICATE AND NOT AN ABSENCE, which is the whole difference from
+// D-06 above. D-06 exempts a TABLE, and a table's exemption can be expressed by
+// the ABSENCE of an over-age statement — there is simply no statement to write.
+// D-26 exempts a STATE, and an absence cannot express a state: leaving out the
+// over-age statement would exempt every scan ever run, including the completed
+// and discarded history rows that have no cursor and nothing to resume. The
+// exception therefore lives IN THE WHERE CLAUSE, where a reader who came looking
+// for it will find it, rather than in the shape of what is missing.
+//
+// AND GROWTH IS STILL BOUNDED, which is what makes this exemption survivable
+// rather than merely principled — the same test D-06 had to pass. The ROW CAP
+// below carves out NO state at all: a suspended scan is evicted by the cap like
+// any other row, oldest first. `idx_scans_one_running` already bounds suspended
+// rows to one per project at a time, so the exempted population is small by
+// construction and the cap is what bounds the rest.
+//
+// THE COST, STATED RATHER THAN DISCOVERED: a suspended scan whose operator never
+// returns sits in the table until the row cap reaches it. That is the intended
+// behaviour — "resumes only on explicit operator action" (D-11) has no expiry
+// date — and it is bounded, which is the property that matters.
+//
+// This is now TWO exemptions. It is still not a family, and a THIRD is a new
+// decision needing its own paragraph, exactly as this one did.
+
+const SCANS_OVER_AGE_SQL = `
+SELECT scan_id FROM scans
+WHERE project_id = ? AND updated_at < ? AND state <> 'suspended'
+ORDER BY updated_at ASC, scan_id ASC
+LIMIT ?
+`;
+
+// NO STATE PREDICATE, DELIBERATELY. See the paragraph above: the exemption is
+// from the AGE bound only, and a carve-out here would leave the table with no
+// ceiling at all on a database Caido never garbage-collects.
+const SCANS_OLDEST_SQL = `
+SELECT scan_id FROM scans
+WHERE project_id = ?
+ORDER BY updated_at ASC, scan_id ASC
+LIMIT ?
+`;
+
+const COUNT_SCANS_SQL = `SELECT COUNT(*) AS n FROM scans WHERE project_id = ?`;
+
+const DELETE_SCAN_SQL = `
+DELETE FROM scans WHERE project_id = ? AND scan_id = ?
+`;
+
 // Orphans: a child whose parent is already gone. The cascade below cannot create
 // one — children go first — but a crash mid-pass in some future version, or a row
 // written before this module existed, can. Cleaning them is cheap and makes "no
@@ -322,6 +425,7 @@ export async function sweepRetention(
   let examined = 0;
   let deleted = 0;
   let auditDeleted = 0;
+  let rowCapDeleted = 0;
   let moreWork = false;
   /** Mutated from inside `remove` below, so it is an object rather than two
    *  `let`s: a captured `let` assigned only inside a closure is exactly the
@@ -335,6 +439,7 @@ export async function sweepRetention(
       examined,
       deleted,
       auditDeleted,
+      rowCapDeleted,
       moreWork,
       errors: failures.count,
       lastError: failures.last,
@@ -359,12 +464,23 @@ export async function sweepRetention(
     // --- 1. artifacts eligible under either bound --------------------------
     const victims: string[] = [];
     const seen = new Set<string>();
-    const pushVictims = (rows: { sha256: string }[]): void => {
+    /** The digests that entered through the ROW-CAP branch and no other.
+     *
+     *  D-08's whole signal. Because `pushVictims` skips a digest already in
+     *  `seen` and the over-age candidates are pushed FIRST, membership here means
+     *  "the row cap would have evicted this and the age bound would not" — which
+     *  is the backfill-consuming-itself condition and not ordinary trimming. */
+    const fromRowCap = new Set<string>();
+    const pushVictims = (
+      rows: { sha256: string }[],
+      viaRowCap = false,
+    ): void => {
       for (const r of rows) {
         const sha = String(r.sha256);
         if (seen.has(sha)) continue;
         seen.add(sha);
         victims.push(sha);
+        if (viaRowCap) fromRowCap.add(sha);
       }
     };
 
@@ -378,6 +494,9 @@ export async function sweepRetention(
     );
 
     const artifactCount = await countRows(db, COUNT_ARTIFACTS_SQL, projectId);
+    // `> 0` AND NOT `>= 0`: at the cap exactly, nothing is over it. FIND-04's
+    // boundary, and an off-by-one here would suspend a running scan for a cap it
+    // never exceeded.
     const excess = artifactCount - bounds.maxRows;
     if (excess > 0) {
       const oldestStmt = await db.prepare(ARTIFACTS_OLDEST_SQL);
@@ -386,6 +505,7 @@ export async function sweepRetention(
           projectId,
           Math.min(excess, CANDIDATE_SCAN_LIMIT),
         ),
+        true,
       );
     }
 
@@ -403,6 +523,11 @@ export async function sweepRetention(
       const cascade = await deleteDigest(db, projectId, sha256, budget, remove);
       examined += cascade.examined;
       deleted += cascade.deleted;
+      // COUNTED ON REMOVAL, never on selection. See `RetentionSweepSummary`'s
+      // `rowCapDeleted`: a digest whose cascade ran out of budget still has its
+      // artifact row, and reporting it as evicted would stop a scan over work
+      // that did not happen.
+      if (cascade.artifactRemoved && fromRowCap.has(sha256)) rowCapDeleted += 1;
       // The digest still has children, or the budget ran out inside it. Either
       // way the artifact row is still there and the next pass resumes on it.
       if (cascade.capped) moreWork = true;
@@ -524,6 +649,66 @@ export async function sweepRetention(
       }
     }
 
+    // --- 3c. the `scans` table's TWO bounds, one of which carves out a state -
+    // ONE SWEEP, ONE CADENCE, ONE CONVERGENCE INEQUALITY. `scans` is trimmed
+    // here, inside the same bounded pass, counted into the same `deleted` and
+    // the same per-pass budget as every other table — not by a second sweep and
+    // not on a second timer. A backfill's position table is small; giving it its
+    // own schedule would buy nothing and would put a second long-lived timer on
+    // a single-threaded runtime where a timer is a design smell rather than a
+    // scheduler.
+    //
+    // NOT counted into `rowCapDeleted`: that number is about ARTIFACTS the cap
+    // evicted, because that is what tells a scan it is consuming its own
+    // results. Evicting an old scan HISTORY row says nothing of the kind.
+    if (budget() > 0) {
+      const scanVictims: string[] = [];
+      const scanSeen = new Set<string>();
+      const pushScans = (rows: { scan_id: string }[]): void => {
+        for (const r of rows) {
+          const id = String(r.scan_id);
+          if (scanSeen.has(id)) continue;
+          scanSeen.add(id);
+          scanVictims.push(id);
+        }
+      };
+
+      // The AGE bound, carrying D-26's state exemption in its predicate.
+      const scansOverAge = await db.prepare(SCANS_OVER_AGE_SQL);
+      pushScans(
+        await scansOverAge.all<{ scan_id: string }>(
+          projectId,
+          cutoff,
+          CANDIDATE_SCAN_LIMIT,
+        ),
+      );
+
+      // The ROW bound, carrying no exemption at all.
+      const scanTotal = await countRows(db, COUNT_SCANS_SQL, projectId);
+      const scanExcess = scanTotal - bounds.maxRows;
+      if (scanExcess > 0) {
+        const scansOldest = await db.prepare(SCANS_OLDEST_SQL);
+        pushScans(
+          await scansOldest.all<{ scan_id: string }>(
+            projectId,
+            Math.min(scanExcess, CANDIDATE_SCAN_LIMIT),
+          ),
+        );
+      }
+
+      examined += scanVictims.length;
+      for (const id of scanVictims) {
+        if (budget() <= 0) {
+          moreWork = true;
+          break;
+        }
+        // The SAME fully-bound single-row delete every other table uses. A scan
+        // row has no children — it holds a position and counters and nothing
+        // else — so there is no cascade to order.
+        deleted += await remove(DELETE_SCAN_SQL, [projectId, id]);
+      }
+    }
+
     // --- 4. does work remain for the next pass? ----------------------------
     // Asked by RE-COUNTING rather than by trusting the loop's bookkeeping: the
     // question is about the database, and the database is right there.
@@ -544,6 +729,7 @@ export async function sweepRetention(
     examined,
     deleted,
     auditDeleted,
+    rowCapDeleted,
     moreWork,
     errors: failures.count,
     lastError: failures.last,
@@ -577,7 +763,17 @@ async function deleteDigest(
   sha256: string,
   budget: () => number,
   remove: DeleteFn,
-): Promise<{ examined: number; deleted: number; capped: boolean }> {
+): Promise<{
+  examined: number;
+  deleted: number;
+  capped: boolean;
+  /** Whether the ARTIFACT ROW ITSELF was removed, as distinct from "some rows
+   *  were". `rowCapDeleted` counts digests the cap actually evicted, and a
+   *  cascade that spent its whole budget on children left the artifact standing
+   *  — reporting that as an eviction would suspend a running scan (D-08) for
+   *  work that did not happen. */
+  artifactRemoved: boolean;
+}> {
   let examined = 0;
   let deleted = 0;
   /** What is left of the PASS budget, this cascade's own deletions included. */
@@ -592,7 +788,8 @@ async function deleteDigest(
   );
   examined += obs.length;
   for (const o of obs) {
-    if (left() <= 0) return { examined, deleted, capped: true };
+    if (left() <= 0)
+      return { examined, deleted, capped: true, artifactRemoved: false };
     deleted += await remove(DELETE_OBSERVATION_SQL, [
       projectId,
       sha256,
@@ -612,7 +809,8 @@ async function deleteDigest(
         );
   examined += ana.length;
   for (const a of ana) {
-    if (left() <= 0) return { examined, deleted, capped: true };
+    if (left() <= 0)
+      return { examined, deleted, capped: true, artifactRemoved: false };
     deleted += await remove(DELETE_ANALYSIS_SQL, [
       projectId,
       sha256,
@@ -623,11 +821,23 @@ async function deleteDigest(
   // Reaching the LIMIT means there may be more rows behind it. Deleting the
   // parent now would orphan them.
   if (obs.length >= obsLimit || ana.length >= anaLimit) {
-    return { examined, deleted, capped: true };
+    return { examined, deleted, capped: true, artifactRemoved: false };
   }
-  if (left() <= 0) return { examined, deleted, capped: true };
-  deleted += await remove(DELETE_ARTIFACT_SQL, [projectId, sha256]);
-  return { examined, deleted, capped: false };
+  if (left() <= 0)
+    return { examined, deleted, capped: true, artifactRemoved: false };
+  const removedArtifact = await remove(DELETE_ARTIFACT_SQL, [
+    projectId,
+    sha256,
+  ]);
+  deleted += removedArtifact;
+  // `remove` reports 0 for a delete that FAILED as well as for one that matched
+  // nothing, and both mean the same thing here: the row is still there.
+  return {
+    examined,
+    deleted,
+    capped: false,
+    artifactRemoved: removedArtifact > 0,
+  };
 }
 
 /** The four statements and the second key column that describe one child table to
@@ -759,6 +969,17 @@ async function workRemains(
   if ((await countRows(db, COUNT_AUDIT_SQL, projectId)) > bounds.auditMaxRows)
     return true;
 
+  // `scans` carries BOTH bounds, and the age half asks the question through
+  // D-26's predicate rather than around it: a suspended scan over the age bound
+  // is not work remaining, it is a cursor the sweep is required to keep. Asking
+  // without the predicate would report work for ever and pin `moreWork` true on
+  // every pass.
+  const oldScans = await db.prepare(SCANS_OVER_AGE_SQL);
+  if ((await oldScans.all<object>(projectId, cutoff, 1)).length > 0)
+    return true;
+  if ((await countRows(db, COUNT_SCANS_SQL, projectId)) > bounds.maxRows)
+    return true;
+
   return false;
 }
 
@@ -772,12 +993,17 @@ export async function retentionCounts(
   observations: number;
   analyses: number;
   audit: number;
+  scans: number;
 }> {
   return {
     artifacts: await countRows(db, COUNT_ARTIFACTS_SQL, projectId),
     observations: await countRows(db, COUNT_OBSERVATIONS_SQL, projectId),
     analyses: await countRows(db, COUNT_ANALYSES_SQL, projectId),
     audit: await countRows(db, COUNT_AUDIT_SQL, projectId),
+    // ADDED rather than left out: every other table the sweep bounds is counted
+    // here, and a table the sweep deletes from but no reader can count is a
+    // table whose bound nothing can be shown to hold.
+    scans: await countRows(db, COUNT_SCANS_SQL, projectId),
   };
 }
 

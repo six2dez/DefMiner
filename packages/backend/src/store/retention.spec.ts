@@ -433,6 +433,7 @@ describe("the per-pass cap and convergence", () => {
       observations: 0,
       analyses: 0,
       audit: 0,
+      scans: 0,
     });
   });
 
@@ -501,6 +502,7 @@ describe("a sweep that cannot delete", () => {
       observations: 5,
       analyses: 0,
       audit: 0,
+      scans: 0,
     });
   });
 
@@ -566,6 +568,7 @@ describe("the cascade leaves no orphan", () => {
       observations: 12,
       analyses: 6,
       audit: 0,
+      scans: 0,
     });
 
     await sweepToConvergence(P1, {
@@ -581,6 +584,7 @@ describe("the cascade leaves no orphan", () => {
       observations: 6,
       analyses: 3,
       audit: 0,
+      scans: 0,
     });
     // Counted DIRECTLY, not inferred from the delete order.
     expect(orphanCount(P1)).toEqual({ observations: 0, analyses: 0 });
@@ -822,6 +826,7 @@ describe("D-06 — the audit table is bounded by ROWS and NOT by age", () => {
       examined: 0,
       deleted: 0,
       auditDeleted: 0,
+      rowCapDeleted: 0,
       moreWork: false,
       errors: 0,
       lastError: null,
@@ -1012,9 +1017,16 @@ describe("D-08 — `rowCapDeleted` separates a row-cap eviction from an age trim
     // claiming a fixity the type no longer has: amended in the same commit that
     // grew the shape, or it becomes the next reader's wrong assumption.
     expect(RETENTION_SOURCE).toContain("rowCapDeleted");
-    const fixed = /FIXED SHAPE[\s\S]{0,900}?\*\//.exec(RETENTION_SOURCE);
-    expect(fixed, "the FIXED SHAPE comment is gone").not.toBeNull();
-    expect(fixed?.[0] ?? "").toContain("rowCapDeleted");
+    const doc =
+      /\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*export type RetentionSweepSummary/.exec(
+        RETENTION_SOURCE,
+      );
+    expect(doc, "RetentionSweepSummary lost its doc block").not.toBeNull();
+    const text = doc?.[0] ?? "";
+    // The claim survives — and now names what it is fixed AGAINST, which is the
+    // direction of change rather than the field list.
+    expect(text).toContain("FIXED");
+    expect(text).toContain("rowCapDeleted");
   });
 });
 
@@ -1046,9 +1058,7 @@ describe("D-26 — the SUSPENDED STATE is exempt from the age bound, not the `sc
     // sweep would be resumable only by luck.
     for (const name of ["SCANS_OVER_AGE_SQL", "SCANS_OLDEST_SQL"]) {
       const sql = statementText(name);
-      expect(sql, name).toMatch(
-        /ORDER BY\s+updated_at\s+ASC,\s*scan_id\s+ASC/,
-      );
+      expect(sql, name).toMatch(/ORDER BY\s+updated_at\s+ASC,\s*scan_id\s+ASC/);
       expect(sql, name).toContain("LIMIT ?");
     }
   });
@@ -1057,7 +1067,15 @@ describe("D-26 — the SUSPENDED STATE is exempt from the age bound, not the `sc
     // Adding a SECOND exemption is exactly the moment somebody "tidies up" the
     // first one into the same shape. D-06's exemption stays an absence, with its
     // reasoning where the missing statement would be.
-    expect(RETENTION_SOURCE).not.toContain("AUDIT_OVER_AGE_SQL");
+    // The DECLARATION, not the string: the D-06 paragraph NAMES the statement it
+    // refuses to have — "If you came here to add `AUDIT_OVER_AGE_SQL` for
+    // consistency, this paragraph is the answer" — so a bare `toContain` would
+    // be asserting against the very sentence that makes the absence legible.
+    expect(RETENTION_SOURCE).not.toMatch(/const\s+AUDIT_OVER_AGE_SQL/);
+    expect(
+      RETENTION_SOURCE,
+      "the paragraph that tells the next reader not to write it is gone",
+    ).toContain("AUDIT_OVER_AGE_SQL");
   });
 
   it("the exemption block carries the SECOND exemption's own paragraph", () => {
@@ -1066,9 +1084,14 @@ describe("D-26 — the SUSPENDED STATE is exempt from the age bound, not the `sc
     // exemption, so the paragraph is now due — and it must name the state, not
     // the table.
     expect(RETENTION_SOURCE).toContain("D-26");
-    const exemptions = /THE AUDIT TABLE IS BOUNDED BY ROWS[\s\S]*?const AUDIT_OLDEST_SQL/.exec(
-      RETENTION_SOURCE,
-    );
+    // The region runs from the FIRST exemption's heading to the first `scans`
+    // statement: each exemption's paragraph sits beside its OWN statements, which
+    // is this file's stronger convention — "the reasoning is stated in full
+    // beside its statements" — so "here" means this block, not this line.
+    const exemptions =
+      /THE AUDIT TABLE IS BOUNDED BY ROWS[\s\S]*?const SCANS_OVER_AGE_SQL/.exec(
+        RETENTION_SOURCE,
+      );
     expect(exemptions, "the exemption block moved or vanished").not.toBeNull();
     expect(exemptions?.[0] ?? "").toContain("D-26");
   });
