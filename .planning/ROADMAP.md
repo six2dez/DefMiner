@@ -431,13 +431,25 @@ Plans:
   4. Operator-facing artifacts are retrievable through `sdk.hostedFile` or a bounded authenticated download — never by writing a path and assuming the operator can reach it
   5. Server disk is quota-bounded with orphan cleanup, and behaviour on a container without a volume is documented and tested
 
-**Plans**: 3 plans
+**Plans**: 13 plans
+
+**The three placeholder plan titles above this line are superseded, and the divergence is stated rather than smuggled.** `06-03: Hosted-file delivery, quotas, orphan cleanup, and storage labelling` names four things, three of which decision D-17 makes impossible or unnecessary: `HostedFileSDK` is `getAll()` and `create()` and nothing else — no delete, no expiry — so DEPLOY-03's "expiry" and DEPLOY-04's "orphan cleanup" are not expressible against that surface. DEPLOY-03's own wording offers "**or** a bounded authenticated frontend download" as an equal alternative, and Phase 5 already built and measured exactly that. What ships instead is the shipped chunked RPC download plus the two gates that keep the guarantee true (06-07) and the honest Settings statement (06-08).
 
 Plans:
 
-- [ ] 06-01: Retroactive scan with HTTPQL push-down, resumable cursor, progress, cancellation
-- [ ] 06-02: Deployment matrix testing across desktop, remote CLI, and Docker
-- [ ] 06-03: Hosted-file delivery, quotas, orphan cleanup, and storage labelling
+- [ ] 06-01-PLAN.md — TRACER: one operator action walks one page end-to-end, plus the one-way `scans` migration — *wave 1*
+- [ ] 06-02-PLAN.md — O-07 probe: which byte count `Body.length` reports on the two read paths — *wave 2*
+- [ ] 06-04-PLAN.md — The HTTPQL composer, the operator-clause validator, and the static gate over filter sinks — *wave 2*
+- [ ] 06-03-PLAN.md — The derived backpressure watermark, the skip-done read, the yielding page walk, and the retro counters — *wave 3*
+- [ ] 06-05-PLAN.md — Scan lifecycle: pause, resume, discard, the epoch suspend and the startup sweep — *wave 3*
+- [ ] 06-07-PLAN.md — DEPLOY-03/04 by construction: the filesystem and hosted-file ban, and the no-BLOB schema gate — *wave 3*
+- [ ] 06-11-PLAN.md — D-06's push-down superset proof over a captured fixture corpus, with its non-vacuity negative — *wave 3*
+- [ ] 06-06-PLAN.md — Retention self-eviction suspends the scan, and the forward step widening the audit vocabulary — *wave 4*
+- [ ] 06-08-PLAN.md — The Settings subtraction: no path, ever, plus the row-count footprint — *wave 4*
+- [ ] 06-09-PLAN.md — Scan progress on the existing event as a second payload variant, and the lifecycle badge — *wave 5*
+- [ ] 06-10-PLAN.md — The four-shape deployment matrix, its result schema and its artifact gate — *wave 5*
+- [ ] 06-12-PLAN.md — The Scan tab: start form, progress readout, controls and the discard confirmation — *wave 6*
+- [ ] 06-13-PLAN.md — The scan history list, the per-scan detail, and the toolbar scan indicator — *wave 7*
 
 ### Phase 7: Sourcemap Reconstruction
 
