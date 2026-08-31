@@ -41,10 +41,12 @@ import {
   INVALIDATION_EVENT,
   isDegradedScanState,
   isOperatorDecided,
+  isScanProgressPayload,
   RETRY_TARGET_SCAN_STATE,
   RETRYABLE_SCAN_STATES,
   SCAN_KIND_CLAUSE,
   SCAN_LIFECYCLE_STATES,
+  SCAN_PROGRESS_KIND,
   SCAN_STATES,
   SUSPEND_REASONS,
   TERMINAL_SCAN_STATES,
@@ -56,11 +58,13 @@ import type {
   EntityRowBase,
   EvidencePanelFrame,
   InvalidationCategory,
+  InvalidationEventPayload,
   InvalidationSummary,
   PageCursor,
   PageRequest,
   PageResponse,
   ScanLifecycleState,
+  ScanProgressPayload,
   ScanState,
   ScanStatusPayload,
   ScoreExplanation,
@@ -667,3 +671,167 @@ describe("ScanStatusPayload — what the Scan tab reads", () => {
     expect(absent).not.toBe(none);
   });
 });
+
+// ===========================================================================
+// THE SECOND PAYLOAD VARIANT (FIND-04, D-15)
+// ===========================================================================
+//
+// THE DIVERGENCE FROM D-15's WORD "CATEGORY" IS ASSERTED HERE, NOT ONLY
+// ARGUED IN A COMMENT. D-15 asks for progress "as a new coalescer category",
+// and 06-UI-SPEC.md § "Named Conflicts" records why the literal reading
+// delivers the OPPOSITE of D-15's stated intent: both of the coalescer's
+// triage-lock early returns are checked BEFORE the debounce window, so a
+// `scans` category would accrue into the pill and never land while a row is
+// selected. Progress therefore rides the SAME event as a second VARIANT and is
+// NOT a fourth category — and the cases below assert the gate that stops a
+// speculative category is still exactly where it was.
+
+describe("the progress payload is a VARIANT, never a fourth CATEGORY", () => {
+  it("leaves INVALIDATION_CATEGORIES at three members with nothing scan-shaped in it", () => {
+    // The same assertion the shipped case above makes, restated here against
+    // the CHANGE this file is now recording — so an edit that widened the list
+    // to carry progress fails in the block that introduced progress rather than
+    // only in the block that predates it.
+    expect(INVALIDATION_CATEGORIES).toHaveLength(3);
+    expect(INVALIDATION_CATEGORIES).not.toContain("scans");
+    expect(INVALIDATION_CATEGORIES).not.toContain("scan");
+    expect(INVALIDATION_CATEGORIES).not.toContain(SCAN_PROGRESS_KIND);
+  });
+
+  it("SCAN_PROGRESS_KIND is a non-empty literal that is not an event name", () => {
+    expect(typeof SCAN_PROGRESS_KIND).toBe("string");
+    expect(SCAN_PROGRESS_KIND.length).toBeGreaterThan(0);
+    // NOT namespaced like the event. It is a discriminator INSIDE a payload on
+    // one already-namespaced event, and giving it a `defminer:` prefix would
+    // invite a reader to mistake it for a second event name.
+    expect(SCAN_PROGRESS_KIND).not.toBe(INVALIDATION_EVENT);
+  });
+
+  it("isScanProgressPayload narrows BOTH ways over the union", () => {
+    const summary: InvalidationEventPayload = {
+      projectId: "p1",
+      category: "artifacts",
+      changedCount: 3,
+      newestId: "a".repeat(64),
+    };
+    const progress: InvalidationEventPayload = makeProgress();
+
+    expect(isScanProgressPayload(summary)).toBe(false);
+    expect(isScanProgressPayload(progress)).toBe(true);
+
+    // THE NARROWING IS THE POINT, not the boolean. Reading a progress-only
+    // field off the union without the guard is a typecheck error; reading it
+    // inside the guard is not.
+    if (isScanProgressPayload(progress)) {
+      expect(progress.scanId).toBe("s1");
+    } else {
+      throw new Error("the predicate did not narrow the progress variant");
+    }
+  });
+
+  it("returns false for a payload that simply has no discriminator", () => {
+    // The summary variant carries no `kind` at run time at all — the emitted
+    // object is still the four scalars UI-07 fixed — so "missing" and "not
+    // progress" are the same object, and this is that object.
+    const bare = {
+      projectId: "p1",
+      category: "observations",
+      changedCount: 1,
+      newestId: "r-1",
+    } satisfies InvalidationSummary;
+    expect(Object.keys(bare)).not.toContain("kind");
+    expect(isScanProgressPayload(bare)).toBe(false);
+  });
+
+  it("carries the seven counters, the position, the state and the hold — and no target-controlled string", () => {
+    const progress = makeProgress();
+
+    // THE KEY SET, not the individual fields. A findings array or a body added
+    // to this variant later fails here without anyone having to predict its
+    // name — the same reason the summary case above asserts its own key set.
+    expect(Object.keys(progress).sort()).toEqual([
+      "admitted",
+      "analysed",
+      "heldAtWatermark",
+      "kind",
+      "lastCreatedAt",
+      "pagesWalked",
+      "projectId",
+      "queued",
+      "rejected",
+      "scanId",
+      "seen",
+      "skippedDone",
+      "state",
+    ]);
+
+    // THE SEVEN COUNTERS 06-UI-SPEC.md names: four in the strip and three in
+    // the detail list. Every one of them is a number or an explicit absence.
+    for (const counter of [
+      progress.seen,
+      progress.admitted,
+      progress.queued,
+      progress.analysed,
+      progress.pagesWalked,
+      progress.skippedDone,
+      progress.rejected,
+    ]) {
+      expect(counter === null || typeof counter === "number").toBe(true);
+    }
+
+    expect(SCAN_LIFECYCLE_STATES).toContain(progress.state);
+    expect(typeof progress.heldAtWatermark).toBe("boolean");
+    expect(
+      progress.lastCreatedAt === null ||
+        Number.isInteger(progress.lastCreatedAt),
+    ).toBe(true);
+  });
+
+  it("has exactly two string fields and both are identifiers this plugin owns", () => {
+    // T-06-44. `projectId` is Caido's own project identifier and `scanId` is a
+    // UUID DefMiner minted; `kind` and `state` are closed-vocabulary members.
+    // Nothing else on this shape is a string, which is what makes the readout
+    // renderable with no display-path call — a property of the SHAPE rather
+    // than a discipline somebody has to keep.
+    const progress = makeProgress();
+    const strings = Object.entries(progress).filter(
+      ([, value]) => typeof value === "string",
+    );
+    expect(strings.map(([key]) => key).sort()).toEqual([
+      "kind",
+      "projectId",
+      "scanId",
+      "state",
+    ]);
+  });
+
+  it("`analysed` is ABSENT and never a lying zero", () => {
+    // The same rule `ScanStatusPayload.analysed` carries, and the same reason:
+    // `analyses` rows hold no scan attribution, so DefMiner cannot attribute a
+    // finished analysis to THIS scan. 06-UI-SPEC.md D2 — "a number DefMiner
+    // does not have is absent, never zero".
+    expect(makeProgress().analysed).toBeNull();
+  });
+});
+
+/** One progress payload, as `scan/producer.ts` emits it. */
+function makeProgress(
+  overrides: Partial<ScanProgressPayload> = {},
+): ScanProgressPayload {
+  return {
+    kind: SCAN_PROGRESS_KIND,
+    projectId: "p1",
+    scanId: "s1",
+    state: "running",
+    pagesWalked: 2,
+    seen: 40,
+    admitted: 9,
+    skippedDone: 4,
+    rejected: 27,
+    queued: 9,
+    analysed: null,
+    lastCreatedAt: 1_723_600_000_000,
+    heldAtWatermark: false,
+    ...overrides,
+  };
+}

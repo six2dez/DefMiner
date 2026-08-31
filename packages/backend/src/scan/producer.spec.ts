@@ -41,8 +41,11 @@
 
 import { readFileSync } from "node:fs";
 
+import type { ScanProgressPayload } from "@defminer/engine/contract";
 import {
+  INVALIDATION_EVENT,
   isDegradedScanState,
+  isScanProgressPayload,
   SCAN_KIND_CLAUSE,
   TERMINAL_SCAN_STATES,
 } from "@defminer/engine/contract";
@@ -1109,5 +1112,217 @@ describe("producer.ts holds no local copy of a tunable number", () => {
     // (the fixed-bind count, the error truncation bound), so an empty result
     // would mean it had stopped looking.
     expect(numbers.length).toBeGreaterThan(0);
+  });
+});
+
+// ===========================================================================
+// 8. THE PER-PAGE PROGRESS EMIT (FIND-04, D-15)
+// ===========================================================================
+//
+// ONE PAYLOAD PER PAGE THAT WAS ACTUALLY WALKED, on the SHIPPED event, and
+// nothing else. The negative half is the half that matters: a hold transfers no
+// page, so a hold reports no progress — a readout that ticked while the walk
+// was withholding would be reporting motion that did not happen, on the one
+// surface whose entire subject is whether anything is moving.
+
+/** Every progress payload the code under test handed to the event channel. */
+function progressEmits(sdk: {
+  calls: { apiSend: { event: string; args: unknown[] }[] };
+}): ScanProgressPayload[] {
+  return sdk.calls.apiSend
+    .filter((call) => call.event === INVALIDATION_EVENT)
+    .map((call) => call.args[0])
+    .filter((payload): payload is ScanProgressPayload =>
+      isScanProgressPayload(payload as ScanProgressPayload),
+    );
+}
+
+describe("the producer reports every page it walked, and only those", () => {
+  it("emits exactly one payload per walked page — four pages, four payloads", async () => {
+    const record = newRecord();
+    const pages = [
+      [item("p1-a"), item("p1-b")],
+      [item("p2-a")],
+      [item("p3-a"), item("p3-b")],
+      [item("p4-a")],
+    ];
+    const sdk = fakeQuerySdk(pages, false, record);
+
+    const outcome = await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: new BoundedQueue(QUEUE_CAP),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    expect(outcome.pagesWalked).toBe(4);
+    expect(progressEmits(sdk)).toHaveLength(4);
+  });
+
+  it("emits NOTHING while it is holding at the watermark without walking a page", async () => {
+    // Three depth reads, all at or above the watermark: the gate, the re-check
+    // after the yield, and one spare. No page is transferred, so no page is
+    // reported.
+    const record = newRecord();
+    const sdk = onePage([item("a-1")], true, record);
+
+    const outcome = await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: fakeQueue([
+        SCAN_BACKPRESSURE_WATERMARK,
+        SCAN_BACKPRESSURE_WATERMARK + 1,
+        SCAN_BACKPRESSURE_WATERMARK,
+      ]),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    expect(outcome.stop).toBe("held");
+    expect(record.executes).toBe(0);
+    expect(progressEmits(sdk)).toHaveLength(0);
+  });
+
+  it("carries the CUMULATIVE row counters, the scan id, the state and the position", async () => {
+    // CUMULATIVE, not this call's deltas. The readout renders "how far has this
+    // scan got", and a payload carrying one call's totals would reset the strip
+    // to a small number every time a held walk re-entered.
+    await advanceScan(fx.db, PROJECT, "s1", {
+      lastRequestId: "9999",
+      lastCursor: "cursor-9999",
+      lastCreatedAt: CAPTURED_AT + 5_000,
+      seen: 20,
+      admitted: 5,
+      skippedDone: 2,
+      rejected: 13,
+      queued: 5,
+      nowMs: NOW,
+    });
+
+    const record = newRecord();
+    const sdk = onePage([item("ok-1"), item("no-1", { code: 404 })], false, record);
+
+    await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: new BoundedQueue(QUEUE_CAP),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    const emits = progressEmits(sdk);
+    expect(emits).toHaveLength(1);
+    const payload = emits[0];
+
+    expect(payload.projectId).toBe(PROJECT);
+    expect(payload.scanId).toBe("s1");
+    expect(payload.state).toBe("running");
+    // The seeded page plus this one.
+    expect(payload.pagesWalked).toBe(2);
+    expect(payload.seen).toBe(22);
+    expect(payload.admitted).toBe(6);
+    expect(payload.skippedDone).toBe(2);
+    expect(payload.rejected).toBe(14);
+    expect(payload.queued).toBe(6);
+    // ABSENT, never a lying zero — `analyses` rows carry no scan attribution.
+    expect(payload.analysed).toBeNull();
+    // FROM THE ITEM'S CAPTURE TIME, never from the clock: `nowMs` above is NOW
+    // and the position is the boundary item's `getCreatedAt()`.
+    expect(payload.lastCreatedAt).toBe(CAPTURED_AT);
+    expect(payload.heldAtWatermark).toBe(false);
+
+    // The row the RPC would read agrees with the payload the event carried.
+    const row = await getActiveScan(fx.db, PROJECT);
+    expect(row?.seen).toBe(payload.seen);
+    expect(row?.pages_walked).toBe(payload.pagesWalked);
+  });
+
+  it("carries no URL, no host, no header and no body", async () => {
+    // T-06-44. The page's items all name a host and a path; nothing on the
+    // payload may repeat one. Asserted over the SERIALISED payload rather than
+    // field by field, so a field added later is covered without being predicted.
+    const record = newRecord();
+    const sdk = onePage(
+      [item("ok-1", { url: "https://secret.example.test/bundle.js" })],
+      false,
+      record,
+    );
+
+    await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: new BoundedQueue(QUEUE_CAP),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    const serialised = JSON.stringify(progressEmits(sdk));
+    expect(serialised).not.toContain("secret.example.test");
+    expect(serialised).not.toContain("bundle.js");
+    expect(serialised).not.toContain("http");
+    expect(serialised).not.toContain("content-type");
+  });
+
+  it("emits NOTHING once the project has changed under the walk", async () => {
+    // The project-still-current check, in the shape the consumer applies before
+    // its own emit. A payload announcing project A's progress delivered while
+    // the operator is looking at project B is the frontend half of the boundary
+    // `currentProjectId()` enforces on the backend.
+    const record = newRecord();
+    const sdk = onePage([item("ok-1")], false, record);
+    let reads = 0;
+
+    await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: new BoundedQueue(QUEUE_CAP),
+      getProjectId: () => {
+        reads += 1;
+        // The page is walked under `p1`; by the time the emit asks again the
+        // operator has switched.
+        return Promise.resolve(reads === 1 ? PROJECT : "p2");
+      },
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    expect(record.executes).toBe(1);
+    expect(progressEmits(sdk)).toHaveLength(0);
+  });
+
+  it("an emit that throws does not stop the walk", async () => {
+    // Caido reports nothing from plugin code, so an event channel gone during
+    // teardown must never take the walk down with it — the rule the consumer's
+    // own emit already follows.
+    const record = newRecord();
+    const base = fakeQuerySdk([[item("p1-a")], [item("p2-a")]], false, record);
+    const sdk = {
+      ...base,
+      api: {
+        ...base.api,
+        send: (event: string, ...args: unknown[]) => {
+          base.calls.apiSend.push({ event, args });
+          throw new Error("channel is gone");
+        },
+      },
+    };
+
+    const outcome = await runScanProducer({
+      sdk,
+      db: fx.db,
+      queue: new BoundedQueue(QUEUE_CAP),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    });
+
+    expect(outcome.stop).toBe("completed");
+    expect(outcome.pagesWalked).toBe(2);
+    expect(base.calls.apiSend).toHaveLength(2);
   });
 });
