@@ -141,6 +141,55 @@ export const RETENTION_SWEEP_EVERY_N = 128;
  */
 export const SCAN_PAGE_SIZE = 20;
 
+/**
+ * The queue depth at or above which the retroactive scan stops offering pages
+ * (FIND-03, D-01).
+ *
+ * DERIVATION, and the argument is written out so a reader can DISAGREE with it
+ * rather than merely read a number:
+ *
+ *   The scan may offer a page only while there is still room for a full MEASURED
+ *   live burst on top of everything the scan has just added. A burst is
+ *   EVENTS_DELIVERED_UNDER_BLOCK — 499 intercept events arrived in a single 20 ms
+ *   window after a 30 s handler block (SPIKE-03), and it is the only burst anyone
+ *   has measured; `BoundedQueue`'s constructor already refuses a cap below it.
+ *   One scan page adds at most SCAN_PAGE_SIZE entries. So the watermark must
+ *   satisfy
+ *
+ *       WATERMARK <= QUEUE_CAP - EVENTS_DELIVERED_UNDER_BLOCK - SCAN_PAGE_SIZE
+ *
+ *   and it is set TO that bound. Computed from the three identifiers rather than
+ *   written as the number they currently produce, in the idiom
+ *   RETENTION_SWEEP_MAX_ROWS's convergence property uses: the derivation is
+ *   referenced in code, so it is not merely a comment.
+ *
+ * WHY A WATERMARK AT ALL, stated here because it is the whole reason plan 06-01
+ * shipped a producer with no caller: `BoundedQueue.offer()` drops the OLDEST
+ * entry at cap. That is the right trade for live traffic — the newest artifact
+ * is the one the operator is looking at — and it is exactly wrong under a
+ * backfill, where the oldest entries ARE the operator's live browsing. An
+ * ungated producer therefore does not merely run fast: it provably discards the
+ * live responses the operator is watching, and the drop counter is the only
+ * place that shows.
+ *
+ * THE RESIDUAL, named here rather than left to be discovered. This is a
+ * DROP-safety bound and it says nothing about LATENCY. At TOKENIZER_MS_PER_MB a
+ * full PASSIVE_MAX_BYTES artifact takes roughly six seconds to walk and the
+ * consumer is strictly serial, so a queue standing at this watermark can be a
+ * long backlog in front of every live response the operator generates — none of
+ * them dropped, all of them waiting. A latency-derived watermark would need a
+ * MEDIAN ARTIFACT SIZE, and no such distribution has been measured: SPIKE-06's
+ * ladder was four sizes over a corpus of two, which is a ladder and not a
+ * distribution. That measurement — a size distribution over a real Caido
+ * project's stored traffic — is what would close this, and until it exists no
+ * number is projected here. In particular RSS_BYTES_PER_INPUT_BYTE is NOT used
+ * for it: that figure was measured for the tokenizer's memory profile, and
+ * reusing it as a latency proxy would produce a fabricated number of exactly the
+ * shape Phase 0 refused.
+ */
+export const SCAN_BACKPRESSURE_WATERMARK =
+  QUEUE_CAP - EVENTS_DELIVERED_UNDER_BLOCK - SCAN_PAGE_SIZE;
+
 // Referenced by the derivations above so the imports are not "unused" to a linter
 // and so a reader can see, in one place, which measured values the policy set
 // hangs off. thresholds.spec.ts asserts every one of these relationships.
@@ -149,4 +198,15 @@ export const POLICY_DERIVED_FROM = {
   QUEUE_CAP: { EVENTS_DELIVERED_UNDER_BLOCK },
   ARTIFACT_DEADLINE_MS: { TOKENIZER_MS_PER_MB },
   CACHE_HIT_RATE: { CACHE_HIT_RATE_ASSUMED },
+  // The only entry whose inputs are not all MEASURED, and the exception is
+  // deliberate rather than an oversight. QUEUE_CAP and SCAN_PAGE_SIZE are
+  // themselves POLICY, so this row records a derivation over two policy values
+  // and one measured one. Recording it anyway is what makes the relationship
+  // machine-checkable — thresholds.spec.ts reads this entry — and the measured
+  // term, EVENTS_DELIVERED_UNDER_BLOCK, is the one the safety argument turns on.
+  SCAN_BACKPRESSURE_WATERMARK: {
+    QUEUE_CAP,
+    EVENTS_DELIVERED_UNDER_BLOCK,
+    SCAN_PAGE_SIZE,
+  },
 } as const;
