@@ -771,3 +771,137 @@ export const EXPORT_REDACTION_MODES = ["redacted", "raw"] as const;
 
 /** One member of {@link EXPORT_REDACTION_MODES}. */
 export type ExportRedactionMode = (typeof EXPORT_REDACTION_MODES)[number];
+
+// ---------------------------------------------------------------------------
+// UI-08 — THE SETTINGS VOCABULARY
+// ---------------------------------------------------------------------------
+//
+// DECLARED HERE AND NOT IN `store/settings.ts`, FOR THE REASON EVERY OTHER
+// VOCABULARY IN THIS FILE IS. Both packages need these as VALUES — the backend
+// to enumerate what it can read and write, the frontend to render one section
+// per group and one labelled field per key — and the two packages cannot import
+// each other.
+//
+// AND THE EXHAUSTIVENESS IS THE POINT, NOT THE SHARING. The frontend's copy map
+// is `Record<SettingKey, ...>`. A key added below without copy is a TYPECHECK
+// FAILURE in the frontend rather than a field that renders with a blank label,
+// which is what makes this surface grow by ADDITION when a later phase ships a
+// toggle instead of by somebody remembering to edit two files.
+
+/**
+ * The settings groups this build has.
+ *
+ * ONE MEMBER TODAY, AND THAT IS THE HONEST LIST. 05-UI-SPEC.md's `empty /
+ * settings-form` row: the shell renders only the sections whose owning phase has
+ * shipped, and a phase that has contributed no controls contributes NO EMPTY
+ * SECTION — an empty labelled box reads as a missing control rather than as an
+ * absent feature. Phases 2-4 add their thresholds and budgets by adding a member
+ * here and the keys that belong to it.
+ *
+ * ORDER IS DECLARATION ORDER and is never sorted at runtime, so a section does
+ * not move under an operator who reaches for it by position.
+ */
+export const SETTINGS_GROUPS = ["retention"] as const;
+
+/** One member of {@link SETTINGS_GROUPS}. */
+export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
+
+/**
+ * Maximum rows per table per project.
+ *
+ * The literal lives HERE rather than in the store module that reads it, so the
+ * key the sweep resolves and the key the settings surface writes are one string
+ * and not two. A key spelled twice is a setting the operator changes and the
+ * sweep never sees — and nothing anywhere reports that, because an unresolved
+ * key is indistinguishable from an unset one by construction.
+ */
+export const RETENTION_MAX_ROWS_KEY = "retention.max_rows_per_table";
+
+/** Maximum row age in milliseconds. Applies to every table EXCEPT `audit`. */
+export const RETENTION_MAX_AGE_MS_KEY = "retention.max_age_ms";
+
+/**
+ * The audit table's own row bound — its ONLY bound.
+ *
+ * A SEPARATE KEY, NOT A REUSE OF {@link RETENTION_MAX_ROWS_KEY}, and there is
+ * deliberately NO audit AGE key to sit beside it. Decision D-06: the audit log
+ * answers "when did I project this permanent Finding, and what did I export",
+ * which is asked long after ninety days about actions that are themselves
+ * irreversible. `retention.ts` states the same exception where it bites, and the
+ * absence of an age statement there is asserted three ways.
+ *
+ * A SETTINGS SURFACE THAT OFFERED AN AUDIT AGE BOUND WOULD CONTRADICT THAT. The
+ * key list below is what the surface renders, so the exception is enforced by
+ * the vocabulary rather than by a rule somebody has to remember.
+ */
+export const AUDIT_RETENTION_MAX_ROWS_KEY = "retention.audit_max_rows";
+
+/**
+ * Every settings key this build ACTUALLY HAS.
+ *
+ * THREE KEYS, AND NOT ONE INVENTED ONE. Each has a shipped consumer —
+ * `getRetentionBounds` resolves all three — and `settings.spec.ts` asserts that
+ * by running every listed key through the shipped resolution function. A key for
+ * a phase that has not shipped its control would be a field the operator can set
+ * and nothing reads, which is worse than an absent field: it looks like it works.
+ */
+export const SETTING_KEYS = [
+  RETENTION_MAX_ROWS_KEY,
+  RETENTION_MAX_AGE_MS_KEY,
+  AUDIT_RETENTION_MAX_ROWS_KEY,
+] as const;
+
+/** One member of {@link SETTING_KEYS}. */
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+/**
+ * The two scopes a setting can be written at.
+ *
+ * PROJECT FIRST, and the order is not arbitrary: the narrower scope is what a
+ * positional mistake should land on, by the same argument
+ * {@link EXPORT_REDACTION_MODES} makes. A write that lands on `global` by
+ * accident changes every project the operator has.
+ *
+ * The three-level resolution the store ships — project row, then global row,
+ * then the documented default — was written three-level specifically so this
+ * surface could offer an operator-wide default with a per-project override
+ * without any call site changing. These are the two levels it exposes; the third
+ * is not writable, because a default nobody can overwrite is what makes a
+ * cleared override recoverable.
+ */
+export const SETTING_SCOPES = ["project", "global"] as const;
+
+/** One member of {@link SETTING_SCOPES}. */
+export type SettingScope = (typeof SETTING_SCOPES)[number];
+
+/**
+ * Why a bound was not stored. A CLOSED, DefMiner-authored vocabulary.
+ *
+ * REASONS, NEVER MESSAGES — the same rule the RPC client's `RpcReason` states.
+ * The frontend maps each member to its own copy, so nothing a driver said can be
+ * interpolated into a sentence the operator reads.
+ *
+ * THE FIRST FIVE ARE WHY THIS SURFACE VALIDATES AT ALL. The store's shipped read
+ * guard already refuses to APPLY a bad bound, and it says why: a stored bound is
+ * a string some future interface wrote, and `Number("")` is 0 and `Number("abc")`
+ * is NaN — either one silently applied as a retention bound would delete
+ * everything. This surface IS that future interface, so it validates at the write
+ * edge as well, and reports which of the five it was rather than substituting the
+ * default and reporting success.
+ *
+ * ZERO AND NEGATIVE ARE TWO MEMBERS AND NOT ONE. "0" is what an operator types
+ * when they mean "no limit", and that is the single most dangerous thing they can
+ * mean here — the copy for it has to say so. "-1" is a typo.
+ */
+export const BOUND_REJECTIONS = [
+  "empty",
+  "not-numeric",
+  "not-finite",
+  "zero",
+  "negative",
+  "no-project",
+  "write-failed",
+] as const;
+
+/** One member of {@link BOUND_REJECTIONS}. */
+export type BoundRejection = (typeof BOUND_REJECTIONS)[number];
