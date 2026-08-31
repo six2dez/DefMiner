@@ -32,10 +32,15 @@
 
 import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
+  INTERNAL_SETTING_KEYS,
+  OPERATOR_SETTING_KEYS,
   RETENTION_MAX_AGE_MS_KEY,
   RETENTION_MAX_ROWS_KEY,
   SETTING_KEYS,
   SETTINGS_GROUPS,
+  STORAGE_BOOT_COUNT_KEY,
+  STORAGE_INSTALL_ID_KEY,
+  STORAGE_OBSERVED_LOSS_KEY,
 } from "@defminer/engine/contract";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -56,6 +61,9 @@ import {
   listKnownSettings,
   putBoundedSetting,
   putSetting,
+  readStorageFootprint,
+  recordBoot,
+  resetBootMarkerForTest,
   resolveSetting,
   validateBound,
 } from "./settings";
@@ -89,8 +97,56 @@ function rowsForKey(key: string): { project_id: string; value: string }[] {
 // ---------------------------------------------------------------------------
 
 describe("the known-key list is what this build ACTUALLY has", () => {
-  it("names exactly the keys the shared vocabulary declares, in its order", () => {
-    expect(KNOWN_SETTINGS.map((s) => s.key)).toEqual([...SETTING_KEYS]);
+  it("names exactly the OPERATOR keys the shared vocabulary declares, in its order", () => {
+    expect(KNOWN_SETTINGS.map((s) => s.key)).toEqual([...OPERATOR_SETTING_KEYS]);
+  });
+
+  // THE ASSERTION T-06-41 RESTS ON, AND IT IS WRITTEN IN BOTH DIRECTIONS.
+  //
+  // `SETTING_KEYS` is now the UNION of two arrays: keys the operator sets, and
+  // internal durable state this plugin writes to observe its own deployment.
+  // `KNOWN_SETTINGS` is what the Settings panel renders. An internal marker that
+  // leaked into the rendered list would be a field the operator can edit and
+  // nothing sensibly reads — an editable value that looks like a control.
+  it("keeps every INTERNAL marker key OUT of the list the Settings panel renders", () => {
+    const rendered = new Set<string>(KNOWN_SETTINGS.map((s) => s.key));
+    for (const internal of INTERNAL_SETTING_KEYS) {
+      expect(rendered.has(internal), `${internal} is operator-editable`).toBe(
+        false,
+      );
+    }
+    expect(INTERNAL_SETTING_KEYS).toContain(STORAGE_INSTALL_ID_KEY);
+    expect(INTERNAL_SETTING_KEYS).toContain(STORAGE_BOOT_COUNT_KEY);
+    expect(INTERNAL_SETTING_KEYS).toContain(STORAGE_OBSERVED_LOSS_KEY);
+  });
+
+  it("declares SETTING_KEYS as exactly the operator keys followed by the internal ones", () => {
+    expect([...SETTING_KEYS]).toEqual([
+      ...OPERATOR_SETTING_KEYS,
+      ...INTERNAL_SETTING_KEYS,
+    ]);
+    // No key is in both halves — the two arrays partition the vocabulary rather
+    // than overlapping it, which is what makes "which array is it in" a
+    // decidable question.
+    expect(new Set<string>(SETTING_KEYS).size).toBe(SETTING_KEYS.length);
+  });
+
+  // THE SWEEP THE CLOSED LIST HAS ALWAYS CARRIED, WIDENED TO THE WHOLE LIST.
+  // The shipped case below runs the OPERATOR keys through `resolveSetting`; the
+  // internal keys are stored in the same table by the same writer and must be
+  // readable by the same reader, or the marker is a row nothing can find.
+  it("resolves EVERY key in the closed list — internal markers included", async () => {
+    for (const [i, key] of SETTING_KEYS.entries()) {
+      const written = await putSetting(
+        fx.db,
+        GLOBAL_PROJECT_ID,
+        key,
+        `v${String(i)}`,
+        NOW,
+      );
+      expect(written.ok).toBe(true);
+      expect(await resolveSetting(fx.db, P1, key)).toBe(`v${String(i)}`);
+    }
   });
 
   it("carries only groups the shared vocabulary declares", () => {
@@ -419,5 +475,166 @@ describe("a bound that is not a finite positive number never reaches the table",
     );
     expect(bad.ok).toBe(false);
     expect(rowsForKey(RETENTION_MAX_ROWS_KEY)[0]?.value).toBe("999");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE BOOT MARKER — O-02's OBSERVED PERSISTENCE
+// ---------------------------------------------------------------------------
+//
+// WHAT THESE CASES ARE GUARDING, AND IT IS ONE THING ABOVE ALL THE OTHERS:
+// A FIRST INSTALL MUST NEVER REPORT A LOSS. The sentence this marker feeds says
+// "a previous restart of this Caido lost DefMiner's database". Said to somebody
+// who has just installed the plugin it is false, and a persistence claim that is
+// false the first time it is shown is a persistence claim nobody reads again.
+
+describe("the boot marker is an OBSERVATION of the past, never a prediction", () => {
+  beforeEach(() => {
+    resetBootMarkerForTest();
+  });
+
+  it("records no loss on a FIRST boot against an empty database", async () => {
+    const marker = await recordBoot(fx.db, "install-a", NOW);
+
+    expect(marker.installId).toBe("install-a");
+    expect(marker.bootCount).toBe(1);
+    expect(marker.observedLoss).toBe(false);
+  });
+
+  it("increments the boot count and KEEPS the install id on a second boot", async () => {
+    await recordBoot(fx.db, "install-a", NOW);
+    // A SECOND MINTED ID IS OFFERED AND MUST BE IGNORED. The caller mints one
+    // unconditionally because it cannot know whether a marker exists; the
+    // stored id is what identifies the install.
+    const second = await recordBoot(fx.db, "install-b", NOW + 1000);
+
+    expect(second.installId).toBe("install-a");
+    expect(second.bootCount).toBe(2);
+    expect(second.observedLoss).toBe(false);
+  });
+
+  it("does NOT report a loss when a boot count is simply absent on a fresh process", async () => {
+    // The ephemeral-deployment case as a REAL deployment produces it: the whole
+    // database is gone AND so is the process that wrote the marker. With no
+    // memory of a prior marker there is no evidence, so there is no claim.
+    await recordBoot(fx.db, "install-a", NOW);
+    resetBootMarkerForTest();
+    fx.raw.prepare("DELETE FROM settings").run();
+
+    const after = await recordBoot(fx.db, "install-c", NOW + 2000);
+    expect(after.observedLoss).toBe(false);
+    expect(after.bootCount).toBe(1);
+  });
+
+  it("reports a loss when THIS process's own marker has disappeared", async () => {
+    await recordBoot(fx.db, "install-a", NOW);
+    // The marker this process wrote is gone from the database it wrote it to.
+    // That is the one condition that is evidence rather than inference.
+    fx.raw.prepare("DELETE FROM settings").run();
+
+    const after = await recordBoot(fx.db, "install-c", NOW + 2000);
+    expect(after.observedLoss).toBe(true);
+    expect(after.installId).toBe("install-c");
+    expect(after.bootCount).toBe(1);
+  });
+
+  it("KEEPS the loss recorded across subsequent boots of the same database", async () => {
+    await recordBoot(fx.db, "install-a", NOW);
+    fx.raw.prepare("DELETE FROM settings").run();
+    await recordBoot(fx.db, "install-c", NOW + 2000);
+
+    // A fresh process, the same surviving database: the flag is read back from
+    // the row rather than re-derived, so the observation outlives the process
+    // that made it for exactly as long as the database does.
+    resetBootMarkerForTest();
+    const later = await recordBoot(fx.db, "install-d", NOW + 3000);
+    expect(later.observedLoss).toBe(true);
+    expect(later.installId).toBe("install-c");
+    expect(later.bootCount).toBe(2);
+  });
+
+  it("writes the marker at the RESERVED GLOBAL scope and at no project scope", async () => {
+    await recordBoot(fx.db, "install-a", NOW);
+
+    for (const key of [
+      STORAGE_INSTALL_ID_KEY,
+      STORAGE_BOOT_COUNT_KEY,
+    ] as const) {
+      const rows = rowsForKey(key);
+      expect(rows.map((r) => r.project_id)).toEqual([GLOBAL_PROJECT_ID]);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-25 — THE FOOTPRINT, AGAINST THE CAPS
+// ---------------------------------------------------------------------------
+
+describe("the storage footprint reports counts against their caps", () => {
+  it("returns three count/cap pairs from the already-shipped reads", async () => {
+    const footprint = await readStorageFootprint(fx.db, P1, NOW);
+
+    for (const row of [
+      footprint.artifacts,
+      footprint.observations,
+      footprint.analyses,
+    ]) {
+      expect(row).not.toBeNull();
+      expect(row?.count).toBe(0);
+      expect(row?.cap).toBe(DEFAULT_RETENTION_MAX_ROWS);
+    }
+  });
+
+  it("reports a MEASURED ZERO as a zero — distinguishable from an unread count", async () => {
+    const footprint = await readStorageFootprint(fx.db, P1, NOW);
+    expect(footprint.artifacts?.count).toBe(0);
+    // A genuinely empty project has no oldest row, so the age is ABSENT rather
+    // than zero. "oldest 0 days" is a fabricated number.
+    expect(footprint.artifacts?.oldestDays).toBeNull();
+  });
+
+  it("counts and ages only THIS project's rows", async () => {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(P1, "a".repeat(64), 10, "js", NOW - 3 * 86_400_000, NOW, 1);
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run("other", "b".repeat(64), 10, "js", NOW - 99 * 86_400_000, NOW, 1);
+
+    const footprint = await readStorageFootprint(fx.db, P1, NOW);
+    expect(footprint.artifacts?.count).toBe(1);
+    expect(footprint.artifacts?.oldestDays).toBe(3);
+  });
+
+  it("carries the observed-loss flag beside the counts, so the surface reads ONE call", async () => {
+    resetBootMarkerForTest();
+    await recordBoot(fx.db, "install-a", NOW);
+    expect((await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss).toBe(
+      false,
+    );
+
+    fx.raw.prepare("DELETE FROM settings").run();
+    await recordBoot(fx.db, "install-c", NOW + 1000);
+    expect((await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss).toBe(
+      true,
+    );
+  });
+
+  it("returns a row ABSENT rather than zero when its count cannot be read", async () => {
+    // A read that throws is the case the surface must distinguish from an empty
+    // project. Dropping the table is the cheapest way to make the shipped
+    // statement fail for real rather than through a stub.
+    fx.raw.prepare("DROP TABLE observations").run();
+
+    const footprint = await readStorageFootprint(fx.db, P1, NOW);
+    expect(footprint.observations).toBeNull();
+    // And the endpoint still resolves: one unreadable table does not take the
+    // other two with it.
+    expect(footprint.artifacts).not.toBeNull();
+    expect(footprint.analyses).not.toBeNull();
   });
 });

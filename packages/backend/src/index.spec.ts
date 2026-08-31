@@ -18,8 +18,10 @@
 import type { ExportRedactionMode } from "@defminer/engine/contract";
 import {
   INVALIDATION_EVENT,
+  OPERATOR_SETTING_KEYS,
   RETENTION_MAX_ROWS_KEY,
-  SETTING_KEYS,
+  STORAGE_BOOT_COUNT_KEY,
+  STORAGE_INSTALL_ID_KEY,
 } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -49,6 +51,7 @@ import { DETECTOR_CORPUS_VERSION } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
 import type { KnownSettingValue } from "./store/settings";
+import { GLOBAL_PROJECT_ID, resetBootMarkerForTest } from "./store/settings";
 import { resetTelemetryForTest } from "./telemetry";
 
 import { init } from "./index";
@@ -81,6 +84,7 @@ const CONTRACT_ENDPOINTS: readonly string[] = [
   "listSettings",
   "writeSetting",
   "getHealth",
+  "getStorageFootprint",
   "startScan",
   "getScanStatus",
   "pauseScan",
@@ -96,6 +100,7 @@ beforeEach(() => {
   resetConsumerForTest();
   resetDbHandleForTest();
   resetTelemetryForTest();
+  resetBootMarkerForTest();
 });
 
 afterEach(() => {
@@ -1502,7 +1507,7 @@ describe("UI-08's settings endpoints", () => {
       projectId: "p1",
     })) as KnownSettingValue[];
 
-    expect(listed.map((r) => r.key)).toEqual([...SETTING_KEYS]);
+    expect(listed.map((r) => r.key)).toEqual([...OPERATOR_SETTING_KEYS]);
     for (const row of listed) {
       expect(row.project).toBeNull();
       expect(row.global).toBeNull();
@@ -1685,5 +1690,144 @@ describe("OBS-01's four numbers, projected", () => {
       health: { jobsInFlight: number };
     };
     expect(answered.health.jobsInFlight).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O-02's BOOT MARKER AND D-25's FOOTPRINT, THROUGH init()
+// ---------------------------------------------------------------------------
+//
+// The store module owns the decision and proves it directly. What is proven HERE
+// is the wiring: that `init()` writes the marker at all, that it writes it at the
+// reserved global scope, and that the endpoint the Settings surface reads returns
+// the three pairs and the flag together.
+
+describe("init() records the boot marker and serves the storage footprint", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    const report = await migrate(fx.db);
+    expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  async function boot(projectId: string | null = "p1"): Promise<{
+    rpc: Record<string, (...a: unknown[]) => unknown>;
+  }> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId,
+      db: () => Promise.resolve(fx.db),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+    return { rpc };
+  }
+
+  function markerRows(): { project_id: string; key: string; value: string }[] {
+    return fx.raw
+      .prepare("SELECT project_id, key, value FROM settings WHERE key LIKE ?")
+      .all("storage.%") as unknown as {
+      project_id: string;
+      key: string;
+      value: string;
+    }[];
+  }
+
+  it("writes an install identifier and a boot count of 1 on a FIRST init, at the global scope", async () => {
+    await boot();
+
+    const byKey = new Map(markerRows().map((r) => [r.key, r]));
+    expect(byKey.get(STORAGE_INSTALL_ID_KEY)?.value.length).toBeGreaterThan(0);
+    expect(byKey.get(STORAGE_INSTALL_ID_KEY)?.project_id).toBe(
+      GLOBAL_PROJECT_ID,
+    );
+    expect(byKey.get(STORAGE_BOOT_COUNT_KEY)?.value).toBe("1");
+  });
+
+  it("increments the boot count and keeps the install id on a SECOND init", async () => {
+    await boot();
+    const first = new Map(markerRows().map((r) => [r.key, r.value]));
+
+    resetDbHandleForTest();
+    resetLifecycleForTest();
+    resetPassiveForTest();
+    resetConsumerForTest();
+    await boot();
+
+    const second = new Map(markerRows().map((r) => [r.key, r.value]));
+    expect(second.get(STORAGE_INSTALL_ID_KEY)).toBe(
+      first.get(STORAGE_INSTALL_ID_KEY),
+    );
+    expect(second.get(STORAGE_BOOT_COUNT_KEY)).toBe("2");
+  });
+
+  it("reports NO observed loss on a first install — the one false positive that would make the sentence untrustworthy", async () => {
+    const { rpc } = await boot();
+    const footprint = (await rpc.getStorageFootprint(null)) as {
+      observedRestartLoss: boolean;
+    };
+    expect(footprint.observedRestartLoss).toBe(false);
+  });
+
+  it("reports an observed loss once THIS process's own marker has disappeared", async () => {
+    await boot();
+    fx.raw.prepare("DELETE FROM settings").run();
+
+    resetDbHandleForTest();
+    resetLifecycleForTest();
+    resetPassiveForTest();
+    resetConsumerForTest();
+    const { rpc } = await boot();
+
+    const footprint = (await rpc.getStorageFootprint(null)) as {
+      observedRestartLoss: boolean;
+    };
+    expect(footprint.observedRestartLoss).toBe(true);
+  });
+
+  it("answers three count/cap pairs and the flag, and NOTHING path-shaped", async () => {
+    const { rpc } = await boot();
+    const footprint = (await rpc.getStorageFootprint(null)) as Record<
+      string,
+      unknown
+    >;
+
+    expect(Object.keys(footprint).sort()).toEqual([
+      "analyses",
+      "artifacts",
+      "observations",
+      "observedRestartLoss",
+    ]);
+    for (const table of ["artifacts", "observations", "analyses"] as const) {
+      const row = footprint[table] as { count: number; cap: number };
+      expect(row.count).toBe(0);
+      expect(row.cap).toBeGreaterThan(0);
+    }
+    // NO BYTES AND NO PATH. The negative is the property D-25 and D-19 buy
+    // together, and a field added later would be invisible to a search.
+    expect(JSON.stringify(footprint)).not.toContain("/");
+  });
+
+  it("fails closed with an EXPLICIT absence when no project is resolved", async () => {
+    const { rpc } = await boot(null);
+    const footprint = (await rpc.getStorageFootprint(null)) as {
+      artifacts: unknown;
+      observations: unknown;
+      analyses: unknown;
+    };
+    // No project means no project-scoped count to report. The rows are ABSENT,
+    // which is what the surface renders as "no row", never as a zero — a zero
+    // would claim a measured empty project.
+    expect(footprint.artifacts).toBeNull();
+    expect(footprint.observations).toBeNull();
+    expect(footprint.analyses).toBeNull();
   });
 });
