@@ -589,8 +589,8 @@ Two further ordering changes: error containment and observability moved forward 
 | CORE-01 … CORE-11, STORE-01 … STORE-07, COMPAT-01/02, ENC-01, DIST-05/06 | Phase 1 |
 | ERR-01 … ERR-04, OBS-01 … OBS-03 | Phase 2 |
 | DET-01 … DET-10, QUAL-01/02/03 | Phase 3 |
-| SEC-01 … SEC-06, ENDP-01/03/06, ENC-02/03/04, UPGRADE-02, STORE-08 (`entities`, `evidence`) | Phase 4 |
-| UI-01/02/03/04/06/07/08/09, OPS-01 … OPS-04, UISEC-01 … UISEC-03, FIND-01/02, STORE-08 (`audit`) | Phase 5 |
+| SEC-01 … SEC-06, ENDP-01/03/06, ENC-02/03/04, UPGRADE-02, STORE-09 | Phase 4 |
+| UI-01/02/03/04/06/07/08/09, OPS-01 … OPS-04, UISEC-01 … UISEC-03, FIND-01/02, STORE-08 | Phase 5 |
 | FIND-03/04, DEPLOY-01 … DEPLOY-04 | Phase 6 |
 | MAP-01 … MAP-07, UI-05 | Phase 7 |
 | ACTIVE-01 … ACTIVE-14 | Phase 8 |
