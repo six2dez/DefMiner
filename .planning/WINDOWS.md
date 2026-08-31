@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 53
+open_count: 55
 waived_count: 0
-fixed_count: 24
-total_count: 77
-last_updated: 2026-08-31T17:23:18.756Z
+fixed_count: 27
+total_count: 82
+last_updated: 2026-08-31T17:53:10.642Z
 ---
 
 # Broken Windows Ledger
@@ -101,18 +101,23 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 63 | 05 | unrun-verify | packages/backend/src/store/export.ts |  | The 8 MiB per-RPC-call figure is a BUDGET this project sets, not a ceiling measured from Caido; 05-02 asked 05-11 to confirm a large export against a real Caido and it could not. Coverage D13. | open |  | 2026-08-31T08:20:05.758Z |  |
 | 64 | 05 | stub | packages/frontend/src/App.vue |  | SERVER_STORAGE_PATH is null — the R5 server-path renderer in SettingsPanel.vue ships with no production data source; telemetry.ts strips sdk.meta.path() out of everything crossing the RPC, so DEPLOY-02 (Phase 6) owns the surface that supplies one | open |  | 2026-08-31T09:17:48.121Z |  |
 | 65 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports analysed: null — the scans table has no analysed column and plan 06-06 owns wiring the consumer-side number | open |  | 2026-08-31T16:12:21.498Z |  |
-| 66 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true | open |  | 2026-08-31T16:12:21.588Z |  |
+| 66 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true | fixed |  | 2026-08-31T16:12:21.588Z | 2026-08-31T17:53:10.642Z |
 | 67 | 06 | stub | packages/backend/src/scan/producer.ts |  | runScanProducer has no caller in the shipped build — Start scan inserts the row, and plan 06-03 adds the watermark-gated loop that drives the walk | open |  | 2026-08-31T16:12:21.682Z |  |
 | 68 | 06 | deviation | scripts/phase6/o07-body-length.sh |  | Plan 06-02 task 2 step 5 as written (issue startScan with an operator clause, let the producer walk one page, read the query()-side Body.length) is NOT EXECUTABLE on the shipped build: index.ts startScan REFUSES any non-empty operatorFilter until 06-04 ships the validator, and runScanProducer deliberately has no caller until 06-03 ships the watermark. Measured through probe/phase6-o07 instead, which calls sdk.requests.query() directly. 06-03/06-04 should re-read this if they want the measurement repeated through the real producer. | open |  | 2026-08-31T16:34:32.559Z |  |
 | 69 | 06 | deviation | probe/phase6-o07/backend/script.js |  | The O-07 query() walk is UNFILTERED (descending req.id, first 50, items matched by the request id the hook recorded) rather than filtered to the fixture's path. Deliberate: this phase's own O-03/O-06 record Caido's req.path / req.query / cont implementations as unmeasured, so a filtered walk returning nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. The byte-count verdict therefore does NOT cover a filtered query() page. 06-11's push-down proof is the plan that should close it. | open |  | 2026-08-31T16:34:42.297Z |  |
 | 70 | 06 | deviation | tests/phase6-o07.spec.ts |  | Plan 06-02 task 1's <verify> (pnpm vitest run tests/phase6-o07.spec.ts, fails_when non-zero exit) is unsatisfiable at task-1 time by task 1's own acceptance criterion, which requires the gate to FAIL when the artifact is absent. Executed as a RED gate: 13 failed / 7 passed / 0 skipped at task 1, 20 passed after task 2 wrote the artifact. No code changed to reconcile them. | open |  | 2026-08-31T16:34:42.387Z |  |
-| 71 | 06 | deviation | packages/backend/src/index.ts | 692 | Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands. | open |  | 2026-08-31T17:00:10.126Z |  |
+| 71 | 06 | deviation | packages/backend/src/index.ts | 692 | Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands. | fixed |  | 2026-08-31T17:00:10.126Z | 2026-08-31T17:53:10.461Z |
 | 72 | 06 | unmet-truth | packages/backend/src/scan/filter.ts |  | The fail-CLOSED property is proved on DefMiner's half only. That an unbalanced or comment-truncated expression actually makes execute() throw is CITED from the SDK's own JSDoc (@throws {Error} If a query parameter is invalid, requests.d.ts:635-639) and has never been executed against a real Caido parser in this repo. 06-04 tests the refusal, the composer's omission, and producer.ts's handling of a rejected execute(); it does not test Caido. Plan 06-11's fixture suite over sdk.requests.matches() is where this becomes measured — along with whether req.path strips the query and whether cont is byte-wise or Unicode case-folded. Recorded as SUMMARY coverage D6 with human_judgment: true. | open |  | 2026-08-31T17:00:10.225Z |  |
-| 73 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus still reports heldAtWatermark: false unconditionally. Plan 06-03 made the value REAL — the producer holds at SCAN_BACKPRESSURE_WATERMARK and exposes isHeldAtWatermark() as module state precisely because getScanStatus is a separate call that does not hold the walk's outcome — but index.ts and api/spec.ts are named in 06-05-PLAN.md's files_modified and 06-05 owns the getScanStatus projection. Wiring it here would have shipped a half-owned endpoint the way 06-04 declined to (WINDOWS 71). Closes when 06-05 lands. Supersedes the ownership half of entry 66. | open |  | 2026-08-31T17:23:05.611Z |  |
+| 73 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus still reports heldAtWatermark: false unconditionally. Plan 06-03 made the value REAL — the producer holds at SCAN_BACKPRESSURE_WATERMARK and exposes isHeldAtWatermark() as module state precisely because getScanStatus is a separate call that does not hold the walk's outcome — but index.ts and api/spec.ts are named in 06-05-PLAN.md's files_modified and 06-05 owns the getScanStatus projection. Wiring it here would have shipped a half-owned endpoint the way 06-04 declined to (WINDOWS 71). Closes when 06-05 lands. Supersedes the ownership half of entry 66. | fixed |  | 2026-08-31T17:23:05.611Z | 2026-08-31T17:53:10.552Z |
 | 74 | 06 | stub | packages/backend/src/scan/producer.ts |  | runScanProducer STILL has no caller in the shipped build. The loop entry 67 named now exists — watermark gate, per-page skip-done read, descending multi-page walk, yield, re-entrancy flag — but nothing drives it: startScan inserts the row and returns. The driver lives in index.ts, which is 06-05's files_modified. Entry 67 is therefore only half discharged: the loop is 06-03's and shipped; the caller is 06-05's and is not. | open |  | 2026-08-31T17:23:05.711Z |  |
 | 75 | 06 | unmet-truth | packages/engine/src/thresholds.ts |  | SCAN_BACKPRESSURE_WATERMARK is a DROP-safety bound only and says nothing about LATENCY. At TOKENIZER_MS_PER_MB a full PASSIVE_MAX_BYTES artifact takes ~6.3s to walk and the consumer is strictly serial, so a queue standing at the watermark can be a long backlog in front of every live response the operator generates — none dropped, all waiting. Closing it needs a MEDIAN ARTIFACT SIZE over a real project's stored traffic; SPIKE-06's ladder was four sizes over a corpus of two, which is a ladder and not a distribution. 06-RESEARCH.md records the residual and this plan deliberately projected no number rather than reusing RSS_BYTES_PER_INPUT_BYTE as a latency proxy. The residual is stated in the source at the constant. | open |  | 2026-08-31T17:23:05.815Z |  |
 | 76 | 06 | deviation | packages/backend/src/scan/scans.ts |  | Plan 06-03's files_modified names six files and does not include scans.ts or scans.spec.ts; both were edited. Forced by D-03 itself: replacing the per-item skip read with one bounded per-page read makes scans.ts's isRequestFinished dead, and knip reports a dead export as an error. Deleted rather than left as a second way to ask the same question, and FINISHED_ANALYSIS_STATE exported so the producer binds the derived state instead of re-deriving it. scans.spec.ts lost the runScanProducer describe block, which moved to the new producer.spec.ts with a note at both ends. 06-05 and 06-06 both name scans.ts in their own files_modified and will see the change. | open |  | 2026-08-31T17:23:18.666Z |  |
 | 77 | 06 | deviation | packages/backend/src/telemetry.spec.ts |  | Two SHIPPED gates were widened because each was narrower than the invariant it enforces (the same shape as 06-01's deviation 1). (a) The projection's payload rule filtered containers by a hand-listed path set, so counters.retro failed a rule about PAYLOADS for being an object; it now judges LEAVES by shape. (b) The AST counters rule asserted literals.length === 1, which refused D-02's nested sub-map while still permitting a genuine second object elsewhere in telemetry.ts; it now asserts every counter-shaped literal is in telemetry.ts AND inside createCounters(), which is strictly stronger. Both failing paths are executed through the gate itself via a new pure scanSource(file, src). | open |  | 2026-08-31T17:23:18.756Z |  |
+| 78 | 06 | deviation | packages/backend/src/scan/producer.ts |  | The producer DRIVER is still absent, and 06-05 declined it on scope grounds. WINDOWS 74 named index.ts (this plan's files_modified) as the driver's home, but 06-05-PLAN.md's files_modified does NOT include packages/backend/src/scan/producer.ts or packages/backend/test/fixtures/fake-sdk.ts, and both are required: runScanProducer needs sdk.requests.query(), which PluginSdk does not declare and the fake SDK does not implement, so adding it to the type is a fake-sdk.ts edit. Consequence: completeScan has NO production caller (nothing reports the producer's 'completed' stop into the transition), and suspendOnEpochChange's per-page call site does not exist — 06-05 wired D-04 at startScan and the polled getScanStatus instead, which is the only reachable substitute. NO REMAINING PLAN names index.ts together with producer.ts/fake-sdk.ts, so this has no owner. Supersedes entry 74's ownership claim. | open |  | 2026-08-31T17:52:59.837Z |  |
+| 79 | 06 | deviation | packages/backend/src/scan/scans.spec.ts |  | 06-05 task 1 acceptance criterion 'suspendRunningOnInit over a project holding two running rows moves both in one statement and returns 2' is UNSATISFIABLE and was executed as two projects instead. Two running rows in ONE project cannot exist: idx_scans_one_running is a partial UNIQUE index on (project_id) WHERE state = 'running' (migration step v5), which is the plan's own one-at-a-time invariant, and it refuses the second insert including a raw one. The set-based property is asserted over two projects (each sweep returns 1, each is scoped to its own project) and the ERR-02 case in lifecycle.spec.ts asserts no row anywhere is left running. | open |  | 2026-08-31T17:52:59.926Z |  |
+| 80 | 06 | deviation | packages/backend/src/scan/scans.ts |  | SCAN_LIST_DEFAULT_LIMIT stays at the 200 plan 06-01 shipped, not the 50 06-05-PLAN.md's action text names. The plan itself says the number is an ASSUMPTION and 'the number may move'; what it makes binding is the SHAPE (a stated bound, enforced at read, suspended rows exempt, the truncation said in words), and all four ship. Changing an already-exported, already-asserted constant to a different unmeasured number would have been churn. The constant's JSDoc now says it is an assumption and names plan 06-13 as the owner of the surface that renders the truncation sentence. | open |  | 2026-08-31T17:53:00.019Z |  |
+| 81 | 06 | deviation | packages/backend/src/scan/scans.ts |  | RESUME_SQL re-bases the row's epoch, which 06-05-PLAN.md's behaviour text does not ask for and its task-2 line ('a resume under the ORIGINAL epoch continues') arguably contradicts. Forced as a Rule 1 bug: projectEpoch() is a MONOTONIC count of applied project changes and never returns to a previous value, so a resume preserving the stale epoch produced a scan that suspended itself again on its first page for ever — D-04's suspension was a one-way door and the must-have 'resumes only on explicit operator action' was unreachable. The plan's line is satisfied under the reading that the discriminator is the PROJECT rather than the number: a resume from the wrong project is refused by project_id scoping (getScan returns undefined -> no-scan), which is UI-SPEC's 'Resume it from that project'. | open |  | 2026-08-31T17:53:00.108Z |  |
+| 82 | 06 | deviation | packages/backend/src/scan/scans.spec.ts |  | Tasks 1 and 2 carry tdd="true" but workflow.tdd_mode is false in config.json, and 06-05 did NOT ship separate RED-then-GREEN gate commits for task 1: the statements and their spec landed in one feat() commit. Task 2's spec is its own test() commit. Non-vacuity was established by MUTATION instead, and both mutations were executed and recorded: removing LIST_SCANS_SQL's leading (state = 'suspended') DESC term fails exactly the pin case, and emptying DEFERRED_REASONS fails exactly the vocabulary case. The index.ts sweep-ordering assertion was mutation-checked the same way (moving the sweep after the registrations fails it). | open |  | 2026-08-31T17:53:00.199Z |  |
 
 ````json
 [
@@ -903,10 +908,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/backend/src/index.ts",
     "line": null,
     "description": "getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-31T16:12:21.588Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-31T17:53:10.642Z"
   },
   {
     "id": 67,
@@ -963,10 +968,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/backend/src/index.ts",
     "line": 692,
     "description": "Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-31T17:00:10.126Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-31T17:53:10.461Z"
   },
   {
     "id": 72,
@@ -987,10 +992,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/backend/src/index.ts",
     "line": null,
     "description": "getScanStatus still reports heldAtWatermark: false unconditionally. Plan 06-03 made the value REAL — the producer holds at SCAN_BACKPRESSURE_WATERMARK and exposes isHeldAtWatermark() as module state precisely because getScanStatus is a separate call that does not hold the walk's outcome — but index.ts and api/spec.ts are named in 06-05-PLAN.md's files_modified and 06-05 owns the getScanStatus projection. Wiring it here would have shipped a half-owned endpoint the way 06-04 declined to (WINDOWS 71). Closes when 06-05 lands. Supersedes the ownership half of entry 66.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-31T17:23:05.611Z",
-    "resolved_at": null
+    "resolved_at": "2026-08-31T17:53:10.552Z"
   },
   {
     "id": 74,
@@ -1038,6 +1043,66 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T17:23:18.756Z",
+    "resolved_at": null
+  },
+  {
+    "id": 78,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/producer.ts",
+    "line": null,
+    "description": "The producer DRIVER is still absent, and 06-05 declined it on scope grounds. WINDOWS 74 named index.ts (this plan's files_modified) as the driver's home, but 06-05-PLAN.md's files_modified does NOT include packages/backend/src/scan/producer.ts or packages/backend/test/fixtures/fake-sdk.ts, and both are required: runScanProducer needs sdk.requests.query(), which PluginSdk does not declare and the fake SDK does not implement, so adding it to the type is a fake-sdk.ts edit. Consequence: completeScan has NO production caller (nothing reports the producer's 'completed' stop into the transition), and suspendOnEpochChange's per-page call site does not exist — 06-05 wired D-04 at startScan and the polled getScanStatus instead, which is the only reachable substitute. NO REMAINING PLAN names index.ts together with producer.ts/fake-sdk.ts, so this has no owner. Supersedes entry 74's ownership claim.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:52:59.837Z",
+    "resolved_at": null
+  },
+  {
+    "id": 79,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.spec.ts",
+    "line": null,
+    "description": "06-05 task 1 acceptance criterion 'suspendRunningOnInit over a project holding two running rows moves both in one statement and returns 2' is UNSATISFIABLE and was executed as two projects instead. Two running rows in ONE project cannot exist: idx_scans_one_running is a partial UNIQUE index on (project_id) WHERE state = 'running' (migration step v5), which is the plan's own one-at-a-time invariant, and it refuses the second insert including a raw one. The set-based property is asserted over two projects (each sweep returns 1, each is scoped to its own project) and the ERR-02 case in lifecycle.spec.ts asserts no row anywhere is left running.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:52:59.926Z",
+    "resolved_at": null
+  },
+  {
+    "id": 80,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.ts",
+    "line": null,
+    "description": "SCAN_LIST_DEFAULT_LIMIT stays at the 200 plan 06-01 shipped, not the 50 06-05-PLAN.md's action text names. The plan itself says the number is an ASSUMPTION and 'the number may move'; what it makes binding is the SHAPE (a stated bound, enforced at read, suspended rows exempt, the truncation said in words), and all four ship. Changing an already-exported, already-asserted constant to a different unmeasured number would have been churn. The constant's JSDoc now says it is an assumption and names plan 06-13 as the owner of the surface that renders the truncation sentence.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:53:00.019Z",
+    "resolved_at": null
+  },
+  {
+    "id": 81,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.ts",
+    "line": null,
+    "description": "RESUME_SQL re-bases the row's epoch, which 06-05-PLAN.md's behaviour text does not ask for and its task-2 line ('a resume under the ORIGINAL epoch continues') arguably contradicts. Forced as a Rule 1 bug: projectEpoch() is a MONOTONIC count of applied project changes and never returns to a previous value, so a resume preserving the stale epoch produced a scan that suspended itself again on its first page for ever — D-04's suspension was a one-way door and the must-have 'resumes only on explicit operator action' was unreachable. The plan's line is satisfied under the reading that the discriminator is the PROJECT rather than the number: a resume from the wrong project is refused by project_id scoping (getScan returns undefined -> no-scan), which is UI-SPEC's 'Resume it from that project'.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:53:00.108Z",
+    "resolved_at": null
+  },
+  {
+    "id": 82,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.spec.ts",
+    "line": null,
+    "description": "Tasks 1 and 2 carry tdd=\"true\" but workflow.tdd_mode is false in config.json, and 06-05 did NOT ship separate RED-then-GREEN gate commits for task 1: the statements and their spec landed in one feat() commit. Task 2's spec is its own test() commit. Non-vacuity was established by MUTATION instead, and both mutations were executed and recorded: removing LIST_SCANS_SQL's leading (state = 'suspended') DESC term fails exactly the pin case, and emptying DEFERRED_REASONS fails exactly the vocabulary case. The index.ts sweep-ordering assertion was mutation-checked the same way (moving the sweep after the registrations fails it).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:53:00.199Z",
     "resolved_at": null
   }
 ]

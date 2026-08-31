@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-08-31T17:23:52.333Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-08-31T17:56:11.033Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 5b2357e50a7ee853f913daafdcb9068b8820ebd0
+state_head: 7852cb648485daa3bb57cbdf07c2358b7e80187f
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 62
+  completed_plans: 64
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 5 of 13
+Plan: 6 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -299,6 +299,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P02 | 17 min | 2 tasks | 8 files |
 | Phase 06 P04 | 11 min | 2 tasks | 3 files |
 | Phase 06 P03 | 22 min | 3 tasks | 6 files |
+| Phase 06 P05 | 26 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -584,6 +585,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: Retro and live attribution are two sub-maps of the ONE counters object, over the same closed REJECT_REASONS vocabulary — counters.retro is built inside createCounters() so resetTelemetryForTest() zeroes it in place and telemetry.spec.ts's AST scan still finds one counters object. A 40,000-request backfill folded into the live numbers would make OBS-01's drop count and reject reasons stop describing live proxying (D-02).
 - [Phase 06]: heldAtWatermark is producer module state with an out-of-band reader, not only a return value — getScanStatus is a separate RPC that does not hold the walk's outcome, and from outside the backend a watermark hold and a blocked QuickJS thread look identical. Without the explicit signal, "Waiting for the analysis queue" can never render and every healthy hold falls through to the stall marker. The index.ts projection is 06-05's edit.
 - [Phase 06]: The skip-done read is ONE bounded statement per page and scans.ts's per-item isRequestFinished was deleted rather than kept — D-03: at twenty items a page that is 2,000 indexed round trips for a 40,000-request backfill instead of 40,000. Two readers of the same question drift, and the one nobody calls stops being right without anything failing. The placeholder count is counted from the statement text and asserted at import against SCAN_PAGE_SIZE.
+- [Phase 06]: A resume RE-BASES the scan's epoch: projectEpoch() is a monotonic count of applied project changes and never returns to a previous value, so a preserved epoch made D-04's suspension a one-way door. The epoch is a freshness token; project_id is the identity, and a resume from the wrong project is refused by the scoping.
 
 ### Known Risks Carried Forward
 
@@ -626,8 +628,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T17:23:25.271Z
-**Stopped at:** Completed 06-03-PLAN.md
+**Last session:** 2026-08-31T17:56:03.575Z
+**Stopped at:** Completed 06-05-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -644,3 +646,4 @@ None.
 
 - POINTER AMENDMENT 2026-08-26 (gap-closure round 8, plans 01-36 through 01-38, waves 36 through 38). THIS AMENDMENT RESTATES NO BOUND AND IS A POINTER: the bound of record is the machine-owned generated span in `.planning/REQUIREMENTS.md` and in the gate file, byte-compared to `deriveResidual(RESOLVER_REGISTRY)` by the suite, and this file is reached by NO mechanical comparison at all. THE ROUND OPENED MEASURED RED WHERE THE HANDOFF DESCRIBED IT GREEN: at HEAD `4105fd0` the suite ran 2 failed of 1372, both caused by that commit reverting CORE-11's checkbox while two cases still pinned the flipped state; wave 36 restored the tree by regenerating `.planning/REQUIREMENTS.md`'s machine-owned span and moving `CORE11_BOX_EXPECTED` to the shipped `[ ]`. WHAT THE ROUND'S FOUR FINDINGS WERE AND HOW THEY WERE DISPOSED OF. CR-17: the gate file's exemption keys were positional and survived a cross-construct relocation unnoticed — wave 37 anchored them with `constructAnchorFor`, watched a purpose-built relocation fixture fail first, and shipped it. WR-48: quantifier exclusion three was wider than the span it needed — wave 37 narrowed it to `4135..5767` and MEASURED the 117 restored lines, which raised ZERO new obligations. CR-18: CORE-11's ledger row stated this box's state and a superseded bar — wave 38 reduced it to the prohibition plus one pointer, relocating all three removed passages BYTE-IDENTICAL into a dated 2026-08-26 history block, on the reasoning that a row carrying no statement of the box's state cannot carry a stale one. CR-19: this section's own CORE-11 lines were stale and one was FALSE — corrected above against six probes RE-EXECUTED through `auditSource` on 2026-08-26 rather than cited from verification pass 8, all six reporting, and against a registry re-counted at 26 `measured-silence` rows of 61 with all five of plan 01-32's names present and `silence-operator-around-global-receiver` absent. THAT ROW WAS NOT RESTORED AND MUST NOT BE: the suite asserts its absence and calls its return a REGRESSION in the descent. THE TWO CLASSES OF UNREACHED SURFACE, STATED AS UNGUARDED LIMITS AND NOT AS SATISFIED CHECKS: unguarded FILES — `.planning/STATE.md` and `.planning/WINDOWS.md` are reached by no mechanical comparison, the byte comparisons reaching the gate header and the ledger and no further, so the pointer-not-a-bound rule is a prohibition with no check on either file; and undeclared PHRASINGS — a standing statement spelled outside the phrase set this round's enumeration used is invisible to that enumeration, which was a ONE-TIME GREP over four named files and not a standing gate. CORE-11's CHECKBOX IS `[ ]`, MEASURED, AND IT BELONGS TO A VERIFIER: this round produced evidence on criterion (3)'s document legs and awards no verdict on criterion (3), on whether the box may move, or on whether the gate is complete. THE FLOOR AT THE CLOSE, MEASURED NOT CLAIMED: 31 test files / 1374 tests exit 0, typecheck / lint / knip clean, the shipped bundle at one import specifier, and the real tree at 23 files with ZERO violations.
 - UI-09 remains OPEN after plan 05-09, its only declarer. The degradation-marking components ship and are exercised, but packages/backend/src/store/reads.ts's paged statements carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. Closing UI-09 needs a backend read that carries the analysis state; a scan-state filter column is additionally needed before 'Show only affected artifacts' can narrow anything. Recorded in .planning/WINDOWS.md entries 56-58.
+- The retroactive-scan producer DRIVER has no owning plan: runScanProducer is fully built and specced and nothing calls it, because wiring it needs producer.ts and test/fixtures/fake-sdk.ts and no remaining Phase 6 plan names those together with index.ts.
