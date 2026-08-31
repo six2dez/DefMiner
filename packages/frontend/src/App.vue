@@ -18,9 +18,11 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type {
   AnalysisKey,
+  CompatReport,
   DefMinerBackendSdk,
   ExportChunkOutcome,
   ExportChunkRequest,
+  HealthOutcome,
   InventoryTable,
   ObservationRow,
   PanelAnalysis,
@@ -34,9 +36,11 @@ import { createBackendClient } from "./api/client";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
 import ArtifactsTable from "./components/ArtifactsTable.vue";
+import CompatRefusal from "./components/CompatRefusal.vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
 import { EXPORT_CTA } from "./components/export-contract";
 import ExportDialog from "./components/ExportDialog.vue";
+import HealthPanel from "./components/HealthPanel.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import type { InvalidationCoalescer } from "./stores/coalescer";
@@ -402,6 +406,10 @@ onMounted(() => {
   if (client !== null) {
     void client.checkContractVersion();
   }
+  // BEFORE the two page reads in source order, and deliberately: on a refusing
+  // build both of those reject, and the compatibility report is the only thing
+  // that can explain why. It does not depend on either of them resolving.
+  void loadCompat();
   void artifacts.loadFirstPage();
   void observations.loadFirstPage();
 });
@@ -554,6 +562,54 @@ const SERVER_STORAGE_PATH: string | null = null;
 function openHealth(): void {
   activeTab.value = "health";
 }
+
+// ---------------------------------------------------------------------------
+// OBS-01 — THE HEALTH COUNTERS
+// ---------------------------------------------------------------------------
+
+/** Read the four counters. Answers a VALUE on every path — a component that had
+ *  to catch would be a component whose failure Caido swallows, on the one
+ *  surface whose subject is failures. */
+function loadHealth(): Promise<RpcResult<HealthOutcome>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.getHealth();
+}
+
+// ---------------------------------------------------------------------------
+// COMPAT-01 — THE VISIBLE REFUSAL SURFACE
+// ---------------------------------------------------------------------------
+//
+// THE DEBT PHASE 1 WROTE INTO THE SOURCE, DISCHARGED HERE. `index.ts`'s first
+// refusal path records it in as many words: "COMPAT-01's 'clear message' is
+// this log line plus this RPC; the visible surface is owed to Phase 5 (decision
+// P1-D5)." Until now a build that refused to run was, to the operator, a plugin
+// that is installed, enabled, and silently doing nothing.
+//
+// IT IS READ ONCE, ON MOUNT, AND FROM `getCompat` ALONE. That endpoint is
+// registered on the success path AND on all three refusal paths, and on a
+// refusal it is one of only two endpoints that exist — so this read is the only
+// one that can succeed on the build the surface exists for. `api/client.ts`
+// deliberately leaves it OUT of the contract-version guard for the same reason:
+// `getContractVersion` does not exist on a refusing build either, so the guard
+// could never have been satisfied there.
+
+const compatReport = ref<CompatReport | null>(null);
+
+async function loadCompat(): Promise<void> {
+  if (client === null) return;
+  const result = await client.getCompat();
+  // NO REPORT ON A FAILED READ, AND THAT IS NOT A GAP. A call that did not
+  // answer is not evidence of a refusal — a refusing build answers this one —
+  // and rendering a refusal banner off a timeout would tell an operator their
+  // Caido is unsupported when their backend was merely busy.
+  if (result.ok) compatReport.value = result.value;
+}
 </script>
 
 <template>
@@ -629,6 +685,16 @@ function openHealth(): void {
       </button>
     </nav>
 
+    <!-- COMPAT-01's VISIBLE REFUSAL, discharging the debt index.ts records as
+         owed to this phase. ABOVE the body and BELOW the strip, so it is on
+         screen whichever tab is active — a refusal reachable only from one tab
+         is a refusal the operator finds after they have finished wondering. It
+         renders nothing at all while the report is unread and nothing at all on
+         a build that runs. -->
+    <div v-if="compatReport !== null" class="shrink-0 px-4 pt-4">
+      <CompatRefusal :report="compatReport" />
+    </div>
+
     <!-- UI-06's dialog. Mounted under the toolbar rather than as an overlay,
          for the reason the evidence panel is a region and not an overlay: this
          page has no modal layer, and inventing one for a single dialog would be
@@ -693,20 +759,14 @@ function openHealth(): void {
           :storage-path="SERVER_STORAGE_PATH"
         />
 
-        <!-- Health ROUTES and RENDERS from the first paint. A tab is never
-             removed, never disabled and never hidden on account of its body —
-             the strip is a fixed map of the surface. -->
-        <div v-else class="py-16">
-          <h2 class="text-2xl font-semibold leading-tight">
-            Nothing analysed on this target yet
-          </h2>
-          <p class="mt-4 text-surface-400">
-            DefMiner analyses JavaScript as you browse, in the background.
-            Browse the target with the Caido proxy running and assets appear
-            here as they are analysed. DefMiner sends nothing to the target to
-            do this.
-          </p>
-        </div>
+        <!-- OBS-01's HEALTH BODY, replacing the tracer's placeholder.
+             `v-else` rather than a fourth `v-else-if`: `TabId` is a closed
+             union of four and the three above are spent, so a fifth tab added
+             without a body would land here visibly rather than rendering an
+             empty panel. Health ROUTES and RENDERS from the first paint, as it
+             always did — a tab is never removed, never disabled and never
+             hidden on account of its body. -->
+        <HealthPanel v-else :load="loadHealth" />
       </section>
 
       <!-- THE PANEL IS A REGION OF THE SPLIT BODY, NOT AN OVERLAY, AND IT IS

@@ -193,7 +193,9 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
   return {
     backend: {
       getContractVersion: () =>
-        refusing ? refused<number>() : Promise.resolve(FRONTEND_CONTRACT_VERSION),
+        refusing
+          ? refused<number>()
+          : Promise.resolve(FRONTEND_CONTRACT_VERSION),
       listArtifactsPage: (_request: PageRequest) => page(rows),
       listObservationsPage: (_request: PageRequest) => page<ObservationRow>([]),
       getArtifactAnalysis: (request: { readonly sha256: string }) =>
@@ -843,7 +845,7 @@ describe("the health tab mounts the real strip (OBS-01, research P-07)", () => {
     await settle(wrapper);
 
     expect(wrapper.text(), "the artifacts table stopped rendering").toContain(
-      ROWS[0]!.sha256,
+      ROWS[0].sha256,
     );
     expect(wrapper.text()).not.toContain(HEALTH_HEADING);
   });

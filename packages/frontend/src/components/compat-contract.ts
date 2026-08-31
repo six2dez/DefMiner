@@ -115,3 +115,21 @@ export const SURFACE_MISSING = "Missing";
 
 /** The heading over a probe's own error text, when it threw. */
 export const PROBE_ERROR_LABEL = "probe error";
+
+/**
+ * The classes a plugin-generated diagnostic string renders with.
+ *
+ * `font-mono` because the two strings on this surface DefMiner did not author
+ * word for word quote a version number and a caught runtime message, and a
+ * lookalike character in either — `0`/`O` in "0.57.1", `l`/`1` in a symbol name
+ * — is exactly what the mandatory monospace rule exists to make visible.
+ *
+ * `whitespace-pre-wrap` AND NOT `whitespace-pre`, which is the one place this
+ * surface deliberately differs from a table cell. A cell must not wrap because
+ * a variable row height costs the virtualised list its geometry; a refusal
+ * explanation must wrap, because the alternative is an `overflow-hidden` cut
+ * through the sentence naming the missing surfaces — the single most useful
+ * line on the page — with no affordance to see the rest.
+ */
+export const DIAGNOSTIC_TEXT_CLASS =
+  "font-mono whitespace-pre-wrap break-words";
