@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 61
+open_count: 66
 waived_count: 0
 fixed_count: 27
-total_count: 88
-last_updated: 2026-08-31T20:56:03.457Z
+total_count: 93
+last_updated: 2026-08-31T21:28:14.775Z
 ---
 
 # Broken Windows Ledger
@@ -124,6 +124,11 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 86 | 06 | stub | packages/backend/src/index.ts |  | ScanStatusPayload.analysed is STILL null after plan 06-06, and window 65 assigned it to this plan. NOT DONE, and not silently: 06-06-PLAN.md's files_modified names neither index.ts's getScanStatus nor the engine contract, and there is no cheap wiring - analyses rows carry no scan attribution, so a per-scan analysed count needs either a NEW scans column (another one-way migration step, a decision this plan had no mandate for) or telemetry.ts's in-memory retro sub-map. Attempting it here would have been a Rule 4 architectural change taken without asking. OWNER: plan 06-09, which already owns delivering scan progress to the frontend on one channel and already took a mid-execution scope addition; 06-12 renders the readout and would inherit it otherwise. Window 65 stays open and this entry names why. | open |  | 2026-08-31T20:56:03.270Z |  |
 | 87 | 06 | deviation | packages/backend/src/index.ts |  | discardScan gained a fifth parameter (the caller-minted audit event_id), so two files OUTSIDE 06-06-PLAN.md's files_modified changed: index.ts's discardScan registration now passes randomUUID(), and scan/lifecycle.spec.ts's one call site was updated. Rule 3 (blocking): the plan REQUIRES the caller to mint the id - 'The caller mints the event_id UUID, which is what makes a retry a no-op rather than a duplicate' - and a caller-minted id has no meaning if the caller does not mint it. Also outside files_modified: retentionCounts() gained a scans field, because every other table the sweep bounds is counted there and a table the sweep deletes from that no reader can count is a bound nothing can be shown to hold. | open |  | 2026-08-31T20:56:03.364Z |  |
 | 88 | 06 | deviation | packages/backend/src/store/migrations.spec.ts |  | 06-06-PLAN.md's task-3 acceptance criterion says 'retention.spec.ts STILL asserts' AUDIT_OVER_AGE_SQL's absence. It did not: before this plan the absence was asserted only BEHAVIOURALLY (the D-06 contrast case), with no source-text check. The criterion is now true rather than the premise being quietly accepted - retention.spec.ts asserts no  declaration exists AND that the paragraph naming it survives, since the D-06 block names the statement it refuses to have. Separately, migrations.spec.ts's cannot-fail gate was WIDENED beyond the plan: it used to filter to statements beginning with CREATE, so step v6's INSERT/DROP/ALTER would have been skipped entirely by the very gate that justifies batching them. | open |  | 2026-08-31T20:56:03.457Z |  |
+| 89 | 06 | deviation | packages/engine/src/contract.ts |  | 06-08 shipped THREE internal marker keys, not the two the plan names. The plan's own behaviour contract requires the observed-loss flag to 'stay recorded across subsequent boots', and two keys (install id, boot count) cannot carry a durable third fact - the database that lost the marker is the same database the flag would have to live in. STORAGE_OBSERVED_LOSS_KEY is the third. The acceptance criterion is satisfied as a SUPERSET: SETTING_KEYS contains the two named marker keys and KNOWN_SETTINGS contains none of the three. Structurally stronger than the plan asked: KnownSetting.key and SettingWriteRequest.key narrow to OperatorSettingKey, so an internal key on the operator-editable surface is a typecheck failure rather than a spec assertion (T-06-41). | open |  | 2026-08-31T21:28:00.283Z |  |
+| 90 | 06 | deviation | packages/frontend/src/components/settings-contract.ts |  | FIELD_COPY's Record was narrowed from SettingKey to OperatorSettingKey inside TASK 1's commit, although settings-contract.ts is a task-2 file. Forced: task 1's own <verify> runs 'pnpm typecheck', and adding members to SETTING_KEYS breaks Record<SettingKey, FieldCopy> exhaustively - the alternative was authoring operator-facing copy for three internal marker keys, which is the exact failure the key split exists to prevent. Only the type and its two doc paragraphs moved in task 1; the five path constants and truncatePathLeft stayed whole and came out in task 2's single commit, so the deletion set was NOT split. | open |  | 2026-08-31T21:28:00.372Z |  |
+| 91 | 06 | deviation | packages/backend/src/index.spec.ts |  | settingsRows() was narrowed to exclude INTERNAL_SETTING_KEYS. Three shipped assertions counted EVERY row on the settings table to prove a scoping claim about a settings WRITE ('the caller's projectId was discarded'; 'a project-scoped write with no project stored nothing'), and init() now writes O-02's boot marker at the reserved global scope on every boot. Without the filter an unrelated feature decides whether a scoping assertion passes. Filtered over the CLOSED internal list, so a marker key added later is excluded by the vocabulary rather than by a remembered string. | open |  | 2026-08-31T21:28:00.466Z |  |
+| 92 | 06 | deviation | .planning/REQUIREMENTS.md |  | WINDOW 85 RECURRED EXACTLY AS IT PREDICTED, AND IS FIXED AGAIN. 06-08's close-out marked DEPLOY-02 complete; requirements.mark-complete reflowed the derived residual block and re-inserted the SAME three blank lines - after 'DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:', around the two-file list, and before '1. Each entry below is verified by EXECUTION'. outbound-prohibition.spec.ts went red on the byte-compare and was restored by deleting the blank lines, never by touching the comparison. The final REQUIREMENTS.md diff for this plan is ONE character: DEPLOY-02's checkbox. The tool is the defect, not the close-out - window 85 stays open and owns it. | open |  | 2026-08-31T21:28:14.684Z |  |
+| 93 | 06 | lint-warning | package.json |  | PRE-EXISTING AND NOT 06-08's: 'pnpm knip' exits 1 on a clean tree at 7ceff93 with 22 'Tag hints' - @internal JSDoc tags knip reports as unused across compat.ts, telemetry.ts, lifecycle.ts, settings.ts, artifacts.ts, observations.ts, admit.ts, scans.ts, producer.ts and audit.ts. 06-08's acceptance criterion 'pnpm knip is clean' was therefore read as 'no NEW knip finding', and was verified by diffing the output against a git-stash baseline: identical. One new finding DID appear mid-plan (BootMarker exported but consumed only in its own file, which ignoreExportsUsedInFile:false rejects) and was fixed by un-exporting it. 06-CONTEXT.md's deferred list already names 'removing the eight now-redundant @internal JSDoc tags' as out of scope. | open |  | 2026-08-31T21:28:14.775Z |  |
 
 ````json
 [
@@ -1181,6 +1186,66 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T20:56:03.457Z",
+    "resolved_at": null
+  },
+  {
+    "id": 89,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/engine/src/contract.ts",
+    "line": null,
+    "description": "06-08 shipped THREE internal marker keys, not the two the plan names. The plan's own behaviour contract requires the observed-loss flag to 'stay recorded across subsequent boots', and two keys (install id, boot count) cannot carry a durable third fact - the database that lost the marker is the same database the flag would have to live in. STORAGE_OBSERVED_LOSS_KEY is the third. The acceptance criterion is satisfied as a SUPERSET: SETTING_KEYS contains the two named marker keys and KNOWN_SETTINGS contains none of the three. Structurally stronger than the plan asked: KnownSetting.key and SettingWriteRequest.key narrow to OperatorSettingKey, so an internal key on the operator-editable surface is a typecheck failure rather than a spec assertion (T-06-41).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T21:28:00.283Z",
+    "resolved_at": null
+  },
+  {
+    "id": 90,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/frontend/src/components/settings-contract.ts",
+    "line": null,
+    "description": "FIELD_COPY's Record was narrowed from SettingKey to OperatorSettingKey inside TASK 1's commit, although settings-contract.ts is a task-2 file. Forced: task 1's own <verify> runs 'pnpm typecheck', and adding members to SETTING_KEYS breaks Record<SettingKey, FieldCopy> exhaustively - the alternative was authoring operator-facing copy for three internal marker keys, which is the exact failure the key split exists to prevent. Only the type and its two doc paragraphs moved in task 1; the five path constants and truncatePathLeft stayed whole and came out in task 2's single commit, so the deletion set was NOT split.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T21:28:00.372Z",
+    "resolved_at": null
+  },
+  {
+    "id": 91,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/index.spec.ts",
+    "line": null,
+    "description": "settingsRows() was narrowed to exclude INTERNAL_SETTING_KEYS. Three shipped assertions counted EVERY row on the settings table to prove a scoping claim about a settings WRITE ('the caller's projectId was discarded'; 'a project-scoped write with no project stored nothing'), and init() now writes O-02's boot marker at the reserved global scope on every boot. Without the filter an unrelated feature decides whether a scoping assertion passes. Filtered over the CLOSED internal list, so a marker key added later is excluded by the vocabulary rather than by a remembered string.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T21:28:00.466Z",
+    "resolved_at": null
+  },
+  {
+    "id": 92,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "WINDOW 85 RECURRED EXACTLY AS IT PREDICTED, AND IS FIXED AGAIN. 06-08's close-out marked DEPLOY-02 complete; requirements.mark-complete reflowed the derived residual block and re-inserted the SAME three blank lines - after 'DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:', around the two-file list, and before '1. Each entry below is verified by EXECUTION'. outbound-prohibition.spec.ts went red on the byte-compare and was restored by deleting the blank lines, never by touching the comparison. The final REQUIREMENTS.md diff for this plan is ONE character: DEPLOY-02's checkbox. The tool is the defect, not the close-out - window 85 stays open and owns it.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T21:28:14.684Z",
+    "resolved_at": null
+  },
+  {
+    "id": 93,
+    "kind": "lint-warning",
+    "phase": "06",
+    "file": "package.json",
+    "line": null,
+    "description": "PRE-EXISTING AND NOT 06-08's: 'pnpm knip' exits 1 on a clean tree at 7ceff93 with 22 'Tag hints' - @internal JSDoc tags knip reports as unused across compat.ts, telemetry.ts, lifecycle.ts, settings.ts, artifacts.ts, observations.ts, admit.ts, scans.ts, producer.ts and audit.ts. 06-08's acceptance criterion 'pnpm knip is clean' was therefore read as 'no NEW knip finding', and was verified by diffing the output against a git-stash baseline: identical. One new finding DID appear mid-plan (BootMarker exported but consumed only in its own file, which ignoreExportsUsedInFile:false rejects) and was fixed by un-exporting it. 06-CONTEXT.md's deferred list already names 'removing the eight now-redundant @internal JSDoc tags' as out of scope.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T21:28:14.775Z",
     "resolved_at": null
   }
 ]

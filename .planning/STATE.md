@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-08-31T20:59:57.998Z"
+stopped_at: Completed 06-08-PLAN.md
+last_updated: "2026-08-31T21:28:48.207Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: dab148efc8727c920e6f5d6ff8c0fecec996c3f9
+state_head: 1b225358bd0db788dfcb38f093563ed463c991f0
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -325,6 +325,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P05 | 26 min | 3 tasks | 6 files |
 | Phase 06 P07 | 25 min | 3 tasks | 2 files |
 | Phase 06 P06 | 121 min | 3 tasks | 12 files |
+| Phase 06 P08 | 25 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -623,6 +624,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: D-26's exemption is a PREDICATE (`AND state <> 'suspended'`), not an absence, and has its own paragraph beside its own statements — An absence exempts the whole table, and the table includes completed and discarded history rows with no cursor and nothing to resume. The audit exemption's closing sentence said a second exemption would need this paragraph.
 - [Phase 06]: The `scans` sweep runs inside the existing bounded pass on the existing cadence, counted into `deleted` — One sweep, one cadence, one convergence inequality. A second timer on a single-threaded runtime is a design smell, not a scheduler.
 - [Phase 06]: ScanStatusPayload.analysed stays null and is re-owned from 06-06 to 06-09 — analyses rows carry no scan attribution, so a per-scan count needs either a new scans column (another one-way migration, a Rule 4 decision this plan had no mandate for) or telemetry.ts's retro sub-map. Neither file is in 06-06's files_modified. WINDOWS 86.
+- [Phase 06]: DEPLOY-02 is met by SUBTRACTION: the Settings surface's path renderer, its prop, its five copy constants and its left-cut helper are deleted rather than labelled, and 05-VERIFICATION.md's DEPLOY-02 behavior_unverified item is closed by deletion, not by supplying a value. — The operator cannot reach a server path, and sdk.meta.path() carries an OS username - the string telemetry.spec.ts's guard exists to keep off the RPC. R5's RULE survives its implementation's deletion: vacuously satisfied by displaying no path, and binding on any later phase that displays one. knip runs with ignoreExportsUsedInFile:false, so the whole set had to come out in one commit, and did.
+- [Phase 06]: The persistence sentence is an OBSERVATION OF THE PAST, fed by a durable boot marker, and it can never fire on a first install. — O-02 established the backend can learn nothing about persistence by introspection, so DefMiner does not guess. recordBoot reports a loss only when THIS process's own marker has disappeared from the database it wrote it to - unreachable on a first install, because the in-process memory of having held a marker is null until one is held. A boot count going backwards cannot be the signal: the count lives in the row set that disappears, so absence is the only trace a wipe leaves. No string on the surface claims that data survives a restart, asserted against a forbidden-claim list held in the SPEC file rather than the contract module.
+- [Phase 06]: SETTING_KEYS becomes the union of OPERATOR_SETTING_KEYS and a new INTERNAL_SETTING_KEYS, and KnownSetting.key narrows to OperatorSettingKey. — One closed vocabulary now holds two kinds of key, and the difference is which array a key is in. Narrowing the rendered list's key TYPE makes an internal marker on an operator-editable surface a typecheck failure rather than a rule somebody has to remember (T-06-41), and the frontend's copy map moves to Record<OperatorSettingKey, FieldCopy> so internal state never owes operator-facing copy. THREE internal keys shipped, not the two the plan named: the observed-loss flag must survive across boots and two keys cannot carry it.
 
 ### Known Risks Carried Forward
 
@@ -665,8 +669,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T20:59:26.760Z
-**Stopped at:** Completed 06-06-PLAN.md
+**Last session:** 2026-08-31T21:28:48.117Z
+**Stopped at:** Completed 06-08-PLAN.md
 **Resume file:** None
 
 ### Blockers
