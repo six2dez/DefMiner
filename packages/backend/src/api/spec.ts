@@ -47,6 +47,7 @@ import type { Database } from "sqlite";
 import type { SurfaceOutcome } from "../compat";
 import type { LifecycleSdk } from "../lifecycle";
 import type { OperatorClauseRejection } from "../scan/filter";
+import type { ScanQuery } from "../scan/producer";
 import type { ArtifactRow } from "../store/artifacts";
 import type { ExportChunkResult } from "../store/export";
 import type { ObservationRow } from "../store/observations";
@@ -812,6 +813,23 @@ export type PluginSdk = Omit<LifecycleSdk, "events"> & {
   requests: {
     get(id: string): Promise<unknown>;
     inScope(request: unknown): boolean;
+    /**
+     * The retroactive walk's page read (FIND-03).
+     *
+     * WIDENED NARROWLY, AND NOT BY ADOPTING `SDK<...>` WHOLESALE. The paragraph
+     * above states why this type is a named structural surface: Phase 0
+     * measured how badly the shipped type packages under-declare this runtime,
+     * and every module here takes the PIECE of the SDK it uses. This adds one
+     * more piece for the same reason — `init()` is where {@link ScanQuery}'s
+     * only production caller is constructed, and without it `sdk.requests` is
+     * declared as `get` and `inScope` and the producer has no driver that can
+     * typecheck.
+     *
+     * The RETURN TYPE is `scan/producer.ts`'s own declaration rather than a
+     * second copy of the builder's shape, so widening the walk is one edit. The
+     * import is `import type`, so nothing is added to the shipped bundle.
+     */
+    query(): ScanQuery;
   };
   meta: { db(): Promise<Database> };
   api: APISDK<Spec["api"], Spec["events"]>;

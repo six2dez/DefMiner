@@ -203,6 +203,69 @@ export function makeFake304(init: { id?: string } = {}): FakeResponse {
   });
 }
 
+// --- the retroactive scan's page reads --------------------------------------
+
+/**
+ * One item of a `RequestsConnection`, as `RequestsQuery.execute()` resolves it.
+ *
+ * Structurally identical to `scan/producer.ts`'s `ScanPageItem`, and declared
+ * here rather than imported from it for the reason this whole file exists: a
+ * fixture that imported the type it is faking would stop failing when the real
+ * surface changed shape underneath both of them. The FIELD NAMES and arities
+ * are taken from `@caido/quickjs-types@0.26.0/src/caido/requests.d.ts`, exactly
+ * as the request and response fakes above are.
+ *
+ * `response` is OPTIONAL because the SDK declares it optional. A stored request
+ * with no response is a real shape and it is not an error.
+ */
+export type FakeScanItem = {
+  readonly cursor: string;
+  readonly request: FakeRequest & { getCreatedAt(): Date };
+  readonly response?: FakeResponse | undefined;
+};
+
+/** A capture date, so a fixture item's position is a fact rather than the
+ *  clock. 14 Aug 2024, in ms. */
+const FAKE_CAPTURED_AT = 1_723_600_000_000;
+
+export function makeFakeScanItem(
+  init: FakeRequestInit & {
+    cursor?: string;
+    createdAt?: number;
+    code?: number;
+    noResponse?: boolean;
+  } = {},
+): FakeScanItem {
+  const request = makeFakeRequest(init);
+  const createdAt = init.createdAt ?? FAKE_CAPTURED_AT;
+  return {
+    cursor: init.cursor ?? `cursor-${request.getId()}`,
+    request: { ...request, getCreatedAt: () => new Date(createdAt) },
+    response:
+      init.noResponse === true
+        ? undefined
+        : makeFakeResponse({ id: request.getId(), code: init.code ?? 200 }),
+  };
+}
+
+/**
+ * The slice of `RequestsQuery` the retroactive walk uses.
+ *
+ * EVERY METHOD RETURNS THE QUERY, exactly as the SDK declares — the builder is
+ * chained, not applied. A fake that returned a fresh object from each call
+ * would let a LOST `.filter()` pass unnoticed, which is the one mistake that
+ * would turn a narrowed scan into a pull of every stored body in history.
+ */
+export type FakeScanQuery = {
+  filter(filter: string): FakeScanQuery;
+  descending(target: "req", field: "id"): FakeScanQuery;
+  first(n: number): FakeScanQuery;
+  execute(): Promise<{
+    readonly pageInfo: { readonly hasNextPage: boolean };
+    readonly items: readonly FakeScanItem[];
+  }>;
+};
+
 // --- projects ---------------------------------------------------------------
 
 /**
@@ -260,6 +323,12 @@ export type FakeSdkCalls = {
   consoleLog: string[];
   requestsGet: string[];
   inScope: unknown[];
+  /** Every `sdk.requests.query()` the code under test built, recorded as the
+   *  composed filter string it was given — or `null` if it never called
+   *  `.filter()`. THE FILTER IS THE WHOLE SECURITY QUESTION on this path: D-05
+   *  promises the operator may narrow a scan and never widen it, and the only
+   *  place that promise becomes a fact is the string handed to Caido. */
+  scanFilters: (string | null)[];
   apiRegister: string[];
   /** Every `sdk.api.send(...)` the code under test made, recorded as the event
    *  name and the arguments EXACTLY as they were handed over.
@@ -289,6 +358,7 @@ export type FakeSdk = {
   requests: {
     get(id: string): Promise<unknown>;
     inScope(request: unknown): boolean;
+    query(): FakeScanQuery;
   };
   meta: { db(): Promise<Database> };
   console: { log(msg: string): void };
@@ -315,6 +385,14 @@ export type FakeSdkOverrides = {
   getCurrent?: () => Promise<unknown>;
   get?: (id: string) => Promise<unknown>;
   inScope?: (request: unknown) => boolean;
+  /** The pages `requests.query().execute()` answers, in order. THE DEFAULT IS
+   *  ONE EMPTY PAGE, which is a complete and correct answer — a filter that
+   *  matches nothing is what finishing looks like — and it is what keeps every
+   *  case that is not about the scan from accidentally driving a walk. */
+  scanPages?: FakeScanItem[][];
+  /** What `pageInfo.hasNextPage` says on the LAST page of {@link scanPages}.
+   *  `false` by default: the sequence ends where it ends. */
+  scanHasNextPageAfterLast?: boolean;
   db?: () => Promise<unknown>;
   log?: (msg: string) => void;
   register?: (name: string, fn: unknown) => void;
@@ -339,6 +417,7 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
     consoleLog: [],
     requestsGet: [],
     inScope: [],
+    scanFilters: [],
     apiRegister: [],
     apiSend: [],
     interceptResponseHandlers: [],
@@ -376,6 +455,42 @@ export function makeFakeSdk(overrides: FakeSdkOverrides = {}): FakeSdk {
         return overrides.inScope === undefined
           ? true
           : overrides.inScope(request);
+      },
+      // ONE BUILDER PER `query()` CALL, and it records the filter it was given.
+      // `executes` is not a separate counter here: the number of pages consumed
+      // is `calls.scanFilters.length` minus the builders that were never
+      // executed, and a spec that cares asserts the filters themselves — which
+      // is the stronger claim.
+      query: (): FakeScanQuery => {
+        const at = calls.scanFilters.length;
+        calls.scanFilters.push(null);
+        const query: FakeScanQuery = {
+          filter(f: string) {
+            calls.scanFilters[at] = f;
+            return query;
+          },
+          descending() {
+            return query;
+          },
+          first() {
+            return query;
+          },
+          execute: () => {
+            const pages = overrides.scanPages ?? [[]];
+            const index = at;
+            const page = pages[index] ?? [];
+            const isLast = index >= pages.length - 1;
+            return Promise.resolve({
+              pageInfo: {
+                hasNextPage: isLast
+                  ? (overrides.scanHasNextPageAfterLast ?? false)
+                  : true,
+              },
+              items: page,
+            });
+          },
+        };
+        return query;
       },
     },
     meta: {

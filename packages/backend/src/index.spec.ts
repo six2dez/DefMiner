@@ -15,23 +15,30 @@
 // These cases drive the real `init()`. They assert it RESOLVES and that the
 // failure is written down somewhere an operator can reach it.
 
-import type { ExportRedactionMode } from "@defminer/engine/contract";
+import { readFileSync } from "node:fs";
+
+import type {
+  ExportRedactionMode,
+  ScanProgressPayload,
+} from "@defminer/engine/contract";
 import {
   INTERNAL_SETTING_KEYS,
   INVALIDATION_EVENT,
+  isScanProgressPayload,
   OPERATOR_SETTING_KEYS,
   RETENTION_MAX_ROWS_KEY,
   STORAGE_BOOT_COUNT_KEY,
   STORAGE_INSTALL_ID_KEY,
 } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   emitProjectChange,
   makeFakeProject,
   makeFakeRequest,
   makeFakeResponse,
+  makeFakeScanItem,
   makeFakeSdk,
 } from "../test/fixtures/fake-sdk";
 import {
@@ -48,6 +55,7 @@ import {
   OPERATOR_CLAUSE_REJECTIONS,
   positionClause,
 } from "./scan/filter";
+import { isHeldAtWatermark, resetScanProducerForTest } from "./scan/producer";
 import { DETECTOR_CORPUS_VERSION } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
@@ -55,7 +63,7 @@ import type { KnownSettingValue } from "./store/settings";
 import { GLOBAL_PROJECT_ID, resetBootMarkerForTest } from "./store/settings";
 import { resetTelemetryForTest } from "./telemetry";
 
-import { init } from "./index";
+import { init, resetScanDriverForTest } from "./index";
 
 /**
  * Every endpoint the success path registers, in registration order.
@@ -102,6 +110,8 @@ beforeEach(() => {
   resetDbHandleForTest();
   resetTelemetryForTest();
   resetBootMarkerForTest();
+  resetScanProducerForTest();
+  resetScanDriverForTest();
 });
 
 afterEach(() => {
@@ -109,6 +119,10 @@ afterEach(() => {
   resetPassiveForTest();
   resetConsumerForTest();
   resetDbHandleForTest();
+  // THE DRIVER'S PENDING TIMER IS CLEARED HERE, and it is not optional. A scan
+  // started by one case schedules a re-entry; left armed it would fire during
+  // an unrelated case, against a fixture database that case has already closed.
+  resetScanDriverForTest();
 });
 
 describe("init() contains every failure it can have", () => {
@@ -1847,4 +1861,222 @@ describe("init() records the boot marker and serves the storage footprint", () =
     expect(footprint.observations).toBeNull();
     expect(footprint.analyses).toBeNull();
   });
+});
+
+// ===========================================================================
+// THE PRODUCER'S DRIVER — ROADMAP SUCCESS CRITERION 1's "runs" HALF
+// ===========================================================================
+//
+// `runScanProducer` shipped in plan 06-01, was given a watermark by 06-03 and a
+// lifecycle by 06-05, and until this plan NOTHING CALLED IT. Every property the
+// producer's own spec proves — the descending walk, the bounded skip-done read,
+// the backpressure hold — was true of a function no build ever entered, so a
+// retroactive scan did not run at all. These cases assert the walk from the
+// OUTSIDE: through the real `init()`, the real RPC surface, the real queue and
+// the real `scans` table.
+//
+// THE CLOCK IS FAKE THROUGHOUT. The driver is scheduled rather than run inline,
+// deliberately — a walk that started synchronously inside `startScan` would hold
+// the RPC open for the length of a backfill — so advancing time is the only way
+// to observe it, and real timers would make these cases slow and flaky at once.
+
+describe("a retroactive scan actually WALKS, driven from production code", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  async function boot(
+    pages: ReturnType<typeof makeFakeScanItem>[][],
+  ): Promise<{
+    rpc: Record<string, (...a: unknown[]) => unknown>;
+    sdk: ReturnType<typeof makeFakeSdk>;
+  }> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId: "p1",
+      db: () => Promise.resolve(fx.db),
+      scanPages: pages,
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+    return { rpc, sdk };
+  }
+
+  /** Let every scheduled driver pass and every yield between pages run. */
+  async function settle(): Promise<void> {
+    await vi.advanceTimersByTimeAsync(5_000);
+  }
+
+  function scanRow(): Record<string, unknown> | undefined {
+    return fx.raw.prepare("SELECT * FROM scans WHERE project_id = 'p1'").get() as
+      | Record<string, unknown>
+      | undefined;
+  }
+
+  it("startScan kicks the driver, the walk covers every page, and completeScan lands", async () => {
+    const { rpc } = await boot([
+      [makeFakeScanItem({ id: "a-1" }), makeFakeScanItem({ id: "a-2" })],
+      [makeFakeScanItem({ id: "b-1" })],
+    ]);
+
+    const started = await rpc.startScan(null, { operatorFilter: "" });
+    expect(started).toEqual({ outcome: "started", scanId: expect.any(String) });
+
+    // NOTHING HAS WALKED YET, and that is the contract: the RPC answers before
+    // any page is transferred, so pressing Start scan never blocks the operator
+    // on a backfill.
+    expect(scanRow()?.pages_walked).toBe(0);
+
+    await settle();
+
+    const row = scanRow();
+    expect(row?.pages_walked).toBe(2);
+    expect(row?.seen).toBe(3);
+    expect(row?.admitted).toBe(3);
+    // `completeScan` had NO PRODUCTION CALLER before this plan. The driver is
+    // that caller: the filter's range below the position is exhausted, which is
+    // what finishing looks like.
+    expect(row?.state).toBe("completed");
+    expect(row?.finished_at).not.toBeNull();
+  });
+
+  it("hands the producer the SHIPPED queue — the consumer picks the walked work up", async () => {
+    // THE WATERMARK IS ONLY OPERATIVE IF THE DRIVER PASSES THE REAL QUEUE. A
+    // driver that constructed its own would gate on a depth nothing else ever
+    // touches, and the drop-oldest defect D-01 exists to prevent would be back
+    // with every producer test still green. The observable proof is that the ONE
+    // consumer re-reads exactly the ids the walk offered: `analyseAndFinish`
+    // resolves work with `sdk.requests.get(id)`, and it can only see an id that
+    // reached the queue it drains.
+    const { rpc, sdk } = await boot([
+      [
+        makeFakeScanItem({ id: "walked-1" }),
+        makeFakeScanItem({ id: "walked-2" }),
+      ],
+    ]);
+
+    await rpc.startScan(null, { operatorFilter: "" });
+    await settle();
+    await drainConsumerForTest();
+
+    expect(sdk.calls.requestsGet).toContain("walked-1");
+    expect(sdk.calls.requestsGet).toContain("walked-2");
+  });
+
+  it("sends DefMiner's own clause to Caido, with the operator's clause last", async () => {
+    // D-05 made checkable at the one place it becomes a fact: the string handed
+    // to `sdk.requests.query().filter(...)`. Compared BYTE FOR BYTE against the
+    // one producer of a scan filter, never re-derived here.
+    const { rpc, sdk } = await boot([[makeFakeScanItem({ id: "a-1" })]]);
+    await rpc.startScan(null, {
+      operatorFilter: 'req.host.eq:"example.test"',
+    });
+    await settle();
+
+    const filters = sdk.calls.scanFilters.filter((f) => f !== null);
+    expect(filters.length).toBeGreaterThan(0);
+    expect(filters[0]).toBe(
+      composeScanFilter(positionClause(""), 'req.host.eq:"example.test"'),
+    );
+  });
+
+  it("emits one progress payload per walked page on the SHIPPED event", async () => {
+    const { rpc, sdk } = await boot([
+      [makeFakeScanItem({ id: "a-1" })],
+      [makeFakeScanItem({ id: "b-1" })],
+      [makeFakeScanItem({ id: "c-1" })],
+    ]);
+    await rpc.startScan(null, { operatorFilter: "" });
+    await settle();
+
+    const progress = sdk.calls.apiSend
+      .map((call) => call.args[0])
+      .filter(
+        (payload): payload is ScanProgressPayload =>
+          isScanProgressPayload(payload as ScanProgressPayload),
+      );
+
+    expect(progress).toHaveLength(3);
+    expect(progress.map((p) => p.pagesWalked)).toEqual([1, 2, 3]);
+    expect(progress[2].projectId).toBe("p1");
+    expect(progress[2].state).toBe("running");
+    expect(progress[2].heldAtWatermark).toBe(false);
+  });
+
+  it("resumeScan kicks the driver too — the ONLY other way back into the walk", async () => {
+    const { rpc, sdk } = await boot([
+      [makeFakeScanItem({ id: "a-1" })],
+      [makeFakeScanItem({ id: "b-1" })],
+    ]);
+    const started = (await rpc.startScan(null, { operatorFilter: "" })) as {
+      scanId: string;
+    };
+    await rpc.pauseScan(null, { scanId: started.scanId });
+    await settle();
+
+    // Paused before anything ran: the walk refuses a scan that is not `running`.
+    expect(scanRow()?.pages_walked).toBe(0);
+    expect(scanRow()?.state).toBe("suspended");
+    const walkedWhilePaused = sdk.calls.scanFilters.length;
+
+    await rpc.resumeScan(null, { scanId: started.scanId });
+    await settle();
+
+    expect(sdk.calls.scanFilters.length).toBeGreaterThan(walkedWhilePaused);
+    expect(scanRow()?.pages_walked).toBe(2);
+    expect(scanRow()?.state).toBe("completed");
+  });
+
+  it("D-11 is not undone: init() arms NO driver, so nothing resumes itself", async () => {
+    // The startup sweep suspends a scan a previous process left running and
+    // resumes NOTHING (ERR-02, D-11). A driver kicked at boot would quietly
+    // reverse that decision and start pulling full response bodies again the
+    // moment Caido came back up.
+    fx.raw
+      .prepare(
+        "INSERT INTO scans (project_id, scan_id, state, suspend_reason, operator_filter, epoch, " +
+          "last_request_id, last_cursor, last_created_at, pages_walked, seen, admitted, " +
+          "skipped_done, rejected, queued, started_at, updated_at, finished_at) " +
+          "VALUES ('p1', 's-old', 'running', NULL, '', 0, '', '', NULL, 0, 0, 0, 0, 0, 0, 1, 1, NULL)",
+      )
+      .run();
+
+    const { sdk } = await boot([[makeFakeScanItem({ id: "a-1" })]]);
+    await settle();
+
+    expect(scanRow()?.state).toBe("suspended");
+    expect(scanRow()?.suspend_reason).toBe("process_restarted");
+    expect(sdk.calls.scanFilters).toHaveLength(0);
+  });
+
+  it("getScanStatus reports the producer's REAL hold, never a hardcoded false", async () => {
+    // WINDOWS 66 and 73. The value cannot be derived by the reader — from
+    // outside the backend a scan holding at the watermark and a scan whose
+    // QuickJS thread is blocked look identical — so the projection reads the
+    // producer's module state, and this asserts the WIRE rather than the source.
+    const { rpc } = await boot([[makeFakeScanItem({ id: "a-1" })]]);
+    await rpc.startScan(null, { operatorFilter: "" });
+    const status = (await rpc.getScanStatus()) as { heldAtWatermark: boolean };
+    expect(status.heldAtWatermark).toBe(isHeldAtWatermark());
+
+    // And the source carries no literal for it: a projection that had been
+    // corrected to `false` again would pass the equality above whenever the
+    // producer happens not to be holding, which is almost always.
+    const src = readFileSync("packages/backend/src/index.ts", "utf8");
+    expect(src).toContain("heldAtWatermark: isHeldAtWatermark()");
+    expect(src).not.toContain("heldAtWatermark: false");
+  });
+
 });
