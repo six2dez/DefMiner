@@ -416,7 +416,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 05-12: Settings, Health, and the visible compatibility refusal surface
+- [x] 05-12: Settings, Health, and the visible compatibility refusal surface
 
 ### Phase 6: Retroactive Scan & Deployment Reality
 
