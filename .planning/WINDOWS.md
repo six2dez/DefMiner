@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 46
+open_count: 48
 waived_count: 0
 fixed_count: 24
-total_count: 70
-last_updated: 2026-08-31T16:34:42.387Z
+total_count: 72
+last_updated: 2026-08-31T17:00:10.225Z
 ---
 
 # Broken Windows Ledger
@@ -106,6 +106,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 68 | 06 | deviation | scripts/phase6/o07-body-length.sh |  | Plan 06-02 task 2 step 5 as written (issue startScan with an operator clause, let the producer walk one page, read the query()-side Body.length) is NOT EXECUTABLE on the shipped build: index.ts startScan REFUSES any non-empty operatorFilter until 06-04 ships the validator, and runScanProducer deliberately has no caller until 06-03 ships the watermark. Measured through probe/phase6-o07 instead, which calls sdk.requests.query() directly. 06-03/06-04 should re-read this if they want the measurement repeated through the real producer. | open |  | 2026-08-31T16:34:32.559Z |  |
 | 69 | 06 | deviation | probe/phase6-o07/backend/script.js |  | The O-07 query() walk is UNFILTERED (descending req.id, first 50, items matched by the request id the hook recorded) rather than filtered to the fixture's path. Deliberate: this phase's own O-03/O-06 record Caido's req.path / req.query / cont implementations as unmeasured, so a filtered walk returning nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. The byte-count verdict therefore does NOT cover a filtered query() page. 06-11's push-down proof is the plan that should close it. | open |  | 2026-08-31T16:34:42.297Z |  |
 | 70 | 06 | deviation | tests/phase6-o07.spec.ts |  | Plan 06-02 task 1's <verify> (pnpm vitest run tests/phase6-o07.spec.ts, fails_when non-zero exit) is unsatisfiable at task-1 time by task 1's own acceptance criterion, which requires the gate to FAIL when the artifact is absent. Executed as a RED gate: 13 failed / 7 passed / 0 skipped at task 1, 20 passed after task 2 wrote the artifact. No code changed to reconcile them. | open |  | 2026-08-31T16:34:42.387Z |  |
+| 71 | 06 | deviation | packages/backend/src/index.ts | 692 | Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands. | open |  | 2026-08-31T17:00:10.126Z |  |
+| 72 | 06 | unmet-truth | packages/backend/src/scan/filter.ts |  | The fail-CLOSED property is proved on DefMiner's half only. That an unbalanced or comment-truncated expression actually makes execute() throw is CITED from the SDK's own JSDoc (@throws {Error} If a query parameter is invalid, requests.d.ts:635-639) and has never been executed against a real Caido parser in this repo. 06-04 tests the refusal, the composer's omission, and producer.ts's handling of a rejected execute(); it does not test Caido. Plan 06-11's fixture suite over sdk.requests.matches() is where this becomes measured — along with whether req.path strips the query and whether cont is byte-wise or Unicode case-folded. Recorded as SUMMARY coverage D6 with human_judgment: true. | open |  | 2026-08-31T17:00:10.225Z |  |
 
 ````json
 [
@@ -947,6 +949,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T16:34:42.387Z",
+    "resolved_at": null
+  },
+  {
+    "id": 71,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": 692,
+    "description": "Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:00:10.126Z",
+    "resolved_at": null
+  },
+  {
+    "id": 72,
+    "kind": "unmet-truth",
+    "phase": "06",
+    "file": "packages/backend/src/scan/filter.ts",
+    "line": null,
+    "description": "The fail-CLOSED property is proved on DefMiner's half only. That an unbalanced or comment-truncated expression actually makes execute() throw is CITED from the SDK's own JSDoc (@throws {Error} If a query parameter is invalid, requests.d.ts:635-639) and has never been executed against a real Caido parser in this repo. 06-04 tests the refusal, the composer's omission, and producer.ts's handling of a rejected execute(); it does not test Caido. Plan 06-11's fixture suite over sdk.requests.matches() is where this becomes measured — along with whether req.path strips the query and whether cont is byte-wise or Unicode case-folded. Recorded as SUMMARY coverage D6 with human_judgment: true.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:00:10.225Z",
     "resolved_at": null
   }
 ]

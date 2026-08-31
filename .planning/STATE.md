@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-08-31T16:37:49.473Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-08-31T16:59:47.165Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 7eee9b750ebda09f0d1a13f9ec44963c3e578a26
+state_head: 54bef3f01175910af10287355f682b296887f79d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 61
+  completed_plans: 62
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -297,6 +297,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P12 | 45 min | 3 tasks | 23 files |
 | Phase 06 P01 | 25 min | 2 tasks | 19 files |
 | Phase 06 P02 | 17 min | 2 tasks | 8 files |
+| Phase 06 P04 | 11 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -574,6 +575,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: [Phase 06, plan 06-02] PHASE 6 OWNS PORTS 8961-8965 (caido 8961, origin 8962), a new block below Phase 0's 8999/8998/8991-8996/8981-8985/8081-8083 and Phase 1's 8971-8975. instance.sh is BYTE-UNCHANGED and its 0.57.1 default — Phase 1's tripwire — is untouched; EXPECT_VERSION=0.58.2 is passed IN from MATRIX_EXPECTED_VERSION (D-21). Both refusals were EXECUTED rather than claimed: PORT=8080 exits 1 before launching and CAIDO_BIN=$HOME/.caido/caido-cli (the stale 0.55.3 that owns PATH) exits 1, with the artifact byte-identical after both.
 - [Phase 06]: [Phase 06, plan 06-02] .gitignore GAINED PHASE 6 TOKEN AND HOST-LOG RULES, and this is a class of gap rather than a one-off: threat T-00-14's controls are PATH-SPECIFIC, one block per results root, and any phase that sources scripts/spike/instance.sh into a NEW results root must add its own three lines in the same commit or a run that dies before teardown can commit a live guest bearer token.
 - [Phase 06]: [Phase 06, plan 06-02] state.update-progress WITHHELD THE PROJECT-WIDE BAR AGAIN — 'progress percent withheld by buildStateFrontmatter — STATE.md left unchanged'. That is the SEVENTH consecutive occurrence across phases 05 and 06, recorded so the run stays visible rather than being rediscovered. state.advance-plan was invoked EXACTLY ONCE and moved the position 2 -> 3 of 13, correct against the files on disk.
+- [Phase 06]: The HTTPQL gate polices COMPOSITION AT THE SINK, not where HTTPQL fragments live — A fragment in a shared constant cannot place the operator clause first; the hazard is a second COMPOSER. This is what makes the gate fit SCAN_KIND_CLAUSE living in the engine contract (06-01 deviation 2) rather than contradict it.
+- [Phase 06]: composeScanFilter re-validates the operator clause and OMITS it on failure rather than throwing — runScanProducer composes outside the try that wraps execute(), so a throw would escape it entirely and Caido surfaces neither a throw nor a rejection from plugin code. Omission narrows to DefMiners own clause and can never widen.
+- [Phase 06]: OPERATOR_CLAUSE_MAX_CHARS is 2048, derived from EVIDENCE_PANEL_MAX_GRAPHEMES and asserted equal rather than imported — The operator must never be shown a truncated version of the one string they have to check against the composed filter. Asserted rather than imported because the cap is a COST bound that merely coincides with a DISPLAY bound.
+- [Phase 06]: The index.ts operator-clause-unsupported refusal was assessed and deliberately LEFT IN PLACE for plan 06-05 — 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and owns wiring validateOperatorClause into startScan. Removing the refusal here without 06-05s ScanCommandOutcome shape, the RPC union and the frontend copy would ship a half-wired endpoint. D-05 is delivered by end of phase, on this plans foundations.
 
 ### Known Risks Carried Forward
 
@@ -616,8 +621,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T16:37:49.390Z
-**Stopped at:** Completed 06-02-PLAN.md
+**Last session:** 2026-08-31T16:59:17.686Z
+**Stopped at:** Completed 06-04-PLAN.md
 **Resume file:** None
 
 ### Blockers

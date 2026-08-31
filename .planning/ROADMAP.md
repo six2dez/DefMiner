@@ -431,7 +431,7 @@ Plans:
   4. Operator-facing artifacts are retrievable through `sdk.hostedFile` or a bounded authenticated download — never by writing a path and assuming the operator can reach it
   5. Server disk is quota-bounded with orphan cleanup, and behaviour on a container without a volume is documented and tested
 
-**Plans**: 2/13 plans executed
+**Plans**: 3/13 plans executed
 
 **The three placeholder plan titles above this line are superseded, and the divergence is stated rather than smuggled.** `06-03: Hosted-file delivery, quotas, orphan cleanup, and storage labelling` names four things, three of which decision D-17 makes impossible or unnecessary: `HostedFileSDK` is `getAll()` and `create()` and nothing else — no delete, no expiry — so DEPLOY-03's "expiry" and DEPLOY-04's "orphan cleanup" are not expressible against that surface. DEPLOY-03's own wording offers "**or** a bounded authenticated frontend download" as an equal alternative, and Phase 5 already built and measured exactly that. What ships instead is the shipped chunked RPC download plus the two gates that keep the guarantee true (06-07) and the honest Settings statement (06-08).
 
@@ -443,7 +443,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 06-02-PLAN.md — O-07 probe: which byte count `Body.length` reports on the two read paths — *wave 2*
-- [ ] 06-04-PLAN.md — The HTTPQL composer, the operator-clause validator, and the static gate over filter sinks — *wave 2*
+- [x] 06-04-PLAN.md — The HTTPQL composer, the operator-clause validator, and the static gate over filter sinks — *wave 2*
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
