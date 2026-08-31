@@ -32,9 +32,9 @@
 import type { BoundRejection, SettingScope } from "@defminer/engine/contract";
 import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
+  OPERATOR_SETTING_KEYS,
   RETENTION_MAX_AGE_MS_KEY,
   RETENTION_MAX_ROWS_KEY,
-  SETTING_KEYS,
 } from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
@@ -163,11 +163,15 @@ async function settle(wrapper: VueWrapper): Promise<void> {
   await wrapper.vm.$nextTick();
 }
 
-const input = (wrapper: VueWrapper, key: (typeof SETTING_KEYS)[number]) =>
-  wrapper.get(`#${fieldId(key)}`);
+const input = (
+  wrapper: VueWrapper,
+  key: (typeof OPERATOR_SETTING_KEYS)[number],
+) => wrapper.get(`#${fieldId(key)}`);
 
-const saveButton = (wrapper: VueWrapper, key: (typeof SETTING_KEYS)[number]) =>
-  wrapper.get(`#${fieldId(key)}-save`);
+const saveButton = (
+  wrapper: VueWrapper,
+  key: (typeof OPERATOR_SETTING_KEYS)[number],
+) => wrapper.get(`#${fieldId(key)}-save`);
 
 // ---------------------------------------------------------------------------
 // SECTIONS
@@ -198,13 +202,15 @@ describe("the surface renders only the sections that have controls", () => {
     const ids = h.wrapper
       .findAll("div[id$='-field']")
       .map((el) => el.attributes("id"));
-    expect(ids).toEqual(SETTING_KEYS.map((key) => `${fieldId(key)}-field`));
+    expect(ids).toEqual(
+      OPERATOR_SETTING_KEYS.map((key) => `${fieldId(key)}-field`),
+    );
   });
 
   it("carries the shipped rationale as help text, not a summary of it", async () => {
     const h = harness();
     await settle(h.wrapper);
-    for (const key of SETTING_KEYS) {
+    for (const key of OPERATOR_SETTING_KEYS) {
       expect(h.wrapper.text()).toContain(FIELD_COPY[key].help);
       expect(h.wrapper.text()).toContain(FIELD_COPY[key].label);
     }

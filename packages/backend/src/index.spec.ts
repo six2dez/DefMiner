@@ -17,6 +17,7 @@
 
 import type { ExportRedactionMode } from "@defminer/engine/contract";
 import {
+  INTERNAL_SETTING_KEYS,
   INVALIDATION_EVENT,
   OPERATOR_SETTING_KEYS,
   RETENTION_MAX_ROWS_KEY,
@@ -1496,9 +1497,25 @@ describe("UI-08's settings endpoints", () => {
     key: string;
     value: string;
   }[] {
-    return fx.raw
-      .prepare("SELECT project_id, key, value FROM settings")
-      .all() as unknown as { project_id: string; key: string; value: string }[];
+    // THE OPERATOR'S ROWS ONLY, AND THE FILTER IS THE POINT RATHER THAN A
+    // CONVENIENCE. Every claim below is about what a SETTINGS WRITE did — "the
+    // caller's project id was discarded", "a project-scoped write with no
+    // project stored nothing". `init()` also writes O-02's boot marker at the
+    // reserved global scope on every boot (plan 06-08), which is internal
+    // durable state and not a settings write; counting it here would let an
+    // unrelated feature decide whether a scoping assertion passes. The filter is
+    // over the CLOSED internal list, so a marker key added later is excluded by
+    // the vocabulary rather than by a string somebody remembers to update.
+    const internal = new Set<string>(INTERNAL_SETTING_KEYS);
+    return (
+      fx.raw
+        .prepare("SELECT project_id, key, value FROM settings")
+        .all() as unknown as {
+        project_id: string;
+        key: string;
+        value: string;
+      }[]
+    ).filter((r) => !internal.has(r.key));
   }
 
   it("lists every known key with three distinguishable levels", async () => {

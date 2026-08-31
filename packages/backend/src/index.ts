@@ -136,6 +136,9 @@ import {
   GLOBAL_PROJECT_ID,
   listKnownSettings,
   putBoundedSetting,
+  readObservedRestartLoss,
+  readStorageFootprint,
+  recordBoot,
 } from "./store/settings";
 import { describeError, slimStatus } from "./telemetry";
 
@@ -565,6 +568,41 @@ export async function init(sdk: PluginSdk): Promise<void> {
       }
     }
 
+    // 5d — O-02's DURABLE MARKER, AND IT IS THE ONLY HONEST SOURCE DEPLOY-02's
+    // PERSISTENCE SENTENCE CAN HAVE.
+    //
+    // The backend can learn nothing about persistence by introspection —
+    // research O-02 read the complete SDK member list and found no durability
+    // signal of any kind — so DefMiner does not guess. It writes a marker at
+    // first boot and reads it back on every later one, which turns "does this
+    // deployment keep data" into a fact about the PAST rather than a promise
+    // about the future. `store/settings.ts`'s `recordBoot` states the exact
+    // condition and why it cannot fire on a genuine first install.
+    //
+    // PLACEMENT obeys this file's ordering contract: AFTER the migrations
+    // (step 3, so the `settings` table exists) and BEFORE the RPC surface at 6b,
+    // so `getStorageFootprint` can never be reached with the flag unread. It
+    // does NOT need the project — the marker rows are written at the RESERVED
+    // GLOBAL scope, because the question is about the DATABASE and not about any
+    // project inside it, and `settings` is the one table on which an empty
+    // `project_id` is legal.
+    //
+    // LOGGED, NOT THROWN, on failure. A marker that could not be written costs
+    // the operator one sentence on a settings surface; it must not cost them the
+    // plugin.
+    try {
+      const marker = await recordBoot(db, randomUUID(), Date.now());
+      if (marker.observedLoss) {
+        log(
+          sdk,
+          "a previous boot's storage marker is GONE — this deployment has been " +
+            "observed to lose DefMiner's database across a restart (D-19, O-02)",
+        );
+      }
+    } catch (e) {
+      log(sdk, "could not record the boot marker: " + describeError(e));
+    }
+
     // 6 — exactly one consumer.
     configurePassive({ queue, enqueuedAt, admissionAllowed });
     startConsumer(sdk, {
@@ -816,6 +854,41 @@ export async function init(sdk: PluginSdk): Promise<void> {
           maxSliceMs: slimStatus().maxSliceMs,
         },
       };
+    });
+    // --- DEPLOY-02's STORAGE FOOTPRINT (D-19, D-25) ----------------------
+    //
+    // THE CALLER DOES NOT NAME THE PROJECT, for the reason the settings surface
+    // above states. With nothing resolved the three rows come back ABSENT rather
+    // than as zeroes: a zero claims a measured empty project, and telling an
+    // operator "0 of 50,000 artifact rows" while DefMiner has no project open
+    // would be the same lie the health strip refuses to tell with four zeroes.
+    //
+    // THE FLAG STILL ANSWERS. It is a fact about the DATABASE, read at the
+    // reserved global scope, so it is knowable with no project resolved — and it
+    // is the half of this payload that matters most when nothing else does.
+    sdk.api.register("getStorageFootprint", async () => {
+      const pid = currentProjectId();
+      // READ, NEVER CACHED IN A MODULE VARIABLE. The flag is a durable row, and
+      // a cached copy of it would be a second reader of one fact — the shape
+      // that lets a surface report what was true at boot rather than what is
+      // true now.
+      if (!db) {
+        return {
+          artifacts: null,
+          observations: null,
+          analyses: null,
+          observedRestartLoss: false,
+        };
+      }
+      if (pid === null) {
+        return {
+          artifacts: null,
+          observations: null,
+          analyses: null,
+          observedRestartLoss: await readObservedRestartLoss(db),
+        };
+      }
+      return readStorageFootprint(db, pid, Date.now());
     });
     // --- FIND-03's RETROACTIVE SCAN ---------------------------------------
     //

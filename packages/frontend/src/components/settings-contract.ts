@@ -23,12 +23,18 @@
 // ===========================================================================
 // EVERY MAP HERE IS EXHAUSTIVE OVER A SHARED VOCABULARY, DELIBERATELY
 // ===========================================================================
-// `Record<SettingKey, …>` and `Record<BoundRejection, …>` are `Record`s over
-// closed unions declared in @defminer/engine/contract, so a key or a rejection
-// reason added by a later phase is a TYPECHECK FAILURE here rather than a field
-// that renders with a blank label or an error that renders as nothing. That is
-// the whole growth mechanism for this surface: it grows by addition, and the
-// addition cannot be half-done.
+// `Record<OperatorSettingKey, …>` and `Record<BoundRejection, …>` are `Record`s
+// over closed unions declared in @defminer/engine/contract, so a key or a
+// rejection reason added by a later phase is a TYPECHECK FAILURE here rather
+// than a field that renders with a blank label or an error that renders as
+// nothing. That is the whole growth mechanism for this surface: it grows by
+// addition, and the addition cannot be half-done.
+//
+// OVER `OperatorSettingKey` AND NOT `SettingKey`, AS OF PLAN 06-08. The closed
+// list now holds a second kind of key — internal durable state the backend
+// writes to observe whether its own database survives a restart (O-02, D-19) —
+// and that kind is never rendered, so it never owes copy. The exhaustiveness
+// obligation is unchanged for the kind it was written for.
 //
 // ===========================================================================
 // THE RULE THAT OUTRANKS THE COPY TABLE APPLIES TO EVERY STRING BELOW
@@ -41,6 +47,7 @@
 
 import type {
   BoundRejection,
+  OperatorSettingKey,
   SettingKey,
   SettingScope,
   SettingsGroup,
@@ -110,7 +117,7 @@ export type FieldCopy = {
  * that deletes ninety times too much, on the one mechanism in this plugin that
  * deletes anything. The number the operator sees is the number the sweep obeys.
  */
-export const FIELD_COPY: Record<SettingKey, FieldCopy> = {
+export const FIELD_COPY: Record<OperatorSettingKey, FieldCopy> = {
   [RETENTION_MAX_ROWS_KEY]: {
     label: "Maximum rows per table, per project",
     unit: "rows",

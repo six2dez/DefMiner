@@ -30,13 +30,13 @@ import type {
   ExportRedactionMode,
   INVALIDATION_EVENT,
   InvalidationSummary,
+  OperatorSettingKey,
   PageCursor,
   PageRequest,
   PageResponse,
   ScanLifecycleState,
   ScanState,
   ScanStatusPayload,
-  SettingKey,
   SettingScope,
   SuspendReason,
   VisibleTotal,
@@ -54,6 +54,7 @@ import type { ArtifactPageRow, InventoryTable } from "../store/reads";
 import type {
   BoundedSettingOutcome,
   KnownSettingValue,
+  StorageFootprint,
 } from "../store/settings";
 import type { SlimStatus } from "../telemetry";
 
@@ -129,6 +130,14 @@ import type { SlimStatus } from "../telemetry";
  * wider one; they are two halves of one release. Bumping again here would spend
  * a forced reload on a mismatch that cannot exist, and would make the NEXT bump
  * — the one that does protect somebody — one number harder to reason about.
+ *
+ * NOT BUMPED BY PLAN 06-08 EITHER, AND FOR THE SAME REASON APPLIED AGAIN.
+ * 06-08 adds ONE name (`getStorageFootprint`) and widens no existing union — it
+ * NARROWS `writeSetting`'s `key` from `SettingKey` to `OperatorSettingKey`,
+ * which removes nothing a shipped reader can currently send: the internal keys
+ * that narrowing excludes did not exist before this plan. Adding a name obliges
+ * no bump, and a narrowing that excludes only members introduced in the same
+ * commit is not a shape change any reader can be holding.
  *
  * The rule the next author needs: bump when a SHIPPED reader could hold the old
  * shape. Within one phase's own surface, it cannot.
@@ -349,7 +358,11 @@ type SettingsRequest = {
 type SettingWriteRequest = {
   readonly projectId: string;
   readonly scope: SettingScope;
-  readonly key: SettingKey;
+  /** OPERATOR keys only. The closed vocabulary gained a second kind of key in
+   *  plan 06-08 — internal durable state this plugin writes about its own
+   *  deployment — and narrowing here means the write endpoint structurally
+   *  cannot be pointed at one (T-06-41). */
+  readonly key: OperatorSettingKey;
   readonly value: string | null;
 };
 
@@ -678,6 +691,19 @@ type Spec = DefinePluginPackageSpec<{
     /** The four numbers that tell a blocked backend thread from a slow
      *  renderer (research P-07). Adds no measurement; projects what exists. */
     getHealth: () => HealthOutcome;
+    /** WHERE the data lives and HOW MUCH of each cap it uses (DEPLOY-02, D-19,
+     *  D-25) — three row counts against their retention caps, each with the age
+     *  of its oldest row when that is knowable, plus whether a restart has ever
+     *  been OBSERVED to lose this database.
+     *
+     *  THERE IS NO PATH ON THIS SHAPE AND THERE NEVER WILL BE. D-19 removed the
+     *  Settings surface's path renderer entirely rather than labelling it: the
+     *  operator cannot reach a server path, and `sdk.meta.path()` carries an OS
+     *  username, which is the string `telemetry.spec.ts`'s guard exists to keep
+     *  off this contract. NO BYTES EITHER — D-25 rejected `PRAGMA page_count`
+     *  because it buys a SQL-discipline allowlist argument for a number
+     *  derivable from the counts. */
+    getStorageFootprint: () => Promise<StorageFootprint>;
     /** Begin one retroactive scan of traffic Caido captured before DefMiner was
      *  installed (FIND-03). ONE PER PROJECT: the second start is refused by a
      *  partial unique index inside the insert, not by a check before it, so

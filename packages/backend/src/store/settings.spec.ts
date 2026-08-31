@@ -98,7 +98,9 @@ function rowsForKey(key: string): { project_id: string; value: string }[] {
 
 describe("the known-key list is what this build ACTUALLY has", () => {
   it("names exactly the OPERATOR keys the shared vocabulary declares, in its order", () => {
-    expect(KNOWN_SETTINGS.map((s) => s.key)).toEqual([...OPERATOR_SETTING_KEYS]);
+    expect(KNOWN_SETTINGS.map((s) => s.key)).toEqual([
+      ...OPERATOR_SETTING_KEYS,
+    ]);
   });
 
   // THE ASSERTION T-06-41 RESTS ON, AND IT IS WRITTEN IN BOTH DIRECTIONS.
@@ -613,15 +615,15 @@ describe("the storage footprint reports counts against their caps", () => {
   it("carries the observed-loss flag beside the counts, so the surface reads ONE call", async () => {
     resetBootMarkerForTest();
     await recordBoot(fx.db, "install-a", NOW);
-    expect((await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss).toBe(
-      false,
-    );
+    expect(
+      (await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss,
+    ).toBe(false);
 
     fx.raw.prepare("DELETE FROM settings").run();
     await recordBoot(fx.db, "install-c", NOW + 1000);
-    expect((await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss).toBe(
-      true,
-    );
+    expect(
+      (await readStorageFootprint(fx.db, P1, NOW)).observedRestartLoss,
+    ).toBe(true);
   });
 
   it("returns a row ABSENT rather than zero when its count cannot be read", async () => {

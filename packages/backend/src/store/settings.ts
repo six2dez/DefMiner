@@ -13,24 +13,30 @@
 
 import type {
   BoundRejection,
-  SettingKey,
+  OperatorSettingKey,
   SettingsGroup,
 } from "@defminer/engine/contract";
 import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
   RETENTION_MAX_AGE_MS_KEY,
   RETENTION_MAX_ROWS_KEY,
+  STORAGE_BOOT_COUNT_KEY,
+  STORAGE_INSTALL_ID_KEY,
+  STORAGE_OBSERVED_LOSS_KEY,
 } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 
 import { describeError } from "../telemetry";
 
+import { countAnalyses } from "./analyses";
+import { countArtifacts } from "./artifacts";
+import type { StoreWriteResult } from "./artifacts";
+import { countObservations } from "./observations";
+
 // Caught exceptions render through `describeError`, never a bare stringification.
 // The reasoning — a driver rejection carries the bound parameters, and one of them
 // is the observation URL — is stated once beside the first converted site in
 // `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
-
-import type { StoreWriteResult } from "./artifacts";
 
 /** The reserved `project_id` for a setting that applies to every project. */
 export const GLOBAL_PROJECT_ID = "";
@@ -335,7 +341,17 @@ export async function getRetentionBounds(
  * a reason that is an implementation detail of where it lives.
  */
 export type KnownSetting = {
-  readonly key: SettingKey;
+  /**
+   * OPERATOR keys only, and the TYPE is what enforces it.
+   *
+   * The closed vocabulary holds a second kind of key as of plan 06-08 —
+   * internal durable state this plugin writes to observe whether its own
+   * database survives a restart (O-02, D-19). This list is what the Settings
+   * panel renders, so an internal marker landing here would be a field the
+   * operator can edit and nothing sensibly reads. Narrowing the type makes that
+   * a typecheck failure rather than a rule somebody has to remember (T-06-41).
+   */
+  readonly key: OperatorSettingKey;
   readonly group: SettingsGroup;
   readonly documented: string;
 };
@@ -446,7 +462,7 @@ export type BoundedSettingOutcome =
 export async function putBoundedSetting(
   db: Database,
   projectId: string,
-  key: SettingKey,
+  key: OperatorSettingKey,
   raw: string,
   nowMs: number,
 ): Promise<BoundedSettingOutcome> {
@@ -462,4 +478,305 @@ export async function putBoundedSetting(
     return { ok: false, reason: "write-failed" };
   }
   return { ok: true, stored };
+}
+
+// --- O-02's BOOT MARKER — OBSERVED PERSISTENCE, NEVER PREDICTED -------------
+//
+// THE QUESTION D-19 ASKS AND WHY NOTHING ELSE CAN ANSWER IT. The Settings
+// surface owes the operator a statement about whether this deployment keeps
+// their findings across a restart. Research O-02 read the complete backend SDK
+// member list this session and found a version string and two server path
+// strings and no durability signal of any kind; `os` has no `hostname()`;
+// `process` does not load; and `/.dockerenv` is unreachable under D-18 by
+// construction and would only distinguish container-from-not, never
+// volume-from-no-volume. A persistence CLAIM would therefore be a prediction,
+// and it would be false on exactly the deployment shape the DEPLOY-01 matrix
+// tests: Docker without a volume.
+//
+// SO NOTHING PREDICTS. This marker OBSERVES.
+
+/**
+ * The install id this PROCESS has already seen in the database it is talking to.
+ *
+ * PROCESS-SCOPED MEMORY, AND IT IS THE WHOLE EVIDENCE MECHANISM. The marker is
+ * what disappears when the database is thrown away, so the database cannot
+ * remember that it forgot — the memory of having written one has to live
+ * somewhere the wipe does not reach. That is here.
+ *
+ * A test seam resets it, named like the other four in this package
+ * (`resetLifecycleForTest`, `resetConsumerForTest`, `resetPassiveForTest`,
+ * `resetDbHandleForTest`): module state is process-global, and a case that could
+ * not clear it would be a case that passes or fails on what ran before it.
+ */
+let seenInstallId: string | null = null;
+
+/** Forget that this process ever saw a marker. TESTS ONLY — a production reset
+ *  would be a production way to erase the evidence. */
+export function resetBootMarkerForTest(): void {
+  seenInstallId = null;
+}
+
+/** What one boot found, and what it left behind.
+ *
+ *  NOT EXPORTED. {@link recordBoot} is the only producer and `index.ts` reads
+ *  the result inline, so an export would have no cross-module consumer — and
+ *  knip runs with `ignoreExportsUsedInFile: false`, where an export nothing
+ *  imports is a build failure rather than dead code. */
+type BootMarker = {
+  /** The id identifying this install of the database. */
+  readonly installId: string;
+  /** How many boots this install has seen, this one included. */
+  readonly bootCount: number;
+  /** Has a boot ever found this process's own marker gone? */
+  readonly observedLoss: boolean;
+};
+
+/**
+ * Record this boot, and report whether a restart has EVER been observed to lose
+ * this database.
+ *
+ * THE RULE, STATED ONCE AND EXACTLY:
+ *
+ *   An observed loss is a boot that finds NO install id in a database THIS
+ *   PROCESS has already written or read one from.
+ *
+ * WHY IT CANNOT FIRE ON A GENUINE FIRST INSTALL. {@link seenInstallId} is `null`
+ * until this process has read or written a marker. A first install reaches the
+ * absent-marker branch with `seenInstallId === null`, which is the no-evidence
+ * arm: a fresh marker is written and no loss is recorded. The loss arm is
+ * reachable ONLY after this same process has already held a marker in its hand,
+ * which a first install by definition has not. That is the one false positive
+ * that would make the sentence untrustworthy, and it is unreachable rather than
+ * merely unlikely.
+ *
+ * WHY A BOOT COUNT GOING BACKWARDS IS NOT THE CONDITION. It cannot be: the count
+ * lives in the same row set that disappears, so a wiped database reports no
+ * count at all rather than a lower one. Absence is the only signal a wipe leaves.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT CLAIM. A restart that this process did not
+ * live through — the ordinary case, since a Caido restart is a new process —
+ * leaves no evidence, and none is invented. The honest reading of a clear flag
+ * is "nothing has been observed", never "your data is safe", and the copy this
+ * feeds says nothing in the clear case at all.
+ *
+ * `mintedId` IS THE CALLER'S TO MINT, for the reason `audit.ts` states about its
+ * own event id: this module must not import `crypto`, whose specifier set the
+ * bundle gate polices. It is IGNORED when a marker already exists.
+ *
+ * THREE SINGLE-STATEMENT WRITES, NOT A TRANSACTION. This driver has no
+ * transaction primitive, so no invariant here may require two statements to hold
+ * — and none does: a boot interrupted between the id write and the count write
+ * leaves an id with a stale count, which the next boot corrects by incrementing
+ * whatever it finds.
+ */
+export async function recordBoot(
+  db: Database,
+  mintedId: string,
+  nowMs: number,
+): Promise<BootMarker> {
+  const storedId = await getSetting(
+    db,
+    GLOBAL_PROJECT_ID,
+    STORAGE_INSTALL_ID_KEY,
+  );
+  const storedLoss =
+    (await getSetting(db, GLOBAL_PROJECT_ID, STORAGE_OBSERVED_LOSS_KEY)) ===
+    "1";
+
+  if (storedId !== null) {
+    // A CONTINUING DATABASE. Increment whatever count is there — a missing or
+    // unparseable count is treated as zero rather than as a reason to fail,
+    // because the count is a diagnostic and the id is the identity.
+    const rawCount = await getSetting(
+      db,
+      GLOBAL_PROJECT_ID,
+      STORAGE_BOOT_COUNT_KEY,
+    );
+    const prior = Number(rawCount);
+    const bootCount =
+      Number.isFinite(prior) && prior > 0 ? Math.floor(prior) + 1 : 1;
+    await putSetting(
+      db,
+      GLOBAL_PROJECT_ID,
+      STORAGE_BOOT_COUNT_KEY,
+      String(bootCount),
+      nowMs,
+    );
+    seenInstallId = storedId;
+    return { installId: storedId, bootCount, observedLoss: storedLoss };
+  }
+
+  // NO MARKER. Either a first install, or a database that lost one.
+  const observedLoss = seenInstallId !== null;
+
+  await putSetting(
+    db,
+    GLOBAL_PROJECT_ID,
+    STORAGE_INSTALL_ID_KEY,
+    mintedId,
+    nowMs,
+  );
+  await putSetting(db, GLOBAL_PROJECT_ID, STORAGE_BOOT_COUNT_KEY, "1", nowMs);
+  if (observedLoss) {
+    // WRITTEN, SO THE OBSERVATION OUTLIVES THE PROCESS THAT MADE IT — for
+    // exactly as long as the database does, which is the honest horizon. On a
+    // deployment that keeps nothing, this row goes with the next wipe and the
+    // surface falls silent again rather than repeating a claim it can no longer
+    // support.
+    await putSetting(
+      db,
+      GLOBAL_PROJECT_ID,
+      STORAGE_OBSERVED_LOSS_KEY,
+      "1",
+      nowMs,
+    );
+  }
+  seenInstallId = mintedId;
+  return { installId: mintedId, bootCount: 1, observedLoss };
+}
+
+// --- D-25's FOOTPRINT — ROW COUNTS AGAINST THEIR CAPS -----------------------
+//
+// NO PRAGMA AND NO BYTES. D-25 rejected a byte figure via `PRAGMA page_count`
+// because it buys a SQL-discipline allowlist argument for a number derivable
+// from the counts, and the counts are what the retention bounds are actually
+// expressed in — so a count against its cap is the number that explains a scan
+// suspended by the cap (D-08), which a megabyte figure never could.
+
+/** ONE table's footprint: how many rows, against the cap in force, and how old
+ *  the oldest row is when that is knowable. */
+export type FootprintRow = {
+  /** Rows this project holds in this table. A MEASURED zero is a zero. */
+  readonly count: number;
+  /** The row cap in force for this project. */
+  readonly cap: number;
+  /**
+   * Age of the oldest row in whole days, or `null`.
+   *
+   * `null` IS ABSENT AND IS NEVER RENDERED AS ZERO. "oldest 0 days" is a
+   * fabricated number, and an empty table genuinely has no oldest row.
+   */
+  readonly oldestDays: number | null;
+};
+
+/**
+ * What the Settings storage surface reads. ONE CALL, not two.
+ *
+ * A `null` ROW IS AN UNREAD COUNT, NOT AN EMPTY TABLE. The two must be
+ * distinguishable on the surface: a zero claims a measured empty project, and a
+ * read that failed claims nothing. One unreadable table does not take the other
+ * two with it.
+ */
+export type StorageFootprint = {
+  readonly artifacts: FootprintRow | null;
+  readonly observations: FootprintRow | null;
+  readonly analyses: FootprintRow | null;
+  /** Has a restart ever been OBSERVED to lose this database? See
+   *  {@link recordBoot} for why this is never a prediction. */
+  readonly observedRestartLoss: boolean;
+};
+
+// THREE COMPLETE LITERAL STATEMENTS, ONE PER TABLE, IN `retention.ts`'s STYLE:
+// bounded, single-row, `project_id` bound FIRST and alone in the WHERE. This is
+// the one read D-25 does not already ship — U6-3's `oldest {n} days` clause —
+// and D-25 permits it ("no new SQL DISCIPLINE EXCEPTION" bars an exemption, not
+// a statement that passes the gate on its own terms). `MIN` over an empty set is
+// SQL NULL, which is exactly the absent case: no row, no age, no fabrication.
+const OLDEST_ARTIFACT_SQL = `SELECT MIN(first_seen_at) AS t FROM artifacts WHERE project_id = ?`;
+const OLDEST_OBSERVATION_SQL = `SELECT MIN(observed_at) AS t FROM observations WHERE project_id = ?`;
+const OLDEST_ANALYSIS_SQL = `SELECT MIN(started_at) AS t FROM analyses WHERE project_id = ?`;
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Whole days between the oldest row and now, or `null` when there is no oldest
+ *  row — or when the read failed, which is the same absence to the surface and a
+ *  different one from a zero. */
+async function oldestDays(
+  db: Database,
+  sql: string,
+  projectId: string,
+  nowMs: number,
+): Promise<number | null> {
+  try {
+    const stmt = await db.prepare(sql);
+    const row = await stmt.get<{ t: number | null }>(projectId);
+    const oldest = row?.t;
+    if (oldest === null || oldest === undefined) return null;
+    const age = Number(oldest);
+    if (!Number.isFinite(age)) return null;
+    // FLOORED, so a row six hours old reads as "oldest 0 days" — which is why
+    // the caller renders the clause only when this is non-null AND the copy
+    // reads as a duration rather than as a count of rows. Never negative: a
+    // clock that moved backwards must not produce a negative age.
+    return Math.max(0, Math.floor((nowMs - age) / MS_PER_DAY));
+  } catch {
+    return null;
+  }
+}
+
+/** One table's row, or `null` when its count could not be read. */
+async function footprintRow(
+  count: () => Promise<number>,
+  cap: number,
+  age: () => Promise<number | null>,
+): Promise<FootprintRow | null> {
+  try {
+    const n = await count();
+    return { count: n, cap, oldestDays: await age() };
+  } catch {
+    // ABSENT, NOT ZERO. A zero is what a genuinely empty project reports, and
+    // the surface has to be able to say "DefMiner could not read this" without
+    // saying "there is nothing here".
+    return null;
+  }
+}
+
+/**
+ * Has a restart ever been OBSERVED to lose this database?
+ *
+ * SEPARATE FROM {@link readStorageFootprint} because it is knowable when the
+ * counts are not: it is a fact about the DATABASE, stored at the reserved global
+ * scope, so it answers with no project resolved — which is exactly the moment
+ * the operator most needs it and the counts have nothing honest to say.
+ */
+export async function readObservedRestartLoss(db: Database): Promise<boolean> {
+  return (
+    (await getSetting(db, GLOBAL_PROJECT_ID, STORAGE_OBSERVED_LOSS_KEY)) === "1"
+  );
+}
+
+/**
+ * The three counts, their caps, their ages, and the observed-loss flag.
+ *
+ * COMPOSED FROM THE ALREADY-SHIPPED READS — `countArtifacts`,
+ * `countObservations`, `countAnalyses` and {@link getRetentionBounds} — so D-25's
+ * "no new SQL" holds for every number except the three ages, which are the one
+ * addition U6-3 asks for and which pass the discipline gate on their own terms.
+ */
+export async function readStorageFootprint(
+  db: Database,
+  projectId: string,
+  nowMs: number,
+): Promise<StorageFootprint> {
+  const bounds = await getRetentionBounds(db, projectId);
+  const cap = bounds.maxRows;
+
+  return {
+    artifacts: await footprintRow(
+      () => countArtifacts(db, projectId),
+      cap,
+      () => oldestDays(db, OLDEST_ARTIFACT_SQL, projectId, nowMs),
+    ),
+    observations: await footprintRow(
+      () => countObservations(db, projectId),
+      cap,
+      () => oldestDays(db, OLDEST_OBSERVATION_SQL, projectId, nowMs),
+    ),
+    analyses: await footprintRow(
+      () => countAnalyses(db, projectId),
+      cap,
+      () => oldestDays(db, OLDEST_ANALYSIS_SQL, projectId, nowMs),
+    ),
+    observedRestartLoss: await readObservedRestartLoss(db),
+  };
 }

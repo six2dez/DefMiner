@@ -1001,10 +1001,17 @@ export type ExportRedactionMode = (typeof EXPORT_REDACTION_MODES)[number];
 // each other.
 //
 // AND THE EXHAUSTIVENESS IS THE POINT, NOT THE SHARING. The frontend's copy map
-// is `Record<SettingKey, ...>`. A key added below without copy is a TYPECHECK
-// FAILURE in the frontend rather than a field that renders with a blank label,
-// which is what makes this surface grow by ADDITION when a later phase ships a
-// toggle instead of by somebody remembering to edit two files.
+// is `Record<OperatorSettingKey, ...>`. A key added below without copy is a
+// TYPECHECK FAILURE in the frontend rather than a field that renders with a
+// blank label, which is what makes this surface grow by ADDITION when a later
+// phase ships a toggle instead of by somebody remembering to edit two files.
+//
+// THE MAP IS OVER `OperatorSettingKey` AND NOT `SettingKey`, AS OF PLAN 06-08.
+// The closed list now holds two KINDS of key — ones the operator sets, and
+// internal durable state this plugin writes to observe whether its own database
+// survives a restart (O-02, D-19). Only the first kind is rendered, so only the
+// first kind owes copy. The growth mechanism is unchanged for the kind it was
+// written for.
 
 /**
  * The settings groups this build has.
@@ -1055,18 +1062,110 @@ export const RETENTION_MAX_AGE_MS_KEY = "retention.max_age_ms";
 export const AUDIT_RETENTION_MAX_ROWS_KEY = "retention.audit_max_rows";
 
 /**
- * Every settings key this build ACTUALLY HAS.
+ * Every settings key the OPERATOR sets.
  *
  * THREE KEYS, AND NOT ONE INVENTED ONE. Each has a shipped consumer —
  * `getRetentionBounds` resolves all three — and `settings.spec.ts` asserts that
  * by running every listed key through the shipped resolution function. A key for
  * a phase that has not shipped its control would be a field the operator can set
  * and nothing reads, which is worse than an absent field: it looks like it works.
+ *
+ * THIS ARRAY IS THE ONE THE SETTINGS SURFACE RENDERS FROM, and that is now a
+ * load-bearing statement rather than a description — see
+ * {@link INTERNAL_SETTING_KEYS} below.
  */
-export const SETTING_KEYS = [
+export const OPERATOR_SETTING_KEYS = [
   RETENTION_MAX_ROWS_KEY,
   RETENTION_MAX_AGE_MS_KEY,
   AUDIT_RETENTION_MAX_ROWS_KEY,
+] as const;
+
+/** One member of {@link OPERATOR_SETTING_KEYS} — a key the operator SETS. */
+export type OperatorSettingKey = (typeof OPERATOR_SETTING_KEYS)[number];
+
+// ---------------------------------------------------------------------------
+// O-02's DURABLE MARKER — INTERNAL STATE, ON THE SAME TABLE, IN A SEPARATE LIST
+// ---------------------------------------------------------------------------
+//
+// WHY THESE KEYS EXIST AT ALL. Phase 6's D-19 owes the operator a sentence about
+// whether this deployment keeps their findings across a restart. The backend
+// cannot ANSWER that by introspection: research O-02 read the complete SDK
+// member list and found a version string and two server path strings and no
+// durability signal of any kind, `os` has no `hostname()`, `process` does not
+// load, and `/.dockerenv` is unreachable under D-18 by construction — and would
+// only distinguish container-from-not, never volume-from-no-volume.
+//
+// But persistence is not an introspectable property. It is an OBSERVED one. A
+// marker written at first boot and read back on every later boot turns "does
+// this deployment keep data" into a fact about the PAST, which is strictly
+// stronger than a guess and strictly weaker than a prediction.
+//
+// WHY THEY ARE IN THEIR OWN ARRAY AND NOT IN {@link OPERATOR_SETTING_KEYS}.
+// `store/settings.ts`'s `KNOWN_SETTINGS` is what the Settings panel renders, and
+// its `key` field is typed {@link OperatorSettingKey} — so an internal marker
+// cannot reach the rendered list without a typecheck failure rather than without
+// somebody remembering. An internal value on an operator-editable surface would
+// be a field they can change and nothing sensibly reads, which is the exact
+// failure the operator-key list's own doc comment above refuses.
+//
+// THEY ARE STILL IN THE CLOSED VOCABULARY. {@link SETTING_KEYS} is the union, so
+// the store's resolution sweep still covers them: a marker key nothing could
+// resolve would be a row nothing can find.
+
+/**
+ * Identifies ONE install of DefMiner's database. Minted once, then never
+ * rewritten while the row survives.
+ *
+ * Written at the RESERVED GLOBAL SCOPE (`project_id = ''`), which `settings` and
+ * only `settings` permits, because the question it answers is about the DATABASE
+ * and not about any project inside it.
+ */
+export const STORAGE_INSTALL_ID_KEY = "storage.install_id";
+
+/** How many boots this install has seen. Monotonic while the row survives. */
+export const STORAGE_BOOT_COUNT_KEY = "storage.boot_count";
+
+/**
+ * Set once a boot has found this process's OWN marker missing.
+ *
+ * THE RECORDED OBSERVATION, NOT THE INFERENCE. It is written only by a boot that
+ * had already read or written a marker in this process's lifetime and then found
+ * it gone, so it cannot fire on a genuine first install — the one false positive
+ * that would make the sentence it feeds untrustworthy.
+ */
+export const STORAGE_OBSERVED_LOSS_KEY = "storage.observed_restart_loss";
+
+/**
+ * The internal durable state this plugin writes about its own deployment.
+ *
+ * NEVER RENDERED AS AN OPERATOR-EDITABLE SETTING. `settings.spec.ts` asserts
+ * that in both directions, and `KnownSetting.key`'s type makes it structural.
+ */
+export const INTERNAL_SETTING_KEYS = [
+  STORAGE_INSTALL_ID_KEY,
+  STORAGE_BOOT_COUNT_KEY,
+  STORAGE_OBSERVED_LOSS_KEY,
+] as const;
+
+/** One member of {@link INTERNAL_SETTING_KEYS} — state this plugin WRITES. */
+export type InternalSettingKey = (typeof INTERNAL_SETTING_KEYS)[number];
+
+/**
+ * Every settings key this build ACTUALLY HAS, of either kind.
+ *
+ * ONE CLOSED LIST, TWO ARRAYS, AND THE DIFFERENCE IS WHICH ARRAY A KEY IS IN.
+ * Everything the store reads or writes on the `settings` table is here, so the
+ * resolution sweep in `settings.spec.ts` still covers the whole vocabulary. What
+ * the SURFACE renders is {@link OPERATOR_SETTING_KEYS} alone.
+ *
+ * A PHASE THAT ADDS A TOGGLE adds its key to {@link OPERATOR_SETTING_KEYS}, and
+ * the frontend's `Record<OperatorSettingKey, …>` copy map is then a TYPECHECK
+ * FAILURE until the new field has a label. A phase that adds internal durable
+ * state adds it to {@link INTERNAL_SETTING_KEYS} and renders nothing.
+ */
+export const SETTING_KEYS = [
+  ...OPERATOR_SETTING_KEYS,
+  ...INTERNAL_SETTING_KEYS,
 ] as const;
 
 /** One member of {@link SETTING_KEYS}. */
