@@ -39,7 +39,21 @@ import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
+import {
+  DETECTED_CAIDO_LABEL,
+  MIN_CAIDO_LABEL,
+  MIN_SQLITE_LABEL,
+  REFUSAL_HEADING,
+  SURFACE_MISSING,
+  SURFACE_PRESENT,
+  UNKNOWN_VERSION,
+} from "./components/compat-contract";
 import { EXPORT_CTA } from "./components/export-contract";
+import {
+  counterId,
+  HEALTH_HEADING,
+  HEALTH_UNAVAILABLE_BODY,
+} from "./components/health-contract";
 import { EVIDENCE_PANEL_HEIGHT_CLASS } from "./components/panel-contract";
 
 /**
@@ -151,8 +165,23 @@ type StubOptions = {
  */
 function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
   const rows = options.artifacts ?? [];
+  /**
+   * A refusing build's answer to every name it never registered.
+   *
+   * ON `getContractVersion` TOO, AND THAT IS THE POINT RATHER THAN THOROUGHNESS.
+   * `init()` returns from a refusal path having registered `getStatus` and
+   * `getCompat` and nothing else, so a bundle that could still read a contract
+   * version off a refusing build would be a stub describing a runtime that does
+   * not exist — and the refusal surface would be under-tested in exactly the
+   * direction that matters, since `getCompat` is deliberately the one read NOT
+   * gated by that version check.
+   */
+  const refused = <TValue>(): Promise<TValue> =>
+    Promise.reject(new Error("backend refused to run"));
+  const refusing = options.onlyCompatAnswers === true;
+
   const page = <TRow>(items: readonly TRow[]): Promise<PageResponse<TRow>> =>
-    options.reject === true
+    options.reject === true || refusing
       ? Promise.reject(new Error("backend exploded"))
       : Promise.resolve({
           rows: items,
@@ -163,7 +192,8 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
 
   return {
     backend: {
-      getContractVersion: () => Promise.resolve(FRONTEND_CONTRACT_VERSION),
+      getContractVersion: () =>
+        refusing ? refused<number>() : Promise.resolve(FRONTEND_CONTRACT_VERSION),
       listArtifactsPage: (_request: PageRequest) => page(rows),
       listObservationsPage: (_request: PageRequest) => page<ObservationRow>([]),
       getArtifactAnalysis: (request: { readonly sha256: string }) =>
@@ -179,7 +209,7 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         );
       },
       countInventory: () =>
-        options.reject === true
+        options.reject === true || refusing
           ? Promise.reject(new Error("backend exploded"))
           : Promise.resolve(TOTAL),
       exportInventory: (request: ExportChunkRequest) => {
@@ -193,16 +223,16 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         );
       },
       listSettings: () =>
-        options.onlyCompatAnswers === true
-          ? Promise.reject(new Error("backend refused to run"))
+        refusing
+          ? refused<readonly SettingRow[]>()
           : Promise.resolve(options.settings ?? []),
       writeSetting: () =>
-        options.onlyCompatAnswers === true
-          ? Promise.reject(new Error("backend refused to run"))
+        refusing
+          ? refused<{ ok: true; stored: string }>()
           : Promise.resolve({ ok: true as const, stored: "1" }),
       getHealth: () =>
-        options.onlyCompatAnswers === true
-          ? Promise.reject(new Error("backend refused to run"))
+        refusing
+          ? refused<HealthOutcome>()
           : Promise.resolve(
               options.health ?? {
                 outcome: "health" as const,
@@ -327,7 +357,12 @@ describe("App", () => {
     await health!.trigger("click");
 
     expect(health!.attributes("aria-selected")).toBe("true");
-    expect(wrapper.text()).toContain("Nothing analysed on this target yet");
+    // AND THE HEALTH BODY IS THE REAL ONE. Until plan 05-12 this asserted the
+    // tracer's empty-state placeholder, which was the honest assertion while
+    // the tab routed to nothing; asserting it now would assert that the tab
+    // still routes to nothing.
+    await settle(wrapper);
+    expect(wrapper.text()).toContain(HEALTH_HEADING);
   });
 
   it("routes to Health when the table's Open Health action is used", async () => {
@@ -741,5 +776,218 @@ describe("the export action opens the dialog and never exports (UI-06)", () => {
     expect(exports[0]?.table).toBe("artifacts");
     expect(exports[0]?.mode, "the default is not redacted").toBe("redacted");
     expect(exports[0]?.sortKey).toBe("last_seen");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OBS-01 — THE HEALTH TAB'S REAL BODY
+// ---------------------------------------------------------------------------
+
+describe("the health tab mounts the real strip (OBS-01, research P-07)", () => {
+  it("renders the four counters once the tab is opened", async () => {
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        health: {
+          outcome: "health",
+          health: {
+            queueDepth: 4_096,
+            droppedCount: 12,
+            jobsInFlight: 1,
+            maxSliceMs: 987,
+          },
+        },
+      }),
+    );
+    await settle(wrapper);
+
+    const health = wrapper
+      .findAll('[role="tab"]')
+      .find((t) => t.text() === "Health");
+    await health!.trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.get(`#${counterId("queueDepth")}`).text()).toContain(
+      "4,096",
+    );
+    expect(wrapper.get(`#${counterId("droppedCount")}`).text()).toContain("12");
+    expect(wrapper.get(`#${counterId("jobsInFlight")}`).text()).toContain("1");
+    expect(wrapper.get(`#${counterId("maxSliceMs")}`).text()).toContain(
+      "987 ms",
+    );
+  });
+
+  it("carries the endpoint's `unavailable` outcome through to the page", async () => {
+    // The page must not flatten the two outcomes into counters. Four zeroes for
+    // a plugin with no project resolved would be the opposite of the truth.
+    const wrapper = mountWith(
+      stubSdk({
+        health: { outcome: "unavailable", reason: "no-project" },
+      }),
+    );
+    await settle(wrapper);
+
+    const health = wrapper
+      .findAll('[role="tab"]')
+      .find((t) => t.text() === "Health");
+    await health!.trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.text()).toContain(HEALTH_UNAVAILABLE_BODY);
+  });
+
+  it("leaves the two entity tabs mounting their own bodies", async () => {
+    // The health body replaced a placeholder shared by two tabs. This is the
+    // assertion that the replacement did not take the wrong branch with it.
+    const wrapper = mountWith(stubSdk({ artifacts: ROWS }));
+    await settle(wrapper);
+
+    expect(wrapper.text(), "the artifacts table stopped rendering").toContain(
+      ROWS[0]!.sha256,
+    );
+    expect(wrapper.text()).not.toContain(HEALTH_HEADING);
+  });
+
+  it("routes from the table's error action STRAIGHT to a rendered strip", async () => {
+    // The copy row promises "open Settings → Health to see queue depth and
+    // dropped count". One action, and the numbers are on screen — the whole
+    // point of routing the error state here rather than to a paragraph.
+    const wrapper = mountWith(stubSdk({ reject: true }));
+    await settle(wrapper);
+
+    const action = wrapper
+      .findAll("button")
+      .find((b) => b.text() === "Open Health");
+    await action!.trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-health-strip]").exists()).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// COMPAT-01 — THE VISIBLE REFUSAL SURFACE
+// ---------------------------------------------------------------------------
+//
+// The debt `packages/backend/src/index.ts` recorded as owed to this phase:
+// "COMPAT-01's 'clear message' is this log line plus this RPC; the visible
+// surface is owed to Phase 5 (decision P1-D5)."
+
+/** A build that refused, with the reason `checkCompat` actually produces and a
+ *  probe matrix that has both a present and a missing surface in it. */
+const REFUSING_REPORT: CompatReport = {
+  compatible: false,
+  reason:
+    "DefMiner requires Caido 0.57.1 or newer; this instance reports 0.55.3. " +
+    "Passive analysis is disabled.",
+  minCaido: "0.57.1",
+  minSqlite: "3.24.0",
+  caidoVersion: "0.55.3",
+  sqliteVersion: null,
+  surfaces: [
+    {
+      name: "sdk.events.onInterceptResponse",
+      scope: "sdk",
+      ok: true,
+      error: null,
+    },
+    {
+      name: "sdk.events.onProjectChange",
+      scope: "sdk",
+      ok: false,
+      error: null,
+    },
+  ],
+};
+
+describe("the compatibility refusal surface (COMPAT-01, debt P1-D5)", () => {
+  it("renders when ONLY the compatibility endpoint answers", async () => {
+    // The shape of a refusing build: `init()` returned having registered
+    // `getStatus` and `getCompat` and nothing else, so the surface may depend
+    // on `getCompat` and on nothing the refusal path does not register.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-compat-refusal]").exists()).toBe(true);
+    expect(wrapper.text()).toContain(REFUSAL_HEADING);
+  });
+
+  it("names both minimum versions and the reason the backend gave", async () => {
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    const text = wrapper.text();
+    expect(text).toContain(MIN_CAIDO_LABEL);
+    expect(text).toContain("0.57.1");
+    expect(text).toContain(MIN_SQLITE_LABEL);
+    expect(text).toContain("3.24.0");
+    expect(text, "the reason is not on the surface").toContain(
+      REFUSING_REPORT.reason,
+    );
+  });
+
+  it("says a version was not reported rather than leaving the cell blank", async () => {
+    // "No version reported" is itself one of the refusal reasons, so a blank
+    // would hide the fact that caused the refusal being explained above it.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.text()).toContain(UNKNOWN_VERSION);
+    expect(wrapper.text()).toContain(DETECTED_CAIDO_LABEL);
+  });
+
+  it("renders the probe matrix, marking each surface in WORDS", async () => {
+    // Colour is never the sole carrier of meaning. The tint is the redundant
+    // half; the word is the carrier.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    const matrix = wrapper.get("[data-defminer-compat-surfaces]").text();
+    expect(matrix).toContain("sdk.events.onInterceptResponse");
+    expect(matrix).toContain(SURFACE_PRESENT);
+    expect(matrix).toContain("sdk.events.onProjectChange");
+    expect(matrix).toContain(SURFACE_MISSING);
+  });
+
+  it("is ABSENT when the build is compatible", async () => {
+    const wrapper = mountWith(stubSdk({ artifacts: ROWS }));
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-compat-refusal]").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain(REFUSAL_HEADING);
+  });
+
+  it("keeps the tab strip rendered and routable on a refusing build", async () => {
+    // A tab is never removed, and least of all here: the operator's next
+    // question after "why is nothing happening" is often "what did it record
+    // before it stopped".
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(
+      TAB_LABELS,
+    );
+  });
+
+  it("renders no rejection text from the endpoints that refused", async () => {
+    // Every other call rejected. None of their messages reaches the page —
+    // an error crossing the RPC boundary can quote target-controlled bytes.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.text()).not.toContain("backend refused to run");
+    expect(wrapper.text()).not.toContain("backend exploded");
   });
 });

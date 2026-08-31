@@ -174,19 +174,33 @@ export function assertColumnContract<TRow>(
 }
 
 /**
+ * Thousands separators, applied by hand.
+ *
+ * NOT `toLocaleString`, for the reason `safety/display.ts`'s private `grouped`
+ * gives beside its own copy: it reads differently under a different locale and
+ * these strings are compared literally by specs. It is also the kind of
+ * dependency that is present in the renderer and absent in QuickJS.
+ *
+ * EXPORTED BY PLAN 05-12 rather than copied a third time. It was inlined in
+ * {@link counted} until the health strip needed the same grouping without a
+ * noun; `display.ts` keeps its own copy because that module is the safety layer
+ * and importing a components-level contract into it would invert the layering
+ * for five characters of regex.
+ */
+export function groupThousands(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/**
  * A count with its noun in agreement — "1 secret", "3,412 secrets".
  *
  * 05-UI-SPEC.md § "UI Considerations" (zero-one-many / findings-table) forbids
  * the parenthesised suffix outright: counts are never rendered as "1 secret(s)".
- * The separator is applied by hand for the reason `safety/display.ts`'s
- * `grouped` gives — `toLocaleString` reads differently under a different locale
- * and this string is compared literally by a spec.
  */
 export function counted(
   count: number,
   singular: string,
   plural: string,
 ): string {
-  const grouped = String(count).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${grouped} ${count === 1 ? singular : plural}`;
+  return `${groupThousands(count)} ${count === 1 ? singular : plural}`;
 }
