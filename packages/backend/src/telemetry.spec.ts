@@ -391,9 +391,16 @@ describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
   it("carries only numbers besides the one error string", () => {
     recordSlice(9);
     recordError(new TypeError("boom"));
-    const bad = walkValues(slimStatus())
-      .filter((e) => e.path !== "$" && e.path !== "$.counters")
-      .filter((e) => e.path !== "$.counters.rejected")
+    // CONTAINERS ARE FILTERED BY SHAPE, not by a hand-listed set of paths.
+    // This used to name `$`, `$.counters` and `$.counters.rejected` one at a
+    // time, so the first nested sub-map anyone added — `counters.retro`, which
+    // D-02 requires — failed a gate about PAYLOADS for the crime of being an
+    // object. The rule was always about the LEAVES: every leaf is a count,
+    // except the one truncated error string.
+    const leaves = walkValues(slimStatus()).filter(
+      (e) => !(e.value !== null && typeof e.value === "object"),
+    );
+    const bad = leaves
       .filter((e) => typeof e.value !== "number")
       .filter((e) => e.path !== "$.lastError");
     expect(
@@ -401,6 +408,12 @@ describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
       "the projection carries a value that is neither a count nor the error " +
         "string. Anything else is a payload.",
     ).toEqual([]);
+    // Non-vacuity: filtering by shape must not have filtered the subject away.
+    expect(
+      leaves.length,
+      "the leaf walk found almost nothing — the shape filter above is eating " +
+        "the values it is supposed to judge.",
+    ).toBeGreaterThan(20);
   });
 
   it("is a COPY — mutating what getStatus returned cannot reach the counters", () => {
@@ -927,10 +940,25 @@ const COUNTER_KEYS = new Set(Object.keys(counters));
  *  Three, not one: `{ processed: 0 }` alone is an ordinary object. */
 const COUNTER_LITERAL_THRESHOLD = 3;
 
-type Finding = { file: string; line: number; what: string };
+type Finding = {
+  file: string;
+  line: number;
+  what: string;
+  /** For a counter-shaped literal: is it lexically inside `createCounters()`?
+   *  The whole point of the rule, once nested sub-maps exist — see the
+   *  `inside createCounters` case below. */
+  inFactory: boolean;
+};
 
 function scanFile(file: string): Finding[] {
-  const src = readFileSync(file, "utf8");
+  return scanSource(file, readFileSync(file, "utf8"));
+}
+
+/** The gate's core, as a PURE function over (filename, source) — the shape
+ *  `sql-discipline.spec.ts` established, and for its stated reason: a gate whose
+ *  failing path has never run is a gate nobody has tested. Every rule below has
+ *  a synthetic fixture at the bottom of this section. */
+function scanSource(file: string, src: string): Finding[] {
   const sf = ts.createSourceFile(
     file,
     src,
@@ -942,7 +970,18 @@ function scanFile(file: string): Finding[] {
   const at = (node: ts.Node): number =>
     sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
 
+  /** The ONE factory that is allowed to build a counter-shaped literal. Named
+   *  rather than matched loosely: the rule below is "inside this function", and
+   *  a function is the smallest scope that statement can be true of. */
+  const FACTORY = "createCounters";
+  let factoryDepth = 0;
+
   const visit = (node: ts.Node): void => {
+    const entersFactory =
+      ts.isFunctionDeclaration(node) &&
+      node.name !== undefined &&
+      node.name.text === FACTORY;
+    if (entersFactory) factoryDepth += 1;
     // RULE A — a binding literally called `counters`. After the rewire the only
     // one is telemetry.ts's export; `import { counters }` is an ImportSpecifier,
     // not a VariableDeclaration, so re-using the name by importing it is fine.
@@ -955,6 +994,7 @@ function scanFile(file: string): Finding[] {
         file,
         line: at(node),
         what: "declares a `counters` binding",
+        inFactory: factoryDepth > 0,
       });
     }
 
@@ -981,11 +1021,13 @@ function scanFile(file: string): Finding[] {
             "an object literal with " +
             String(hits) +
             " canonical counter keys",
+          inFactory: factoryDepth > 0,
         });
       }
     }
 
     ts.forEachChild(node, visit);
+    if (entersFactory) factoryDepth -= 1;
   };
   visit(sf);
   return found;
@@ -1012,52 +1054,94 @@ describe("there is exactly ONE counters object in packages/backend", () => {
     expect(bindings.length).toBe(1);
   });
 
-  it("finds a counter-shaped object literal only in telemetry.ts", () => {
+  it("finds a counter-shaped object literal only in telemetry.ts, and only inside createCounters()", () => {
+    // WHY THIS IS NOT `literals.length === 1` ANY MORE. It was, and the count
+    // was the whole rule — which made the gate narrower than the invariant it
+    // enforces. D-02 requires a SECOND, NESTED sub-map (`counters.retro`), and
+    // that literal carries three canonical keys of its own (`admitted`,
+    // `reloadNoResponse`, `rejected`), so a count of one refused the shape the
+    // decision mandates while still permitting a genuine second object built
+    // anywhere else in this file.
+    //
+    // The rule the count was standing in for is stated directly instead, and it
+    // is STRICTLY STRONGER: every counter-shaped literal in this package lives
+    // in telemetry.ts AND lives inside `createCounters()`. That is what makes
+    // `resetTelemetryForTest()` — `Object.assign(counters, createCounters())` —
+    // total over every counter that exists, which is the property the original
+    // count was protecting by proxy.
     const literals = findings.filter((f) => f.what.includes("literal"));
-    expect(literals.length).toBe(1);
-    expect(literals[0].file).toBe(TELEMETRY_FILE);
+    expect(
+      literals.filter((f) => f.file !== TELEMETRY_FILE).map((f) => f.file),
+      "a counter-shaped object literal exists outside telemetry.ts. Two objects " +
+        "means one is written and never read while the other is read and never " +
+        "written, and slimStatus() projects the empty one.",
+    ).toEqual([]);
+    expect(
+      literals
+        .filter((f) => !f.inFactory)
+        .map((f) => f.file + ":" + String(f.line)),
+      "a counter-shaped object literal in telemetry.ts sits OUTSIDE " +
+        "createCounters(). Anything built outside the factory survives " +
+        "resetTelemetryForTest(), which mutates the one object in place — so it " +
+        "would carry one spec's counts into the next and would never be zeroed " +
+        "in production either.",
+    ).toEqual([]);
+    // Non-vacuity: the filters above are satisfied by an empty finding set.
+    expect(
+      literals.length,
+      "the AST scan found NO counter-shaped literal at all — the gate is " +
+        "asserting nothing.",
+    ).toBeGreaterThanOrEqual(1);
   });
 
+  /** Three canonical keys — exactly the threshold — spelled as an object body. */
+  const counterShapedBody = (): string =>
+    [...COUNTER_KEYS]
+      .slice(0, COUNTER_LITERAL_THRESHOLD)
+      .map((k) => "  " + k + ": 0,")
+      .join("\n");
+
   it("would flag a second object — the failing path, executed", () => {
-    // The gate's own failure mode, run against a synthetic file rather than
-    // asserted. A gate whose failing path has never run is a gate nobody has
-    // tested, and this one guards the single highest-risk change in the plan.
-    const keys = [...COUNTER_KEYS].slice(0, COUNTER_LITERAL_THRESHOLD);
-    const synthetic =
-      "const shadow = {\n" +
-      keys.map((k) => "  " + k + ": 0,").join("\n") +
-      "\n};\nconst counters = shadow;\n";
-    const sf = ts.createSourceFile(
+    // The gate's own failure mode, run through THE GATE rather than through a
+    // re-implementation of it. A gate whose failing path has never run is a
+    // gate nobody has tested — and a failing path exercised by a copy of the
+    // walk tests the copy.
+    const findings = scanSource(
       "synthetic.ts",
-      synthetic,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
+      "const shadow = {\n" +
+        counterShapedBody() +
+        "\n};\nconst counters = shadow;\n",
     );
-    let literals = 0;
-    let bindings = 0;
-    const visit = (node: ts.Node): void => {
-      if (
-        ts.isVariableDeclaration(node) &&
-        ts.isIdentifier(node.name) &&
-        node.name.text === "counters"
-      ) {
-        bindings += 1;
-      }
-      if (ts.isObjectLiteralExpression(node)) {
-        const hits = node.properties.filter(
-          (p) =>
-            p.name !== undefined &&
-            ts.isIdentifier(p.name) &&
-            COUNTER_KEYS.has(p.name.text),
-        ).length;
-        if (hits >= COUNTER_LITERAL_THRESHOLD) literals += 1;
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sf);
-    expect(literals).toBe(1);
-    expect(bindings).toBe(1);
+    expect(findings.filter((f) => f.what.includes("literal")).length).toBe(1);
+    expect(findings.filter((f) => f.what.includes("binding")).length).toBe(1);
+  });
+
+  it("would flag a counter-shaped literal built OUTSIDE createCounters()", () => {
+    // The new rule's failing path. This is the shape the count-based assertion
+    // used to catch by accident and now catches on purpose: a second sub-map
+    // built beside the factory instead of inside it, which would survive every
+    // resetTelemetryForTest() and never be zeroed in production either.
+    const outside = scanSource(
+      "synthetic.ts",
+      "const stray = {\n" + counterShapedBody() + "\n};\n",
+    );
+    const strayLiterals = outside.filter((f) => f.what.includes("literal"));
+    expect(strayLiterals.length).toBe(1);
+    expect(strayLiterals[0].inFactory).toBe(false);
+  });
+
+  it("stays quiet on the same literal built INSIDE createCounters()", () => {
+    // The legal fixture beside the firing one. Without it the rule above passes
+    // for a gate that reports `inFactory: false` unconditionally.
+    const inside = scanSource(
+      "synthetic.ts",
+      "function createCounters() {\n  return {\n" +
+        counterShapedBody() +
+        "\n  };\n}\n",
+    );
+    const factoryLiterals = inside.filter((f) => f.what.includes("literal"));
+    expect(factoryLiterals.length).toBe(1);
+    expect(factoryLiterals[0].inFactory).toBe(true);
   });
 
   it("proves recordSlice has a call site OUTSIDE telemetry.ts", () => {

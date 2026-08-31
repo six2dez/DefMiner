@@ -266,11 +266,7 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
       "POLICY_DERIVED_FROM.SCAN_BACKPRESSURE_WATERMARK must name exactly QUEUE_CAP, " +
         "EVENTS_DELIVERED_UNDER_BLOCK and SCAN_PAGE_SIZE — the three values the derivation " +
         "reads. A derivation whose stated inputs differ from its real ones is worse than none.",
-    ).toEqual([
-      "EVENTS_DELIVERED_UNDER_BLOCK",
-      "QUEUE_CAP",
-      "SCAN_PAGE_SIZE",
-    ]);
+    ).toEqual(["EVENTS_DELIVERED_UNDER_BLOCK", "QUEUE_CAP", "SCAN_PAGE_SIZE"]);
     // BY REFERENCE, never by copied value — the rule CACHE_HIT_RATE's case states.
     expect(derived.QUEUE_CAP).toBe(T.QUEUE_CAP);
     expect(derived.EVENTS_DELIVERED_UNDER_BLOCK).toBe(

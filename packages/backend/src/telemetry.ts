@@ -26,6 +26,29 @@
 // expensive the moment a UI, an export and Phase 2's vocabulary all reference it.
 //
 // ===========================================================================
+// TWO CALLERS, ONE VOCABULARY — WHY `counters.retro` EXISTS (decision D-02)
+// ===========================================================================
+// Every counter in this file used to describe one caller: the live proxy hook.
+// Phase 6 adds a second — the retroactive scan — and a backfill is not a rounding
+// error on the live numbers. A 40,000-request walk folded into `rejected` and
+// `queueOverflow` would make OBS-01's drop count and reject reasons stop
+// describing live proxying at all, on the one surface an operator consults to
+// answer "is DefMiner keeping up with my browsing". The live numbers would still
+// be numbers; they would simply be about something else, with nothing on screen
+// saying so.
+//
+// So the retro path gets its OWN sub-map — `counters.retro` — over the SAME
+// closed `REJECT_REASONS` vocabulary, built by the same `zeroedRejectCounters`
+// helper. One counters object, two sub-maps. Not a second object (the AST scan
+// in telemetry.spec.ts forbids it, and for good reason), and not a second
+// vocabulary (a reason with no counter reads zero for ever).
+//
+// D-02'S STATED COST, taken deliberately rather than discovered later: every
+// counter call site now has to know which caller it is serving. That is a real
+// tax on every future increment and it is the price of the live numbers still
+// meaning what they say.
+//
+// ===========================================================================
 // CLOCK DISCIPLINE — TWO CLOCKS, NEVER MIXED
 // ===========================================================================
 // Elapsed figures come from the MONOTONIC clock (`performance.now()` where it
@@ -156,6 +179,60 @@ export type Counters = {
    *  BODY_LENGTH_EQUALS_RAW_LENGTH measured them equal across 24 round trips, so
    *  a non-zero value here means that measurement no longer holds. */
   byteLenMismatch: number;
+  /**
+   * Reloads whose measured body exceeded PASSIVE_MAX_BYTES and were dropped at
+   * the reload rather than at admission.
+   *
+   * DECLARED HERE, INCREMENTED BY PLAN 06-06. A non-zero value means an artifact
+   * passed the query-side or hook-side size axis and then measured over the
+   * ceiling when the consumer re-read it — which is the case the AUTHORITATIVE
+   * gate exists for. The query-side `admit()` on the retro path is a FILTER; the
+   * reload is where the byte count is known good, which is what makes plan
+   * 06-02's O-07 verdict non-load-bearing either way (T-06-18).
+   */
+  reloadOverSize: number;
+  /**
+   * The retroactive scan's own counters (D-02).
+   *
+   * A SUB-MAP OF THIS OBJECT and not a sibling of it. See the header: the AST
+   * scan in `telemetry.spec.ts` fails on a second counters object anywhere in
+   * this package, and `resetTelemetryForTest()` mutates THIS object in place —
+   * a map built beside it would survive a reset and leak counts from one spec
+   * into the next.
+   */
+  retro: RetroCounters;
+};
+
+/**
+ * What the retroactive scan counts, separately from the live hook.
+ *
+ * Named for what the SCAN did, in the same voice as the rest of this file: no
+ * word here asserts completeness, because a scan's coverage is bounded by the
+ * filter it was given and by how far back it has walked.
+ *
+ * @internal
+ */
+export type RetroCounters = {
+  /** Pages of stored traffic the producer walked to completion. */
+  pagesWalked: number;
+  /** Items those pages returned. */
+  seen: number;
+  /** Items the SHIPPED `admit()` accepted. */
+  admitted: number;
+  /** Items skipped because this request was already carried to a terminal
+   *  `done` analysis at the current corpus version (D-03). Not a rejection:
+   *  the work was already finished, which is the opposite of turned away. */
+  skippedDone: number;
+  /** Admitted items actually offered into the queue. */
+  queued: number;
+  /** Stored requests whose `response` was absent. NEITHER admitted NOR
+   *  rejected: `admit.ts`'s reason union is closed and describes a RESPONSE,
+   *  and there is no response here to describe. A stored request with no
+   *  response is a real shape and it is not an error. */
+  reloadNoResponse: number;
+  /** Rejected, by reason — over the SAME closed vocabulary the live map uses,
+   *  built by the same {@link zeroedRejectCounters} call. */
+  rejected: Record<RejectReason, number>;
 };
 
 function createCounters(): Counters {
@@ -181,6 +258,29 @@ function createCounters(): Counters {
     storeErrors: 0,
     consumerErrors: 0,
     byteLenMismatch: 0,
+    reloadOverSize: 0,
+    // INSIDE THIS FUNCTION, and the reason is mechanical rather than stylistic
+    // — it belongs where the next author will read it. Two gates depend on it:
+    // `telemetry.spec.ts` scans this package's AST and fails on a second
+    // counters object ANYWHERE, so a `retroCounters` declared beside `counters`
+    // would fail the build; and `resetTelemetryForTest()` is
+    // `Object.assign(counters, createCounters())`, so a sub-map created outside
+    // this factory would survive every reset and carry one spec's counts into
+    // the next. Built here, a retro counter added tomorrow is reset for free
+    // and needs no edit to the reset function.
+    retro: {
+      pagesWalked: 0,
+      seen: 0,
+      admitted: 0,
+      skippedDone: 0,
+      queued: 0,
+      reloadNoResponse: 0,
+      // THE SHIPPED HELPER OVER THE SHIPPED ARRAY, called a second time. Not a
+      // copy of the vocabulary and not a second list: D-02 splits the CALLER,
+      // never the reason set, so a seventh reject reason acquires both counters
+      // in one edit to `admit.ts`.
+      rejected: zeroedRejectCounters(REJECT_REASONS),
+    },
   };
 }
 
@@ -614,7 +714,17 @@ export type SlimStatus = {
  */
 export function slimStatus(): SlimStatus {
   return {
-    counters: { ...counters, rejected: { ...counters.rejected } },
+    counters: {
+      ...counters,
+      rejected: { ...counters.rejected },
+      // A SNAPSHOT, for the same reason `rejected` is copied above: the spread
+      // is shallow, so without this the RPC hands its caller a live reference
+      // into module state that keeps changing after the projection was taken.
+      // Every value inside is a DefMiner-authored integer, so this adds no
+      // string to the projection and the WR-03 redaction rules still have
+      // nothing on this path to run over.
+      retro: { ...counters.retro, rejected: { ...counters.retro.rejected } },
+    },
     maxSliceMs,
     lastError,
   };
