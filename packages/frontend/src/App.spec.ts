@@ -16,6 +16,7 @@ import type {
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  ScanStatusPayload,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
@@ -34,6 +35,7 @@ import type {
   PanelAnalysis,
   RetryOutcome,
   SettingRow,
+  StartScanOutcome,
 } from "./api/client";
 import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
@@ -49,6 +51,11 @@ import {
   UNKNOWN_VERSION,
 } from "./components/compat-contract";
 import { EXPORT_CTA } from "./components/export-contract";
+import {
+  SCAN_HEADING,
+  SCAN_NO_DENOMINATOR_NOTE,
+  SCAN_START_CTA,
+} from "./components/scan-contract";
 import {
   counterId,
   HEALTH_HEADING,
@@ -86,7 +93,24 @@ const ROWS: ArtifactRow[] = [
   },
 ];
 
-const TAB_LABELS = ["Artifacts", "Observations", "Health", "Settings"];
+/**
+ * The five tabs, in declaration order.
+ *
+ * `Scan` IS THIRD, not appended fifth. The strip's two halves are entity
+ * classes then operational chrome, and a retroactive scan is the job that
+ * FILLS the two entity tables — so third keeps the entity tabs contiguous and
+ * first, keeps the operational tabs contiguous, and keeps Settings last
+ * (06-UI-SPEC.md § "The fifth tab"). Appending would have preserved every
+ * existing index at the cost of reading as an afterthought, and the
+ * muscle-memory cost is paid once, at upgrade.
+ */
+const TAB_LABELS = [
+  "Artifacts",
+  "Observations",
+  "Scan",
+  "Health",
+  "Settings",
+];
 
 const TOTAL: VisibleTotal = {
   visible: 2,
@@ -154,6 +178,12 @@ type StubOptions = {
    *  that refused to run, where the compatibility report is one of only two
    *  endpoints that exist at all. */
   readonly onlyCompatAnswers?: boolean;
+  /** The scan status the Scan tab reads. `null` — the default — is the state a
+   *  project with no scan row is genuinely in, and is what puts the start form
+   *  on screen rather than a counter strip full of zeroes. */
+  readonly scan?: ScanStatusPayload | null;
+  /** Every startScan request the page issued, in order. */
+  readonly starts?: { readonly operatorFilter: string }[];
 };
 
 /**
@@ -246,6 +276,16 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
                 },
               },
             ),
+      startScan: (request: { readonly operatorFilter: string }) => {
+        options.starts?.push(request);
+        return refusing
+          ? refused<StartScanOutcome>()
+          : Promise.resolve<StartScanOutcome>({ outcome: "started" });
+      },
+      getScanStatus: () =>
+        refusing
+          ? refused<ScanStatusPayload | null>()
+          : Promise.resolve(options.scan ?? null),
       // ANSWERS EVEN WHEN NOTHING ELSE DOES. That is not a convenience of the
       // stub, it is the shape of a refusing build: `init()` registers only
       // `getStatus` and `getCompat` on all three refusal paths.
@@ -1027,5 +1067,164 @@ describe("the compatibility refusal surface (COMPAT-01, debt P1-D5)", () => {
 
     expect(wrapper.text()).not.toContain("backend refused to run");
     expect(wrapper.text()).not.toContain("backend exploded");
+  });
+});
+
+
+// ===========================================================================
+// THE FIFTH TAB (D-13, FIND-04)
+// ===========================================================================
+
+describe("App — the Scan tab", () => {
+  it("renders the five tabs in the declared order, Scan THIRD", async () => {
+    // Order is declaration order and is never sorted at runtime, so the tab an
+    // operator reaches for by muscle memory does not move under them. THIRD is
+    // the decision: entity tabs contiguous and first, operational tabs
+    // contiguous, Settings last.
+    const wrapper = mountWith(stubSdk());
+    await settle(wrapper);
+
+    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual([
+      "Artifacts",
+      "Observations",
+      "Scan",
+      "Health",
+      "Settings",
+    ]);
+  });
+
+  it("mounts ScanPanel on the Scan arm, and NOT the bare v-else Health branch", async () => {
+    // `TabId` derives from `TABS`, so an entry added WITHOUT a body arm falls
+    // through to the bare `v-else` and silently renders Health under a tab
+    // labelled Scan. That is the exact defect App.vue's own comment predicts,
+    // and this is the assertion that catches it.
+    const wrapper = mountWith(stubSdk());
+    await settle(wrapper);
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-scan]").exists()).toBe(true);
+    expect(wrapper.find("[data-defminer-health]").exists()).toBe(false);
+    expect(wrapper.text()).toContain(SCAN_HEADING);
+  });
+
+  it("shows the START FORM when the project has no scan, never a strip of zeroes", async () => {
+    // `null` is a real state and not a failure. A counter strip reading
+    // `0 seen · 0 admitted` describes a scan that started and found nothing —
+    // the opposite of the truth for a project that has never run one.
+    const wrapper = mountWith(stubSdk({ scan: null }));
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.text()).toContain(SCAN_START_CTA);
+    expect(wrapper.find("[data-defminer-scan-strip]").exists()).toBe(false);
+  });
+
+  it("shows the counter strip and the no-denominator note once a scan exists", async () => {
+    const wrapper = mountWith(
+      stubSdk({
+        scan: {
+          scanId: "s1",
+          state: "running",
+          suspendReason: null,
+          operatorFilter: "",
+          composedFilter: "(req.path.cont:\".js\")",
+          pagesWalked: 3,
+          seen: 60,
+          admitted: 4,
+          skippedDone: 1,
+          rejected: 55,
+          queued: 4,
+          analysed: null,
+          lastCreatedAt: 1_723_600_000_000,
+          startedAt: 1_756_000_000_000,
+          updatedAt: 1_756_000_060_000,
+          finishedAt: null,
+          heldAtWatermark: false,
+        },
+      }),
+    );
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-scan-strip]").exists()).toBe(true);
+    // Grouped by `groupThousands`, never `toLocaleString`: separators are not
+    // decoration on a surface read at a glance by somebody who already thinks
+    // something is broken.
+    expect(wrapper.text()).toContain("60");
+    // THE SINGLE MOST IMPORTANT SENTENCE ON THE SURFACE. Without it the
+    // operator reads an omission and infers a bug; with it the missing fraction
+    // is a stated engineering position.
+    expect(wrapper.text()).toContain(SCAN_NO_DENOMINATOR_NOTE);
+    // The start form and the live readout are the same question in two states
+    // and are NEVER both on screen.
+    expect(wrapper.text()).not.toContain(SCAN_START_CTA);
+  });
+
+  it("renders NOTHING indeterminate — no progress bar, no spinner, anywhere", async () => {
+    // D5. A spinner claims "something is happening" while refusing to say
+    // what, and D-14's whole subject is refusing to claim more than is known. A
+    // tool that will not fabricate a percentage must not fabricate reassurance
+    // either.
+    const wrapper = mountWith(stubSdk());
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    const html = wrapper.html();
+    expect(html).not.toContain("progressbar");
+    expect(html).not.toContain("progressspinner");
+    expect(html).not.toContain("animate-");
+  });
+
+  it("issues the start request through the client when Start scan is pressed", async () => {
+    const starts: { readonly operatorFilter: string }[] = [];
+    const wrapper = mountWith(stubSdk({ starts }));
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    await wrapper.get("#defminer-scan-start").trigger("click");
+    await settle(wrapper);
+
+    expect(starts).toHaveLength(1);
+    // The tracer sends no operator clause. Plan 06-04 adds the validated input.
+    expect(starts[0].operatorFilter).toBe("");
+  });
+
+  it("keeps the Scan tab routable on a refusing build", async () => {
+    // A tab is never removed, and least of all here: a suspended scan holding
+    // its place is exactly what an operator wants to see on a build that
+    // stopped.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-scan]").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("backend refused to run");
   });
 });

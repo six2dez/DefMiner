@@ -252,12 +252,12 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v4 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v5 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
-    // the literal 4 rather than against `MIGRATIONS.length`: a step number that
+    // the literal 5 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
     expect(
       MIGRATIONS.find((m) => m.v === 3),
       "step v3 is missing",
@@ -266,6 +266,109 @@ describe("forward-only migration ladder (STORE-05)", () => {
       MIGRATIONS.find((m) => m.v === 4),
       "step v4 is missing",
     ).toBeDefined();
+    expect(
+      MIGRATIONS.find((m) => m.v === 5),
+      "step v5 is missing",
+    ).toBeDefined();
+  });
+
+  it("step v5's DDL is a COMPLETE LITERAL — no column arrives by computation", () => {
+    // The one-way property, asserted as text rather than trusted to a comment.
+    // Shipped steps are immutable, `schema.spec.ts` asserts `EXPECTED_TABLES`
+    // exactly and `COLUMN_ALLOWLIST` names every column of every table, so the
+    // column list approved at plan 06-01's blocking-human checkpoint
+    // (2026-08-31) can only be changed by ANOTHER forward step. A DDL string
+    // assembled at run time would put that list somewhere a reviewer reading
+    // the diff cannot see it.
+    const v5 = MIGRATIONS.find((m) => m.v === 5);
+    expect(v5, "step v5 is missing").toBeDefined();
+    const sql = v5?.sql ?? "";
+
+    // The approved eighteen, each named. A column added to the DDL without a
+    // line here fails `schema.spec.ts`'s allowlist; a column REMOVED from the
+    // DDL fails here, which is the direction an allowlist cannot see.
+    for (const column of [
+      "project_id",
+      "scan_id",
+      "state",
+      "suspend_reason",
+      "operator_filter",
+      "epoch",
+      "last_request_id",
+      "last_cursor",
+      "last_created_at",
+      "pages_walked",
+      "seen",
+      "admitted",
+      "skipped_done",
+      "rejected",
+      "queued",
+      "started_at",
+      "updated_at",
+      "finished_at",
+    ]) {
+      expect(sql, `scans.${column} is not in step v5`).toContain(column);
+    }
+
+    // THE STATE COLUMN IS `state`, NEVER `scan_state`. `analyses.scan_state`
+    // already exists over a DIFFERENT closed vocabulary, and two vocabularies
+    // under one column name in one database is the drift shape this repo keeps
+    // catching (06-UI-SPEC.md § "Two Vocabularies With One Name", mechanism 1).
+    expect(sql).not.toContain("scan_state");
+    expect(sql).toContain(
+      "CHECK (state IN ('running','suspended','completed','discarded'))",
+    );
+
+    // `project_id` FIRST in the primary key — asserted structurally in
+    // `schema.spec.ts` by PRAGMA ordinal, and here as the DDL a reviewer reads.
+    expect(sql).toContain("PRIMARY KEY (project_id, scan_id)");
+
+    // NO BLOB and no untyped column. Every column is TEXT or INTEGER, which is
+    // what keeps DEPLOY-04's "fixed-shape metadata" claim true by construction.
+    expect(sql).not.toMatch(/\bBLOB\b/);
+  });
+
+  it("step v5's one-running index is PARTIAL and UNIQUE — the invariant is the driver's", () => {
+    // The one-scan-per-project rule cannot be a read-then-write: `BEGIN` does
+    // not span `exec` calls on this driver, so a caller-side "is one already
+    // running" check is two operations nothing can make atomic. A partial
+    // unique index makes the second start fail INSIDE the insert.
+    const fx = createFixtureDb();
+    try {
+      const v5 = MIGRATIONS.find((m) => m.v === 5);
+      expect(v5?.sql ?? "").toContain(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running",
+      );
+      expect(v5?.sql ?? "").toContain("WHERE state = 'running'");
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("step v5 brings `scans` to a database that stopped at v1, losing no seeded row", async () => {
+    // The same property the v3 case asserts, re-asserted for the step that
+    // actually ships in this plan: a migration can succeed on an EMPTY database
+    // and destroy a populated one.
+    const fx = createFixtureDb();
+    try {
+      applyV1Only(fx);
+      seedArtifacts(fx);
+      const before = readArtifacts(fx);
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(5);
+
+      expect(readArtifacts(fx)).toEqual(before);
+      expect(listTables(fx.raw)).toContain("scans");
+
+      // The column set as SQLite actually built it, not as the DDL claims.
+      const columns = tableInfo(fx.raw, "scans").map((c) => c.name);
+      expect(columns).toHaveLength(18);
+      expect(columns).not.toContain("id");
+    } finally {
+      fx.close();
+    }
   });
 
   it("step v4 indexes the SECOND sort key on each pageable table", async () => {

@@ -43,7 +43,10 @@ import {
   isOperatorDecided,
   RETRY_TARGET_SCAN_STATE,
   RETRYABLE_SCAN_STATES,
+  SCAN_KIND_CLAUSE,
+  SCAN_LIFECYCLE_STATES,
   SCAN_STATES,
+  SUSPEND_REASONS,
   TERMINAL_SCAN_STATES,
   TRIAGE_STATES,
   UNCLASSIFIED_ANALYSIS_FAILURE_REASON,
@@ -57,7 +60,10 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanLifecycleState,
   ScanState,
+  ScanStatusPayload,
+  SuspendReason,
   ScoreExplanation,
   ScoreSignal,
   TriageState,
@@ -475,5 +481,186 @@ describe("the published shapes are constructible by the phases that must build t
   it("triage state literals only come from the vocabulary", () => {
     const state: TriageState = "reviewed";
     expect(TRIAGE_STATES).toContain(state);
+  });
+});
+
+// ===========================================================================
+// PHASE 6 — THE RETROACTIVE SCAN'S LIFECYCLE VOCABULARY
+// ===========================================================================
+// These assertions exist for ONE reason and it is stated in
+// 06-UI-SPEC.md § "Two Vocabularies With One Name": `running` is a literal
+// member of BOTH `SCAN_STATES` (an artifact's analysis state) and
+// `SCAN_LIFECYCLE_STATES` (a retroactive scan's lifecycle state). Two closed
+// vocabularies, one word "scan", and one shared member. The declarations sit
+// adjacent in `contract.ts` so the collision is visible at the point of
+// declaration; these are the mechanical half of the same guard.
+
+describe("SCAN_LIFECYCLE_STATES — the RETROACTIVE SCAN vocabulary (FIND-03, D-09)", () => {
+  it("holds exactly the four states migration step v5's CHECK enforces, in order", () => {
+    // ORDER, not membership, for the reason the SCAN_STATES assertion above
+    // gives: this is also the order step v5 writes into
+    // `CHECK (state IN (...))`, so a reordering here is a diff a reviewer can
+    // put beside the DDL.
+    expect(SCAN_LIFECYCLE_STATES).toEqual([
+      "running",
+      "suspended",
+      "completed",
+      "discarded",
+    ]);
+  });
+
+  it("is snake_case throughout, like the shipped SCAN_STATES", () => {
+    for (const state of SCAN_LIFECYCLE_STATES) {
+      expect(state, `${state} is not snake_case`).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    }
+  });
+
+  it("shares exactly ONE member with the analysis vocabulary, and it is `running`", () => {
+    // THE COLLISION, ASSERTED RATHER THAN REMEMBERED. If a later edit made a
+    // second member overlap — `failed`, say, or `pending` — the naming
+    // discipline 06-UI-SPEC.md builds around one shared word would silently
+    // stop being sufficient, and nothing else in the build would say so.
+    const shared = SCAN_LIFECYCLE_STATES.filter((state) =>
+      (SCAN_STATES as readonly string[]).includes(state),
+    );
+    expect(shared).toEqual(["running"]);
+  });
+
+  it("does NOT contain `completed`'s analysis-side lookalike", () => {
+    // `SCAN_STATES` ships `done`, and the lifecycle vocabulary ships
+    // `completed`. Neither list may grow the other's word: `done` here, or
+    // `completed` there, would put two meanings under one literal in the one
+    // place the type system could no longer tell them apart.
+    expect(SCAN_LIFECYCLE_STATES).not.toContain("done");
+    expect(SCAN_STATES).not.toContain("completed");
+  });
+
+  it("types a lifecycle state — no bare string anywhere on the scan path", () => {
+    const state: ScanLifecycleState = "suspended";
+    expect(SCAN_LIFECYCLE_STATES).toContain(state);
+  });
+});
+
+describe("SUSPEND_REASONS — why a scan stopped, as a closed code set", () => {
+  it("holds exactly the four reasons the phase can produce", () => {
+    // Each is a DefMiner-authored CODE and never rendered error text: the
+    // frontend maps it to its own sentence (06-UI-SPEC.md § "Suspension
+    // reasons"). A fifth reason needs a copy row before it can be rendered,
+    // which is what makes the set closed rather than merely short.
+    expect(SUSPEND_REASONS).toEqual([
+      "operator_paused",
+      "project_changed",
+      "process_restarted",
+      "retention_eviction",
+    ]);
+  });
+
+  it("is snake_case throughout", () => {
+    for (const reason of SUSPEND_REASONS) {
+      expect(reason, `${reason} is not snake_case`).toMatch(
+        /^[a-z]+(_[a-z]+)*$/,
+      );
+    }
+  });
+
+  it("types a reason — the column is nullable, the vocabulary is not open", () => {
+    const reason: SuspendReason = "process_restarted";
+    expect(SUSPEND_REASONS).toContain(reason);
+  });
+});
+
+describe("SCAN_KIND_CLAUSE — DefMiner's own narrowing, readable by both packages", () => {
+  it("names both script extensions and all five media-type substrings", () => {
+    // The seven kind terms 06-RESEARCH.md § "Composing the scan filter" fixes.
+    // Asserted as SUBSTRINGS of the clause rather than by rebuilding it: a
+    // second construction here would be a second producer of HTTPQL, which is
+    // exactly what `scan/filter.ts`'s header prohibits.
+    for (const term of [
+      'req.path.cont:".js"',
+      'req.path.cont:".mjs"',
+      'resp.raw.cont:"javascript"',
+      'resp.raw.cont:"ecmascript"',
+      'resp.raw.cont:"jscript"',
+      'resp.raw.cont:"livescript"',
+      'resp.raw.cont:"text/js"',
+    ]) {
+      expect(SCAN_KIND_CLAUSE, `${term} is missing`).toContain(term);
+    }
+  });
+
+  it("bounds the status to 2xx, so a 304 never reaches the transfer at all", () => {
+    expect(SCAN_KIND_CLAUSE).toContain("resp.code.gte:200");
+    expect(SCAN_KIND_CLAUSE).toContain("resp.code.lt:300");
+  });
+
+  it("never uses `req.ext.eq`, which is case SENSITIVE where `admit()` is not", () => {
+    // `isScriptish` lowercases before comparing a suffix, so it accepts
+    // `/APP.JS`. `req.ext.eq` is documented case sensitive and would not match
+    // it — the push-down would then be a strict SUBSET of the admission gate,
+    // and the retroactive scan would silently never see that artifact.
+    expect(SCAN_KIND_CLAUSE).not.toContain("req.ext.eq");
+  });
+
+  it("carries no HTTPQL comment token, in either grammar", () => {
+    // The clause is DefMiner-authored and a comment in it would be a comment
+    // in front of the operator's, which is the widening O-06 forbids.
+    expect(SCAN_KIND_CLAUSE).not.toContain("//");
+    expect(SCAN_KIND_CLAUSE).not.toContain("/*");
+  });
+
+  it("is balanced — every parenthesis it opens, it closes", () => {
+    let depth = 0;
+    for (const ch of SCAN_KIND_CLAUSE) {
+      if (ch === "(") depth += 1;
+      if (ch === ")") depth -= 1;
+      expect(depth, "the clause closes a parenthesis it never opened").toBeGreaterThanOrEqual(0);
+    }
+    expect(depth).toBe(0);
+  });
+});
+
+describe("ScanStatusPayload — what the Scan tab reads", () => {
+  it("carries the held-at-watermark signal as a REQUIRED field", () => {
+    // 06-UI-SPEC.md § "The scan status payload — required fields" is binding
+    // and this is the field it binds. Without it a healthy backpressure hold
+    // and a blocked QuickJS thread are indistinguishable from outside the
+    // backend, `Waiting for the analysis queue` can never render, and the
+    // stall marker fires on the most common healthy state of a long backfill.
+    const payload: ScanStatusPayload = {
+      scanId: "s1",
+      state: "running",
+      suspendReason: null,
+      operatorFilter: "",
+      composedFilter: `(${SCAN_KIND_CLAUSE})`,
+      pagesWalked: 1,
+      seen: 20,
+      admitted: 3,
+      skippedDone: 1,
+      rejected: 16,
+      queued: 3,
+      analysed: null,
+      lastCreatedAt: 1_755_000_000_000,
+      startedAt: 1_755_000_100_000,
+      updatedAt: 1_755_000_200_000,
+      finishedAt: null,
+      heldAtWatermark: false,
+    };
+
+    expect(Object.keys(payload)).toContain("heldAtWatermark");
+    expect(payload.heldAtWatermark).toBe(false);
+  });
+
+  it("distinguishes a counter DefMiner does not have from a counter that is zero", () => {
+    // `analysed` is `number | null` and not `number`. The scan table has no
+    // `analysed` column — the number belongs to the consumer, not to the
+    // producer — so until plan 06-06 wires it, the honest value is ABSENT.
+    // 06-UI-SPEC.md D2's rule, applied to a counter: "a number DefMiner does
+    // not have is absent, never zero". A zero here would read as "nothing has
+    // been analysed" on a scan that is analysing.
+    const absent: ScanStatusPayload["analysed"] = null;
+    const none: ScanStatusPayload["analysed"] = 0;
+    expect(absent).toBeNull();
+    expect(none).toBe(0);
+    expect(absent).not.toBe(none);
   });
 });

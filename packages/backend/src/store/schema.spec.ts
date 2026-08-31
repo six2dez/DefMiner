@@ -16,7 +16,10 @@
 // finds nothing wrong with it has measured nothing — see 01-PATTERNS.md, and
 // tests/schema.spec.ts:44-53 where the same guard exists for the same reason.
 
-import { SCAN_STATES } from "@defminer/engine/contract";
+import {
+  SCAN_LIFECYCLE_STATES,
+  SCAN_STATES,
+} from "@defminer/engine/contract";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -28,7 +31,7 @@ import {
 
 import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
 
-/** The five tables the operator approved, across TWO one-way checkpoints.
+/** The six tables the operator approved, across THREE one-way checkpoints.
  *  Exactly these, in this order.
  *
  *  - `analyses`, `artifacts`, `observations`, `settings` — plan 01-01's one-way
@@ -36,15 +39,23 @@ import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
  *  - `audit` — plan 05-06's `blocking-human` checkpoint (option-a, 2026-08-28),
  *    which was required precisely BECAUSE this comment named its table set as the
  *    operator's rather than the planner's.
+ *  - `scans` — plan 06-01's `blocking-human` checkpoint (approve-as-specified,
+ *    2026-08-31). The operator was shown the full eighteen-column list, both
+ *    indexes, and the two costs the shape accepts — that only the aggregate
+ *    `rejected` is durable, and that O-04 is designed around rather than bet on
+ *    — before step v5 was written.
  *
- *  BOTH approval events are named on purpose. A comment reading "four" above an
- *  array holding five is the exact drift shape this repo keeps catching, and it
- *  would have been introduced here by the edit that added the fifth entry. */
+ *  ALL THREE approval events are named on purpose. A comment reading "five"
+ *  above an array holding six is the exact drift shape this repo keeps catching,
+ *  and it would have been introduced here by the edit that added the sixth
+ *  entry. `listTables()` orders `name ASC`, which is why `scans` lands between
+ *  `observations` and `settings` rather than at the end. */
 const EXPECTED_TABLES = [
   "analyses",
   "artifacts",
   "audit",
   "observations",
+  "scans",
   "settings",
 ];
 
@@ -435,6 +446,42 @@ const COLUMN_ALLOWLIST: Record<string, string[]> = {
   // counts; neither may hold a raw value or a URL, which is what makes this
   // allowlist the mitigation and not merely a manifest.
   audit: ["project_id", "event_id", "at", "kind", "subject", "detail"],
+  // `scan_id`, NOT `id` — same reason `audit.event_id` is spelled that way, and
+  // the forbidden-column map below states it once for the package.
+  //
+  // WHAT IS NOT HERE IS THE MITIGATION. There is no reject-reason column per
+  // member of `REJECT_REASONS` and there is no JSON column: six columns would
+  // couple a one-way migration to a vocabulary Phases 3 and 4 will grow, and a
+  // JSON blob is a column able to hold arbitrary content, which is precisely
+  // what this allowlist exists to prevent. Only the AGGREGATE `rejected` is
+  // durable, and the accepted cost — a completed scan's per-reason breakdown is
+  // not stored — was put to the operator at plan 06-01's checkpoint rather than
+  // discovered afterwards.
+  //
+  // `operator_filter` is the one column on this table that holds OPERATOR input.
+  // It is an HTTPQL clause the operator typed, not target-controlled content: no
+  // response byte, no header and no URL reaches it. `last_request_id` and
+  // `last_cursor` are Caido's own opaque identifiers for a stored request.
+  scans: [
+    "project_id",
+    "scan_id",
+    "state",
+    "suspend_reason",
+    "operator_filter",
+    "epoch",
+    "last_request_id",
+    "last_cursor",
+    "last_created_at",
+    "pages_walked",
+    "seen",
+    "admitted",
+    "skipped_done",
+    "rejected",
+    "queued",
+    "started_at",
+    "updated_at",
+    "finished_at",
+  ],
 };
 
 /** Column names that must never exist anywhere, whatever the table. Named rather
@@ -469,7 +516,7 @@ describe("schema shape (STORE-01, STORE-02, T-01-21)", () => {
     }
   });
 
-  it("the table set is EXACTLY the four approved tables", async () => {
+  it("the table set is EXACTLY the six approved tables", async () => {
     const fx = await migratedFixture();
     try {
       const tables = listTables(fx.raw);
@@ -644,6 +691,85 @@ describe("schema shape (STORE-01, STORE-02, T-01-21)", () => {
       await expect(
         stmt.run("p1", "z".repeat(64), "h", "in_progress", 1),
       ).rejects.toThrow();
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("scans keys on (project_id, scan_id) IN THAT ORDER, by PRAGMA ordinal", async () => {
+    // STORE-02's rule read structurally rather than from the DDL text: `pk` is
+    // the ONE-BASED position within the PRIMARY KEY, so `project_id` at 1 and
+    // `scan_id` at 2 is the assertion. A CREATE TABLE whose comment claims a
+    // project-first key it does not have passes any grep and fails here.
+    const fx = await migratedFixture();
+    try {
+      const cols = tableInfo(fx.raw, "scans");
+      const byName = new Map(cols.map((c) => [c.name, c]));
+
+      expect(byName.get("project_id")?.pk).toBe(1);
+      expect(byName.get("scan_id")?.pk).toBe(2);
+      expect(byName.get("project_id")?.notnull).toBe(1);
+      expect(byName.get("scan_id")?.notnull).toBe(1);
+
+      // THE IDENTIFIER IS `scan_id` AND THERE IS NO `id`. Asserted here as well
+      // as in the package-wide forbidden-column check, because this is the one
+      // table where the temptation is live: `last_insert_rowid()` is unusable
+      // on the pooled connection, so a surrogate id would be a row identity
+      // nothing can read back.
+      expect(byName.has("id")).toBe(false);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("scans.state is a CLOSED vocabulary, and it is the LIFECYCLE one", async () => {
+    // READ FROM `SCAN_LIFECYCLE_STATES`, NEVER RESTATED — the same discipline
+    // the `analyses.scan_state` case above follows, and it matters more here:
+    // `running` is a member of BOTH vocabularies, so a literal copy in this
+    // file could satisfy the wrong one and still look right.
+    const fx = await migratedFixture();
+    try {
+      const stmt = await fx.db.prepare(
+        `INSERT INTO scans (project_id, scan_id, state, operator_filter, epoch,
+                            last_request_id, pages_walked, seen, admitted,
+                            skipped_done, rejected, queued, started_at, updated_at)
+         VALUES (?, ?, ?, '', 0, '', 0, 0, 0, 0, 0, 0, 1, 1)`,
+      );
+      for (const state of SCAN_LIFECYCLE_STATES) {
+        await expect(stmt.run("p1", `scan-${state}`, state)).resolves.toBeDefined();
+      }
+      // A member of the OTHER vocabulary. `done` is a perfectly good analysis
+      // state and is not a scan lifecycle state, and the database says so.
+      await expect(stmt.run("p1", "scan-done", "done")).rejects.toThrow();
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("at most ONE running scan per project, enforced by the driver and not by a prior read", async () => {
+    // The invariant that cannot be a caller-side check: `BEGIN` does not span
+    // `exec` calls on this driver and every statement still reports success, so
+    // "read whether one is running, then insert" is two operations nothing can
+    // make atomic. The partial unique index makes the second insert FAIL.
+    const fx = await migratedFixture();
+    try {
+      const insert = await fx.db.prepare(
+        `INSERT INTO scans (project_id, scan_id, state, operator_filter, epoch,
+                            last_request_id, pages_walked, seen, admitted,
+                            skipped_done, rejected, queued, started_at, updated_at)
+         VALUES (?, ?, ?, '', 0, '', 0, 0, 0, 0, 0, 0, 1, 1)`,
+      );
+      await expect(insert.run("p1", "s1", "running")).resolves.toBeDefined();
+      await expect(insert.run("p1", "s2", "running")).rejects.toThrow();
+
+      // ANOTHER PROJECT IS UNAFFECTED. The index is partial on `state` and
+      // keyed on `project_id`, so the invariant is per project rather than
+      // global — one SQLite file serves every Caido project (T-01-20).
+      await expect(insert.run("p2", "s3", "running")).resolves.toBeDefined();
+
+      // AND A SUSPENDED SCAN DOES NOT HOLD THE SLOT. It is the state predicate
+      // in the index that makes resuming possible at all.
+      await expect(insert.run("p1", "s4", "suspended")).resolves.toBeDefined();
     } finally {
       fx.close();
     }
