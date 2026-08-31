@@ -207,6 +207,8 @@ export function redactUrlForExport(url: string): string {
  * a function for one it does. A BOOLEAN plus a policy elsewhere would put the
  * "which columns" question and the "what does redaction mean" question in two
  * files that only ever change in one of them.
+ *
+ * @internal
  */
 export type ExportColumn = {
   readonly name: string;
@@ -402,7 +404,9 @@ function projectRow(
   });
 }
 
-/** What one call to {@link serialiseRows} is serialising. */
+/** What one call to {@link serialiseRows} is serialising.
+ *
+ *  @internal */
 export type SerialiseRequest = {
   readonly table: InventoryTable;
   readonly format: ExportFormat;

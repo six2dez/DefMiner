@@ -36,6 +36,7 @@ import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
+import { EXPORT_CTA } from "./components/export-contract";
 import { EVIDENCE_PANEL_HEIGHT_CLASS } from "./components/panel-contract";
 
 /**
@@ -603,5 +604,90 @@ describe("App — the split body (05-UI-SPEC § Data & Interaction Contract)", (
     // The narrowing action is offered, because a scan-state filter column now
     // exists behind it.
     expect(banner.text()).toContain("Show only affected artifacts");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UI-06 — THE TOOLBAR ACTION, AND WHAT IT MUST NOT DO
+// ---------------------------------------------------------------------------
+
+describe("the export action opens the dialog and never exports (UI-06)", () => {
+  it("renders the primary action with the design contract's label", () => {
+    const wrapper = mountWith(stubSdk());
+    expect(wrapper.get("#defminer-export-open").text()).toBe(EXPORT_CTA);
+  });
+
+  it("does not mount the dialog until the action is pressed", () => {
+    const wrapper = mountWith(stubSdk());
+    expect(wrapper.find("#defminer-export-dialog").exists()).toBe(false);
+  });
+
+  it("OPENS the dialog and issues NO export call — the whole point of the row", async () => {
+    // The copy row says "opens the redaction dialog, never exports directly",
+    // and this is the assertion that makes that a fact: an export reachable from
+    // one press of a toolbar button is a raw export one mis-click away, and the
+    // two deliberate acts would begin from the wrong place.
+    const exports: ExportChunkRequest[] = [];
+    const wrapper = mountWith(stubSdk({ exports }));
+
+    await wrapper.get("#defminer-export-open").trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find("#defminer-export-dialog").exists()).toBe(true);
+    expect(exports, "the toolbar action exported directly").toHaveLength(0);
+  });
+
+  it("does NOT take the accent — 05-UI-SPEC.md § Color names the export button in the list accent is not used for", () => {
+    const wrapper = mountWith(stubSdk());
+    const classes =
+      wrapper.get("#defminer-export-open").attributes("class") ?? "";
+    // The focus RING is accent by rule 3 of the five; the button's own border
+    // and text are not.
+    expect(classes).toContain("border-surface-600");
+    expect(classes.replace(/focus:ring-primary-500/g, "")).not.toContain(
+      "primary-500",
+    );
+  });
+
+  it("closes on the dialog's own dismissal", async () => {
+    const wrapper = mountWith(stubSdk());
+    await wrapper.get("#defminer-export-open").trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.get("#defminer-export-cancel").trigger("click");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("#defminer-export-dialog").exists()).toBe(false);
+  });
+
+  it("carries the ACTIVE table and its filter into the export request", async () => {
+    const exports: ExportChunkRequest[] = [];
+    const wrapper = mountWith(
+      stubSdk({
+        exports,
+        exportOutcomes: [
+          {
+            outcome: "chunk",
+            chunk: {
+              filename: "defminer-artifacts-redacted-20260829T000000Z.csv",
+              contentType: "text/csv;charset=utf-8",
+              text: "x\r\n",
+              chunkIndex: 0,
+              rows: 1,
+              hasMore: false,
+              nextCursor: null,
+            },
+          },
+        ],
+      }),
+    );
+
+    await wrapper.get("#defminer-export-open").trigger("click");
+    await wrapper.vm.$nextTick();
+    await wrapper.get("#defminer-export-confirm").trigger("click");
+    await wrapper.vm.$nextTick();
+
+    expect(exports).toHaveLength(1);
+    expect(exports[0]?.table).toBe("artifacts");
+    expect(exports[0]?.mode, "the default is not redacted").toBe("redacted");
+    expect(exports[0]?.sortKey).toBe("last_seen");
   });
 });

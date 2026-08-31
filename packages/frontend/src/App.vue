@@ -19,6 +19,9 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import type {
   AnalysisKey,
   DefMinerBackendSdk,
+  ExportChunkOutcome,
+  ExportChunkRequest,
+  InventoryTable,
   ObservationRow,
   PanelAnalysis,
   RetryOutcome,
@@ -29,6 +32,8 @@ import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
 import ArtifactsTable from "./components/ArtifactsTable.vue";
 import EvidencePanel from "./components/EvidencePanel.vue";
+import { EXPORT_CTA } from "./components/export-contract";
+import ExportDialog from "./components/ExportDialog.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
 import type { InvalidationCoalescer } from "./stores/coalescer";
 import { createCoalescer } from "./stores/coalescer";
@@ -397,6 +402,101 @@ onMounted(() => {
   void observations.loadFirstPage();
 });
 
+// ---------------------------------------------------------------------------
+// UI-06 — THE EXPORT, AND THE TOOLBAR ACTION THAT ONLY OPENS IT
+// ---------------------------------------------------------------------------
+//
+// THE PRIMARY ACTION OPENS THE DIALOG AND NEVER EXPORTS. 05-UI-SPEC.md's copy
+// row says so beside the label itself, and `App.spec.ts` asserts the click
+// issues no export call: an export that could start from one press of a toolbar
+// button is a raw export one mis-click away, and the two deliberate acts the
+// design contract requires would begin from the wrong place.
+
+const exportOpen = ref(false);
+
+/**
+ * Which table the export covers: the one the operator is looking at.
+ *
+ * A tab with no entity table (Health, Settings) leaves the subject where it
+ * was rather than clearing it — the export is about the inventory, and the
+ * inventory does not stop existing because the operator opened Settings.
+ */
+const exportTable = computed<InventoryTable>(() =>
+  activeTab.value === "observations" ? "observations" : "artifacts",
+);
+
+const exportStore = computed(() =>
+  exportTable.value === "observations" ? observations : artifacts,
+);
+
+/**
+ * Rows the export covers, under the ACTIVE FILTER.
+ *
+ * `null` while the count is still resolving, and that is not the same claim as
+ * zero: the dialog disables the action on zero, and disabling it against a
+ * number nobody has measured yet would refuse an export that is perfectly
+ * possible.
+ */
+const exportReachable = computed<number | null>(
+  () => exportStore.value.visibleTotal.value?.visible ?? null,
+);
+
+/**
+ * The contributing artifacts and how many stopped short (UI-09).
+ *
+ * COUNTED UNFILTERED AND OVER `artifacts` WHICHEVER TABLE IS BEING EXPORTED. An
+ * observation is a SIGHTING of an artifact and the analysis lives on the bytes,
+ * so the artifacts are what contribute to any inventory the export covers. The
+ * backend counts the same two numbers again when it serialises — these are for
+ * the DECISION, those are for the FILE, and the file's must be read at the
+ * moment it is written.
+ */
+const contributingTotal = ref(0);
+const contributingDegraded = ref(0);
+
+async function loadContributingCounts(): Promise<void> {
+  if (client === null) return;
+  const total = await client.countInventory({
+    projectId: SERVER_SCOPED_PROJECT,
+    table: "artifacts",
+    filter: null,
+  });
+  if (total.ok) contributingTotal.value = total.value.visible;
+  const degraded = await client.countInventory({
+    projectId: SERVER_SCOPED_PROJECT,
+    table: "artifacts",
+    filter: AFFECTED_FILTER,
+  });
+  if (degraded.ok) contributingDegraded.value = degraded.value.visible;
+}
+
+/** The toolbar action. It OPENS THE DIALOG and refreshes the two floor numbers.
+ *  It issues no export. */
+function openExport(): void {
+  exportOpen.value = true;
+  void loadContributingCounts();
+}
+
+function closeExport(): void {
+  exportOpen.value = false;
+}
+
+/** One export chunk, routed through the typed client. Answers a VALUE on every
+ *  path — a component that had to catch would be a component whose failure
+ *  Caido swallows. */
+function runExport(
+  request: ExportChunkRequest,
+): Promise<RpcResult<ExportChunkOutcome>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.exportInventory(request);
+}
+
 /** The table asked for Health. The TAB STRIP is this component's to move; a
  *  table that switched tabs itself would be a component writing to a sibling. */
 function openHealth(): void {
@@ -420,6 +520,19 @@ function openHealth(): void {
       class="flex h-12 shrink-0 items-center border-b border-surface-600 bg-surface-800 px-4"
     >
       <h1 class="text-2xl font-semibold leading-tight">DefMiner</h1>
+
+      <!-- UI-06's primary action. It OPENS THE DIALOG; it never exports. The
+           accent is NOT used here: 05-UI-SPEC.md reserves accent to five
+           elements and names the export button in the list it is explicitly
+           NOT used for. -->
+      <button
+        id="defminer-export-open"
+        type="button"
+        class="ml-4 border border-surface-600 px-2 py-1 text-xs font-semibold focus:ring-2 focus:ring-primary-500"
+        @click="openExport"
+      >
+        {{ EXPORT_CTA }}
+      </button>
 
       <!-- The coalescing pill slot. It renders ONLY when there is something
            pending: a pill reading "0 new" is chrome that says nothing and
@@ -463,6 +576,26 @@ function openHealth(): void {
         {{ tab.label }}
       </button>
     </nav>
+
+    <!-- UI-06's dialog. Mounted under the toolbar rather than as an overlay,
+         for the reason the evidence panel is a region and not an overlay: this
+         page has no modal layer, and inventing one for a single dialog would be
+         a second focus regime nobody else obeys. -->
+    <div v-if="exportOpen" class="shrink-0 px-4 pt-4">
+      <ExportDialog
+        :open="exportOpen"
+        :table="exportTable"
+        :filter="exportStore.filter.value"
+        :sort-key="exportStore.sortKey.value"
+        :direction="exportStore.direction.value"
+        :project-id="SERVER_SCOPED_PROJECT"
+        :reachable-count="exportReachable"
+        :contributing-total="contributingTotal"
+        :contributing-degraded="contributingDegraded"
+        :run-export="runExport"
+        @close="closeExport"
+      />
+    </div>
 
     <!-- Region 3 — split body. The evidence panel is a PERSISTENT region, not an
          overlay: an overlay forces the operator to close it between rows, which
