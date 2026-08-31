@@ -411,9 +411,35 @@ WHERE project_id = ? AND scan_id = ? AND state = 'running'
 // `operator_paused` would render its suspension sentence under a badge that says
 // it is scanning, on the surface whose entire subject is which of those two it
 // is.
+//
+// AND THE EPOCH IS RE-BASED TO THE ONE IN FORCE NOW. That is the least obvious
+// line in this module and it is load-bearing, so here is the whole argument.
+//
+// `projectEpoch()` is a MONOTONIC COUNT OF APPLIED PROJECT CHANGES
+// (`lifecycle.ts`: "Bumped by every applied change"). It never returns to a
+// previous value — switching away from a project and back gives a HIGHER number,
+// not the old one. A resume that left the row's stale epoch in place would
+// therefore produce a scan that suspends itself again on its very first page,
+// for ever, because `runScanProducer` re-checks `scan.epoch !== projectEpoch()`
+// every page. D-04's suspension would be a ONE-WAY DOOR, and the must-have that
+// a suspended scan "resumes only on explicit operator action" would be
+// unreachable rather than merely awkward.
+//
+// THE EPOCH IS A FRESHNESS TOKEN, NOT A PROJECT IDENTITY. The identity is
+// `project_id`, which is in this predicate and in every other one in this
+// package, and which comes from `currentProjectId()` and never from the caller
+// (T-05-34). What the epoch catches is a change that lands MID-FLIGHT, between a
+// walk's own reads and its writes — the window `consumer.ts` re-checks it for.
+// A resume is the operator saying "continue this scan, in this project, now", so
+// re-stamping the token to now is what makes the resume mean anything.
+//
+// A resume issued from the WRONG project is refused before this statement is
+// ever reached, and refused by the scoping rather than by the epoch: the row is
+// not in that project's partition, so `getScan` does not find it. That is
+// 06-UI-SPEC.md's "Resume it from that project" enforced by the predicate.
 const RESUME_SQL = `
 UPDATE scans
-SET state = 'running', suspend_reason = NULL, updated_at = ?
+SET state = 'running', suspend_reason = NULL, epoch = ?, updated_at = ?
 WHERE project_id = ? AND scan_id = ? AND state = 'suspended'
 `;
 
@@ -565,16 +591,22 @@ export async function pauseScan(
  * `discarded` row reports `changes: 0` — a scan that reached the end of its
  * range has nothing to continue, and a discarded one has no position to continue
  * from.
+ *
+ * @param currentEpoch - The epoch in force NOW, written onto the row. See
+ * {@link RESUME_SQL} for why a resume re-bases it rather than preserving it —
+ * the short version is that the counter is monotonic, so a preserved epoch makes
+ * D-04's suspension permanent.
  */
 export async function resumeScan(
   db: Database,
   projectId: string,
   scanId: string,
+  currentEpoch: number,
   nowMs: number,
 ): Promise<ScanTransition> {
   try {
     const stmt = await db.prepare(RESUME_SQL);
-    const res = await stmt.run(nowMs, projectId, scanId);
+    const res = await stmt.run(currentEpoch, nowMs, projectId, scanId);
     return {
       ok: true,
       changes: res.changes,

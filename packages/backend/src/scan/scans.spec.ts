@@ -408,7 +408,7 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
     await pauseScan(fx.db, PROJECT, "s1", NOW + 1);
 
-    const resumed = await resumeScan(fx.db, PROJECT, "s1", NOW + 2);
+    const resumed = await resumeScan(fx.db, PROJECT, "s1", 0, NOW + 2);
     expect(resumed.ok && resumed.changes).toBe(1);
     expect(resumed.ok && resumed.row?.state).toBe("running");
     // CLEARED, not left behind: a running scan still carrying `operator_paused`
@@ -416,7 +416,7 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     expect(resumed.ok && resumed.row?.suspend_reason).toBeNull();
 
     await completeScan(fx.db, PROJECT, "s1", NOW + 3);
-    const again = await resumeScan(fx.db, PROJECT, "s1", NOW + 4);
+    const again = await resumeScan(fx.db, PROJECT, "s1", 0, NOW + 4);
     expect(again.ok && again.changes).toBe(0);
     expect(again.ok && again.row?.state).toBe("completed");
   });
@@ -433,7 +433,7 @@ describe("the transitions — every guard INSIDE its own statement (D-04, D-10, 
     expect(refused.ok && refused.changes).toBe(0);
     expect(refused.ok && refused.row?.state).toBe("suspended");
 
-    await resumeScan(fx.db, PROJECT, "s1", NOW + 3);
+    await resumeScan(fx.db, PROJECT, "s1", 0, NOW + 3);
     const done = await completeScan(fx.db, PROJECT, "s1", NOW + 4);
     expect(done.ok && done.changes).toBe(1);
     expect(done.ok && done.row?.state).toBe("completed");

@@ -143,7 +143,7 @@ describe("the scan lifecycle — every route into and out of every state", () =>
     expect(paused.ok && paused.row?.last_request_id).toBe("9001");
     expect(paused.ok && paused.row?.last_created_at).toBe(CAPTURED_AT);
 
-    const resumed = await resumeScan(fx.db, PROJECT, "s1", NOW + 3);
+    const resumed = await resumeScan(fx.db, PROJECT, "s1", EPOCH, NOW + 3);
     expect(resumed.ok && resumed.row?.state).toBe("running");
     expect(resumed.ok && resumed.row?.suspend_reason).toBeNull();
     expect(resumed.ok && resumed.row?.last_request_id).toBe("9001");
@@ -207,63 +207,92 @@ describe("the scan lifecycle — every route into and out of every state", () =>
     expect(await getActiveScan(fx.db, PROJECT)).toBeUndefined();
   });
 
-  it("start → EPOCH CHANGE: suspended with `project_changed`, and a resume under the NEW epoch does not stick", async () => {
+  it("start → EPOCH CHANGE: suspended with `project_changed`, resumable only from the project it belongs to", async () => {
     await startScan(fx.db, PROJECT, "s1", "", EPOCH, NOW);
     await advanceScan(fx.db, PROJECT, "s1", page("9001", NOW + 1));
 
     // D-04. Nothing is written under a stale project and nothing silently
-    // restarts.
+    // restarts. `projectEpoch()` is a MONOTONIC COUNT of applied changes, so the
+    // new epoch is a higher number and never the old one again.
+    const changedEpoch = EPOCH + 1;
     const suspended = await suspendOnEpochChange(
       fx.db,
       PROJECT,
       "s1",
-      EPOCH + 1,
+      changedEpoch,
       NOW + 2,
     );
     expect(suspended.ok && suspended.changes).toBe(1);
     expectReason(suspended.ok ? suspended.row : undefined, "project_changed");
     // IT KEPT ITS PLACE IN THE OLD PROJECT — both the position and the row's own
-    // epoch, which is what a resume from that project needs to be possible.
+    // epoch, which is what makes the scan still identifiable as belonging there.
     expect(suspended.ok && suspended.row?.last_request_id).toBe("9001");
     expect(suspended.ok && suspended.row?.epoch).toBe(EPOCH);
 
-    // A RESUME UNDER THE NEW EPOCH IS REFUSED — and it is refused by the same
-    // predicate, not by a second rule. The transition itself has no epoch
-    // argument on purpose: resuming is the operator's act, and the epoch guard
-    // is what decides whether the resumed scan may WRITE. Run in the order the
-    // RPC runs them, a resume under the wrong project is undone before it can
-    // walk a page.
-    await resumeScan(fx.db, PROJECT, "s1", NOW + 3);
-    const reSuspended = await suspendOnEpochChange(
+    // A RESUME FROM THE PROJECT THE OPERATOR SWITCHED TO IS REFUSED, AND IT IS
+    // REFUSED BY THE SCOPING RATHER THAN BY THE EPOCH. The row is not in that
+    // project's partition, so nothing there can reach it — which is
+    // 06-UI-SPEC.md's "Resume it from that project" enforced by a predicate
+    // instead of by a rule somebody has to remember. The RPC reads
+    // `currentProjectId()` and never a caller-supplied id (T-05-34), so there is
+    // no argument a caller can pass to get past this.
+    expect(await getScan(fx.db, OTHER, "s1")).toBeUndefined();
+    const fromWrongProject = await resumeScan(
       fx.db,
-      PROJECT,
+      OTHER,
       "s1",
-      EPOCH + 1,
-      NOW + 4,
+      changedEpoch,
+      NOW + 3,
     );
-    expect(reSuspended.ok && reSuspended.changes).toBe(1);
-    expectReason(
-      reSuspended.ok ? reSuspended.row : undefined,
-      "project_changed",
-    );
+    expect(fromWrongProject.ok && fromWrongProject.changes).toBe(0);
+    expect((await getScan(fx.db, PROJECT, "s1"))?.state).toBe("suspended");
 
-    // A RESUME UNDER THE ORIGINAL EPOCH CONTINUES. The same two calls, with the
-    // epoch the row was started under: the guard declines, the scan stays
-    // running, and the next page advances it.
-    await resumeScan(fx.db, PROJECT, "s1", NOW + 5);
-    const held = await suspendOnEpochChange(
+    // A RESUME FROM THE PROJECT IT BELONGS TO CONTINUES, and it RE-BASES the
+    // epoch to the one in force now. That re-basing is load-bearing rather than
+    // incidental: the counter never returns to a previous value, so a resume
+    // that preserved the stale epoch would produce a scan that suspends itself
+    // again on its very first page, for ever — D-04's suspension would be a
+    // one-way door and "resumes only on explicit operator action" would be
+    // unreachable rather than merely awkward. `RESUME_SQL` carries the argument.
+    const backHome = EPOCH + 2;
+    const resumed = await resumeScan(fx.db, PROJECT, "s1", backHome, NOW + 4);
+    expect(resumed.ok && resumed.changes).toBe(1);
+    expect(resumed.ok && resumed.row?.state).toBe("running");
+    expect(resumed.ok && resumed.row?.suspend_reason).toBeNull();
+    expect(resumed.ok && resumed.row?.epoch).toBe(backHome);
+    // …and the position it was suspended at is exactly where it carries on from.
+    expect(resumed.ok && resumed.row?.last_request_id).toBe("9001");
+
+    // THE GUARD NO LONGER FIRES AT THE CURRENT EPOCH, so the scan can actually
+    // walk — the assertion the one-way-door bug would fail.
+    const settled = await suspendOnEpochChange(
       fx.db,
       PROJECT,
       "s1",
-      EPOCH,
-      NOW + 6,
+      backHome,
+      NOW + 5,
     );
-    expect(held.ok && held.changes).toBe(0);
-    expect(held.ok && held.row?.state).toBe("running");
+    expect(settled.ok && settled.changes).toBe(0);
+    expect(settled.ok && settled.row?.state).toBe("running");
     expect(
-      (await advanceScan(fx.db, PROJECT, "s1", page("8981", NOW + 7))).ok,
+      (await advanceScan(fx.db, PROJECT, "s1", page("8981", NOW + 6))).ok,
     ).toBe(true);
     expect((await getScan(fx.db, PROJECT, "s1"))?.pages_walked).toBe(2);
+
+    // AND IT FIRES AGAIN ON THE NEXT CHANGE. Re-basing does not disarm D-04; it
+    // re-arms it against the epoch the operator resumed under.
+    const changedAgain = await suspendOnEpochChange(
+      fx.db,
+      PROJECT,
+      "s1",
+      backHome + 1,
+      NOW + 7,
+    );
+    expect(changedAgain.ok && changedAgain.changes).toBe(1);
+    expectReason(
+      changedAgain.ok ? changedAgain.row : undefined,
+      "project_changed",
+    );
   });
 
   it("ERR-02: after the startup sweep NO row is `running`, in any project, and nothing auto-resumed", async () => {
@@ -362,7 +391,7 @@ describe("the scan lifecycle — every route into and out of every state", () =>
     await startScan(fx.db, PROJECT, "s1", "", EPOCH, NOW);
     await advanceScan(fx.db, PROJECT, "s1", page("9001", NOW + 1));
     await pauseScan(fx.db, PROJECT, "s1", NOW + 2);
-    await resumeScan(fx.db, PROJECT, "s1", NOW + 3);
+    await resumeScan(fx.db, PROJECT, "s1", EPOCH, NOW + 3);
 
     const row = await getScan(fx.db, PROJECT, "s1");
     const resumeFilter = composeScanFilter(
@@ -386,7 +415,7 @@ describe("the scan lifecycle — every route into and out of every state", () =>
     await startScan(fx.db, PROJECT, "s1", "", EPOCH, NOW);
     await advanceScan(fx.db, PROJECT, "s1", page("9001", NOW + 1));
     await suspendRunningOnInit(fx.db, PROJECT, NOW + 2);
-    await resumeScan(fx.db, PROJECT, "s1", NOW + 3);
+    await resumeScan(fx.db, PROJECT, "s1", EPOCH, NOW + 3);
 
     const row = await getScan(fx.db, PROJECT, "s1");
     // A scan that had lost its position would compose with NO position clause —
