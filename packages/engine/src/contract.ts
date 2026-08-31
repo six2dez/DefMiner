@@ -756,7 +756,140 @@ export type InvalidationSummary = {
   readonly category: InvalidationCategory;
   readonly changedCount: number;
   readonly newestId: string;
+  /**
+   * THE DISCRIMINATOR, DECLARED ON THIS VARIANT AND NEVER EMITTED ON IT.
+   *
+   * `?: undefined` and not a literal, deliberately. Both variants of
+   * {@link InvalidationEventPayload} declare the tag — which is what makes
+   * {@link isScanProgressPayload} a narrowing predicate rather than a cast —
+   * while the object this type describes is still EXACTLY the four scalars
+   * above at run time. `ingest/consumer.ts` builds it as a four-key literal and
+   * `index.spec.ts` asserts that key set; giving the summary a real tag would
+   * have widened the shipped payload UI-07 fixed, to buy a narrowing the
+   * optional form already provides.
+   */
+  readonly kind?: undefined;
 };
+
+// ---------------------------------------------------------------------------
+// THE SECOND PAYLOAD VARIANT — SCAN PROGRESS (FIND-04, D-15)
+// ---------------------------------------------------------------------------
+//
+// ===========================================================================
+// WHY THIS IS A VARIANT AND NOT A FOURTH CATEGORY
+// ===========================================================================
+// D-15 asks for retroactive-scan progress to ride the frontend coalescer "as a
+// new category", and says in the same breath that the never-re-order-while-a-
+// row-is-selected rule must NOT apply to it, so progress lands immediately
+// rather than accruing into the coalescing pill.
+//
+// TAKEN LITERALLY, THOSE TWO HALVES CONTRADICT EACH OTHER, and the contradiction
+// is mechanical rather than a matter of taste. `stores/coalescer.ts` checks its
+// triage lock TWICE and both checks are BEFORE the debounce window: a summary
+// arriving while a row is selected is counted into `pending` and never enters
+// the window at all. A `scans` category added to the list below would therefore
+// accrue into the pill and never land — the exact opposite of what D-15 asks
+// for. 06-UI-SPEC.md § "Named Conflicts" records the resolution: progress rides
+// the SAME EVENT, which is D-15's actual reason (one backend -> frontend
+// mechanism), and is NOT an {@link InvalidationCategory}, which is D-15's
+// mechanism and cannot deliver its own intent.
+//
+// THE CATEGORY LIST IS THE GATE AND IT IS NOT TOUCHED. `INVALIDATION_CATEGORIES`
+// exists to stop speculative categories arriving through the back door, and a
+// progress payload has NO ROWS TO INVALIDATE — there is no table to re-query, no
+// cursor to protect and no pill to increment. It is not a member of that
+// vocabulary in any sense except that it travels on the same wire.
+
+/**
+ * The discriminator that tells the two payload variants apart.
+ *
+ * NOT NAMESPACED like {@link INVALIDATION_EVENT}. It is a tag INSIDE a payload
+ * on one already-namespaced event, and a `defminer:` prefix here would invite a
+ * reader to mistake it for a second event name — which is the one thing D-15
+ * spends its argument forbidding.
+ */
+export const SCAN_PROGRESS_KIND = "scan-progress";
+
+/**
+ * One retroactive scan's progress, as the producer reports it after each page
+ * it has actually walked.
+ *
+ * EVERY FIELD IS AN INTEGER, A BOOLEAN, A CLOSED-VOCABULARY WORD OR AN
+ * IDENTIFIER THIS PLUGIN OWNS (T-06-44) — the same property
+ * {@link ScanStatusPayload} has and for the same reason: the readout renders
+ * without a display-path call because of the SHAPE, not because of a discipline
+ * somebody has to keep. NO FINDINGS PAYLOAD, NO RESPONSE BODIES, NO ROWS, and
+ * no URL, host, header or body anywhere on it.
+ *
+ * THE COUNTERS ARE CUMULATIVE, read off the `scans` row rather than off one
+ * call's totals. A walk that holds at the backpressure watermark re-enters, and
+ * a payload carrying the re-entry's own deltas would reset the operator's strip
+ * to a small number every time the queue filled.
+ */
+export type ScanProgressPayload = {
+  readonly kind: typeof SCAN_PROGRESS_KIND;
+  readonly projectId: string;
+  readonly scanId: string;
+  readonly state: ScanLifecycleState;
+  readonly pagesWalked: number;
+  readonly seen: number;
+  readonly admitted: number;
+  readonly skippedDone: number;
+  readonly rejected: number;
+  readonly queued: number;
+  /**
+   * ABSENT, NEVER A LYING ZERO — and absent for the same reason
+   * {@link ScanStatusPayload.analysed} is.
+   *
+   * `analyses` rows carry NO SCAN ATTRIBUTION: the primary key is
+   * `(project_id, sha256, detector_set_hash)` and nothing on it says which scan
+   * offered the work. Counting them honestly needs either a new `scans` column
+   * — another permanent step in a one-way migration ladder — or provenance on
+   * the queue entry itself, and neither is a thing to invent on the side of a
+   * progress payload. The field is declared here so wiring it later is one edit
+   * in one place rather than a shape change on the wire.
+   */
+  readonly analysed: number | null;
+  /**
+   * The capture time of the oldest request walked so far, in ms.
+   *
+   * FROM `request.getCreatedAt()`, NEVER FROM THE CLOCK — the walk is
+   * descending, so this date marches BACKWARDS into history, and that motion is
+   * the narrative the missing denominator was going to carry. `null` before the
+   * first page resolves: absent, never the epoch.
+   */
+  readonly lastCreatedAt: number | null;
+  /** Is the producer withholding pages because the queue is at the watermark?
+   *  {@link ScanStatusPayload.heldAtWatermark} states at length why this cannot
+   *  be derived by the reader. */
+  readonly heldAtWatermark: boolean;
+};
+
+/**
+ * Everything {@link INVALIDATION_EVENT} can carry. TWO VARIANTS, ONE CHANNEL.
+ *
+ * The events map in `packages/backend/src/api/spec.ts` is typed against THIS,
+ * so a third variant added without a handler on the frontend's single
+ * subscription site is a typecheck failure rather than a payload nobody routes.
+ */
+export type InvalidationEventPayload =
+  | InvalidationSummary
+  | ScanProgressPayload;
+
+/**
+ * Narrow one event payload to the progress variant.
+ *
+ * THE PREDICATE IS THE ROUTING MECHANISM. The frontend discriminates at its ONE
+ * subscription site and dispatches: progress to its own leading-throttled store,
+ * invalidation summaries to the coalescer. A progress payload therefore never
+ * reaches `onSummary` and never touches `pending`, which is what leaves both of
+ * the coalescer's triage-lock early returns literally unmodified.
+ */
+export function isScanProgressPayload(
+  payload: InvalidationEventPayload,
+): payload is ScanProgressPayload {
+  return payload.kind === SCAN_PROGRESS_KIND;
+}
 
 // ---------------------------------------------------------------------------
 // THE SCORE-EXPLANATION FRAME (UI-04) — FRAME ONLY, NO VOCABULARY

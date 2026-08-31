@@ -92,6 +92,11 @@
 // runtime's ReDoS recovery is `kill`, and SIGKILL takes the operator's real
 // project data with it. The one text scan below counts a character in a loop.
 
+import type { ScanProgressPayload } from "@defminer/engine/contract";
+import {
+  INVALIDATION_EVENT,
+  SCAN_PROGRESS_KIND,
+} from "@defminer/engine/contract";
 import type { Entry } from "@defminer/engine/queue";
 import {
   SCAN_BACKPRESSURE_WATERMARK,
@@ -179,7 +184,25 @@ export type ScanQueue = {
  * @internal
  */
 export type ScanProducerDeps = {
-  readonly sdk: AdmitSdk & { requests: { query(): ScanQuery } };
+  /**
+   * The SDK slice this walk touches: `inScope` for the shipped admission gate,
+   * `query()` for the page read, and `api.send` for the per-page progress emit.
+   *
+   * THE EVENT CHANNEL IS ON THE SDK AND NOT AN INJECTED CALLBACK. There is
+   * exactly ONE backend -> frontend mechanism (D-15) and `ingest/consumer.ts`
+   * already reaches it this way; a second, callback-shaped route to the same
+   * `sdk.api.send` would be two spellings of one thing, and the one that is not
+   * the SDK is the one a driver can silently forget to wire.
+   */
+  readonly sdk: AdmitSdk & {
+    requests: { query(): ScanQuery };
+    api: {
+      send(
+        event: typeof INVALIDATION_EVENT,
+        payload: ScanProgressPayload,
+      ): void;
+    };
+  };
   readonly db: Database;
   readonly queue: ScanQueue;
   readonly getProjectId: () => Promise<string>;
@@ -440,6 +463,50 @@ function outcome(
 }
 
 /**
+ * Hand one progress payload to the SHIPPED event channel.
+ *
+ * TWO GUARDS AND A SWALLOW, and each one is somebody else's failure mode:
+ *
+ *   THE PROJECT IS RE-READ IMMEDIATELY BEFORE THE SEND. The page was walked
+ *   under `walkedProjectId`; the operator may have switched in the awaits since.
+ *   A payload announcing project A's progress delivered while the workspace is
+ *   showing project B puts a visibly wrong number on screen, which is the
+ *   frontend half of the boundary `currentProjectId()` enforces on the backend
+ *   — the same still-current check `ingest/consumer.ts` applies before its own
+ *   emit.
+ *
+ *   THE THROW IS SWALLOWED. Caido surfaces neither a throw nor a rejection from
+ *   plugin code, and an event channel torn down during unload must never take
+ *   the walk with it. `consumer.ts`'s `flushInvalidations` states the same rule;
+ *   this is that rule applied to the second variant on the same wire.
+ */
+async function emitProgress(
+  deps: ScanProducerDeps,
+  walkedProjectId: string,
+  payload: ScanProgressPayload,
+): Promise<void> {
+  let currentProjectId: string;
+  try {
+    currentProjectId = await deps.getProjectId();
+  } catch {
+    return;
+  }
+  if (currentProjectId !== walkedProjectId) return;
+  try {
+    deps.sdk.api.send(INVALIDATION_EVENT, payload);
+  } catch {
+    // SWALLOWED WITH NOTHING RECORDED, AND THAT IS DEFENSIBLE HERE ONLY BECAUSE
+    // THE EVENT IS NOT THE AUTHORITATIVE READER. `getScanStatus` reads the
+    // `scans` row directly and does not depend on this channel at all, so a lost
+    // payload costs at most one tick of a readout the operator can refresh —
+    // and the next page emits again. This module also has no console: `AdmitSdk`
+    // is deliberately the narrowest slice that admits, and widening it to log a
+    // teardown-time channel failure would buy a line nobody reads at the cost of
+    // a surface every caller then has to supply.
+  }
+}
+
+/**
  * Walk stored traffic, page after page, offering what it admits.
  *
  * The order of operations inside one page is the design, and each step is a
@@ -648,6 +715,42 @@ export async function runScanProducer(
       totals.queued += queued;
       counters.retro.pagesWalked += 1;
       counters.retro.seen += items.length;
+
+      // --- THE PER-PAGE PROGRESS EMIT (FIND-04, D-15) ----------------------
+      //
+      // AFTER THE ADVANCE AND ONLY ON A PAGE THAT WAS WALKED. A hold transfers
+      // no page and reports no progress: a readout that ticked while the
+      // producer was withholding would be reporting motion that did not happen,
+      // on the one surface whose entire subject is whether anything is moving.
+      //
+      // THE COUNTERS ARE THE ROW'S, CUMULATIVE — the values `scan` was read
+      // with plus this page's own — and not `totals`, which describe THIS CALL.
+      // A walk that holds re-enters, and a payload carrying the re-entry's
+      // deltas would reset the operator's strip to a small number every time the
+      // queue filled. Computed rather than re-read: `advanceScan` adds exactly
+      // these deltas to exactly these columns, so a second SELECT would be a
+      // round trip to learn a number this frame already holds.
+      await emitProgress(deps, projectId, {
+        kind: SCAN_PROGRESS_KIND,
+        projectId,
+        scanId: scan.scan_id,
+        // `running` BY CONSTRUCTION, not by re-reading: the page was walked, and
+        // step 2 above refuses to walk a scan in any other state.
+        state: "running",
+        pagesWalked: scan.pages_walked + 1,
+        seen: scan.seen + items.length,
+        admitted: scan.admitted + admitted,
+        skippedDone: scan.skipped_done + skippedDone,
+        rejected: scan.rejected + rejected,
+        queued: scan.queued + queued,
+        // ABSENT, NEVER ZERO. See the field's own note on the contract: no
+        // `analyses` row carries scan attribution, so this producer cannot know
+        // it and will not guess.
+        analysed: null,
+        // FROM THE ITEM, exactly as the row's position was.
+        lastCreatedAt: boundary.request.getCreatedAt().getTime(),
+        heldAtWatermark,
+      });
 
       // BETWEEN PAGES, UNCONDITIONALLY — including after the last one. One
       // thread, no worker threads, and `setTimeout(fn, 0)` the only primitive

@@ -29,7 +29,7 @@ import type {
   ExportFormat,
   ExportRedactionMode,
   INVALIDATION_EVENT,
-  InvalidationSummary,
+  InvalidationEventPayload,
   OperatorSettingKey,
   PageCursor,
   PageRequest,
@@ -624,16 +624,39 @@ export type ScanCommandOutcome = {
  * rename that left the old registration in place would not be a cosmetic
  * mistake, it would abort initialisation, invisibly.
  *
- * THE EVENTS MAP HAS EXACTLY ONE ENTRY AND ITS PAYLOAD IS A SUMMARY. No findings
- * payload, no response bodies, no rows, no target-controlled string (UI-07,
- * threat T-05-17 / T-05-35). The event says THAT something changed, in which
- * category, how much, and the newest row's identifier — and the frontend
- * re-queries a page when it decides to, through the same project-scoped,
- * redacted read path everything else uses. An event that pushed rows would be a
- * second data path out of the backend with none of the first one's controls on
- * it. The event NAME is not restated here either: it comes from the engine
- * contract's `INVALIDATION_EVENT` constant, so the emitter in `index.ts` and the
- * subscriber in the frontend bind to one string rather than to two copies of one.
+ * THE EVENTS MAP HAS EXACTLY ONE ENTRY AND ITS PAYLOAD CARRIES NO CONTENT. No
+ * findings payload, no response bodies, no rows, no target-controlled string
+ * (UI-07, threat T-05-17 / T-05-35 / T-06-44). The frontend re-queries a page
+ * when it decides to, through the same project-scoped, redacted read path
+ * everything else uses. An event that pushed rows would be a second data path
+ * out of the backend with none of the first one's controls on it. The event NAME
+ * is not restated here either: it comes from the engine contract's
+ * `INVALIDATION_EVENT` constant, so the emitter in `index.ts` and the subscriber
+ * in the frontend bind to one string rather than to two copies of one.
+ *
+ * ITS PAYLOAD IS NOW A UNION OF TWO VARIANTS, AND THE SPIRIT OF THE RULE IS
+ * EXACTLY PRESERVED WHILE THE SHAPE IS NOT. The first variant is the shipped
+ * invalidation summary — THAT something changed, in which category, how much,
+ * and the newest row's identifier. The second is one retroactive scan's
+ * progress: DefMiner-authored INTEGERS, one boolean, two identifiers this
+ * plugin owns, and ONE DefMiner-formatted timestamp derived from
+ * `request.getCreatedAt()`. Still no findings payload, still no bodies, still
+ * nothing a target influenced.
+ *
+ * THE UPSTREAM CONTRACT IS AMENDED RATHER THAN QUIETLY EXCEEDED.
+ * `05-UI-SPEC.md` § "Data & Interaction Contract" said verbatim that
+ * backend -> frontend events carry an invalidation summary ONLY; plan 06-09
+ * amends that sentence in the same commit as the code, so the approved document
+ * never describes a build that no longer exists (06-UI-SPEC.md § "Amendments",
+ * rows A2 and A3). An exceeded contract nobody edited is how a security
+ * property becomes folklore.
+ *
+ * ONE EVENT AND NOT TWO, WHICH IS D-15's ACTUAL REASON. A second event name
+ * would mean a second subscription list edited by every phase that adds a
+ * surface. What D-15 asked for LITERALLY — a fourth `InvalidationCategory` —
+ * is NOT done, and the engine contract states at length why it delivers the
+ * opposite of D-15's own intent. `INVALIDATION_CATEGORIES` still holds exactly
+ * three members.
  */
 type Spec = DefinePluginPackageSpec<{
   manifestId: "defminer";
@@ -751,7 +774,9 @@ type Spec = DefinePluginPackageSpec<{
   // compile. The import is `import type`, so nothing is added to the bundle by
   // this file.
   events: {
-    [K in typeof INVALIDATION_EVENT]: (summary: InvalidationSummary) => void;
+    [K in typeof INVALIDATION_EVENT]: (
+      payload: InvalidationEventPayload,
+    ) => void;
   };
 }>;
 

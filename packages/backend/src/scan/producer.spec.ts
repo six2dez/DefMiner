@@ -1203,7 +1203,11 @@ describe("the producer reports every page it walked, and only those", () => {
     });
 
     const record = newRecord();
-    const sdk = onePage([item("ok-1"), item("no-1", { code: 404 })], false, record);
+    const sdk = onePage(
+      [item("ok-1"), item("no-1", { code: 404 })],
+      false,
+      record,
+    );
 
     await runScanProducer({
       sdk,
