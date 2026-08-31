@@ -881,7 +881,7 @@ MEASURED SILENCES - 26 entries.
 - [ ] **UI-03**: Every entity links back to its source request, artifact version, and byte offsets.
 - [ ] **UI-04**: Each finding shows a score explanation — which signals fired and why it scored as it did.
 - [ ] **UI-05**: Reconstructed-source viewer.
-- [ ] **UI-06**: JSON and CSV export, redacted by default with an explicit opt-in to include raw values.
+- [x] **UI-06**: JSON and CSV export, redacted by default with an explicit opt-in to include raw values.
 - [x] **UI-07**: Backend-to-frontend events are coalesced so a heavy browsing session cannot flood the UI.
 - [ ] **UI-08**: A settings surface for every toggle, threshold, and budget.
 - [x] **UI-09**: Degraded and partial analyses are visibly marked, never silently presented as complete.
@@ -935,7 +935,7 @@ MEASURED SILENCES - 26 entries.
 ### Frontend safety (UISEC)
 
 - [x] **UISEC-01**: All displayed content is target-controlled and is rendered as text, never as markup. No `v-html` on extracted content anywhere.
-- [ ] **UISEC-02**: CSV export neutralises formula injection (`=`, `+`, `-`, `@`, tab, CR leading characters).
+- [x] **UISEC-02**: CSV export neutralises formula injection (`=`, `+`, `-`, `@`, tab, CR leading characters).
 - [x] **UISEC-03**: Extremely long or adversarial extracted strings are truncated for display without breaking layout or freezing the renderer.
 
 ### Deployment reality (DEPLOY)
