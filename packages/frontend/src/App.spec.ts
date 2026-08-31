@@ -897,7 +897,12 @@ const REFUSING_REPORT: CompatReport = {
       name: "sdk.events.onProjectChange",
       scope: "sdk",
       ok: false,
-      error: null,
+      // A PROBE THAT THREW rather than one that merely found nothing. Both are
+      // reported as missing by `probeSurfaces`, and only this one has an error
+      // to render — so without it here the branch that renders one is a branch
+      // no test reaches.
+      error:
+        "TypeError: Cannot read properties of undefined (reading 'onProjectChange')",
     },
   ],
 };
@@ -957,6 +962,37 @@ describe("the compatibility refusal surface (COMPAT-01, debt P1-D5)", () => {
     expect(matrix).toContain(SURFACE_PRESENT);
     expect(matrix).toContain("sdk.events.onProjectChange");
     expect(matrix).toContain(SURFACE_MISSING);
+  });
+
+  it("renders a probe's own error text, through the display path", async () => {
+    // A probe that THREW has something to say that a probe that merely found
+    // nothing does not. It is plugin-generated — a caught TypeError from a
+    // property access this plugin made — so it gets its own element rather than
+    // an interpolation into a DefMiner sentence.
+    const wrapper = mountWith(
+      stubSdk({ onlyCompatAnswers: true, compat: REFUSING_REPORT }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.get("[data-defminer-compat-surfaces]").text()).toContain(
+      "Cannot read properties of undefined",
+    );
+  });
+
+  it("truncates an over-long reason and SAYS it truncated", async () => {
+    // The panel cap is 2,048 graphemes and no shipped refusal reason is near
+    // it — but a cap the operator cannot see is a cap that silently eats the
+    // half of a sentence naming the missing surfaces.
+    const wrapper = mountWith(
+      stubSdk({
+        onlyCompatAnswers: true,
+        compat: { ...REFUSING_REPORT, reason: "x".repeat(2100) },
+      }),
+    );
+    await settle(wrapper);
+
+    const text = wrapper.get("[data-defminer-compat-refusal]").text();
+    expect(text).toContain("Truncated at 2,048 of 2,100 characters.");
   });
 
   it("is ABSENT when the build is compatible", async () => {
