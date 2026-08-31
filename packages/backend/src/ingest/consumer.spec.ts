@@ -41,6 +41,7 @@ import { RETENTION_MAX_ROWS_KEY } from "@defminer/engine/contract";
 import { BoundedQueue } from "@defminer/engine/queue";
 import {
   ARTIFACT_DEADLINE_MS,
+  PASSIVE_MAX_BYTES,
   QUEUE_CAP,
   RETENTION_SWEEP_EVERY_N,
 } from "@defminer/engine/thresholds";
@@ -1372,5 +1373,221 @@ describe("the call sites match the signatures 01-01 and 01-04 froze", () => {
           `store function it does not call is a function nobody calls (decision P3-D4).`,
       ).toBe(true);
     }
+  });
+});
+
+// ===========================================================================
+// D-08 — THE ONE BRANCH THAT COUPLES RETENTION TO THE SCAN STATE MACHINE
+// ===========================================================================
+
+describe("D-08 — a row-cap eviction suspends a running scan; an age trim does not", () => {
+  const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
+  const ANCIENT = () => Date.now() - 400 * 24 * 60 * 60 * 1000;
+
+  function seedArtifacts(count: number, at: number): void {
+    const stmt = fx.raw.prepare(
+      `INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`,
+    );
+    for (let i = 0; i < count; i += 1) {
+      stmt.run(
+        PROJECT,
+        "seed" + String(i).padStart(60, "0"),
+        10,
+        "js",
+        at,
+        at + i,
+      );
+    }
+  }
+
+  function seedRunningScan(scanId = "scan-1"): void {
+    fx.raw
+      .prepare(
+        `INSERT INTO scans (project_id, scan_id, state, suspend_reason, operator_filter,
+                            epoch, last_request_id, last_cursor, last_created_at,
+                            pages_walked, seen, admitted, skipped_done, rejected, queued,
+                            started_at, updated_at, finished_at)
+         VALUES (?, ?, 'running', NULL, '', 0, '9001', NULL, NULL, 3, 60, 12, 4, 44, 12, ?, ?, NULL)`,
+      )
+      .run(PROJECT, scanId, Date.now(), Date.now());
+  }
+
+  function scanState(scanId = "scan-1"): {
+    state: string;
+    suspend_reason: string | null;
+    last_request_id: string;
+  } {
+    return {
+      ...(fx.raw
+        .prepare(
+          "SELECT state, suspend_reason, last_request_id FROM scans WHERE project_id = ? AND scan_id = ?",
+        )
+        .get(PROJECT, scanId) as {
+        state: string;
+        suspend_reason: string | null;
+        last_request_id: string;
+      }),
+    };
+  }
+
+  function auditKinds(): string[] {
+    return (
+      fx.raw
+        .prepare(
+          "SELECT kind FROM audit WHERE project_id = ? ORDER BY at ASC, event_id ASC",
+        )
+        .all(PROJECT) as { kind: string }[]
+    ).map((r) => String(r.kind));
+  }
+
+  it("a ROW-CAP eviction while a scan is running suspends it and writes ONE audit row", async () => {
+    // The backfill is consuming itself: every page it walks costs a page it
+    // already walked, and it will never finish however long it runs. Stopping it
+    // is the whole of D-08, and stopping it WITHOUT saying why would leave the
+    // operator with a scan that halted for no visible reason.
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "40",
+      Date.now(),
+    );
+    seedArtifacts(100, Date.now() - 1_000);
+    seedRunningScan();
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("trigger") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const row = scanState();
+    expect(row.state).toBe("suspended");
+    expect(row.suspend_reason).toBe("retention_eviction");
+    // THE POSITION IS KEPT. The remedy the copy names is "raise the cap, then
+    // resume" — and a resume needs somewhere to resume from.
+    expect(row.last_request_id).toBe("9001");
+    expect(auditKinds()).toEqual(["scan_suspended_by_retention"]);
+  });
+
+  it("an AGE-BOUND trim with a running scan suspends NOTHING and records NOTHING", async () => {
+    // THE NEGATIVE PATH, EXECUTED. Both bounds delete rows and both report into
+    // `deleted`; only one of them means the backfill is eating itself. If this
+    // case ever goes red, DefMiner is cancelling operators' multi-hour scans
+    // over routine housekeeping.
+    seedArtifacts(10, ANCIENT());
+    seedRunningScan();
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("trigger") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    // The sweep really did delete — otherwise this proves nothing at all.
+    expect(counters.retentionDeleted).toBeGreaterThan(0);
+    const row = scanState();
+    expect(row.state).toBe("running");
+    expect(row.suspend_reason).toBeNull();
+    expect(auditKinds()).toEqual([]);
+  });
+
+  it("a row-cap eviction with NO running scan suspends nothing", async () => {
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "40",
+      Date.now(),
+    );
+    seedArtifacts(100, Date.now() - 1_000);
+    // A SUSPENDED scan is present and must stay suspended for the reason it
+    // already carries: overwriting `operator_paused` would erase the only record
+    // of why it actually stopped.
+    fx.raw
+      .prepare(
+        `INSERT INTO scans (project_id, scan_id, state, suspend_reason, operator_filter,
+                            epoch, last_request_id, last_cursor, last_created_at,
+                            pages_walked, seen, admitted, skipped_done, rejected, queued,
+                            started_at, updated_at, finished_at)
+         VALUES (?, 'scan-paused', 'suspended', 'operator_paused', '', 0, '9001', NULL, NULL, 1, 1, 1, 0, 0, 0, ?, ?, NULL)`,
+      )
+      .run(PROJECT, Date.now(), Date.now());
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("trigger") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(scanState("scan-paused").suspend_reason).toBe("operator_paused");
+    expect(auditKinds()).toEqual([]);
+  });
+
+  it("the coupling is ONE branch at ONE call site", () => {
+    // D-08 already flags coupling two subsystems as its cost. One branch at the
+    // one place `sweepRetention` runs is what keeps that cost bounded; a second
+    // call site anywhere would spread it, and this is the assertion that notices.
+    const source = readFileSync(CONSUMER, "utf8");
+    const calls = source.match(/suspendForRetentionEviction\(/g) ?? [];
+    expect(calls).toHaveLength(1);
+    expect(source).toContain("summary.rowCapDeleted > 0");
+  });
+});
+
+// ===========================================================================
+// O-07's DISPOSITION — THE AUTHORITATIVE SIZE CHECK IS AT THE RELOAD
+// ===========================================================================
+
+describe("the reload-side size gate — where the byte count is known good", () => {
+  /** A body of exactly `n` bytes, allocated rather than generated per byte: at
+   *  the `PASSIVE_MAX_BYTES` ceiling a per-byte loop is the slowest thing in the
+   *  suite and buys nothing this case is about. */
+  function sized(n: number): Uint8Array {
+    const out = new Uint8Array(n);
+    out.fill(0x2f); // '/', so the bytes decode as text and nothing throws
+    return out;
+  }
+
+  it("a reloaded body ONE BYTE over the ceiling is counted and not analysed", async () => {
+    const p = plan([
+      {
+        id: "r-big",
+        url: "https://x.test/huge.js",
+        bytes: sized(PASSIVE_MAX_BYTES + 1),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.reloadOverSize).toBe(1);
+    // NOTHING WAS WRITTEN. The gate is before the identity write, so an
+    // oversized body costs a counter and nothing else.
+    expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(0);
+    expect((await retentionCounts(fx.db, PROJECT)).analyses).toBe(0);
+  });
+
+  it("a body at EXACTLY the ceiling is admitted — the comparison is `>` and not `>=`", async () => {
+    // The boundary executed on both sides. `PASSIVE_MAX_BYTES` is the largest
+    // body DefMiner analyses, not the smallest it refuses, and an off-by-one
+    // here would silently drop every artifact at the ceiling the live hook
+    // already admits.
+    const p = plan([
+      {
+        id: "r-exact",
+        url: "https://x.test/exact.js",
+        bytes: sized(PASSIVE_MAX_BYTES),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { signal: { aborted: true } });
+
+    expect(counters.reloadOverSize).toBe(0);
+    // It got past the gate: the identity write happened. The ANALYSIS is
+    // deliberately aborted by the signal above — walking eight megabytes to
+    // prove a comparison operator would be the slowest case in the suite and
+    // would be testing the walk rather than the gate.
+    expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(1);
   });
 });

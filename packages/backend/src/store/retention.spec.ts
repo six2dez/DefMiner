@@ -14,6 +14,9 @@
 //   - the cascade leaves no orphan, asserted by counting orphans directly rather
 //     than by trusting the delete order.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
   RETENTION_MAX_ROWS_KEY,
@@ -332,6 +335,7 @@ describe("project isolation (T-01-20)", () => {
       examined: 0,
       deleted: 0,
       auditDeleted: 0,
+      rowCapDeleted: 0,
       moreWork: false,
       errors: 0,
       lastError: null,
@@ -860,5 +864,284 @@ describe("D-06 — the audit table is bounded by ROWS and NOT by age", () => {
     expect(DEFAULT_AUDIT_RETENTION_MAX_ROWS).toBe(
       DEFAULT_RETENTION_MAX_ROWS * 4,
     );
+  });
+});
+
+/** `retention.ts`'s own source, for the assertions that are about the STATEMENT
+ *  TEXT rather than about behaviour.
+ *
+ *  Both kinds are here and neither replaces the other. D-26's exemption is a
+ *  PREDICATE, and the whole point of choosing a predicate over an absence is
+ *  that a reader looking for the exception finds it in the statement — so "the
+ *  predicate is in the text" is a real claim and is asserted as one. The
+ *  behavioural cases below then prove the predicate does what the text says. */
+const RETENTION_SOURCE = readFileSync(
+  fileURLToPath(new URL("./retention.ts", import.meta.url)),
+  "utf8",
+);
+
+/** The body of a named SQL constant in `retention.ts`, as text. */
+function statementText(name: string): string {
+  const m = new RegExp("const " + name + " = `([^`]*)`").exec(RETENTION_SOURCE);
+  expect(m, `${name} is not declared in retention.ts`).not.toBeNull();
+  return m?.[1] ?? "";
+}
+
+/** Seed scan rows directly. Every column is written, so a row is a complete row
+ *  and not a shape that only this file's queries happen to accept. */
+function seedScan(
+  projectId: string,
+  scanId: string,
+  state: "running" | "suspended" | "completed" | "discarded",
+  updatedAt: number,
+): void {
+  fx.raw
+    .prepare(
+      `INSERT INTO scans (project_id, scan_id, state, suspend_reason, operator_filter,
+                          epoch, last_request_id, last_cursor, last_created_at,
+                          pages_walked, seen, admitted, skipped_done, rejected, queued,
+                          started_at, updated_at, finished_at)
+       VALUES (?, ?, ?, ?, '', 0, '9001', NULL, NULL, 1, 1, 1, 0, 0, 0, ?, ?, NULL)`,
+    )
+    .run(
+      projectId,
+      scanId,
+      state,
+      state === "suspended" ? "operator_paused" : null,
+      updatedAt,
+      updatedAt,
+    );
+}
+
+function scanIds(projectId: string): string[] {
+  return (
+    fx.raw
+      .prepare(
+        "SELECT scan_id FROM scans WHERE project_id = ? ORDER BY scan_id ASC",
+      )
+      .all(projectId) as { scan_id: string }[]
+  ).map((r) => String(r.scan_id));
+}
+
+describe("D-08 — `rowCapDeleted` separates a row-cap eviction from an age trim", () => {
+  it("an AGE-ONLY sweep deletes rows and reports `rowCapDeleted` as 0", async () => {
+    // THE NEGATIVE HALF, AND IT IS THE HALF THAT MATTERS. A retroactive scan is
+    // suspended when the ROW CAP starts eating its own results, because that
+    // means the backfill is consuming itself. A 90-day timer removing old
+    // artifacts means nothing of the sort — it is retention working exactly as
+    // configured — and a `rowCapDeleted` that moved on an age trim would cancel
+    // the operator's backfill over routine housekeeping.
+    seedArtifacts(P1, 10, NOW - 400 * 24 * 60 * 60 * 1000, 0);
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      {
+        maxRows: HUGE_ROWS,
+        maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+        auditMaxRows: HUGE_ROWS,
+      },
+      NOW,
+    );
+    expect(summary.deleted).toBeGreaterThan(0);
+    expect(summary.rowCapDeleted).toBe(0);
+  });
+
+  it("the boundary: `count == maxRows` evicts nothing, `count == maxRows + 1` evicts exactly one", async () => {
+    // FIND-04's edge, executed on both sides rather than asserted on one. The
+    // branch is `excess > 0`, so being AT the cap is not being over it — and an
+    // off-by-one here would suspend a scan for a cap it never exceeded.
+    seedArtifacts(P1, 10, NOW - 1000);
+    const atCap = await sweepRetention(
+      fx.db,
+      P1,
+      { maxRows: 10, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
+      NOW,
+    );
+    expect(atCap.rowCapDeleted).toBe(0);
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(10);
+
+    const overByOne = await sweepRetention(
+      fx.db,
+      P1,
+      { maxRows: 9, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
+      NOW,
+    );
+    expect(overByOne.rowCapDeleted).toBe(1);
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(9);
+  });
+
+  it("counts DIGESTS REMOVED, not candidates enumerated", async () => {
+    // `rowCapDeleted` is the number of artifacts the row cap actually evicted.
+    // Counting the candidate list instead would report eviction for a digest the
+    // per-pass budget never reached — a suspension for work that did not happen.
+    seedArtifacts(P1, 30, NOW - 1000);
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      { maxRows: 5, maxAgeMs: HUGE_AGE, auditMaxRows: HUGE_ROWS },
+      NOW,
+    );
+    const remaining = (await retentionCounts(fx.db, P1)).artifacts;
+    expect(summary.rowCapDeleted).toBe(30 - remaining);
+  });
+
+  it("a digest eligible under BOTH bounds is attributed to AGE, never to the row cap", async () => {
+    // `pushVictims` de-duplicates through a `seen` set and the over-age
+    // candidates are pushed FIRST, which is exactly what makes `rowCapDeleted`
+    // mean "artifacts the row cap evicted that age would not have". Every row
+    // here is over the age bound AND over the row cap; none of them is the
+    // backfill-consuming-itself signal.
+    seedArtifacts(P1, 10, NOW - 400 * 24 * 60 * 60 * 1000, 0);
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      {
+        maxRows: 2,
+        maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+        auditMaxRows: HUGE_ROWS,
+      },
+      NOW,
+    );
+    expect(summary.deleted).toBeGreaterThan(0);
+    expect(summary.rowCapDeleted).toBe(0);
+  });
+
+  it("the FIXED SHAPE comment names the shape the type now has", () => {
+    // The comment has grown once already, when `auditDeleted` arrived in Phase
+    // 5, so growing it has precedent. What has no precedent is a comment
+    // claiming a fixity the type no longer has: amended in the same commit that
+    // grew the shape, or it becomes the next reader's wrong assumption.
+    expect(RETENTION_SOURCE).toContain("rowCapDeleted");
+    const fixed = /FIXED SHAPE[\s\S]{0,900}?\*\//.exec(RETENTION_SOURCE);
+    expect(fixed, "the FIXED SHAPE comment is gone").not.toBeNull();
+    expect(fixed?.[0] ?? "").toContain("rowCapDeleted");
+  });
+});
+
+describe("D-26 — the SUSPENDED STATE is exempt from the age bound, not the `scans` table", () => {
+  it("the exemption is a PREDICATE in the age statement's text", () => {
+    // The FIRST exemption this project took — `audit` is exempt from the age
+    // bound — is expressed by the ABSENCE of a statement, with the reasoning
+    // written where the missing statement would be. This one CANNOT be an
+    // absence: it attaches to a STATE and not to a table, and an absence cannot
+    // express a state. So it is a predicate, in the statement a reader looking
+    // for the exception would open.
+    const age = statementText("SCANS_OVER_AGE_SQL");
+    expect(age).toContain("state <> 'suspended'");
+    expect(age).toContain("updated_at < ?");
+  });
+
+  it("the ROW CAP statement carries NO state carve-out, so growth is still bounded", () => {
+    // What makes the exemption survivable rather than merely principled. A
+    // suspended scan cannot age out; it can still be evicted by the cap, on a
+    // database Caido never garbage-collects and which survives a reinstall.
+    const oldest = statementText("SCANS_OLDEST_SQL");
+    expect(oldest).not.toContain("state");
+    expect(oldest).toContain("WHERE project_id = ?");
+  });
+
+  it("both `scans` statements order oldest-first with an EXPLICIT tie-break", () => {
+    // The rule every candidate statement in this file follows: without the
+    // tie-break, two rows sharing a timestamp could swap between passes and the
+    // sweep would be resumable only by luck.
+    for (const name of ["SCANS_OVER_AGE_SQL", "SCANS_OLDEST_SQL"]) {
+      const sql = statementText(name);
+      expect(sql, name).toMatch(
+        /ORDER BY\s+updated_at\s+ASC,\s*scan_id\s+ASC/,
+      );
+      expect(sql, name).toContain("LIMIT ?");
+    }
+  });
+
+  it("`AUDIT_OVER_AGE_SQL` is still ABSENT — the first exemption is unchanged", () => {
+    // Adding a SECOND exemption is exactly the moment somebody "tidies up" the
+    // first one into the same shape. D-06's exemption stays an absence, with its
+    // reasoning where the missing statement would be.
+    expect(RETENTION_SOURCE).not.toContain("AUDIT_OVER_AGE_SQL");
+  });
+
+  it("the exemption block carries the SECOND exemption's own paragraph", () => {
+    // That block's own closing sentence says a second exemption is a new
+    // decision and needs its own paragraph there. This is that second
+    // exemption, so the paragraph is now due — and it must name the state, not
+    // the table.
+    expect(RETENTION_SOURCE).toContain("D-26");
+    const exemptions = /THE AUDIT TABLE IS BOUNDED BY ROWS[\s\S]*?const AUDIT_OLDEST_SQL/.exec(
+      RETENTION_SOURCE,
+    );
+    expect(exemptions, "the exemption block moved or vanished").not.toBeNull();
+    expect(exemptions?.[0] ?? "").toContain("D-26");
+  });
+
+  it("THE CONTRAST: equally old scans, and only the non-suspended ones age out", async () => {
+    // The behavioural half. A suspended scan's row IS its cursor, so a 90-day
+    // timer would silently delete an operator's resumable backfill — the exact
+    // outcome D-26 exists to prevent. Every row below shares one timestamp.
+    const ANCIENT = NOW - 400 * 24 * 60 * 60 * 1000;
+    seedScan(P1, "s-suspended", "suspended", ANCIENT);
+    seedScan(P1, "s-completed", "completed", ANCIENT);
+    seedScan(P1, "s-discarded", "discarded", ANCIENT);
+    seedScan(P1, "s-running", "running", ANCIENT);
+
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect(scanIds(P1)).toEqual(["s-suspended"]);
+  });
+
+  it("the ROW CAP evicts a suspended scan like any other — no state is carved out", async () => {
+    seedScan(P1, "s-01", "completed", NOW - 5000);
+    seedScan(P1, "s-02", "suspended", NOW - 4000);
+    seedScan(P1, "s-03", "completed", NOW - 3000);
+
+    await sweepToConvergence(P1, {
+      maxRows: 1,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    // Oldest-first: the two oldest go, whatever their state.
+    expect(scanIds(P1)).toEqual(["s-03"]);
+  });
+
+  it("sweeping one project's scans does not touch another's", async () => {
+    const ANCIENT = NOW - 400 * 24 * 60 * 60 * 1000;
+    seedScan(P1, "s-1", "completed", ANCIENT);
+    seedScan(P2, "s-1", "completed", ANCIENT);
+
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect(scanIds(P1)).toEqual([]);
+    expect(scanIds(P2)).toEqual(["s-1"]);
+  });
+
+  it("scan deletions are counted into `deleted` like every other table's", async () => {
+    const ANCIENT = NOW - 400 * 24 * 60 * 60 * 1000;
+    seedScan(P1, "s-1", "completed", ANCIENT);
+    seedScan(P1, "s-2", "completed", ANCIENT);
+
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      {
+        maxRows: HUGE_ROWS,
+        maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+        auditMaxRows: HUGE_ROWS,
+      },
+      NOW,
+    );
+    expect(summary.deleted).toBe(2);
+    expect(summary.examined).toBe(2);
+    // ONE sweep and ONE cadence. A `scans` delete is not its own category the
+    // way `auditDeleted` is — `audit` earned one because it is the table with
+    // no age bound at all, and `scans` has both bounds like everything else.
+    expect(summary.rowCapDeleted).toBe(0);
   });
 });
