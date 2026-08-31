@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 56
+open_count: 61
 waived_count: 0
 fixed_count: 27
-total_count: 83
-last_updated: 2026-08-31T18:52:36.722Z
+total_count: 88
+last_updated: 2026-08-31T20:56:03.457Z
 ---
 
 # Broken Windows Ledger
@@ -119,6 +119,11 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 81 | 06 | deviation | packages/backend/src/scan/scans.ts |  | RESUME_SQL re-bases the row's epoch, which 06-05-PLAN.md's behaviour text does not ask for and its task-2 line ('a resume under the ORIGINAL epoch continues') arguably contradicts. Forced as a Rule 1 bug: projectEpoch() is a MONOTONIC count of applied project changes and never returns to a previous value, so a resume preserving the stale epoch produced a scan that suspended itself again on its first page for ever — D-04's suspension was a one-way door and the must-have 'resumes only on explicit operator action' was unreachable. The plan's line is satisfied under the reading that the discriminator is the PROJECT rather than the number: a resume from the wrong project is refused by project_id scoping (getScan returns undefined -> no-scan), which is UI-SPEC's 'Resume it from that project'. | open |  | 2026-08-31T17:53:00.108Z |  |
 | 82 | 06 | deviation | packages/backend/src/scan/scans.spec.ts |  | Tasks 1 and 2 carry tdd="true" but workflow.tdd_mode is false in config.json, and 06-05 did NOT ship separate RED-then-GREEN gate commits for task 1: the statements and their spec landed in one feat() commit. Task 2's spec is its own test() commit. Non-vacuity was established by MUTATION instead, and both mutations were executed and recorded: removing LIST_SCANS_SQL's leading (state = 'suspended') DESC term fails exactly the pin case, and emptying DEFERRED_REASONS fails exactly the vocabulary case. The index.ts sweep-ordering assertion was mutation-checked the same way (moving the sweep after the registrations fails it). | open |  | 2026-08-31T17:53:00.199Z |  |
 | 83 | 06 | deviation | packages/backend/src/filesystem-prohibition.spec.ts |  | Plan 06-07 acceptance criterion 'self-audit returns an empty array' was unsatisfiable (the gate must import node:fs for its own walk); shipped a strictly stronger assertion instead - exactly one violation, and none after removing that import line. | open |  | 2026-08-31T18:52:36.722Z |  |
+| 84 | 06 | unmet-truth | packages/backend/src/store/sql-discipline.spec.ts | 445 | THE BELIEF IS THE FINDING, NOT JUST THE FIX. 06-CONTEXT.md:444 records 'The SQL discipline gate is the strongest invariant in the backend'; that is not true of a multi-statement SQL blob. The insert-select rule at sql-discipline.spec.ts:445-450 bans INSERT ... SELECT package-wide with NO allowlist entry, but statementKind() at :126-129 classifies a SQL string by its LEADING KEYWORD, so a blob leading with CREATE skips insertsFromSelect, isMultiRowStatement and isDecomposable entirely. Step v2's CREATE TRIGGER ... BEGIN SELECT RAISE(ABORT, ...); END and step v6's audit rebuild both pass UNOBSERVED today. Widening the gate to split on ';' and classify each statement independently was put to the operator at 06-06's checkpoint and DECLINED FOR THAT PLAN ONLY as unbudgeted scope that may surface violations in step v2's shipped trigger - declined as scope, not as a non-issue. Step v6's JSDoc makes the compliance argument explicitly and says in its own words that a green run on migrations.ts is green by non-observation. OWNER: Phase 11 hardening, unless an earlier Phase 6 plan already touches sql-discipline.spec.ts. | open |  | 2026-08-31T20:55:42.978Z |  |
+| 85 | 06 | deviation | .planning/REQUIREMENTS.md |  | PRE-EXISTING AND NOT 06-06's: outbound-prohibition.spec.ts's byte-compare of the derived residual block in .planning/REQUIREMENTS.md fails at 532491a (06-07's close-out, the last commit to touch either input). The shipped block gained three blank lines the generator does not emit - after 'DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:', around the two-file list, and before '1. Each entry below is verified by EXECUTION' - consistent with a markdown reflow applied by requirements.mark-complete during a docs close-out. 06-06 modified neither input (git diff HEAD over both is empty) and left it unfixed under the scope boundary. THE SPEC PRINTS THE EXACT REMEDY: it is machine-owned text and the generated form is authoritative, so the fix is to paste the BEGIN/END EXPECTED span. RISK: every close-out that runs requirements.mark-complete can re-introduce it. OWNER: whoever next runs a docs close-out in Phase 6. | open |  | 2026-08-31T20:55:43.070Z |  |
+| 86 | 06 | stub | packages/backend/src/index.ts |  | ScanStatusPayload.analysed is STILL null after plan 06-06, and window 65 assigned it to this plan. NOT DONE, and not silently: 06-06-PLAN.md's files_modified names neither index.ts's getScanStatus nor the engine contract, and there is no cheap wiring - analyses rows carry no scan attribution, so a per-scan analysed count needs either a NEW scans column (another one-way migration step, a decision this plan had no mandate for) or telemetry.ts's in-memory retro sub-map. Attempting it here would have been a Rule 4 architectural change taken without asking. OWNER: plan 06-09, which already owns delivering scan progress to the frontend on one channel and already took a mid-execution scope addition; 06-12 renders the readout and would inherit it otherwise. Window 65 stays open and this entry names why. | open |  | 2026-08-31T20:56:03.270Z |  |
+| 87 | 06 | deviation | packages/backend/src/index.ts |  | discardScan gained a fifth parameter (the caller-minted audit event_id), so two files OUTSIDE 06-06-PLAN.md's files_modified changed: index.ts's discardScan registration now passes randomUUID(), and scan/lifecycle.spec.ts's one call site was updated. Rule 3 (blocking): the plan REQUIRES the caller to mint the id - 'The caller mints the event_id UUID, which is what makes a retry a no-op rather than a duplicate' - and a caller-minted id has no meaning if the caller does not mint it. Also outside files_modified: retentionCounts() gained a scans field, because every other table the sweep bounds is counted there and a table the sweep deletes from that no reader can count is a bound nothing can be shown to hold. | open |  | 2026-08-31T20:56:03.364Z |  |
+| 88 | 06 | deviation | packages/backend/src/store/migrations.spec.ts |  | 06-06-PLAN.md's task-3 acceptance criterion says 'retention.spec.ts STILL asserts' AUDIT_OVER_AGE_SQL's absence. It did not: before this plan the absence was asserted only BEHAVIOURALLY (the D-06 contrast case), with no source-text check. The criterion is now true rather than the premise being quietly accepted - retention.spec.ts asserts no  declaration exists AND that the paragraph naming it survives, since the D-06 block names the statement it refuses to have. Separately, migrations.spec.ts's cannot-fail gate was WIDENED beyond the plan: it used to filter to statements beginning with CREATE, so step v6's INSERT/DROP/ALTER would have been skipped entirely by the very gate that justifies batching them. | open |  | 2026-08-31T20:56:03.457Z |  |
 
 ````json
 [
@@ -1116,6 +1121,66 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T18:52:36.722Z",
+    "resolved_at": null
+  },
+  {
+    "id": 84,
+    "kind": "unmet-truth",
+    "phase": "06",
+    "file": "packages/backend/src/store/sql-discipline.spec.ts",
+    "line": 445,
+    "description": "THE BELIEF IS THE FINDING, NOT JUST THE FIX. 06-CONTEXT.md:444 records 'The SQL discipline gate is the strongest invariant in the backend'; that is not true of a multi-statement SQL blob. The insert-select rule at sql-discipline.spec.ts:445-450 bans INSERT ... SELECT package-wide with NO allowlist entry, but statementKind() at :126-129 classifies a SQL string by its LEADING KEYWORD, so a blob leading with CREATE skips insertsFromSelect, isMultiRowStatement and isDecomposable entirely. Step v2's CREATE TRIGGER ... BEGIN SELECT RAISE(ABORT, ...); END and step v6's audit rebuild both pass UNOBSERVED today. Widening the gate to split on ';' and classify each statement independently was put to the operator at 06-06's checkpoint and DECLINED FOR THAT PLAN ONLY as unbudgeted scope that may surface violations in step v2's shipped trigger - declined as scope, not as a non-issue. Step v6's JSDoc makes the compliance argument explicitly and says in its own words that a green run on migrations.ts is green by non-observation. OWNER: Phase 11 hardening, unless an earlier Phase 6 plan already touches sql-discipline.spec.ts.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T20:55:42.978Z",
+    "resolved_at": null
+  },
+  {
+    "id": 85,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "PRE-EXISTING AND NOT 06-06's: outbound-prohibition.spec.ts's byte-compare of the derived residual block in .planning/REQUIREMENTS.md fails at 532491a (06-07's close-out, the last commit to touch either input). The shipped block gained three blank lines the generator does not emit - after 'DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:', around the two-file list, and before '1. Each entry below is verified by EXECUTION' - consistent with a markdown reflow applied by requirements.mark-complete during a docs close-out. 06-06 modified neither input (git diff HEAD over both is empty) and left it unfixed under the scope boundary. THE SPEC PRINTS THE EXACT REMEDY: it is machine-owned text and the generated form is authoritative, so the fix is to paste the BEGIN/END EXPECTED span. RISK: every close-out that runs requirements.mark-complete can re-introduce it. OWNER: whoever next runs a docs close-out in Phase 6.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T20:55:43.070Z",
+    "resolved_at": null
+  },
+  {
+    "id": 86,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "ScanStatusPayload.analysed is STILL null after plan 06-06, and window 65 assigned it to this plan. NOT DONE, and not silently: 06-06-PLAN.md's files_modified names neither index.ts's getScanStatus nor the engine contract, and there is no cheap wiring - analyses rows carry no scan attribution, so a per-scan analysed count needs either a NEW scans column (another one-way migration step, a decision this plan had no mandate for) or telemetry.ts's in-memory retro sub-map. Attempting it here would have been a Rule 4 architectural change taken without asking. OWNER: plan 06-09, which already owns delivering scan progress to the frontend on one channel and already took a mid-execution scope addition; 06-12 renders the readout and would inherit it otherwise. Window 65 stays open and this entry names why.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T20:56:03.270Z",
+    "resolved_at": null
+  },
+  {
+    "id": 87,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "discardScan gained a fifth parameter (the caller-minted audit event_id), so two files OUTSIDE 06-06-PLAN.md's files_modified changed: index.ts's discardScan registration now passes randomUUID(), and scan/lifecycle.spec.ts's one call site was updated. Rule 3 (blocking): the plan REQUIRES the caller to mint the id - 'The caller mints the event_id UUID, which is what makes a retry a no-op rather than a duplicate' - and a caller-minted id has no meaning if the caller does not mint it. Also outside files_modified: retentionCounts() gained a scans field, because every other table the sweep bounds is counted there and a table the sweep deletes from that no reader can count is a bound nothing can be shown to hold.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T20:56:03.364Z",
+    "resolved_at": null
+  },
+  {
+    "id": 88,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/store/migrations.spec.ts",
+    "line": null,
+    "description": "06-06-PLAN.md's task-3 acceptance criterion says 'retention.spec.ts STILL asserts' AUDIT_OVER_AGE_SQL's absence. It did not: before this plan the absence was asserted only BEHAVIOURALLY (the D-06 contrast case), with no source-text check. The criterion is now true rather than the premise being quietly accepted - retention.spec.ts asserts no  declaration exists AND that the paragraph naming it survives, since the D-06 block names the statement it refuses to have. Separately, migrations.spec.ts's cannot-fail gate was WIDENED beyond the plan: it used to filter to statements beginning with CREATE, so step v6's INSERT/DROP/ALTER would have been skipped entirely by the very gate that justifies batching them.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T20:56:03.457Z",
     "resolved_at": null
   }
 ]
