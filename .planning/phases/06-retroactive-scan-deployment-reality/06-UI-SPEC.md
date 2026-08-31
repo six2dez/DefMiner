@@ -1,10 +1,11 @@
 ---
 phase: 06
 slug: retroactive-scan-deployment-reality
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-08-31
+reviewed_at: 2026-08-31
 extends: .planning/phases/05-workspace-operator-workflow/05-UI-SPEC.md
 ---
 
@@ -315,6 +316,16 @@ idiom `sanitise.spec.ts` uses to permit `forDisplayText` beside `forDisplay` —
 **no label in either presentation map is a case-insensitive prefix of any label in the other.** A
 plain set-disjointness check is not enough: it would pass "Complete" beside "Completed", which is the
 exact pair this rule exists to catch.
+
+**The assertion walks the COMPUTED words too, not only the map members.** Three of the four
+operator-facing words for lifecycle `running` — `Starting…`, `Waiting for the analysis queue`,
+`Not advancing` (`## The Progress Readout` D3) — are computed presentation states and are not members
+of `SCAN_LIFECYCLE_PRESENTATION`. A guard over map members alone therefore covers only half the
+strings an operator actually reads. The check takes the union of both presentation maps' labels
+**and** the computed lifecycle words, and asserts the prefix rule across that union. No collision
+exists today, which is precisely why the guard must be widened now rather than after one is
+introduced: the whole point of mechanism 4 is that this is mechanical rather than remembered, and a
+guard that covers half the surface is remembered for the other half.
 
 **5. Separate presentation module, separate renderer, separate marker.**
 `SCAN_LIFECYCLE_PRESENTATION` is its own `Record<ScanLifecycleState, …>` in its own file, with its own
@@ -824,6 +835,30 @@ lifecycle vocabulary is new, bound to the `scans.state` CHECK, and declared besi
 | `completed` | **Finished** | `success-500` | Reached the end of the filter's range |
 | `discarded` | **Discarded** | `surface-400` | History only; its position is gone |
 
+### The scan status payload — required fields
+
+**This is a binding contract on the backend's status shape, not a frontend preference.** It is
+restated here, in the contract section, because `## Open Decisions` opens by saying every `U6-` row
+"ships under the stated default; none blocks planning" — and U6-6 is the one row that is not a
+default. A planner who reads that preamble first would take the held-at-watermark signal as optional,
+and the consequence is not cosmetic.
+
+The scan status the frontend reads MUST carry an explicit **held-at-watermark** signal — a boolean
+(or an equivalent named reason) stating that the producer is currently withholding pages because
+queue depth is at or above D-01's watermark.
+
+**Why it cannot be derived, and what breaks without it.** From outside the backend, a scan holding at
+the watermark and a scan whose QuickJS thread is blocked are indistinguishable: both show counters
+that stop advancing. `## The Progress Readout` D3 spends three words on "not moving" precisely
+because only one of them is bad — `Waiting for the analysis queue` is the healthy backpressure hold
+that D-01 designs for, and `Not advancing` is the stall marker that fires at `ARTIFACT_DEADLINE_MS`.
+If the signal is absent, `Waiting for the analysis queue` can never render, every legitimate
+watermark hold falls through to `Not advancing`, and the stall marker cries wolf on the single most
+common healthy state of a long backfill. An operator who learns to ignore a stall marker is worse off
+than one who never had it — the same argument `PROJECT.md` § Core Value makes about false positives.
+
+U6-6 in `## Open Decisions` is a pointer to this line, not an independent decision.
+
 ---
 
 ## Visual Hierarchy
@@ -1016,6 +1051,10 @@ the "we never write a path" claim is a promise; with it, it is a gate.
 Each ships under the stated default unless overridden; none blocks planning. Numbered `U6-` to keep
 them distinct from `06-CONTEXT.md`'s locked `D-` decisions, which are **not** open.
 
+**One exception, stated before the table so it cannot be missed: U6-6 is not a default.** It is a
+pointer to a binding requirement in `## Data & Interaction Contract`. Every other row below ships
+under its stated default.
+
 | # | Decision | Default this contract ships under |
 |---|----------|-----------------------------------|
 | U6-1 | How many scans does the history list show before it truncates? | **50, newest first, with every `suspended` scan pinned in regardless of age.** The number is a proposal; the shape — a stated bound, enforced at read, suspended rows exempt, truncation said in words — is binding. Mirrors P5-D20. |
@@ -1023,21 +1062,21 @@ them distinct from `06-CONTEXT.md`'s locked `D-` decisions, which are **not** op
 | U6-3 | Does the footprint line carry "oldest {n} days"? | **Absent unless the plan adds the scoped `MIN(timestamp)` read.** D-25's example sentence includes it, and D-25 also says "no new SQL discipline exception" — which permits a single bound `project_id`-scoped statement but does not require one. If it is not added, the sentence ends at the count and implies nothing about age. Never zero, never a placeholder. |
 | U6-4 | Where does the fifth tab go? | **Third: `Artifacts · Observations · Scan · Health · Settings`.** The rejected alternative (append fifth, preserving every existing index) and its cost are argued in `## New Surfaces`. |
 | U6-5 | Is the per-scan detail an inline disclosure or its own region? | **Inline disclosure under the selected history row.** A separate region would mean two renderers for the same seven counters, and it would need a third split region on a tab that already stacks. It is also why the history list must not be virtualised. |
-| U6-6 | Does the status payload carry the backpressure-hold signal? | **It must, and this contract requires it.** "Waiting for the analysis queue" is the word that stops a legitimate D-01 watermark hold from reading as the stall marker, and the frontend cannot derive it — from the outside, a scan holding at the watermark and a scan whose thread is blocked look identical. The scan status the frontend reads therefore carries an explicit held-at-watermark signal. Named here rather than left for the planner to discover from a missing word. |
+| U6-6 | Does the status payload carry the backpressure-hold signal? | **Not a default and not optional — this row is a POINTER.** The requirement lives in `## Data & Interaction Contract` § "The scan status payload — required fields" and is binding there. It is listed here only so a reader scanning the open-decisions table is sent to it, and it is the one exception to this table's preamble. |
 
 ---
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-08-31 by gsd-ui-checker — 7/7 dimensions PASS, 2 non-blocking recommendations applied (U6-6 restated as a binding line in `## Data & Interaction Contract`; mechanism 4's prefix assertion widened to the computed lifecycle words)
 
 ### Notes for the checker
 
