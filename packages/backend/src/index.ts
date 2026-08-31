@@ -98,9 +98,10 @@ import {
   positionClause,
   validateOperatorClause,
 } from "./scan/filter";
-import { isHeldAtWatermark } from "./scan/producer";
+import { isHeldAtWatermark, runScanProducer } from "./scan/producer";
 import type { ScanRow, ScanTransition } from "./scan/scans";
 import {
+  completeScan,
   discardScan,
   getActiveScan,
   getScan,
@@ -292,6 +293,157 @@ async function reconcileScanEpoch(
   );
 }
 
+// ===========================================================================
+// THE PRODUCER'S DRIVER (FIND-03, D-01, D-10) — 6c
+// ===========================================================================
+//
+// `scan/producer.ts` shipped in plan 06-01 with NO CALLER, deliberately: a loop
+// written before the backpressure watermark existed would have been a bug
+// rather than a feature half built. 06-03 shipped the watermark and 06-05 the
+// lifecycle, and this is the caller both were waiting for. Without it every
+// property the producer's spec proves is true of a function no build ever
+// enters, and ROADMAP success criterion 1's word "runs" is unmet.
+//
+// IT IS SCHEDULED, NEVER RUN INLINE. `startScan` must answer before a single
+// page is transferred — on this runtime a page moves every matching response
+// body — so a walk started synchronously inside the RPC would hold it open for
+// the length of a backfill and the operator would press a button that appears
+// to hang. The RPC records the row and arms the driver; the walk happens after.
+//
+// IT ARMS ITSELF ONLY WHERE A SCAN CAN HAVE BECOME RUNNABLE, which is exactly
+// two places: `startScan` and `resumeScan`. NOT AT INIT — D-11's sweep suspends
+// whatever a previous process left running and resumes NOTHING, and a driver
+// kicked at boot would silently reverse that decision. NOT ON A TIMER either: a
+// poll that woke every few seconds to discover there is no scan is a cost paid
+// by every operator who never runs one.
+//
+// THE WATERMARK IS THE PRODUCER'S AND IS NOT RESTATED HERE. The driver's whole
+// obligation to D-01 is to hand over THE SHIPPED QUEUE — the same instance the
+// live hook feeds and the one consumer drains — because a gate on any other
+// queue's depth would be a gate on a number nothing else touches.
+
+/** The gap before the driver re-enters after a hold or a busy walk.
+ *
+ *  A WAIT AND NOT A SPIN. `runScanProducer` already yields once and re-checks
+ *  before reporting a hold, so reaching here means the consumer was still busy
+ *  a whole slice later; re-entering immediately would burn the single thread
+ *  the consumer needs in order to drain. */
+const SCAN_DRIVER_REENTRY_MS = 250;
+
+/** The armed re-entry, so a second arming replaces it rather than doubling it
+ *  and so a spec can disarm one a case left behind. */
+let scanDriverTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Disarm the driver.
+ *
+ * A TEST SEAM WITH A PRODUCTION JOB TOO: `init()` calls it, because a hot
+ * reload runs `init()` again against a NEW database handle while the previous
+ * process's re-entry is still armed, and a timer holding the old handle is a
+ * walk writing into a database nobody is reading.
+ *
+ * @internal
+ */
+export function resetScanDriverForTest(): void {
+  if (scanDriverTimer !== undefined) clearTimeout(scanDriverTimer);
+  scanDriverTimer = undefined;
+}
+
+function armScanDriver(sdk: PluginSdk, database: Database): void {
+  resetScanDriverForTest();
+  scanDriverTimer = setTimeout(() => {
+    scanDriverTimer = undefined;
+    void driveScan(sdk, database);
+  }, SCAN_DRIVER_REENTRY_MS);
+}
+
+/**
+ * One driver pass: walk until the producer stops, then decide what its stop
+ * means.
+ *
+ * EVERY ARM IS A DECISION AND NONE OF THEM THROWS. Caido surfaces neither a
+ * throw nor a rejection from plugin code, so an uncaught failure here would
+ * leave the scan `running` on the operator's surface with nothing anywhere
+ * saying why — which is the one outcome the whole readout exists to prevent.
+ */
+async function driveScan(sdk: PluginSdk, database: Database): Promise<void> {
+  const pid = currentProjectId();
+  if (pid === null) return;
+  // THE SHIPPED QUEUE OR NOTHING. Constructing a fallback here would hand the
+  // producer a queue whose depth the live hook never raises, and D-01's
+  // watermark would then gate on a number that can only ever be zero — the
+  // drop-oldest defect back with every producer test still green.
+  const shipped = queue;
+  if (shipped === undefined) return;
+
+  let outcome;
+  try {
+    outcome = await runScanProducer({
+      sdk,
+      db: database,
+      queue: shipped,
+      // A FUNCTION, NOT A CAPTURED VALUE, for the reason `startConsumer`'s
+      // `signal` getter is: the whole point of the project id and the epoch is
+      // that they change underneath a walk that is already running.
+      getProjectId: () => Promise.resolve(currentProjectId() ?? ""),
+      projectEpoch,
+      nowMs: () => Date.now(),
+    });
+  } catch (e) {
+    // `runScanProducer` returns a value on every path by contract, so reaching
+    // here means something outside that contract broke. Logged rather than
+    // rethrown: an invisible rejection is the failure COMPAT-01 forbids.
+    log(sdk, "scan driver failed: " + describeError(e));
+    return;
+  }
+
+  switch (outcome.stop) {
+    case "held":
+    case "busy":
+      // A WAIT, NOT A STOP. The walk resumes from exactly where it left off,
+      // with no operator action — which is what makes the backpressure hold a
+      // healthy state rather than a stall.
+      armScanDriver(sdk, database);
+      return;
+    case "completed": {
+      // THE PRODUCTION CALLER `completeScan` HAS BEEN WAITING FOR (plan 06-05
+      // shipped the transition with none). An empty page below the current
+      // position IS a finished scan: the filter's range is exhausted.
+      //
+      // THE PROJECT IS RE-READ FIRST. A completion written into another
+      // project's partition would be D-04's failure with a terminal state on
+      // the end of it.
+      if (currentProjectId() !== pid) return;
+      const active = await getActiveScan(database, pid);
+      if (active === undefined || active.state !== "running") return;
+      const done = await completeScan(
+        database,
+        pid,
+        active.scan_id,
+        Date.now(),
+      );
+      if (!done.ok) {
+        // LOGGED, NOT RETURNED — there is no caller to return to. The row stays
+        // `running`, which the next start refuses and the operator can discard.
+        log(sdk, "completeScan failed: " + done.error);
+      }
+      return;
+    }
+    case "epoch-changed":
+      // D-04, NOTICED BY THE WALK RATHER THAN BY THE NEXT READ. `getScanStatus`
+      // reconciles too, but a scan whose project changed while nobody had the
+      // Scan tab open would otherwise sit `running` under a stale epoch until
+      // somebody looked at it.
+      await reconcileScanEpoch(database, pid);
+      return;
+    case "failed":
+      log(sdk, "scan walk failed: " + outcome.error);
+      return;
+    case "no-scan":
+      return;
+  }
+}
+
 /**
  * One `scans` row, projected onto the history list's shape.
  *
@@ -400,6 +552,13 @@ export async function init(sdk: PluginSdk): Promise<void> {
   // name, which is exactly what a re-init hits. The plugin would then have no
   // hook, no RPC and no log line: the obscure failure COMPAT-01 forbids.
   let caidoVersion: string | null = null;
+
+  // BEFORE ANYTHING ELSE THAT COULD ARM ONE. A hot reload runs `init()` again
+  // while the previous incarnation's re-entry is still armed, and that timer
+  // holds the OLD database handle — a walk writing through a handle nobody
+  // reads from, with `api.register` already rejecting the duplicate names that
+  // would have made it visible.
+  resetScanDriverForTest();
 
   try {
     // 1 — the version guard, before anything else has a side effect.
@@ -971,6 +1130,11 @@ export async function init(sdk: PluginSdk): Promise<void> {
         log(sdk, "startScan failed: " + written.error);
         return { outcome: "refused", reason: "write-failed" } as const;
       }
+      // THE ONE PLACE A SCAN BECOMES RUNNABLE FROM NOTHING. Armed AFTER the row
+      // is committed, so the walk can never run against a scan the insert
+      // declined — and after the answer is built, so the operator's RPC returns
+      // before a single response body moves.
+      armScanDriver(sdk, db);
       return { outcome: "started", scanId } as const;
     });
     sdk.api.register("getScanStatus", async () => {
@@ -1082,17 +1246,28 @@ export async function init(sdk: PluginSdk): Promise<void> {
         pauseScan(database, pid, req.scanId, Date.now()),
       ),
     );
-    sdk.api.register("resumeScan", async (_s, req) =>
-      runScanCommand("resumeScan", req.scanId, (database, pid) =>
-        // THE EPOCH IN FORCE NOW is written onto the row. `scan/scans.ts`'s
-        // `RESUME_SQL` carries the argument: the counter is monotonic and never
-        // returns to a previous value, so a resume that preserved a stale epoch
-        // would produce a scan that suspends itself again on its first page, for
-        // ever. A resume from the WRONG project never reaches here — the row is
-        // not in that project's partition and the pre-read answers `no-scan`.
-        resumeScan(database, pid, req.scanId, projectEpoch(), Date.now()),
-      ),
-    );
+    sdk.api.register("resumeScan", async (_s, req) => {
+      const outcome = await runScanCommand(
+        "resumeScan",
+        req.scanId,
+        (database, pid) =>
+          // THE EPOCH IN FORCE NOW is written onto the row. `scan/scans.ts`'s
+          // `RESUME_SQL` carries the argument: the counter is monotonic and never
+          // returns to a previous value, so a resume that preserved a stale epoch
+          // would produce a scan that suspends itself again on its first page, for
+          // ever. A resume from the WRONG project never reaches here — the row is
+          // not in that project's partition and the pre-read answers `no-scan`.
+          resumeScan(database, pid, req.scanId, projectEpoch(), Date.now()),
+      );
+      // THE OTHER — AND ONLY OTHER — WAY BACK INTO THE WALK. Armed only when
+      // the guard actually moved the row: a resume that changed nothing has no
+      // running scan behind it, and arming there would spin the driver against
+      // a state guard that will keep declining.
+      if (outcome.ok && outcome.changed && outcome.state === "running" && db) {
+        armScanDriver(sdk, db);
+      }
+      return outcome;
+    });
     sdk.api.register("discardScan", async (_s, req) =>
       runScanCommand("discardScan", req.scanId, (database, pid) =>
         // THE AUDIT EVENT ID IS MINTED HERE, at the call site, exactly as the

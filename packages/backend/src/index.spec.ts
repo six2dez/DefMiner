@@ -1895,9 +1895,7 @@ describe("a retroactive scan actually WALKS, driven from production code", () =>
     resetDbHandleForTest();
   });
 
-  async function boot(
-    pages: ReturnType<typeof makeFakeScanItem>[][],
-  ): Promise<{
+  async function boot(pages: ReturnType<typeof makeFakeScanItem>[][]): Promise<{
     rpc: Record<string, (...a: unknown[]) => unknown>;
     sdk: ReturnType<typeof makeFakeSdk>;
   }> {
@@ -1920,9 +1918,7 @@ describe("a retroactive scan actually WALKS, driven from production code", () =>
   }
 
   function scanRow(): Record<string, unknown> | undefined {
-    return fx.raw.prepare("SELECT * FROM scans WHERE project_id = 'p1'").get() as
-      | Record<string, unknown>
-      | undefined;
+    return fx.raw.prepare("SELECT * FROM scans WHERE project_id = 'p1'").get();
   }
 
   it("startScan kicks the driver, the walk covers every page, and completeScan lands", async () => {
@@ -2003,9 +1999,8 @@ describe("a retroactive scan actually WALKS, driven from production code", () =>
 
     const progress = sdk.calls.apiSend
       .map((call) => call.args[0])
-      .filter(
-        (payload): payload is ScanProgressPayload =>
-          isScanProgressPayload(payload as ScanProgressPayload),
+      .filter((payload): payload is ScanProgressPayload =>
+        isScanProgressPayload(payload as ScanProgressPayload),
       );
 
     expect(progress).toHaveLength(3);
@@ -2078,5 +2073,4 @@ describe("a retroactive scan actually WALKS, driven from production code", () =>
     expect(src).toContain("heldAtWatermark: isHeldAtWatermark()");
     expect(src).not.toContain("heldAtWatermark: false");
   });
-
 });
