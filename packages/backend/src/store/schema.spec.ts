@@ -495,6 +495,103 @@ const FORBIDDEN_COLUMNS: Record<string, string> = {
   id: "no surrogate id anywhere: last_insert_rowid() is unusable on the pooled connection (decision P1-D1)",
 };
 
+/**
+ * THE THREE SCALAR AFFINITIES A COLUMN OF THIS SCHEMA MAY DECLARE — D-24.
+ *
+ * WHY THIS IS NOT REDUNDANT WITH `FORBIDDEN_COLUMNS` ABOVE, WHICH IS THE WHOLE
+ * REASON IT EXISTS. That list bans NAMES: `body`, `headers`, `cookie`,
+ * `authorization`, `value_raw`, `path_key`, `id`. A column named for anything at
+ * all — `payload`, `blob_data`, `cached`, `scratch` — with a binary declared type
+ * passes every one of those checks while holding exactly the content the name
+ * check exists to keep out. Half of D-24 shipped as that name list; this is the
+ * other half, and it reads the DECLARED TYPE out of `PRAGMA table_info` the same
+ * structural way the STORE-02 gate reads the `pk` ordinal.
+ *
+ * WHAT IT PROTECTS, AND WHY THE ARGUMENT IS ABOUT DISK RATHER THAN ABOUT TYPES.
+ * DEPLOY-04 says to treat server disk as shared instance storage, with quotas and
+ * orphan cleanup. D-17 discharges it BY CONSTRUCTION instead: DefMiner writes no
+ * files at all — `filesystem-prohibition.spec.ts` is the gate that keeps that
+ * true — and it stores no response bodies, so its ENTIRE server-disk footprint is
+ * fixed-shape metadata already bounded by retention on rows and on age. No quota
+ * machinery ships and no orphan sweep ships, because nothing can create the files
+ * they would reclaim.
+ *
+ * That guarantee has exactly one other way to fail: a column that can hold
+ * arbitrary bytes. A BLOB column, or an UNTYPED column — which takes BLOB
+ * affinity in SQLite and which a name-based check misses entirely — re-opens the
+ * footprint argument and decision D-24 with it. This gate is where that gets
+ * caught, on the day it is written rather than on the day a disk fills.
+ *
+ * WHAT IT MAKES TRUE TODAY, VERIFIED AGAINST THE SHIPPED DDL RATHER THAN
+ * ASSUMED: across every migration step in `migrations.ts` — v1's `artifacts` and
+ * `observations`, v2's `analyses` and `settings`, v4's `audit`, v5's `scans` —
+ * every declared type is already one of these three. So the gate goes GREEN on
+ * the current schema and ALL of its value is in the day it goes red. That is not
+ * a weakness of the check; it is what a gate is.
+ */
+const PERMITTED_DECLARED_TYPES: readonly string[] = Object.freeze([
+  "INTEGER",
+  "REAL",
+  "TEXT",
+]);
+
+/** What `PRAGMA table_info` reports for a column declared with no type at all. */
+const UNTYPED_DECLARATION = "";
+
+type FixtureRaw = Parameters<typeof listTables>[0];
+
+/**
+ * Why one column fails D-24, as the message a reader gets at 2am.
+ *
+ * The reason travels with the finding rather than being left in this file, and it
+ * carries the ARGUMENT rather than a rule name — the same choice
+ * `outbound-prohibition.spec.ts` and `filesystem-prohibition.spec.ts` make when
+ * their `why` strings travel into the violation detail.
+ */
+function whyForbiddenType(
+  table: string,
+  column: string,
+  declared: string,
+): string {
+  const shape =
+    declared === UNTYPED_DECLARATION
+      ? "is declared with NO TYPE AT ALL, which takes BLOB affinity in SQLite — the case a name-based check misses entirely"
+      : `declares type \`${declared}\`, which is not one of ${PERMITTED_DECLARED_TYPES.join(", ")}`;
+  return (
+    `${table}.${column} ${shape}. ` +
+    "D-24: no column may hold a response body, header values, cookies, authorization " +
+    "material or artifact content. DEPLOY-04 is satisfied BY CONSTRUCTION — DefMiner " +
+    "writes no files and stores no bodies, so its whole server-disk footprint is " +
+    "fixed-shape metadata already bounded by retention on rows and on age, and no quota " +
+    "or orphan-cleanup machinery ships because nothing can create what it would reclaim. " +
+    "A binary-affinity column re-opens that guarantee and decision D-24 with it. If this " +
+    "column is genuinely needed, re-open D-24 deliberately rather than widening this set."
+  );
+}
+
+/**
+ * EVERY column whose declared type is outside the scalar set, across EVERY table.
+ *
+ * Collects rather than throwing on the first, so one run names every problem
+ * instead of turning a schema review into a sequence of single-offender reruns.
+ * Pure over `(raw)` so its FAILING PATH can actually be executed against a
+ * throwaway table below — a gate whose failure path has never run is a gate
+ * nobody has tested, which is the rule the two static gates in this package
+ * already follow.
+ */
+function contentBearingColumns(raw: FixtureRaw): string[] {
+  const offenders: string[] = [];
+  for (const table of listTables(raw)) {
+    for (const col of tableInfo(raw, table)) {
+      const declared = col.type.trim().toUpperCase();
+      if (!PERMITTED_DECLARED_TYPES.includes(declared)) {
+        offenders.push(whyForbiddenType(table, col.name, declared));
+      }
+    }
+  }
+  return offenders;
+}
+
 async function migratedFixture() {
   const fx = createFixtureDb();
   const report = await migrate(fx.db);
@@ -597,6 +694,116 @@ describe("schema shape (STORE-01, STORE-02, T-01-21)", () => {
     } finally {
       fx.close();
     }
+  });
+
+  it("every column of every table declares one of the three scalar affinities (D-24)", async () => {
+    const fx = await migratedFixture();
+    try {
+      // NON-VACUITY BEFORE THE RULE. A collector that walked no columns reports
+      // no offenders, which is indistinguishable from a clean schema.
+      const tables = listTables(fx.raw);
+      expect(tables).toEqual(EXPECTED_TABLES);
+      const columnsWalked = tables.reduce(
+        (total, table) => total + tableInfo(fx.raw, table).length,
+        0,
+      );
+      expect(
+        columnsWalked,
+        "no columns enumerated — the declared-type gate checked nothing",
+      ).toBeGreaterThan(0);
+
+      expect(contentBearingColumns(fx.raw)).toEqual([]);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("a BLOB column turns the collector non-empty, and the message says why", async () => {
+    // THE FAILING PATH, EXECUTED. Built as a real table against the fixture
+    // database rather than asserted in a comment, because a gate whose failure
+    // path has never run is a gate nobody has tested.
+    const fx = await migratedFixture();
+    try {
+      fx.raw.exec(
+        "CREATE TABLE throwaway_blob (project_id TEXT NOT NULL, payload BLOB, PRIMARY KEY (project_id))",
+      );
+      const offenders = contentBearingColumns(fx.raw);
+      expect(offenders.length).toBe(1);
+      const [only] = offenders;
+      // The table, the column and the offending declared type all named.
+      expect(only).toContain("throwaway_blob.payload");
+      expect(only).toContain("BLOB");
+      // And the ARGUMENT, not just a rule id.
+      expect(only).toContain("D-24");
+      expect(only).toContain("DEPLOY-04 is satisfied BY CONSTRUCTION");
+
+      // AND THE POINT OF THE WHOLE CHECK: this column is invisible to the
+      // name-based half. `payload` is on no forbidden list, so without the
+      // declared-type gate it would have shipped.
+      expect(FORBIDDEN_COLUMNS["payload"]).toBeUndefined();
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("an UNTYPED column fails too — it takes BLOB affinity, and a name check misses it entirely", async () => {
+    const fx = await migratedFixture();
+    try {
+      // `scratch` is declared with no type at all. SQLite accepts this and gives
+      // the column BLOB affinity, so it can hold exactly the bytes a BLOB can.
+      fx.raw.exec(
+        "CREATE TABLE throwaway_untyped (project_id TEXT NOT NULL, scratch, PRIMARY KEY (project_id))",
+      );
+      const offenders = contentBearingColumns(fx.raw);
+      expect(offenders.length).toBe(1);
+      const [only] = offenders;
+      expect(only).toContain("throwaway_untyped.scratch");
+      expect(only).toContain("NO TYPE AT ALL");
+      expect(only).toContain("BLOB affinity");
+      // The declared type really is the empty string — the fact the message
+      // rests on, asserted rather than assumed.
+      const scratch = tableInfo(fx.raw, "throwaway_untyped").find(
+        (c) => c.name === "scratch",
+      );
+      expect(scratch?.type).toBe(UNTYPED_DECLARATION);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("collects ALL offenders in one run, across tables, rather than failing on the first", async () => {
+    // The behaviour that makes one run enough to fix a schema, executed. Two
+    // offending columns in one throwaway table and a third in another: a
+    // first-failure gate would name one of the three and hide the rest.
+    const fx = await migratedFixture();
+    try {
+      fx.raw.exec(
+        "CREATE TABLE throwaway_a (project_id TEXT NOT NULL, one BLOB, two, PRIMARY KEY (project_id))",
+      );
+      fx.raw.exec(
+        "CREATE TABLE throwaway_b (project_id TEXT NOT NULL, three NUMERIC, PRIMARY KEY (project_id))",
+      );
+      const offenders = contentBearingColumns(fx.raw);
+      expect(offenders.length).toBe(3);
+      expect(offenders.some((o) => o.includes("throwaway_a.one"))).toBe(true);
+      expect(offenders.some((o) => o.includes("throwaway_a.two"))).toBe(true);
+      expect(offenders.some((o) => o.includes("throwaway_b.three"))).toBe(true);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("the permitted set is exactly the three scalar affinities and nothing else", () => {
+    // Stated as its own case so widening the set is a visible, reviewable edit
+    // with a failing test attached rather than a quiet addition to an array.
+    expect([...PERMITTED_DECLARED_TYPES].sort()).toEqual([
+      "INTEGER",
+      "REAL",
+      "TEXT",
+    ]);
+    expect(Object.isFrozen(PERMITTED_DECLARED_TYPES)).toBe(true);
+    expect(PERMITTED_DECLARED_TYPES).not.toContain("BLOB");
+    expect(PERMITTED_DECLARED_TYPES).not.toContain("NUMERIC");
   });
 
   it("artifacts still has NO url column — identity is content-addressed", async () => {
