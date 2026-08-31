@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 43
+open_count: 46
 waived_count: 0
 fixed_count: 24
-total_count: 67
-last_updated: 2026-08-31T16:12:21.682Z
+total_count: 70
+last_updated: 2026-08-31T16:34:42.387Z
 ---
 
 # Broken Windows Ledger
@@ -103,6 +103,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 65 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports analysed: null — the scans table has no analysed column and plan 06-06 owns wiring the consumer-side number | open |  | 2026-08-31T16:12:21.498Z |  |
 | 66 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true | open |  | 2026-08-31T16:12:21.588Z |  |
 | 67 | 06 | stub | packages/backend/src/scan/producer.ts |  | runScanProducer has no caller in the shipped build — Start scan inserts the row, and plan 06-03 adds the watermark-gated loop that drives the walk | open |  | 2026-08-31T16:12:21.682Z |  |
+| 68 | 06 | deviation | scripts/phase6/o07-body-length.sh |  | Plan 06-02 task 2 step 5 as written (issue startScan with an operator clause, let the producer walk one page, read the query()-side Body.length) is NOT EXECUTABLE on the shipped build: index.ts startScan REFUSES any non-empty operatorFilter until 06-04 ships the validator, and runScanProducer deliberately has no caller until 06-03 ships the watermark. Measured through probe/phase6-o07 instead, which calls sdk.requests.query() directly. 06-03/06-04 should re-read this if they want the measurement repeated through the real producer. | open |  | 2026-08-31T16:34:32.559Z |  |
+| 69 | 06 | deviation | probe/phase6-o07/backend/script.js |  | The O-07 query() walk is UNFILTERED (descending req.id, first 50, items matched by the request id the hook recorded) rather than filtered to the fixture's path. Deliberate: this phase's own O-03/O-06 record Caido's req.path / req.query / cont implementations as unmeasured, so a filtered walk returning nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. The byte-count verdict therefore does NOT cover a filtered query() page. 06-11's push-down proof is the plan that should close it. | open |  | 2026-08-31T16:34:42.297Z |  |
+| 70 | 06 | deviation | tests/phase6-o07.spec.ts |  | Plan 06-02 task 1's <verify> (pnpm vitest run tests/phase6-o07.spec.ts, fails_when non-zero exit) is unsatisfiable at task-1 time by task 1's own acceptance criterion, which requires the gate to FAIL when the artifact is absent. Executed as a RED gate: 13 failed / 7 passed / 0 skipped at task 1, 20 passed after task 2 wrote the artifact. No code changed to reconcile them. | open |  | 2026-08-31T16:34:42.387Z |  |
 
 ````json
 [
@@ -908,6 +911,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T16:12:21.682Z",
+    "resolved_at": null
+  },
+  {
+    "id": 68,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "scripts/phase6/o07-body-length.sh",
+    "line": null,
+    "description": "Plan 06-02 task 2 step 5 as written (issue startScan with an operator clause, let the producer walk one page, read the query()-side Body.length) is NOT EXECUTABLE on the shipped build: index.ts startScan REFUSES any non-empty operatorFilter until 06-04 ships the validator, and runScanProducer deliberately has no caller until 06-03 ships the watermark. Measured through probe/phase6-o07 instead, which calls sdk.requests.query() directly. 06-03/06-04 should re-read this if they want the measurement repeated through the real producer.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:34:32.559Z",
+    "resolved_at": null
+  },
+  {
+    "id": 69,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "probe/phase6-o07/backend/script.js",
+    "line": null,
+    "description": "The O-07 query() walk is UNFILTERED (descending req.id, first 50, items matched by the request id the hook recorded) rather than filtered to the fixture's path. Deliberate: this phase's own O-03/O-06 record Caido's req.path / req.query / cont implementations as unmeasured, so a filtered walk returning nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. The byte-count verdict therefore does NOT cover a filtered query() page. 06-11's push-down proof is the plan that should close it.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:34:42.297Z",
+    "resolved_at": null
+  },
+  {
+    "id": 70,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "tests/phase6-o07.spec.ts",
+    "line": null,
+    "description": "Plan 06-02 task 1's <verify> (pnpm vitest run tests/phase6-o07.spec.ts, fails_when non-zero exit) is unsatisfiable at task-1 time by task 1's own acceptance criterion, which requires the gate to FAIL when the artifact is absent. Executed as a RED gate: 13 failed / 7 passed / 0 skipped at task 1, 20 passed after task 2 wrote the artifact. No code changed to reconcile them.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:34:42.387Z",
     "resolved_at": null
   }
 ]
