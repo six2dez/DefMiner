@@ -313,3 +313,7 @@ None at close-out — both `user_setup` services were satisfied during this run.
 ---
 *Phase: 06-retroactive-scan-deployment-reality*
 *Completed: 2026-09-01*
+
+## Self-Check: PASSED
+
+All 12 declared artifacts exist on disk; all 5 commits (`e1eeef6`, `6ca970f`, `0593e85`, `ed68179`, `f25314b`) are present in the log. Plan-level verification re-run at close-out: `pnpm vitest run tests/phase6-matrix.spec.ts` 46 passed / 0 skipped; `pnpm test` 69 files / 2876 tests green; `git diff --exit-code -- scripts/spike/instance.sh` clean; `git status --porcelain .planning/phases/00-runtime-reality-check/results/` empty. Every leg passed with a schema-validated record naming the asserted binary version or resolved image digest.
