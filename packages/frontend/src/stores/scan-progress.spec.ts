@@ -46,7 +46,7 @@ import {
   MAX_REACTIONS_PER_SECOND,
   REACTION_MIN_INTERVAL_MS,
 } from "./coalescer";
-import type { ScanProgressStore } from "./scan-progress";
+import type { ScanProgressOptions, ScanProgressStore } from "./scan-progress";
 import { useScanProgress } from "./scan-progress";
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ type Fixture = {
 function fixture(): Fixture {
   const bus = makeBus();
   const projectId = ref("p1");
-  const store = useScanProgress({
+  const options: ScanProgressOptions = {
     projectId: computed(() => projectId.value),
     subscribe: (handler) =>
       bus.subscribe((payload) => {
@@ -131,7 +131,8 @@ function fixture(): Fixture {
         // same function, so a change to the predicate reaches this spec too.
         if (isScanProgressPayload(payload)) handler(payload);
       }),
-  });
+  };
+  const store = useScanProgress(options);
   return {
     bus,
     store,
@@ -264,7 +265,10 @@ describe("the triage-lock invariant is routed AROUND, never weakened", () => {
     // read the lock is a store somebody eventually teaches to respect it, and
     // the moment it does, D-15's "progress lands immediately" is gone.
     const bus = makeBus();
-    const options = {
+    // ANNOTATED, so TypeScript's excess-property check is the first line of the
+    // guard: an options object that grew a `triageLocked` or a `refresh` would
+    // not compile, and the key-set assertion below would never get to run.
+    const options: ScanProgressOptions = {
       projectId: computed(() => "p1"),
       subscribe: (handler: (payload: ScanProgressPayload) => void) =>
         bus.subscribe((payload) => {

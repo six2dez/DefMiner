@@ -336,15 +336,28 @@ rendering target-controlled bytes obeys `## Rendering Safety Contract` R1 and R2
 
 ### Event coalescing (UI-07)
 
-- Backend→frontend events carry **an invalidation summary only**:
-  `{ projectId, category, changedCount, newestId }`. **No findings payload, no bundle bodies.**
-  The UI re-queries a page when it decides to.
+- Backend→frontend events carry **a summary or a progress payload, and never content**. Two
+  variants on the one event, discriminated by a `kind` tag: the **invalidation summary**
+  `{ projectId, category, changedCount, newestId }`, and — added by Phase 6 (amendment A2, D-15,
+  FIND-04) — a **scan-progress payload** carrying DefMiner-authored integers, one boolean, two
+  identifiers this plugin owns, and one DefMiner-formatted timestamp derived from
+  `getCreatedAt()`. **No findings payload, no bundle bodies, no target-controlled bytes, in either
+  variant.** The UI re-queries a page when it decides to; the progress variant needs no re-query
+  because every field on it is already a number the backend computed.
 - The frontend coalesces per category on a **500 ms trailing window**, capped at **2 UI reactions
   per second** across all categories.
 - **While the operator has a row selected or the evidence panel open, the table does not re-order
   or re-render rows.** New counts accrue into the coalescing pill and apply on **Refresh**. Rows
   shifting under a cursor mid-triage is how an operator marks the wrong finding as a false
   positive — a mis-click here writes durable state.
+- **The coalescer's triage lock governs the entity tables only** (amendment A3, Phase 6). Scan
+  progress is routed to a separate leading-throttled store **before** `onSummary` and never
+  consults the lock. It is not an exemption from the rule: a progress strip has no rows and no
+  cursor, so it is never behind the lock in the first place, and both `triageLocked` early returns
+  in `stores/coalescer.ts` stay literally unmodified. That store applies on the **leading** edge at
+  the same 2-reactions-per-second cap, with **no trailing debounce** — a pure trailing debounce
+  yields zero updates for as long as a sustained stream lasts, and a readout that freezes while the
+  scan is fastest is the opposite of the requirement.
 - A frozen-looking page is almost always **the backend's single QuickJS thread being blocked by a
   large parse** (PITFALLS P3), not Vue. The Health tab therefore shows queue depth, dropped count,
   jobs in flight and max observed synchronous slice, so the operator can tell the two apart instead

@@ -63,10 +63,12 @@ import type {
   BoundRejection,
   ExportFormat,
   ExportRedactionMode,
+  InvalidationEventPayload,
   InvalidationSummary,
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanProgressPayload,
   ScanState,
   ScanStatusPayload,
   SettingKey,
@@ -74,7 +76,10 @@ import type {
   SettingsGroup,
   VisibleTotal,
 } from "@defminer/engine/contract";
-import { INVALIDATION_EVENT } from "@defminer/engine/contract";
+import {
+  INVALIDATION_EVENT,
+  isScanProgressPayload,
+} from "@defminer/engine/contract";
 
 import type { ArtifactRow } from "../backend";
 
@@ -596,7 +601,7 @@ export type DefMinerBackendSdk = {
     getCompat: () => Promise<CompatReport>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
-      callback: (summary: InvalidationSummary) => void,
+      callback: (payload: InvalidationEventPayload) => void,
     ) => InvalidationSubscription;
   };
 };
@@ -651,9 +656,26 @@ export type BackendClient = {
   /** COMPAT-02's report. Reachable on a REFUSING build, where it is one of only
    *  two endpoints that exist. */
   getCompat: () => Promise<RpcResult<CompatReport>>;
-  /** Subscribe to the one backend event, RETURNING THE STOP HANDLE. */
+  /**
+   * Subscribe to the one backend event, RETURNING THE STOP HANDLE.
+   *
+   * ONE SUBSCRIPTION, TWO DESTINATIONS (FIND-04, D-15). The event carries a
+   * discriminated union — the invalidation summary the entity tables coalesce,
+   * and one retroactive scan's progress — and the discrimination happens at the
+   * single subscription site below, BEFORE either handler is called. That is
+   * what leaves both of the coalescer's triage-lock early returns literally
+   * unmodified: a progress payload never reaches `onSummary`, so there is
+   * nothing to exempt it from.
+   *
+   * `onScanProgress` IS OPTIONAL AND ITS ABSENCE DROPS THE VARIANT, which is
+   * the honest state until a surface renders the readout. The alternative was a
+   * store created here, owned by nobody and stopped by nobody — research P-04's
+   * exact leak. What must never happen is a progress payload reaching the
+   * coalescer, and that does not depend on this argument being passed.
+   */
   subscribeInvalidation: (
     handler: (summary: InvalidationSummary) => void,
+    onScanProgress?: (payload: ScanProgressPayload) => void,
   ) => InvalidationSubscription;
 };
 
@@ -816,7 +838,18 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     // bump would have to change to break, and a coalescer that has stopped
     // listening cannot even tell the operator that the counts have stopped
     // being live.
-    subscribeInvalidation: (handler) =>
-      sdk.backend.onEvent(INVALIDATION_EVENT, handler),
+    subscribeInvalidation: (handler, onScanProgress) =>
+      sdk.backend.onEvent(INVALIDATION_EVENT, (payload) => {
+        // THE CALLBACK IS TYPED AGAINST THE UNION, so a third variant added to
+        // the contract without a destination here is a typecheck failure rather
+        // than a payload nobody routes. The predicate is the engine's, never a
+        // local `"kind" in payload` — one declaration of what the discriminator
+        // is, read by the emitter and the subscriber alike.
+        if (isScanProgressPayload(payload)) {
+          onScanProgress?.(payload);
+          return;
+        }
+        handler(payload);
+      }),
   };
 }
