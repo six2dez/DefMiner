@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 48
+open_count: 53
 waived_count: 0
 fixed_count: 24
-total_count: 72
-last_updated: 2026-08-31T17:00:10.225Z
+total_count: 77
+last_updated: 2026-08-31T17:23:18.756Z
 ---
 
 # Broken Windows Ledger
@@ -108,6 +108,11 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 70 | 06 | deviation | tests/phase6-o07.spec.ts |  | Plan 06-02 task 1's <verify> (pnpm vitest run tests/phase6-o07.spec.ts, fails_when non-zero exit) is unsatisfiable at task-1 time by task 1's own acceptance criterion, which requires the gate to FAIL when the artifact is absent. Executed as a RED gate: 13 failed / 7 passed / 0 skipped at task 1, 20 passed after task 2 wrote the artifact. No code changed to reconcile them. | open |  | 2026-08-31T16:34:42.387Z |  |
 | 71 | 06 | deviation | packages/backend/src/index.ts | 692 | Plan 06-04 did NOT remove the refused/operator-clause-unsupported placeholder despite the executor brief saying it would. Assessed and declined: 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and explicitly owns 'Extend startScan to run the operator clause through validateOperatorClause'. Removing it in 06-04 would have shipped a half-wired endpoint — no ScanCommandOutcome shape distinguishing a clause rejection from the one-scan-at-a-time refusal, no RPC union carrying the four new codes, no frontend copy in scan-contract.ts. D-05 is delivered by the end of the phase, on 06-04's validator. Closes when 06-05 lands. | open |  | 2026-08-31T17:00:10.126Z |  |
 | 72 | 06 | unmet-truth | packages/backend/src/scan/filter.ts |  | The fail-CLOSED property is proved on DefMiner's half only. That an unbalanced or comment-truncated expression actually makes execute() throw is CITED from the SDK's own JSDoc (@throws {Error} If a query parameter is invalid, requests.d.ts:635-639) and has never been executed against a real Caido parser in this repo. 06-04 tests the refusal, the composer's omission, and producer.ts's handling of a rejected execute(); it does not test Caido. Plan 06-11's fixture suite over sdk.requests.matches() is where this becomes measured — along with whether req.path strips the query and whether cont is byte-wise or Unicode case-folded. Recorded as SUMMARY coverage D6 with human_judgment: true. | open |  | 2026-08-31T17:00:10.225Z |  |
+| 73 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus still reports heldAtWatermark: false unconditionally. Plan 06-03 made the value REAL — the producer holds at SCAN_BACKPRESSURE_WATERMARK and exposes isHeldAtWatermark() as module state precisely because getScanStatus is a separate call that does not hold the walk's outcome — but index.ts and api/spec.ts are named in 06-05-PLAN.md's files_modified and 06-05 owns the getScanStatus projection. Wiring it here would have shipped a half-owned endpoint the way 06-04 declined to (WINDOWS 71). Closes when 06-05 lands. Supersedes the ownership half of entry 66. | open |  | 2026-08-31T17:23:05.611Z |  |
+| 74 | 06 | stub | packages/backend/src/scan/producer.ts |  | runScanProducer STILL has no caller in the shipped build. The loop entry 67 named now exists — watermark gate, per-page skip-done read, descending multi-page walk, yield, re-entrancy flag — but nothing drives it: startScan inserts the row and returns. The driver lives in index.ts, which is 06-05's files_modified. Entry 67 is therefore only half discharged: the loop is 06-03's and shipped; the caller is 06-05's and is not. | open |  | 2026-08-31T17:23:05.711Z |  |
+| 75 | 06 | unmet-truth | packages/engine/src/thresholds.ts |  | SCAN_BACKPRESSURE_WATERMARK is a DROP-safety bound only and says nothing about LATENCY. At TOKENIZER_MS_PER_MB a full PASSIVE_MAX_BYTES artifact takes ~6.3s to walk and the consumer is strictly serial, so a queue standing at the watermark can be a long backlog in front of every live response the operator generates — none dropped, all waiting. Closing it needs a MEDIAN ARTIFACT SIZE over a real project's stored traffic; SPIKE-06's ladder was four sizes over a corpus of two, which is a ladder and not a distribution. 06-RESEARCH.md records the residual and this plan deliberately projected no number rather than reusing RSS_BYTES_PER_INPUT_BYTE as a latency proxy. The residual is stated in the source at the constant. | open |  | 2026-08-31T17:23:05.815Z |  |
+| 76 | 06 | deviation | packages/backend/src/scan/scans.ts |  | Plan 06-03's files_modified names six files and does not include scans.ts or scans.spec.ts; both were edited. Forced by D-03 itself: replacing the per-item skip read with one bounded per-page read makes scans.ts's isRequestFinished dead, and knip reports a dead export as an error. Deleted rather than left as a second way to ask the same question, and FINISHED_ANALYSIS_STATE exported so the producer binds the derived state instead of re-deriving it. scans.spec.ts lost the runScanProducer describe block, which moved to the new producer.spec.ts with a note at both ends. 06-05 and 06-06 both name scans.ts in their own files_modified and will see the change. | open |  | 2026-08-31T17:23:18.666Z |  |
+| 77 | 06 | deviation | packages/backend/src/telemetry.spec.ts |  | Two SHIPPED gates were widened because each was narrower than the invariant it enforces (the same shape as 06-01's deviation 1). (a) The projection's payload rule filtered containers by a hand-listed path set, so counters.retro failed a rule about PAYLOADS for being an object; it now judges LEAVES by shape. (b) The AST counters rule asserted literals.length === 1, which refused D-02's nested sub-map while still permitting a genuine second object elsewhere in telemetry.ts; it now asserts every counter-shaped literal is in telemetry.ts AND inside createCounters(), which is strictly stronger. Both failing paths are executed through the gate itself via a new pure scanSource(file, src). | open |  | 2026-08-31T17:23:18.756Z |  |
 
 ````json
 [
@@ -973,6 +978,66 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T17:00:10.225Z",
+    "resolved_at": null
+  },
+  {
+    "id": 73,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "getScanStatus still reports heldAtWatermark: false unconditionally. Plan 06-03 made the value REAL — the producer holds at SCAN_BACKPRESSURE_WATERMARK and exposes isHeldAtWatermark() as module state precisely because getScanStatus is a separate call that does not hold the walk's outcome — but index.ts and api/spec.ts are named in 06-05-PLAN.md's files_modified and 06-05 owns the getScanStatus projection. Wiring it here would have shipped a half-owned endpoint the way 06-04 declined to (WINDOWS 71). Closes when 06-05 lands. Supersedes the ownership half of entry 66.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:23:05.611Z",
+    "resolved_at": null
+  },
+  {
+    "id": 74,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/scan/producer.ts",
+    "line": null,
+    "description": "runScanProducer STILL has no caller in the shipped build. The loop entry 67 named now exists — watermark gate, per-page skip-done read, descending multi-page walk, yield, re-entrancy flag — but nothing drives it: startScan inserts the row and returns. The driver lives in index.ts, which is 06-05's files_modified. Entry 67 is therefore only half discharged: the loop is 06-03's and shipped; the caller is 06-05's and is not.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:23:05.711Z",
+    "resolved_at": null
+  },
+  {
+    "id": 75,
+    "kind": "unmet-truth",
+    "phase": "06",
+    "file": "packages/engine/src/thresholds.ts",
+    "line": null,
+    "description": "SCAN_BACKPRESSURE_WATERMARK is a DROP-safety bound only and says nothing about LATENCY. At TOKENIZER_MS_PER_MB a full PASSIVE_MAX_BYTES artifact takes ~6.3s to walk and the consumer is strictly serial, so a queue standing at the watermark can be a long backlog in front of every live response the operator generates — none dropped, all waiting. Closing it needs a MEDIAN ARTIFACT SIZE over a real project's stored traffic; SPIKE-06's ladder was four sizes over a corpus of two, which is a ladder and not a distribution. 06-RESEARCH.md records the residual and this plan deliberately projected no number rather than reusing RSS_BYTES_PER_INPUT_BYTE as a latency proxy. The residual is stated in the source at the constant.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:23:05.815Z",
+    "resolved_at": null
+  },
+  {
+    "id": 76,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.ts",
+    "line": null,
+    "description": "Plan 06-03's files_modified names six files and does not include scans.ts or scans.spec.ts; both were edited. Forced by D-03 itself: replacing the per-item skip read with one bounded per-page read makes scans.ts's isRequestFinished dead, and knip reports a dead export as an error. Deleted rather than left as a second way to ask the same question, and FINISHED_ANALYSIS_STATE exported so the producer binds the derived state instead of re-deriving it. scans.spec.ts lost the runScanProducer describe block, which moved to the new producer.spec.ts with a note at both ends. 06-05 and 06-06 both name scans.ts in their own files_modified and will see the change.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:23:18.666Z",
+    "resolved_at": null
+  },
+  {
+    "id": 77,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/telemetry.spec.ts",
+    "line": null,
+    "description": "Two SHIPPED gates were widened because each was narrower than the invariant it enforces (the same shape as 06-01's deviation 1). (a) The projection's payload rule filtered containers by a hand-listed path set, so counters.retro failed a rule about PAYLOADS for being an object; it now judges LEAVES by shape. (b) The AST counters rule asserted literals.length === 1, which refused D-02's nested sub-map while still permitting a genuine second object elsewhere in telemetry.ts; it now asserts every counter-shaped literal is in telemetry.ts AND inside createCounters(), which is strictly stronger. Both failing paths are executed through the gate itself via a new pure scanSource(file, src).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T17:23:18.756Z",
     "resolved_at": null
   }
 ]

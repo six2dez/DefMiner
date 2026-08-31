@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-08-31T16:59:47.165Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-08-31T17:23:52.333Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 54bef3f01175910af10287355f682b296887f79d
+state_head: 5b2357e50a7ee853f913daafdcb9068b8820ebd0
 progress:
   total_phases: 11
   completed_phases: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -298,6 +298,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P01 | 25 min | 2 tasks | 19 files |
 | Phase 06 P02 | 17 min | 2 tasks | 8 files |
 | Phase 06 P04 | 11 min | 2 tasks | 3 files |
+| Phase 06 P03 | 22 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -579,6 +580,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: composeScanFilter re-validates the operator clause and OMITS it on failure rather than throwing — runScanProducer composes outside the try that wraps execute(), so a throw would escape it entirely and Caido surfaces neither a throw nor a rejection from plugin code. Omission narrows to DefMiners own clause and can never widen.
 - [Phase 06]: OPERATOR_CLAUSE_MAX_CHARS is 2048, derived from EVIDENCE_PANEL_MAX_GRAPHEMES and asserted equal rather than imported — The operator must never be shown a truncated version of the one string they have to check against the composed filter. Asserted rather than imported because the cap is a COST bound that merely coincides with a DISPLAY bound.
 - [Phase 06]: The index.ts operator-clause-unsupported refusal was assessed and deliberately LEFT IN PLACE for plan 06-05 — 06-05-PLAN.md (wave 3, depends_on 06-04) names index.ts and api/spec.ts in files_modified and owns wiring validateOperatorClause into startScan. Removing the refusal here without 06-05s ScanCommandOutcome shape, the RPC union and the frontend copy would ship a half-wired endpoint. D-05 is delivered by end of phase, on this plans foundations.
+- [Phase 06]: SCAN_BACKPRESSURE_WATERMARK is DERIVED as QUEUE_CAP - EVENTS_DELIVERED_UNDER_BLOCK - SCAN_PAGE_SIZE and asserted as an inequality over named constants, never against the literal 1528 — BoundedQueue drops the OLDEST entry at cap and the oldest entries during a backfill are the operator's live browsing, so the scan may offer only while there is room for a full measured live burst on top of a full page. The bound is drop-safety only; its latency half needs a median artifact size nobody has measured, and that residual is stated in the source rather than closed with a projected number.
+- [Phase 06]: Retro and live attribution are two sub-maps of the ONE counters object, over the same closed REJECT_REASONS vocabulary — counters.retro is built inside createCounters() so resetTelemetryForTest() zeroes it in place and telemetry.spec.ts's AST scan still finds one counters object. A 40,000-request backfill folded into the live numbers would make OBS-01's drop count and reject reasons stop describing live proxying (D-02).
+- [Phase 06]: heldAtWatermark is producer module state with an out-of-band reader, not only a return value — getScanStatus is a separate RPC that does not hold the walk's outcome, and from outside the backend a watermark hold and a blocked QuickJS thread look identical. Without the explicit signal, "Waiting for the analysis queue" can never render and every healthy hold falls through to the stall marker. The index.ts projection is 06-05's edit.
+- [Phase 06]: The skip-done read is ONE bounded statement per page and scans.ts's per-item isRequestFinished was deleted rather than kept — D-03: at twenty items a page that is 2,000 indexed round trips for a 40,000-request backfill instead of 40,000. Two readers of the same question drift, and the one nobody calls stops being right without anything failing. The placeholder count is counted from the statement text and asserted at import against SCAN_PAGE_SIZE.
 
 ### Known Risks Carried Forward
 
@@ -621,8 +626,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T16:59:17.686Z
-**Stopped at:** Completed 06-04-PLAN.md
+**Last session:** 2026-08-31T17:23:25.271Z
+**Stopped at:** Completed 06-03-PLAN.md
 **Resume file:** None
 
 ### Blockers
