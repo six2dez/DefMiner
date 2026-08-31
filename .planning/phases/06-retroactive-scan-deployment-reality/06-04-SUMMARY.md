@@ -376,3 +376,10 @@ None — no external service configuration required, no package installed, no en
 ---
 *Phase: 06-retroactive-scan-deployment-reality*
 *Completed: 2026-08-31*
+
+## Self-Check: PASSED
+
+- Every file named in `key-files` exists on disk (`filter.ts`, `filter.spec.ts`, `httpql-discipline.spec.ts`, this SUMMARY).
+- Every commit hash named in `## Task Commits` resolves in `git log` (`21cc281`, `adb8bf7`, `3a20c56`, plus this SUMMARY's `32d7225`).
+- Every `<acceptance_criteria>` from both tasks was re-run on the final tree; results are in `## Verification`.
+- The plan-level `<verification>` block was re-run in full: `packages/backend/src/scan` green, zero gate violations over the shipped tree, `typecheck` / `lint` / `knip` all exit 0.
