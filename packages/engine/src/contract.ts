@@ -87,6 +87,224 @@ export const SCAN_STATES = [
 /** One scan state. Derived from {@link SCAN_STATES}, never restated. */
 export type ScanState = (typeof SCAN_STATES)[number];
 
+// ===========================================================================
+// TWO VOCABULARIES, ONE WORD "SCAN", AND ONE SHARED MEMBER
+// ===========================================================================
+// READ THIS BEFORE TOUCHING EITHER LIST. `SCAN_STATES` above is the ANALYSIS
+// state of one artifact — has this digest been through the detectors. The list
+// immediately below is the LIFECYCLE state of a retroactive backfill — is that
+// job running, paused, finished or thrown away. They are different closed
+// vocabularies about different subjects, and `running` is a literal member of
+// BOTH.
+//
+// The two declarations are adjacent DELIBERATELY, so the collision is visible
+// at the point of declaration rather than discovered at a call site three
+// packages away. Four more mechanisms keep them apart downstream and each is
+// load-bearing: the database column is `state` and never `scan_state`
+// (`analyses.scan_state` already exists and would have accepted the second
+// vocabulary silently); no operator-facing label is shared OR is a prefix of
+// another — `completed` renders as **Finished** and never "Completed", because
+// the analysis vocabulary already ships "Complete" and a one-character
+// difference between two states that mean opposite things is not a
+// difference; the lifecycle gets its own presentation map, its own renderer
+// and its own `data-defminer-*` marker rather than widening `StatusBadge`'s
+// prop; and no surface renders both — the analysis state lives in an entity
+// table's leading cell and in the evidence panel, the lifecycle state in the
+// toolbar indicator and on the Scan tab.
+//
+// The temptation this note exists to refuse is merging them. They cannot be
+// merged: `pending` and `partial` are meaningless for a backfill, `suspended`
+// and `discarded` are meaningless for an analysis, and a union of the two
+// would give the compiler nothing to check at exactly the sites where a wrong
+// state is invisible.
+
+/**
+ * The four states a retroactive scan can be in (D-09, FIND-03).
+ *
+ * ORDER IS THE LIFECYCLE and it is also the order migration step v5 writes
+ * into `CHECK (state IN (...))`, so a reordering here is a diff a reviewer can
+ * put beside the DDL. The database's CHECK constraint is the ENFORCEMENT; this
+ * array is the one declaration every surface binds to, and `scans.spec.ts`
+ * reads the constraint back out of the schema and compares it member by member
+ * rather than trusting the two to stay in step.
+ *
+ * ALL FOUR, THOUGH TWO HAVE NO CALLER IN THE TRACER. `completed` and
+ * `discarded` are written by plans 06-05 and 06-09. They are here anyway for
+ * the reason `AUDIT_KINDS` gives at length: an unused member costs nothing at
+ * run time, while a MISSING one costs a second permanent step in a ladder whose
+ * entries can never be edited — and this list is inside a one-way migration.
+ */
+export const SCAN_LIFECYCLE_STATES = [
+  /** Walking, or holding at the backpressure watermark. */
+  "running",
+  /** Stopped with its place kept, and resumable. Reached by the operator
+   *  (D-10), by a project change (D-04), by a restart (D-11) or by retention
+   *  eviction (D-08) — and a suspension always says which. */
+  "suspended",
+  /** Reached the end of the filter's range. Rendered **Finished**, never
+   *  "Completed": see the collision note above. */
+  "completed",
+  /** Thrown away by the operator. The POSITION is gone; the artifacts and
+   *  observations it already produced are not touched. */
+  "discarded",
+] as const;
+
+/** One retroactive-scan lifecycle state. Derived from
+ *  {@link SCAN_LIFECYCLE_STATES}, never restated. */
+export type ScanLifecycleState = (typeof SCAN_LIFECYCLE_STATES)[number];
+
+/**
+ * Why a scan is `suspended` — a CLOSED, DefMiner-authored code set.
+ *
+ * A CODE AND NEVER A SENTENCE, for the reason `RpcReason` gives on the other
+ * side of the boundary: the frontend maps each of these to its own copy, so a
+ * fifth reason needs a copy row before it can be rendered. Caido's own error
+ * text never reaches this column and never crosses the RPC — anything caught
+ * goes through `describeError` and stays in the log.
+ *
+ * EVERY MEMBER NAMES AN AGENT. A suspension the operator did not perform is
+ * the case that matters: three of these four are things that happened TO the
+ * scan, and a scan that stopped for a reason nobody can see is the
+ * frozen-looking page one level up.
+ */
+export const SUSPEND_REASONS = [
+  /** The operator pressed Pause (D-10). */
+  "operator_paused",
+  /** The Caido project changed underneath it (D-04). Nothing was written under
+   *  the new project; the scan kept its place in the old one. */
+  "project_changed",
+  /** Caido restarted while it was running (D-11). DefMiner never resumes a scan
+   *  on its own — this is ERR-02's rule applied to the one table that needs it
+   *  now, and Phase 2 inherits the pattern rather than inventing a second. */
+  "process_restarted",
+  /** The retention cap was deleting this scan's own results (D-08): the
+   *  backfill was consuming itself. */
+  "retention_eviction",
+] as const;
+
+/** One suspension reason. Derived from {@link SUSPEND_REASONS}. */
+export type SuspendReason = (typeof SUSPEND_REASONS)[number];
+
+/**
+ * DefMiner's OWN narrowing, as one HTTPQL clause (D-05, FIND-03).
+ *
+ * ===========================================================================
+ * WHY THIS STRING LIVES IN THE ENGINE AND NOT IN THE BACKEND
+ * ===========================================================================
+ * D-05's promise is that the operator may NARROW the scan and never widen it,
+ * and 06-UI-SPEC.md § "The start form" makes the check mechanical: the read-only
+ * "DefMiner always scans for" field renders this exact clause before a scan
+ * exists, so the operator can see what they are adding to. A promise the
+ * operator cannot check is a promise; the string is a fact.
+ *
+ * The frontend cannot import the backend — the backend imports `caido:*`
+ * specifiers that resolve only inside Caido's QuickJS — and there is no scan
+ * row to carry the clause across the RPC before the first scan starts. So it
+ * belongs here, in the one module BOTH packages already import, for exactly
+ * the reason `SCAN_STATES` moved here in plan 05-09. The alternative was a
+ * second copy in the frontend, which is a second declaration of the one string
+ * whose whole job is that both halves agree about it.
+ *
+ * THIS IS A CONSTANT, NOT A COMPOSITION. `packages/backend/src/scan/filter.ts`
+ * remains the ONLY producer of a scan filter STRING; nothing here concatenates
+ * an operator's input, and nothing outside that module may.
+ *
+ * ===========================================================================
+ * WHY THESE SEVEN TERMS AND NOT `req.ext.eq`
+ * ===========================================================================
+ * The push-down must be a SUPERSET of `admit()`'s kind axis or the retroactive
+ * scan silently never sees an artifact the live path would have taken. Two
+ * substring terms cover the extensions and five cover the media-type essences
+ * `isScriptish` accepts, and all of them use the case-INSENSITIVE `cont`
+ * family. `req.ext.eq` is documented case sensitive and would miss `/APP.JS`,
+ * which `isScriptish` accepts because it lowercases before comparing a suffix —
+ * so the clause would be a strict subset and the miss would be invisible.
+ *
+ * The 2xx bound mirrors `admit()`'s first axis and is worth more here than
+ * there: on this runtime every returned page transfers full response bodies,
+ * so a status the gate would reject anyway is a body DefMiner paid to move.
+ *
+ * NO REGULAR EXPRESSION AND NO COMMENT TOKEN. `//` and `/* *\/` are HTTPQL
+ * comments and are the one construct that can reach across a parenthesis; a
+ * comment inside DefMiner's own clause would comment DefMiner's narrowing away.
+ * `contract.spec.ts` asserts both are absent.
+ */
+export const SCAN_KIND_CLAUSE =
+  '(req.path.cont:".js" OR req.path.cont:".mjs" ' +
+  'OR resp.raw.cont:"javascript" OR resp.raw.cont:"ecmascript" ' +
+  'OR resp.raw.cont:"jscript" OR resp.raw.cont:"livescript" ' +
+  'OR resp.raw.cont:"text/js") ' +
+  "AND resp.code.gte:200 AND resp.code.lt:300";
+
+/**
+ * What the Scan tab reads — one retroactive scan, as the operator sees it.
+ *
+ * EVERY FIELD IS AN INTEGER, A CLOSED-VOCABULARY WORD, OR THE OPERATOR'S OWN
+ * CLAUSE (T-06-04). No response byte, no header, no URL and no target-authored
+ * string crosses on this shape, which is what lets the readout render without a
+ * display-path call — a property of the SHAPE rather than a discipline.
+ */
+export type ScanStatusPayload = {
+  readonly scanId: string;
+  readonly state: ScanLifecycleState;
+  /** `null` while the scan is not suspended. A code, never a sentence. */
+  readonly suspendReason: SuspendReason | null;
+  /** What the operator typed, or `""`. Echoed only inside its own `font-mono`
+   *  element after sanitisation — never interpolated into a sentence. */
+  readonly operatorFilter: string;
+  /** The EXACT string that was sent, in the exact order. This is what makes
+   *  D-05's "narrow, never widen" checkable rather than merely promised. */
+  readonly composedFilter: string;
+  readonly pagesWalked: number;
+  readonly seen: number;
+  readonly admitted: number;
+  readonly skippedDone: number;
+  readonly rejected: number;
+  readonly queued: number;
+  /**
+   * How many of this scan's admissions have finished analysis — or `null` when
+   * DefMiner does not know.
+   *
+   * `number | null` AND NOT `number`, deliberately. There is no `analysed`
+   * column on `scans`: the number belongs to the consumer at the other end of
+   * the queue, not to the producer, and plan 06-06 wires it. Until then the
+   * honest value is ABSENT. A zero would render as "nothing has been analysed"
+   * on a scan that is analysing, which is 06-UI-SPEC.md D2's rule — a number
+   * DefMiner does not have is absent, never zero — broken on the one counter
+   * whose whole job is to show the far end of the pipe.
+   */
+  readonly analysed: number | null;
+  /**
+   * The capture time of the oldest request walked so far, in ms.
+   *
+   * FROM `request.getCreatedAt()`, NEVER FROM THE CLOCK. The consumer stamps
+   * every persisted row with `Date.now()`, so a position built from a stored
+   * row would read "now scanning traffic from today" for the entire walk.
+   * `null` before the first page resolves — absent, never the epoch.
+   */
+  readonly lastCreatedAt: number | null;
+  readonly startedAt: number;
+  readonly updatedAt: number;
+  readonly finishedAt: number | null;
+  /**
+   * Is the producer withholding pages because the queue is at the watermark?
+   *
+   * REQUIRED, AND NOT OPTIONAL. 06-UI-SPEC.md § "The scan status payload —
+   * required fields" is binding and this is the field it binds. From outside
+   * the backend a scan holding at the watermark and a scan whose QuickJS thread
+   * is blocked are indistinguishable: both show counters that stop advancing.
+   * Without this signal "Waiting for the analysis queue" can never render,
+   * every legitimate hold falls through to "Not advancing", and the stall
+   * marker cries wolf on the single most common healthy state of a long
+   * backfill. An operator who learns to ignore a stall marker is worse off than
+   * one who never had it.
+   *
+   * The tracer always reports `false`; plan 06-03 adds the watermark that makes
+   * it true.
+   */
+  readonly heldAtWatermark: boolean;
+};
+
 /**
  * States that mean "this digest has been through the detectors at this corpus
  * version; do not re-analyse it".

@@ -68,6 +68,7 @@ import type {
   PageRequest,
   PageResponse,
   ScanState,
+  ScanStatusPayload,
   SettingKey,
   SettingScope,
   SettingsGroup,
@@ -113,8 +114,17 @@ import type { ArtifactRow } from "../backend";
  * misreading its outcome shape would report "saved" for a retention bound the
  * backend refused. The operator would then believe a bound is in force that is
  * not, about the one mechanism in this plugin that deletes their history.
+ *
+ * BUMPED TO 5 IN LOCKSTEP WITH PLAN 06-01's. That one is NOT an over-bump and
+ * the backend's comment says why: `getScanStatus` returns
+ * `ScanStatusPayload | null`, and the two halves of that union put OPPOSITE
+ * surfaces on screen — `null` renders the start form, a payload renders the
+ * live counter strip. A bundle reading a shape it does not know would render
+ * one for the other, and the specific failure is a strip of zeroes shown to an
+ * operator who has never started a scan, which reads as "DefMiner scanned and
+ * found nothing".
  */
-export const FRONTEND_CONTRACT_VERSION = 4;
+export const FRONTEND_CONTRACT_VERSION = 5;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -476,6 +486,31 @@ export type RpcResult<TValue> =
 // THE SDK SURFACE THIS MODULE TOUCHES
 // ---------------------------------------------------------------------------
 
+/**
+ * What `startScan` answers.
+ *
+ * MIRRORS THE BACKEND'S UNION, and the `reason` members are the backend's codes
+ * verbatim. They are IDENTIFIERS THE UI MAPS TO ITS OWN COPY, never sentences
+ * it interpolates — the same rule `RpcReason` above obeys, and it matters more
+ * here because the alternative on this path is Caido's HTTPQL parser text,
+ * which quotes whatever the operator typed back at them inside a sentence.
+ *
+ * A refusal is not a failure of the CALL: `RpcResult` still reports `ok: true`
+ * and carries this value. The two layers answer different questions — "did the
+ * backend answer" and "did the backend agree" — and collapsing them would make
+ * a refused start indistinguishable from a backend that never replied.
+ */
+export type StartScanOutcome =
+  | { readonly outcome: "started"; readonly scanId: string }
+  | {
+      readonly outcome: "refused";
+      readonly reason:
+        | "no-project"
+        | "already-running"
+        | "operator-clause-unsupported"
+        | "write-failed";
+    };
+
 /** The stop handle `onEvent` returns. Named because it is the thing that must
  *  be owned and called; research P-04 is entirely about it being dropped. */
 export type InvalidationSubscription = { readonly stop: () => void };
@@ -518,6 +553,10 @@ export type DefMinerBackendSdk = {
       request: SettingWriteRequest,
     ) => Promise<SettingWriteOutcome>;
     getHealth: () => Promise<HealthOutcome>;
+    startScan: (request: {
+      readonly operatorFilter: string;
+    }) => Promise<StartScanOutcome>;
+    getScanStatus: () => Promise<ScanStatusPayload | null>;
     getCompat: () => Promise<CompatReport>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
@@ -563,6 +602,13 @@ export type BackendClient = {
   ) => Promise<RpcResult<SettingWriteOutcome>>;
   /** The four counters that tell a blocked backend from a slow renderer. */
   getHealth: () => Promise<RpcResult<HealthOutcome>>;
+  /** Begin one retroactive scan of already-captured traffic (FIND-03). */
+  startScan: (request: {
+    readonly operatorFilter: string;
+  }) => Promise<RpcResult<StartScanOutcome>>;
+  /** This project's active scan, or `null` when there is none — a real state
+   *  and not a failure, and the one that puts the start form on screen. */
+  getScanStatus: () => Promise<RpcResult<ScanStatusPayload | null>>;
   /** COMPAT-02's report. Reachable on a REFUSING build, where it is one of only
    *  two endpoints that exist. */
   getCompat: () => Promise<RpcResult<CompatReport>>;
@@ -697,6 +743,18 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     writeSetting: (request) => guarded(() => sdk.backend.writeSetting(request)),
 
     getHealth: () => guarded(() => sdk.backend.getHealth()),
+
+    // GUARDED, AND IT IS A WRITE. A stale bundle whose contract version
+    // disagrees must not start a scan: it would be reading the outcome shape
+    // with the old expectations on a call that begins hours of work against the
+    // operator's stored traffic, and a refusal it misread would look like a
+    // start that succeeded.
+    startScan: (request) => guarded(() => sdk.backend.startScan(request)),
+
+    // GUARDED like every other read. The payload's `null` half and its object
+    // half render OPPOSITE surfaces, so a bundle known to be misreading the
+    // contract must stop rather than pick one.
+    getScanStatus: () => guarded(() => sdk.backend.getScanStatus()),
 
     // NOT GUARDED BY THE MISMATCH, AND THAT IS THE WHOLE POINT OF IT. A
     // contract-version mismatch is one of the things somebody opens the

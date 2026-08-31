@@ -26,8 +26,8 @@ import {
   SCAN_KIND_CLAUSE,
   TERMINAL_SCAN_STATES,
 } from "@defminer/engine/contract";
-import { QUEUE_CAP, SCAN_PAGE_SIZE } from "@defminer/engine/thresholds";
 import { BoundedQueue } from "@defminer/engine/queue";
+import { QUEUE_CAP, SCAN_PAGE_SIZE } from "@defminer/engine/thresholds";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -49,6 +49,33 @@ import {
   SCAN_LIST_DEFAULT_LIMIT,
   startScan,
 } from "./scans";
+
+/**
+ * The composed filter's TOP-LEVEL terms.
+ *
+ * A naive `split(" AND ")` is wrong here and the reason is worth stating:
+ * `SCAN_KIND_CLAUSE` contains its own ` AND ` — the 2xx bound is joined to the
+ * kind alternation inside the clause — so a flat split reports four terms for a
+ * two-term composition. Depth counting is what makes "how many clauses did
+ * DefMiner join" a question about the composition rather than about the text.
+ */
+function topLevelTerms(composed: string): string[] {
+  const terms: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < composed.length; i += 1) {
+    const ch = composed[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth -= 1;
+    else if (depth === 0 && composed.startsWith(" AND ", i)) {
+      terms.push(composed.slice(start, i));
+      i += 4;
+      start = i + 1;
+    }
+  }
+  terms.push(composed.slice(start));
+  return terms.map((t) => t.trim()).filter((t) => t.length > 0);
+}
 
 const PROJECT = "p1";
 const NOW = 1_756_000_000_000;
@@ -90,8 +117,8 @@ describe("composeScanFilter — the ONLY producer of a scan filter string (O-06,
     // it say AND binds tighter. Full parenthesisation is what makes the
     // composition mean the same thing under either reading. That is a
     // derivation, not a preference.
-    const composed = composeScanFilter("row.id.lt:1", "req.host.eq:\"a\"");
-    const terms = composed.split(" AND ");
+    const composed = composeScanFilter("row.id.lt:1", 'req.host.eq:"a"');
+    const terms = topLevelTerms(composed);
     expect(terms).toHaveLength(3);
     for (const term of terms) {
       expect(term.startsWith("("), `${term} is not parenthesised`).toBe(true);
@@ -101,7 +128,7 @@ describe("composeScanFilter — the ONLY producer of a scan filter string (O-06,
 
   it("skips an absent operator clause entirely rather than emitting an empty term", () => {
     const composed = composeScanFilter("row.id.lt:9001", "");
-    expect(composed.split(" AND ")).toHaveLength(2);
+    expect(topLevelTerms(composed)).toHaveLength(2);
     expect(composed).not.toContain("()");
   });
 
@@ -250,7 +277,9 @@ describe("the `scans` table (D-09, FIND-03)", () => {
     // write being advanced underneath itself.
     await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
     fx.raw
-      .prepare("UPDATE scans SET state = 'suspended' WHERE project_id = ? AND scan_id = ?")
+      .prepare(
+        "UPDATE scans SET state = 'suspended' WHERE project_id = ? AND scan_id = ?",
+      )
       .run(PROJECT, "s1");
 
     const advanced = await advanceScan(fx.db, PROJECT, "s1", {
@@ -271,7 +300,9 @@ describe("the `scans` table (D-09, FIND-03)", () => {
     expect(advanced.ok && advanced.changes).toBe(0);
 
     const row = fx.raw
-      .prepare("SELECT seen, pages_walked FROM scans WHERE project_id = ? AND scan_id = ?")
+      .prepare(
+        "SELECT seen, pages_walked FROM scans WHERE project_id = ? AND scan_id = ?",
+      )
       .get(PROJECT, "s1") as { seen: number; pages_walked: number };
     expect(row.seen).toBe(0);
     expect(row.pages_walked).toBe(0);
@@ -292,7 +323,9 @@ describe("the `scans` table (D-09, FIND-03)", () => {
     // tie-break is deterministic rather than whatever the scan produced.
     await startScan(fx.db, PROJECT, "s-old", "", 0, NOW);
     fx.raw
-      .prepare("UPDATE scans SET state = 'suspended' WHERE project_id = ? AND scan_id = ?")
+      .prepare(
+        "UPDATE scans SET state = 'suspended' WHERE project_id = ? AND scan_id = ?",
+      )
       .run(PROJECT, "s-old");
     await startScan(fx.db, PROJECT, "s-new", "", 0, NOW + 5000);
 
@@ -302,7 +335,9 @@ describe("the `scans` table (D-09, FIND-03)", () => {
   it("ignores a TERMINAL scan when reporting the active one", async () => {
     await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
     fx.raw
-      .prepare("UPDATE scans SET state = 'completed' WHERE project_id = ? AND scan_id = ?")
+      .prepare(
+        "UPDATE scans SET state = 'completed' WHERE project_id = ? AND scan_id = ?",
+      )
       .run(PROJECT, "s1");
     expect(await getActiveScan(fx.db, PROJECT)).toBeUndefined();
   });
@@ -410,7 +445,15 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
       .prepare(
         "INSERT INTO observations (project_id, sha256, request_id, url, status, content_type, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(PROJECT, sha256, requestId, "https://example.test/x.js", 200, "application/javascript", NOW);
+      .run(
+        PROJECT,
+        sha256,
+        requestId,
+        "https://example.test/x.js",
+        200,
+        "application/javascript",
+        NOW,
+      );
     fx.raw
       .prepare(
         "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, started_at, finished_at) VALUES (?, ?, ?, 'done', ?, ?)",
@@ -432,7 +475,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
       // this path cannot see.
       item("no-1", { code: 404 }),
     ];
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const queue = new BoundedQueue(QUEUE_CAP);
 
     const outcome = await runScanProducer({
@@ -470,7 +517,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // scanning traffic from today" for the entire walk — the single most
     // misleading string this surface could produce.
     const page = [item("a-1"), item("a-2", { createdAt: CAPTURED_AT - 5_000 })];
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const clock = NOW + 60_000;
 
     await runScanProducer({
@@ -495,7 +546,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
   });
 
   it("composes the filter with NO position clause on the first page", async () => {
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     await runScanProducer({
       sdk: fakeQuerySdk([item("a-1")], true, record),
       db: fx.db,
@@ -524,7 +579,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
       nowMs: NOW,
     });
 
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     await runScanProducer({
       sdk: fakeQuerySdk([item("8999")], false, record),
       db: fx.db,
@@ -542,7 +601,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // D-12 and the ordering edge. `created_at` is not a total order: two
     // requests captured in the same millisecond tie, and a tie under a keyset
     // walk is either a repeat or a skip. `id` is unique by construction.
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     await runScanProducer({
       sdk: fakeQuerySdk([item("a-1")], true, record),
       db: fx.db,
@@ -559,7 +622,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // `RequestsConnectionItem.response` is optional. A request Caido stored
     // without a response cannot be admitted — there is nothing to admit — and
     // it is not a rejection either: `admit()` never ran.
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const queue = new BoundedQueue(QUEUE_CAP);
     await runScanProducer({
       sdk: fakeQuerySdk([item("no-resp", { noResponse: true })], false, record),
@@ -581,7 +648,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // `admit()`'s fifth axis is `sdk.requests.inScope`, and the producer calls
     // the SHIPPED gate unchanged. The push-down is an OPTIMISATION; this is the
     // gate. A widened HTTPQL clause cannot produce a row `admit()` would reject.
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const queue = new BoundedQueue(QUEUE_CAP);
     const sdk = fakeQuerySdk([item("ok-1")], false, record);
 
@@ -601,7 +672,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
   });
 
   it("reports an EMPTY page as exhausted and leaves the position where it was", async () => {
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const outcome = await runScanProducer({
       sdk: fakeQuerySdk([], false, record),
       db: fx.db,
@@ -621,7 +696,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
   });
 
   it("does nothing at all when the project has no scan", async () => {
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const outcome = await runScanProducer({
       sdk: fakeQuerySdk([item("a-1")], true, record),
       db: fx.db,
@@ -642,7 +721,11 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // The guard value. A scan started under epoch 0 must not keep writing after
     // the operator switched projects — its rows would land in the new project's
     // partition under the old project's filter.
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const outcome = await runScanProducer({
       sdk: fakeQuerySdk([item("a-1")], true, record),
       db: fx.db,
@@ -667,7 +750,8 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
       filter: () => query,
       descending: () => query,
       first: () => query,
-      execute: () => Promise.reject(new Error("invalid query at https://secret.test/x")),
+      execute: () =>
+        Promise.reject(new Error("invalid query at https://secret.test/x")),
     };
     const outcome = await runScanProducer({
       sdk: { ...base, requests: { ...base.requests, query: () => query } },
@@ -695,21 +779,35 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
     // rather than cementing them." Derived from the shipped vocabulary rather
     // than restated — the skip state is the terminal state that is NOT
     // degraded.
-    const notSkipped = TERMINAL_SCAN_STATES.filter((s) => isDegradedScanState(s));
+    const notSkipped = TERMINAL_SCAN_STATES.filter((s) =>
+      isDegradedScanState(s),
+    );
     expect(notSkipped).toEqual(["partial", "failed"]);
 
     fx.raw
       .prepare(
         "INSERT INTO observations (project_id, sha256, request_id, url, status, content_type, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(PROJECT, "b".repeat(64), "partial-1", "https://example.test/x.js", 200, "application/javascript", NOW);
+      .run(
+        PROJECT,
+        "b".repeat(64),
+        "partial-1",
+        "https://example.test/x.js",
+        200,
+        "application/javascript",
+        NOW,
+      );
     fx.raw
       .prepare(
         "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, started_at) VALUES (?, ?, ?, 'partial', ?)",
       )
       .run(PROJECT, "b".repeat(64), DETECTOR_CORPUS_VERSION, NOW);
 
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const queue = new BoundedQueue(QUEUE_CAP);
     await runScanProducer({
       sdk: fakeQuerySdk([item("partial-1")], false, record),
@@ -733,14 +831,26 @@ describe("runScanProducer — one page, through the SHIPPED admission gate (FIND
       .prepare(
         "INSERT INTO observations (project_id, sha256, request_id, url, status, content_type, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .run("other", "c".repeat(64), "done-x", "https://example.test/x.js", 200, "application/javascript", NOW);
+      .run(
+        "other",
+        "c".repeat(64),
+        "done-x",
+        "https://example.test/x.js",
+        200,
+        "application/javascript",
+        NOW,
+      );
     fx.raw
       .prepare(
         "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, started_at) VALUES (?, ?, ?, 'done', ?)",
       )
       .run("other", "c".repeat(64), DETECTOR_CORPUS_VERSION, NOW);
 
-    const record = { filter: null as string | null, first: null as number | null, order: [] as string[] };
+    const record = {
+      filter: null as string | null,
+      first: null as number | null,
+      order: [] as string[],
+    };
     const queue = new BoundedQueue(QUEUE_CAP);
     await runScanProducer({
       sdk: fakeQuerySdk([item("done-x")], false, record),

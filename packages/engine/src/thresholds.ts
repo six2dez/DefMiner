@@ -116,6 +116,31 @@ export const RETENTION_SWEEP_MAX_ROWS = 512;
  */
 export const RETENTION_SWEEP_EVERY_N = 128;
 
+/**
+ * How many requests one retroactive-scan page asks Caido for (FIND-03, D-01).
+ *
+ * DERIVATION, and it is a property of the SDK surface rather than of a
+ * measurement: `RequestsQuery` in `@caido/quickjs-types@0.26.0` has `after`,
+ * `before`, `first`, `last`, `filter`, `ascending`, `descending` and `execute`
+ * — and NO `includeRaw(false)` or any other projection control. Every
+ * `RequestsConnectionItem` therefore carries the full `Response`, so a page is
+ * not a page of metadata: it is a transfer of every matching response body, on
+ * the single QuickJS thread, into a runtime that sets no memory limit and runs
+ * under `panic = "abort"`.
+ *
+ * That is why the documented 1000-item page size is not usable here and why
+ * this number is small. Twenty at the shipped `PASSIVE_MAX_BYTES` ceiling
+ * projects to at most ~160 MiB in flight for one page, and the realistic case
+ * is orders below that; 1000 at the same ceiling is a host kill that takes
+ * `caido-cli` down with the operator's real project data.
+ *
+ * NOT IN {@link POLICY_DERIVED_FROM}, and the absence is deliberate rather than
+ * an omission: that map exists to bind each policy constant to the MEASURED
+ * value it hangs off, and this one hangs off a type declaration. Adding it with
+ * an empty derivation set would say it was measured when it was read.
+ */
+export const SCAN_PAGE_SIZE = 20;
+
 // Referenced by the derivations above so the imports are not "unused" to a linter
 // and so a reader can see, in one place, which measured values the policy set
 // hangs off. thresholds.spec.ts asserts every one of these relationships.

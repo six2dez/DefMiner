@@ -63,9 +63,9 @@ import type {
   ScanLifecycleState,
   ScanState,
   ScanStatusPayload,
-  SuspendReason,
   ScoreExplanation,
   ScoreSignal,
+  SuspendReason,
   TriageState,
   VisibleTotal,
 } from "./contract";
@@ -613,7 +613,10 @@ describe("SCAN_KIND_CLAUSE — DefMiner's own narrowing, readable by both packag
     for (const ch of SCAN_KIND_CLAUSE) {
       if (ch === "(") depth += 1;
       if (ch === ")") depth -= 1;
-      expect(depth, "the clause closes a parenthesis it never opened").toBeGreaterThanOrEqual(0);
+      expect(
+        depth,
+        "the clause closes a parenthesis it never opened",
+      ).toBeGreaterThanOrEqual(0);
     }
     expect(depth).toBe(0);
   });

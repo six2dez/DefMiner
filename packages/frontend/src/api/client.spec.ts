@@ -246,6 +246,13 @@ function makeStub(): Stub {
       writeSetting: () =>
         answer("writeSetting", { ok: true as const, stored: "1" }),
       getHealth: () => answer("getHealth", HEALTH),
+      // The scan pair. Both are stubbed on the LITERAL surface rather than cast
+      // in, for the reason this file's header gives: a stub that has to be cast
+      // is a stub that stops failing when the real surface changes — which is
+      // exactly what would have happened here when the contract grew.
+      startScan: () =>
+        answer("startScan", { outcome: "started" as const, scanId: "s1" }),
+      getScanStatus: () => answer("getScanStatus", null),
       getCompat: () => answer("getCompat", COMPAT),
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);

@@ -52,16 +52,16 @@ import {
 } from "./components/compat-contract";
 import { EXPORT_CTA } from "./components/export-contract";
 import {
-  SCAN_HEADING,
-  SCAN_NO_DENOMINATOR_NOTE,
-  SCAN_START_CTA,
-} from "./components/scan-contract";
-import {
   counterId,
   HEALTH_HEADING,
   HEALTH_UNAVAILABLE_BODY,
 } from "./components/health-contract";
 import { EVIDENCE_PANEL_HEIGHT_CLASS } from "./components/panel-contract";
+import {
+  SCAN_HEADING,
+  SCAN_NO_DENOMINATOR_NOTE,
+  SCAN_START_CTA,
+} from "./components/scan-contract";
 
 /**
  * Two rows with DELIBERATELY LOOKALIKE digests.
@@ -104,13 +104,7 @@ const ROWS: ArtifactRow[] = [
  * existing index at the cost of reading as an afterthought, and the
  * muscle-memory cost is paid once, at upgrade.
  */
-const TAB_LABELS = [
-  "Artifacts",
-  "Observations",
-  "Scan",
-  "Health",
-  "Settings",
-];
+const TAB_LABELS = ["Artifacts", "Observations", "Scan", "Health", "Settings"];
 
 const TOTAL: VisibleTotal = {
   visible: 2,
@@ -280,7 +274,10 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         options.starts?.push(request);
         return refusing
           ? refused<StartScanOutcome>()
-          : Promise.resolve<StartScanOutcome>({ outcome: "started" });
+          : Promise.resolve<StartScanOutcome>({
+              outcome: "started",
+              scanId: "s-stub",
+            });
       },
       getScanStatus: () =>
         refusing
@@ -1070,7 +1067,6 @@ describe("the compatibility refusal surface (COMPAT-01, debt P1-D5)", () => {
   });
 });
 
-
 // ===========================================================================
 // THE FIFTH TAB (D-13, FIND-04)
 // ===========================================================================
@@ -1136,7 +1132,7 @@ describe("App — the Scan tab", () => {
           state: "running",
           suspendReason: null,
           operatorFilter: "",
-          composedFilter: "(req.path.cont:\".js\")",
+          composedFilter: '(req.path.cont:".js")',
           pagesWalked: 3,
           seen: 60,
           admitted: 4,

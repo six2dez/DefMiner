@@ -259,6 +259,69 @@ describe("the Phase 5 RPC surface", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("getScanStatus answers `null` when no scan row exists — a real state, not an error", async () => {
+    // NOT a zero-filled payload. A payload reading `seen: 0, admitted: 0`
+    // describes a scan that has started and found nothing; `null` says there is
+    // no scan. The Scan tab renders the start form for the second and the live
+    // readout for the first, and collapsing them would put a counter strip full
+    // of zeroes in front of an operator who has never pressed Start scan.
+    const { rpc } = await boot();
+    await expect(rpc.getScanStatus()).resolves.toBeNull();
+  });
+
+  it("startScan inserts ONE running row and getScanStatus then reports it", async () => {
+    // The tracer's RPC half, end to end against the real migration ladder.
+    const { rpc } = await boot();
+
+    const started = (await rpc.startScan(null, { operatorFilter: "" })) as {
+      outcome: string;
+    };
+    expect(started.outcome, JSON.stringify(started)).toBe("started");
+
+    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
+    expect(status, "the scan was not read back").not.toBeNull();
+    expect(status.state).toBe("running");
+    expect(status.seen).toBe(0);
+    // The composed filter crosses the RPC so the operator can CHECK D-05's
+    // promise rather than take it. It is the exact string that will be sent.
+    expect(String(status.composedFilter)).toContain("resp.code.gte:200");
+    // REQUIRED, and `false` on the tracer. Without it a healthy backpressure
+    // hold is indistinguishable from a blocked thread.
+    expect(status.heldAtWatermark).toBe(false);
+    // ABSENT, not zero: `analysed` belongs to the consumer and plan 06-06 wires
+    // it. A zero here would read as "nothing has been analysed".
+    expect(status.analysed).toBeNull();
+  });
+
+  it("a SECOND startScan on a running project refuses with a DefMiner code", async () => {
+    const { rpc } = await boot();
+    await rpc.startScan(null, { operatorFilter: "" });
+
+    const second = (await rpc.startScan(null, { operatorFilter: "" })) as {
+      outcome: string;
+      reason?: string;
+    };
+    expect(second.outcome).toBe("refused");
+    // A CLOSED DefMiner-authored code, never the driver's constraint message —
+    // which would carry the bound parameters across the RPC boundary.
+    expect(second.reason).toBe("already-running");
+  });
+
+  it("startScan refuses a non-empty operator clause on the tracer, without composing it", async () => {
+    // Plan 06-04 owns the operator-clause validator and the static HTTPQL gate.
+    // Until it lands, the honest answer is a refusal with a reason code — NOT
+    // silently dropping the clause, which would run a wider scan than the
+    // operator asked for while telling them it was narrowed.
+    const { rpc } = await boot();
+    const outcome = (await rpc.startScan(null, {
+      operatorFilter: 'req.host.eq:"a.example"',
+    })) as { outcome: string; reason?: string };
+
+    expect(outcome.outcome).toBe("refused");
+    expect(outcome.reason).toBe("operator-clause-unsupported");
+    await expect(rpc.getScanStatus()).resolves.toBeNull();
+  });
+
   it("returns a page whose rows come from the reads module", async () => {
     seedArtifact("d1", 1_700_000_002);
     seedArtifact("d2", 1_700_000_001);
@@ -666,69 +729,6 @@ describe("the exact endpoint set of every refusal path", () => {
       "the catch path's endpoint set changed",
     ).toEqual(["getStatus"]);
     expect(sdk.calls.interceptResponseHandlers).toHaveLength(0);
-  });
-
-  it("getScanStatus answers `null` when no scan row exists — a real state, not an error", async () => {
-    // NOT a zero-filled payload. A payload reading `seen: 0, admitted: 0`
-    // describes a scan that has started and found nothing; `null` says there is
-    // no scan. The Scan tab renders the start form for the second and the live
-    // readout for the first, and collapsing them would put a counter strip full
-    // of zeroes in front of an operator who has never pressed Start scan.
-    const { rpc } = await boot();
-    await expect(rpc.getScanStatus()).resolves.toBeNull();
-  });
-
-  it("startScan inserts ONE running row and getScanStatus then reports it", async () => {
-    // The tracer's RPC half, end to end against the real migration ladder.
-    const { rpc } = await boot();
-
-    const started = (await rpc.startScan(null, { operatorFilter: "" })) as {
-      outcome: string;
-    };
-    expect(started.outcome, JSON.stringify(started)).toBe("started");
-
-    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
-    expect(status, "the scan was not read back").not.toBeNull();
-    expect(status.state).toBe("running");
-    expect(status.seen).toBe(0);
-    // The composed filter crosses the RPC so the operator can CHECK D-05's
-    // promise rather than take it. It is the exact string that will be sent.
-    expect(String(status.composedFilter)).toContain("resp.code.gte:200");
-    // REQUIRED, and `false` on the tracer. Without it a healthy backpressure
-    // hold is indistinguishable from a blocked thread.
-    expect(status.heldAtWatermark).toBe(false);
-    // ABSENT, not zero: `analysed` belongs to the consumer and plan 06-06 wires
-    // it. A zero here would read as "nothing has been analysed".
-    expect(status.analysed).toBeNull();
-  });
-
-  it("a SECOND startScan on a running project refuses with a DefMiner code", async () => {
-    const { rpc } = await boot();
-    await rpc.startScan(null, { operatorFilter: "" });
-
-    const second = (await rpc.startScan(null, { operatorFilter: "" })) as {
-      outcome: string;
-      reason?: string;
-    };
-    expect(second.outcome).toBe("refused");
-    // A CLOSED DefMiner-authored code, never the driver's constraint message —
-    // which would carry the bound parameters across the RPC boundary.
-    expect(second.reason).toBe("already-running");
-  });
-
-  it("startScan refuses a non-empty operator clause on the tracer, without composing it", async () => {
-    // Plan 06-04 owns the operator-clause validator and the static HTTPQL gate.
-    // Until it lands, the honest answer is a refusal with a reason code — NOT
-    // silently dropping the clause, which would run a wider scan than the
-    // operator asked for while telling them it was narrowed.
-    const { rpc } = await boot();
-    const outcome = (await rpc.startScan(null, {
-      operatorFilter: 'req.host.eq:"a.example"',
-    })) as { outcome: string; reason?: string };
-
-    expect(outcome.outcome).toBe("refused");
-    expect(outcome.reason).toBe("operator-clause-unsupported");
-    await expect(rpc.getScanStatus()).resolves.toBeNull();
   });
 
   it("registers NOTHING outside the contract on the success path", async () => {

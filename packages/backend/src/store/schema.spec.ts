@@ -16,10 +16,7 @@
 // finds nothing wrong with it has measured nothing — see 01-PATTERNS.md, and
 // tests/schema.spec.ts:44-53 where the same guard exists for the same reason.
 
-import {
-  SCAN_LIFECYCLE_STATES,
-  SCAN_STATES,
-} from "@defminer/engine/contract";
+import { SCAN_LIFECYCLE_STATES, SCAN_STATES } from "@defminer/engine/contract";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -736,7 +733,9 @@ describe("schema shape (STORE-01, STORE-02, T-01-21)", () => {
          VALUES (?, ?, ?, '', 0, '', 0, 0, 0, 0, 0, 0, 1, 1)`,
       );
       for (const state of SCAN_LIFECYCLE_STATES) {
-        await expect(stmt.run("p1", `scan-${state}`, state)).resolves.toBeDefined();
+        await expect(
+          stmt.run("p1", `scan-${state}`, state),
+        ).resolves.toBeDefined();
       }
       // A member of the OTHER vocabulary. `done` is a perfectly good analysis
       // state and is not a scan lifecycle state, and the database says so.

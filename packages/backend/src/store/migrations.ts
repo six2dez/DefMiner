@@ -12,6 +12,12 @@
 // one-way checkpoint (option-a, 2026-08-28) — and two direction-explicit keyset
 // indexes on the v1 tables. Index additions, not table additions: the approved
 // table set grew by exactly one.
+// Step v4 (plan 05-07) adds the second keyset index per pageable table. No table.
+// Step v5 (plan 06-01) adds `scans` — the sixth table, approved at that plan's
+// blocking-human checkpoint (approve-as-specified, 2026-08-31) — plus one
+// ordinary index and one PARTIAL UNIQUE index that makes the one-scan-per-project
+// invariant a driver-level failure rather than a read-then-write this pool cannot
+// make atomic.
 
 import type { Database } from "sqlite";
 
@@ -255,6 +261,141 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_size_keyset
   ON artifacts (project_id, byte_len DESC, sha256 DESC);
 CREATE INDEX IF NOT EXISTS idx_observations_status_keyset
   ON observations (project_id, status DESC, request_id DESC);
+`,
+  },
+  /**
+   * Step v5 — plan 06-01. `scans`, the retroactive backfill's durable position.
+   *
+   * APPROVED AT A BLOCKING-HUMAN CHECKPOINT (approve-as-specified, 2026-08-31),
+   * for the reason `audit`'s step was: this ladder is forward-only and shipped
+   * steps are immutable, `schema.spec.ts` asserts the table SET exactly and
+   * names every column of every table, so the eighteen columns below can only
+   * be changed by ANOTHER permanent step. The operator was shown the whole
+   * list, both indexes, and the two costs the shape accepts before it was
+   * written.
+   *
+   * -------------------------------------------------------------------------
+   * WHAT THE TABLE IS FOR
+   * -------------------------------------------------------------------------
+   * DefMiner analyses JavaScript as the operator browses. A retroactive scan
+   * applies the same analysis to traffic Caido captured BEFORE DefMiner was
+   * installed, walking backwards from now. That walk runs for hours across
+   * restarts and project switches, so the one thing it cannot keep in memory is
+   * WHERE IT HAD GOT TO. This table is that place, and nothing else.
+   *
+   * It holds no content. There is no body column, no header column, no URL and
+   * no digest — the artifacts and observations the scan produces go to the
+   * tables that already exist for them, through the same admission gate,
+   * digest and store path the live hook uses. There is no second analysis path
+   * (D-01), so there is no second place for content to land.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THE IDENTIFIER IS `scan_id` AND NOT `id`
+   * -------------------------------------------------------------------------
+   * `last_insert_rowid()` is unusable on this pooled connection (decision
+   * P1-D1) and `RETURNING` needs a SQLite this runtime does not have (P4-D4),
+   * so a write cannot tell a caller what it wrote. A surrogate id would be a
+   * row identity nothing can read back. The CALLER mints a UUID, which makes
+   * the caller the owner of idempotency and makes a retry after an ambiguous
+   * failure a no-op instead of a duplicate — exactly `audit.event_id`. The bare
+   * name `id` is banned package-wide by `schema.spec.ts`'s FORBIDDEN_COLUMNS.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THE STATE COLUMN IS `state` AND NEVER `scan_state`
+   * -------------------------------------------------------------------------
+   * `analyses.scan_state` already exists in this same database over a DIFFERENT
+   * closed vocabulary — pending / running / done / partial / failed, the
+   * analysis state of one artifact. The vocabulary below is the LIFECYCLE state
+   * of a backfill, and `running` is a literal member of both. Two different
+   * closed vocabularies under one column name in one SQLite file is the drift
+   * shape this repo keeps catching, and `COLUMN_ALLOWLIST` would have accepted
+   * it without complaint. The TypeScript half is `SCAN_LIFECYCLE_STATES` in
+   * `@defminer/engine/contract`, declared immediately beside `SCAN_STATES` so
+   * the collision is visible where it is created.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THE VOCABULARY IS COMPLETE BEFORE EVERY MEMBER HAS A CALLER
+   * -------------------------------------------------------------------------
+   * `completed` and `discarded` are written by plans 06-05 and 06-09; nothing
+   * in this plan produces either. They are in the CHECK anyway, and the
+   * asymmetry is not close: an unused member costs nothing at run time, while a
+   * missing one costs a second permanent step in a ladder whose entries can
+   * never be edited. `audit`'s step made the same trade for the same reason.
+   *
+   * -------------------------------------------------------------------------
+   * THE POSITION IS `last_request_id`, AND `last_cursor` IS OPPORTUNISTIC
+   * -------------------------------------------------------------------------
+   * O-04 — is a Caido `Cursor` stable across a process restart? — is NOT
+   * MEASURED, and this migration must not wait on it. `RequestOrderField`
+   * includes `"id"` and HTTPQL's `row` namespace has `id` with `lt`, so the
+   * position is expressible as a filter over a plain integer that survives
+   * anything: `last_request_id` is AUTHORITATIVE and is re-derivable from
+   * nothing but itself. `last_cursor` is nullable, is an in-process fast path
+   * only, and is NULLed by the startup sweep. If O-04's four-line probe in plan
+   * 06-10 comes back positive the column is already here and the fast path
+   * widens with no second migration; if it comes back negative nothing in the
+   * design moves. The open question is designed around rather than bet on.
+   *
+   * -------------------------------------------------------------------------
+   * WHAT IS DELIBERATELY ABSENT, AND THE COST THAT BUYS
+   * -------------------------------------------------------------------------
+   * There is no column per member of `REJECT_REASONS` and there is no JSON
+   * column. Six reject columns would couple a one-way migration to a vocabulary
+   * Phases 3 and 4 will grow; a JSON blob is a column able to hold arbitrary
+   * content, which is precisely what `COLUMN_ALLOWLIST` exists to prevent. Only
+   * the aggregate `rejected` is durable, and the live per-reason breakdown is
+   * served from `telemetry.ts`'s in-memory retro sub-map. THE ACCEPTED COST,
+   * STATED RATHER THAN DISCOVERED: a completed or restarted scan's per-reason
+   * breakdown is gone, and the surface says so in words instead of rendering
+   * six zeroes.
+   *
+   * -------------------------------------------------------------------------
+   * WHY `idx_scans_one_running` IS A *PARTIAL UNIQUE* INDEX
+   * -------------------------------------------------------------------------
+   * DefMiner runs one scan per project at a time. Expressed as a caller-side
+   * "read whether one is running, then insert" that is TWO operations, and this
+   * driver has no transaction primitive to make them one — `BEGIN` does not
+   * span `exec` calls and every statement still reports success (Pitfall 2). So
+   * the invariant is an index: `UNIQUE (project_id) WHERE state = 'running'`
+   * makes the second start fail INSIDE the insert, at the driver, with no
+   * window between a check and a write. The `WHERE` half is what still permits
+   * a project to hold a suspended scan and a completed history beside it —
+   * without it, resuming would be impossible.
+   *
+   * `idx_scans_state` runs `(project_id, state, started_at)` in the ascending,
+   * uniform direction `idx_analyses_state` already uses, because the reads
+   * behind it are "the active scan for this project" and "this project's scan
+   * history, newest first" — SQLite traverses an index in reverse for the
+   * opposite ORDER BY, so one direction serves both.
+   */
+  {
+    v: 5,
+    sql: `
+CREATE TABLE IF NOT EXISTS scans (
+  project_id       TEXT    NOT NULL CHECK (length(project_id) > 0),
+  scan_id          TEXT    NOT NULL CHECK (length(scan_id) > 0),
+  state            TEXT    NOT NULL CHECK (state IN ('running','suspended','completed','discarded')),
+  suspend_reason   TEXT,
+  operator_filter  TEXT    NOT NULL,
+  epoch            INTEGER NOT NULL,
+  last_request_id  TEXT    NOT NULL,
+  last_cursor      TEXT,
+  last_created_at  INTEGER,
+  pages_walked     INTEGER NOT NULL,
+  seen             INTEGER NOT NULL,
+  admitted         INTEGER NOT NULL,
+  skipped_done     INTEGER NOT NULL,
+  rejected         INTEGER NOT NULL,
+  queued           INTEGER NOT NULL,
+  started_at       INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL,
+  finished_at      INTEGER,
+  PRIMARY KEY (project_id, scan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_scans_state
+  ON scans (project_id, state, started_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
+  ON scans (project_id) WHERE state = 'running';
 `,
   },
 ];

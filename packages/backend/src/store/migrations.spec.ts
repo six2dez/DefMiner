@@ -493,8 +493,17 @@ describe("forward-only migration ladder (STORE-05)", () => {
         0,
       );
       for (const st of statements) {
+        // `UNIQUE` is OPTIONAL and appears between CREATE and INDEX. Step v5's
+        // one-scan-per-project invariant is a partial UNIQUE index, and it is
+        // exactly as idempotent as any other `IF NOT EXISTS` form — the guard
+        // this rule is about is the `IF NOT EXISTS`, not the uniqueness. The
+        // pattern was narrower than the rule it enforces until step v5 needed
+        // the shape, so it is widened here rather than the step being written
+        // around the gate.
         expect(
-          /^CREATE\s+(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\b/i.test(st),
+          /^CREATE\s+(UNIQUE\s+)?(TABLE|INDEX|TRIGGER)\s+IF\s+NOT\s+EXISTS\b/i.test(
+            st,
+          ),
           `step v${m.v} has a statement without IF NOT EXISTS: ${st.slice(0, 80)}`,
         ).toBe(true);
       }

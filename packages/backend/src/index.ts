@@ -91,6 +91,8 @@ import {
   installLifecycle,
   projectEpoch,
 } from "./lifecycle";
+import { composeScanFilter, positionClause } from "./scan/filter";
+import { getActiveScan, startScan } from "./scan/scans";
 import {
   DETECTOR_CORPUS_VERSION,
   getLatestAnalysisForArtifact,
@@ -662,6 +664,112 @@ export async function init(sdk: PluginSdk): Promise<void> {
           // the same module variable. One number, one owner.
           maxSliceMs: slimStatus().maxSliceMs,
         },
+      };
+    });
+    // --- FIND-03's RETROACTIVE SCAN ---------------------------------------
+    //
+    // THE CALLER DOES NOT NAME THE PROJECT, on either endpoint, for the reason
+    // the settings surface above states: anything holding the RPC handle could
+    // otherwise start a scan in — or read a scan out of — ANOTHER project's
+    // partition of the one shared SQLite file (T-05-34, T-06-03).
+    sdk.api.register("startScan", async (_s, req) => {
+      const pid = currentProjectId();
+      // FAIL CLOSED WITH A REASON THE FORM CAN RENDER. Not silence and not a
+      // throw: Caido surfaces neither, so a rejection here would leave the
+      // operator pressing a button that does nothing.
+      if (!db || pid === null) {
+        return { outcome: "refused", reason: "no-project" } as const;
+      }
+
+      // THE OPERATOR CLAUSE IS REFUSED, NOT DROPPED. Plan 06-04 ships the
+      // validator and the static HTTPQL gate. Until it does, accepting a clause
+      // and ignoring it would run a WIDER scan than the operator asked for while
+      // the surface told them it was narrowed — which is exactly the outcome
+      // D-05 exists to prevent, arrived at from the opposite direction.
+      if (req.operatorFilter !== "") {
+        return {
+          outcome: "refused",
+          reason: "operator-clause-unsupported",
+        } as const;
+      }
+
+      // ONE AT A TIME. The partial unique index refuses a second RUNNING scan
+      // inside the insert; this read refuses a second start while a SUSPENDED
+      // one is still holding its place, which the index deliberately permits so
+      // that resuming is possible at all. The two together are the invariant,
+      // and neither is a substitute for the other.
+      const active = await getActiveScan(db, pid);
+      if (active !== undefined) {
+        return { outcome: "refused", reason: "already-running" } as const;
+      }
+
+      // MINTED HERE, BY THE CALLER OF THE WRITE. That is what makes a retry
+      // after an ambiguous failure a no-op instead of a second scan.
+      const scanId = randomUUID();
+      const written = await startScan(
+        db,
+        pid,
+        scanId,
+        req.operatorFilter,
+        projectEpoch(),
+        Date.now(),
+      );
+      if (!written.ok) {
+        // LOGGED HERE, NOT RETURNED. The description is already redacted and it
+        // still does not cross the boundary: the form's copy is
+        // DefMiner-authored and a message that reached it is a message somebody
+        // eventually interpolates.
+        log(sdk, "startScan failed: " + written.error);
+        return { outcome: "refused", reason: "write-failed" } as const;
+      }
+      return { outcome: "started", scanId } as const;
+    });
+    sdk.api.register("getScanStatus", async () => {
+      const pid = currentProjectId();
+      // `null` ON EVERY ABSENT PATH, AND THAT IS ONE CLAIM RATHER THAN THREE.
+      // No database, no project, or no scan row all mean the same thing to the
+      // surface: there is no scan, so render the start form. A zero-filled
+      // payload would instead describe a scan that ran and found nothing.
+      if (!db || pid === null) return null;
+      const row = await getActiveScan(db, pid);
+      if (row === undefined) return null;
+
+      // MAPPED FIELD BY FIELD, NEVER SPREAD — the rule `getArtifactAnalysis`
+      // already follows. A spread would carry every column this table grows
+      // across the RPC boundary on the day somebody adds one.
+      return {
+        scanId: row.scan_id,
+        state: row.state,
+        suspendReason: row.suspend_reason,
+        operatorFilter: row.operator_filter,
+        // REBUILT THROUGH THE ONE PRODUCER, never stored and never concatenated
+        // here. Storing the composed string would let it drift from what the
+        // next page will actually send, and the whole value of showing it is
+        // that it IS what will be sent (D-05).
+        composedFilter: composeScanFilter(
+          positionClause(row.last_request_id),
+          row.operator_filter,
+        ),
+        pagesWalked: row.pages_walked,
+        seen: row.seen,
+        admitted: row.admitted,
+        skippedDone: row.skipped_done,
+        rejected: row.rejected,
+        queued: row.queued,
+        // ABSENT, NOT ZERO. `analysed` belongs to the consumer at the far end of
+        // the queue and plan 06-06 wires it; a zero here would read as "nothing
+        // has been analysed" on a scan that is analysing.
+        analysed: null,
+        lastCreatedAt: row.last_created_at,
+        startedAt: row.started_at,
+        updatedAt: row.updated_at,
+        finishedAt: row.finished_at,
+        // FALSE UNTIL PLAN 06-03 SHIPS THE WATERMARK. It is reported rather
+        // than omitted because the field is required by the UI contract: an
+        // absent signal collapses a healthy backpressure hold into the stall
+        // marker, and this build genuinely never holds — it walks one page per
+        // call — so `false` is the true answer and not a placeholder.
+        heldAtWatermark: false,
       };
     });
     // Not `async`, and it touches nothing: a version check that could fail for

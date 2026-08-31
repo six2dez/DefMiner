@@ -34,6 +34,7 @@ import type {
   PageRequest,
   PageResponse,
   ScanState,
+  ScanStatusPayload,
   SettingKey,
   SettingScope,
   VisibleTotal,
@@ -103,9 +104,21 @@ import type { SlimStatus } from "../telemetry";
  * force that is not — about the one mechanism in this plugin that deletes their
  * history. The cost of the bump is one forced reload.
  *
+ * BUMPED TO 5 BY PLAN 06-01, AND THIS ONE IS NOT AN OVER-BUMP. `startScan` and
+ * `getScanStatus` are two new names, which under the shape rule would oblige no
+ * bump at all — but `getScanStatus` returns `ScanStatusPayload | null`, and the
+ * two halves of that union mean OPPOSITE things on the surface that reads it:
+ * `null` puts the start form on screen, a payload puts the live counter strip
+ * there. A stale bundle reading a shape it does not know would render one for
+ * the other, and the specific failure is the one 06-UI-SPEC.md spends a section
+ * refusing — a counter strip full of zeroes shown to an operator who has never
+ * started a scan, which reads as "DefMiner scanned and found nothing". The
+ * payload also carries `heldAtWatermark`, whose absence in an older reading
+ * collapses a healthy backpressure hold into the stall marker.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 4;
+export const CONTRACT_VERSION = 5;
 
 /**
  * What `getStatus` returns.
@@ -369,6 +382,61 @@ export type HealthOutcome =
   | { readonly outcome: "unavailable"; readonly reason: "no-project" };
 
 /**
+ * What `startScan` takes.
+ *
+ * ONE FIELD, and it is the operator's own HTTPQL or `""`. The project is NOT
+ * on this request and must not be: the backend substitutes its own
+ * lifecycle-resolved project on every call for the reason `scopedTo` states —
+ * trusting a caller-supplied id would let anything holding the RPC handle start
+ * a scan in another project out of the one shared SQLite file (T-05-34).
+ *
+ * Not exported, for the reason {@link Spec} is not: the registration site
+ * infers this shape from the API map rather than importing it, so an export
+ * would have no cross-module consumer and knip runs with
+ * `ignoreExportsUsedInFile: false`.
+ */
+type StartScanRequest = {
+  /** The operator's clause, or `""`. D-05: they may NARROW the scan and never
+   *  widen it. Plan 06-04 ships the validator; until then the only accepted
+   *  value is `""` and anything else is refused with a reason code. */
+  readonly operatorFilter: string;
+};
+
+/**
+ * What `startScan` answers.
+ *
+ * Not exported, for the reason {@link Spec} and `StartScanRequest` are not:
+ * the registration site infers this shape from the API map rather than
+ * importing it, so an export would have no cross-module consumer and knip runs
+ * with `ignoreExportsUsedInFile: false`. The FRONTEND declares its own mirror in
+ * `api/client.ts`, because it cannot import this package at all.
+ *
+ * A DISCRIMINATED UNION AND A CLOSED REASON SET. `reason` is a
+ * DefMiner-authored code the frontend maps to its own sentence — never Caido's
+ * parser text and never the driver's constraint message, both of which quote
+ * the values that were bound (T-06-04). A refusal is not an exception: three of
+ * the four reasons below are ordinary states the surface renders in words.
+ */
+type StartScanOutcome =
+  | { readonly outcome: "started"; readonly scanId: string }
+  | {
+      readonly outcome: "refused";
+      readonly reason: /** No project is open, so there is nothing to scan. */
+        | "no-project"
+        /** This project already has a running or suspended scan. DefMiner runs
+         *  one at a time, and the surface says which of the two it is. */
+        | "already-running"
+        /** The operator supplied a clause and this build cannot validate one
+         *  yet (plan 06-04). REFUSED rather than silently dropped: running a
+         *  wider scan than the operator asked for while telling them it was
+         *  narrowed is the one outcome D-05 exists to prevent. */
+        | "operator-clause-unsupported"
+        /** The write itself failed. Logged in full on the backend; the caller
+         *  gets the code. */
+        | "write-failed";
+    };
+
+/**
  * The plugin package specification.
  *
  * NOT EXPORTED, deliberately. Nothing outside this module can consume it — the
@@ -450,6 +518,18 @@ type Spec = DefinePluginPackageSpec<{
     /** The four numbers that tell a blocked backend thread from a slow
      *  renderer (research P-07). Adds no measurement; projects what exists. */
     getHealth: () => HealthOutcome;
+    /** Begin one retroactive scan of traffic Caido captured before DefMiner was
+     *  installed (FIND-03). ONE PER PROJECT: the second start is refused by a
+     *  partial unique index inside the insert, not by a check before it, so
+     *  there is no window in which two scans can both believe they started. */
+    startScan: (req: StartScanRequest) => Promise<StartScanOutcome>;
+    /** This project's active scan, or `null` when there is none.
+     *
+     *  `null` IS A REAL STATE AND NOT AN ERROR — it is what puts the start form
+     *  on screen. It is deliberately not a zero-filled payload: `0 seen,
+     *  0 admitted` describes a scan that started and found nothing, which is
+     *  the opposite of the truth for a project that has never run one. */
+    getScanStatus: () => Promise<ScanStatusPayload | null>;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

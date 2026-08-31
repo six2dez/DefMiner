@@ -12,8 +12,15 @@
 // 05-12 own their bodies, and reaching into them here would put two plans in one
 // file for no gain.
 
-import type { PageRequest, ScanState } from "@defminer/engine/contract";
-import { DEGRADED_ANALYSIS_FILTER } from "@defminer/engine/contract";
+import type {
+  PageRequest,
+  ScanState,
+  ScanStatusPayload,
+} from "@defminer/engine/contract";
+import {
+  DEGRADED_ANALYSIS_FILTER,
+  SCAN_KIND_CLAUSE,
+} from "@defminer/engine/contract";
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 
 import type {
@@ -31,6 +38,7 @@ import type {
   SettingRow,
   SettingWriteOutcome,
   SettingWriteRequest,
+  StartScanOutcome,
 } from "./api/client";
 import { createBackendClient } from "./api/client";
 import type { ArtifactRow } from "./backend";
@@ -42,6 +50,7 @@ import { EXPORT_CTA } from "./components/export-contract";
 import ExportDialog from "./components/ExportDialog.vue";
 import HealthPanel from "./components/HealthPanel.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
+import ScanPanel from "./components/ScanPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
 import type { InvalidationCoalescer } from "./stores/coalescer";
 import { createCoalescer } from "./stores/coalescer";
@@ -67,12 +76,23 @@ import { createInventoryStore } from "./stores/inventory";
  *  3. Order is declaration order and is never sorted at runtime, so the tab an
  *     operator reaches for by muscle memory does not move under them.
  *
- * `Health` and `Settings` are fixed labels from the layout contract; the other
- * two name entity classes DefMiner itself defines.
+ * `Health` and `Settings` are fixed labels from the layout contract, `Scan`
+ * names an operation, and the other two name entity classes DefMiner itself
+ * defines.
  */
 const TABS = Object.freeze([
   { id: "artifacts", label: "Artifacts" },
   { id: "observations", label: "Observations" },
+  // THIRD, NOT FIFTH, AND THAT WAS WEIGHED. The strip's two halves are entity
+  // classes then operational chrome, and a retroactive scan is operational: it
+  // is the job that FILLS the two entity tables. Third keeps the entity tabs
+  // contiguous and first, keeps the operational tabs contiguous, and keeps
+  // Settings last where the convention puts it. Appending fifth would have
+  // preserved every existing index — which is what property 3 above argues for
+  // — but that argument is about RUNTIME SORTING, not about a version that
+  // visibly gains a tab, and the cost of appending is that Scan would read as
+  // an afterthought. The muscle-memory cost is paid once, at upgrade.
+  { id: "scan", label: "Scan" },
   { id: "health", label: "Health" },
   { id: "settings", label: "Settings" },
 ] as const);
@@ -582,6 +602,44 @@ function loadHealth(): Promise<RpcResult<HealthOutcome>> {
 }
 
 // ---------------------------------------------------------------------------
+// FIND-03 / FIND-04 — THE RETROACTIVE SCAN
+// ---------------------------------------------------------------------------
+//
+// Both routed through the typed client and both answering a VALUE on every
+// path, for the reason the settings and health loaders give. It matters most on
+// `startScan`: it is a WRITE that begins hours of work against the operator's
+// stored traffic, and a rejection Caido swallows would leave them pressing a
+// button that does nothing.
+
+/** Read this project's active scan. `null` inside a successful result is a REAL
+ *  STATE — there is no scan — and is what puts the start form on screen. */
+function loadScan(): Promise<RpcResult<ScanStatusPayload | null>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.getScanStatus();
+}
+
+/** Begin one scan. The project is NOT named: the backend substitutes its own
+ *  lifecycle-resolved id for the reason `SERVER_SCOPED_PROJECT` records. */
+function startScan(request: {
+  readonly operatorFilter: string;
+}): Promise<RpcResult<StartScanOutcome>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.startScan(request);
+}
+
+// ---------------------------------------------------------------------------
 // COMPAT-01 — THE VISIBLE REFUSAL SURFACE
 // ---------------------------------------------------------------------------
 //
@@ -750,6 +808,17 @@ async function loadCompat(): Promise<void> {
           @open-health="openHealth"
         />
 
+        <!-- FIND-04's SCAN BODY. Its own `v-else-if` arm, added in the SAME
+             commit as the `TABS` entry: `TabId` derives from `TABS`, so an
+             entry with no arm falls through to the bare `v-else` below and
+             renders Health under a tab labelled Scan. -->
+        <ScanPanel
+          v-else-if="activeTab === 'scan'"
+          :defminer-clause="SCAN_KIND_CLAUSE"
+          :load="loadScan"
+          :start="startScan"
+        />
+
         <!-- UI-08's SETTINGS BODY, replacing the tracer's placeholder. -->
         <SettingsPanel
           v-else-if="activeTab === 'settings'"
@@ -760,12 +829,15 @@ async function loadCompat(): Promise<void> {
         />
 
         <!-- OBS-01's HEALTH BODY, replacing the tracer's placeholder.
-             `v-else` rather than a fourth `v-else-if`: `TabId` is a closed
-             union of four and the three above are spent, so a fifth tab added
-             without a body would land here visibly rather than rendering an
-             empty panel. Health ROUTES and RENDERS from the first paint, as it
-             always did — a tab is never removed, never disabled and never
-             hidden on account of its body. -->
+             `v-else` rather than a fifth `v-else-if`: `TabId` is a closed union
+             of FIVE and the four above are spent, so a sixth tab added without
+             a body would land here visibly rather than rendering an empty
+             panel. That is exactly what happened to be checked when plan 06-01
+             added `scan` — the entry and its arm land together, which is why
+             this comment moved from "four" to "five" in the same commit rather
+             than being left describing the union it used to be. Health ROUTES
+             and RENDERS from the first paint, as it always did — a tab is never
+             removed, never disabled and never hidden on account of its body. -->
         <HealthPanel v-else :load="loadHealth" />
       </section>
 
