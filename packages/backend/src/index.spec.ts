@@ -46,6 +46,37 @@ import { resetTelemetryForTest } from "./telemetry";
 
 import { init } from "./index";
 
+/**
+ * Every endpoint the success path registers, in registration order.
+ *
+ * Hoisted to module scope so the two assertions that need it cannot drift
+ * apart: "registers every contract endpoint on the success path" below reads
+ * it in the POSITIVE direction (each name is present), and "registers NOTHING
+ * outside the contract on the success path" reads it in the NEGATIVE one (no
+ * fifteenth name appeared). Two lists would let one edit satisfy one direction
+ * and silently loosen the other.
+ *
+ * There is no runtime list to derive this from — `Api` in `api/spec.ts` is a
+ * TYPE, and the registration site is fourteen hand-written `api.register`
+ * calls — so this literal is the gate.
+ */
+const CONTRACT_ENDPOINTS: readonly string[] = [
+  "getStatus",
+  "getCompat",
+  "getArtifacts",
+  "getObservations",
+  "listArtifactsPage",
+  "listObservationsPage",
+  "countInventory",
+  "getArtifactAnalysis",
+  "retryAnalysis",
+  "exportInventory",
+  "listSettings",
+  "writeSetting",
+  "getHealth",
+  "getContractVersion",
+];
+
 beforeEach(() => {
   resetLifecycleForTest();
   resetPassiveForTest();
@@ -218,22 +249,7 @@ describe("the Phase 5 RPC surface", () => {
     const { sdk } = await boot();
     const names = sdk.calls.apiRegister;
 
-    for (const expected of [
-      "getStatus",
-      "getCompat",
-      "getArtifacts",
-      "getObservations",
-      "listArtifactsPage",
-      "listObservationsPage",
-      "countInventory",
-      "getArtifactAnalysis",
-      "retryAnalysis",
-      "exportInventory",
-      "listSettings",
-      "writeSetting",
-      "getHealth",
-      "getContractVersion",
-    ]) {
+    for (const expected of CONTRACT_ENDPOINTS) {
       expect(names, `${expected} was not registered`).toContain(expected);
     }
     // No name twice. `api.register` rejects a duplicate, so a repeat here is an
@@ -516,6 +532,161 @@ describe("the Phase 5 RPC surface", () => {
     const sdk = makeFakeSdk({ version: "0.1.0" });
     await init(sdk);
     expect(sdk.calls.apiRegister).toEqual(["getStatus", "getCompat"]);
+  });
+});
+
+// ===========================================================================
+// THE EXACT ENDPOINT SET OF EVERY REFUSAL PATH
+// ===========================================================================
+//
+// `init()` refuses in three distinct places, and each one returns early after a
+// HAND-WRITTEN pair of `api.register` calls:
+//
+//   1. checkCompat          — the Caido build is below MIN_CAIDO;
+//   2. checkRuntimeSurfaces — a Database, Statement or capability is missing;
+//   3. projectChangeArmed   — project isolation could not be installed.
+//
+// Plus the catch, which registers `getStatus` ALONE and guards even that
+// against the already-registered case.
+//
+// Only path 1 was pinned — by "does not add any page endpoint to a refusal
+// path" above. Paths 2 and 3 and the catch had nothing: plan 05-12 checked
+// "the refusal path is unchanged" by reading a `git diff`, which is a review
+// step and not a test. A fourth `api.register` added to one of them tomorrow,
+// or a `getCompat` dropped from one, would leave the suite green.
+//
+// That silence is not cosmetic. `CompatRefusal.vue` renders a refusal out of
+// exactly the endpoints the path it is rendering actually registered — it has
+// no other source of truth, and Caido surfaces neither a throw nor a rejection
+// when it calls one that is not there. So the assertions below are `toEqual`
+// and NOT `toContain`: "at least these two" is precisely the claim that cannot
+// catch either edit.
+
+describe("the exact endpoint set of every refusal path", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    // Migrated here, as in the Phase 5 surface block above: paths 2 and 3 are
+    // reached only by a build that opened and migrated a database cleanly, so
+    // an unmigrated handle would refuse for the wrong reason and prove nothing.
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  /** The two endpoints a refusing build owes an operator: the status it refused
+   *  with, and the surface matrix saying which probe failed. */
+  const REFUSAL_SURFACE = ["getStatus", "getCompat"];
+
+  /** The fixture handle with the ONE probe `init()` prepares — `SELECT 1` — made
+   *  to reject, and every other statement left working.
+   *
+   *  This is the only way to reach refusal path 2 honestly. `init()` catches
+   *  that rejection, leaves `statement` undefined, and `checkRuntimeSurfaces`
+   *  then finds Statement.run/get/all missing on a database that migrated fine.
+   *  Breaking `exec` or `prepare` outright would instead take the CATCH path via
+   *  `migrate()`, which is a different case with a different endpoint set. */
+  function noProbeStatement(db: Database): Database {
+    // Both methods are delegated BY HAND rather than spread. `Database` is a
+    // class, and a spread of a class instance carries no methods in the type
+    // system — `{ ...db }` typechecks as `{}` and the result would then be
+    // missing the `Database.exec` that `checkRuntimeSurfaces` probes for.
+    return {
+      exec: (sql: string) => db.exec(sql),
+      prepare: (sql: string) =>
+        sql === "SELECT 1"
+          ? Promise.reject(new Error("no statement is available on this build"))
+          : db.prepare(sql),
+    };
+  }
+
+  it("registers exactly getStatus and getCompat when a RUNTIME SURFACE is missing", async () => {
+    const sdk = makeFakeSdk({
+      db: () => Promise.resolve(noProbeStatement(fx.db)),
+    });
+
+    await init(sdk);
+
+    const logs = sdk.calls.consoleLog.join("\n");
+    // Non-vacuity: this must be refusal path 2 and not the catch, which would
+    // also register a short list. The named surface is what tells them apart.
+    expect(logs, "this did not take the runtime-surface refusal").toContain(
+      "Statement.run",
+    );
+    expect(logs).not.toContain("init failed");
+    expect(
+      sdk.calls.apiRegister,
+      "the runtime-surface refusal registers a set CompatRefusal.vue does not expect",
+    ).toEqual(REFUSAL_SURFACE);
+    expect(sdk.calls.interceptResponseHandlers).toHaveLength(0);
+  });
+
+  it("registers exactly getStatus and getCompat when project isolation cannot be armed", async () => {
+    const sdk = makeFakeSdk({ db: () => Promise.resolve(fx.db) });
+    // The disarming case: `onProjectChange` cannot be registered, so a project
+    // switch would go unnoticed and ingestion refuses rather than writing one
+    // project's traffic under another's id (CORE-09).
+    sdk.events.onProjectChange = (): never => {
+      throw new Error("onProjectChange is not available on this build");
+    };
+
+    await init(sdk);
+
+    const logs = sdk.calls.consoleLog.join("\n");
+    expect(logs, "this did not take the isolation refusal").toContain(
+      "project isolation unavailable",
+    );
+    expect(logs).not.toContain("init failed");
+    expect(
+      sdk.calls.apiRegister,
+      "the isolation refusal registers a set CompatRefusal.vue does not expect",
+    ).toEqual(REFUSAL_SURFACE);
+    expect(sdk.calls.interceptResponseHandlers).toHaveLength(0);
+  });
+
+  it("registers exactly getStatus — and NO getCompat — when init throws", async () => {
+    // The catch is deliberately NOT a refusal path: it reports a failure it did
+    // not anticipate, so it registers the one endpoint that can carry a reason
+    // and does not claim a compatibility report it never computed.
+    const sdk = makeFakeSdk({
+      db: () => Promise.reject(new Error("meta.db() is unavailable")),
+    });
+
+    await init(sdk);
+
+    expect(sdk.calls.consoleLog.join("\n")).toContain("init failed");
+    expect(
+      sdk.calls.apiRegister,
+      "the catch path's endpoint set changed",
+    ).toEqual(["getStatus"]);
+    expect(sdk.calls.interceptResponseHandlers).toHaveLength(0);
+  });
+
+  it("registers NOTHING outside the contract on the success path", async () => {
+    // The negative half of "registers every contract endpoint on the success
+    // path" above, which asserts presence and uniqueness but would not notice a
+    // fifteenth name — and a name the success path registers is a name a
+    // refusal path may then not register, since `api.register` rejects a
+    // duplicate and the rejection aborts whichever init() hits it second.
+    const sdk = makeFakeSdk({ db: () => Promise.resolve(fx.db) });
+
+    await init(sdk);
+
+    expect(
+      sdk.calls.interceptResponseHandlers,
+      "this did not take the success path",
+    ).toHaveLength(1);
+    const extra = sdk.calls.apiRegister.filter(
+      (name) => !CONTRACT_ENDPOINTS.includes(name),
+    );
+    expect(
+      extra,
+      "an endpoint was registered that no contract type declares",
+    ).toEqual([]);
   });
 });
 
