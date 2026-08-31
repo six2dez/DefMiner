@@ -943,7 +943,7 @@ MEASURED SILENCES - 26 entries.
 
 Caido is client/server. Backend plugins run in the Caido CLI/server process, which may be a remote VPS or a Docker container. `sdk.meta.path()` is **server-side** and may be inaccessible to the operator, and ephemeral without a mounted volume.
 
-- [ ] **DEPLOY-01**: Tested against local desktop, remote CLI, and Docker deployments both with and without a persistent volume.
+- [x] **DEPLOY-01**: Tested against local desktop, remote CLI, and Docker deployments both with and without a persistent volume.
 - [x] **DEPLOY-02**: Server-side storage is labelled as such in the UI and never presented as a path on the operator's machine.
 - [x] **DEPLOY-03**: Operator-facing artifacts — reconstructed source, exports, dumps — are delivered via `sdk.hostedFile` or a bounded authenticated frontend download, with expiry and redaction rules. Not by writing to a path and assuming the operator can reach it.
 - [x] **DEPLOY-04**: Server disk is treated as shared instance storage with quotas and orphan cleanup; no assumption of host shell access.

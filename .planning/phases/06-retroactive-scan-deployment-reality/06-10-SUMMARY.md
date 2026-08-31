@@ -25,7 +25,7 @@ affects: [deployment, docker, verification, DEPLOY-02, DEPLOY-03, retroactive-sc
 actuals:
   tokens: 34126
   tasks: 3
-  commits: 4
+  commits: 7
 
 tech-stack:
   added: ["caido/caido:0.58.2 container image (harness-only; no runtime dependency added)"]

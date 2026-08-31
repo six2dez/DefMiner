@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 71
+open_count: 73
 waived_count: 0
 fixed_count: 27
-total_count: 98
-last_updated: 2026-08-31T22:03:04.976Z
+total_count: 100
+last_updated: 2026-08-31T22:45:01.374Z
 ---
 
 # Broken Windows Ledger
@@ -134,6 +134,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 96 | 06 | stub | packages/frontend/src/components/ScanLifecycleBadge.vue |  | ScanLifecycleBadge.vue has NO production renderer yet — its only consumer is scan-lifecycle-presentation.spec.ts. That is the shape plan 06-09 was scoped to deliver (the vocabulary, its map and its badge; not the surfaces that mount it) and knip exits 0 because the spec is a frontend entry. OWNER: plan 06-13 mounts it in the toolbar scan indicator (D-13) and names App.vue and ScanPanel.vue; 06-12 renders the Scan tab body. If neither mounts it, this is a component nobody renders and the window is the record of that. | open |  | 2026-08-31T22:03:04.797Z |  |
 | 97 | 06 | deviation | packages/frontend/src/api/client.spec.ts |  | PLAN SCOPE DEVIATION, Rule 3 (blocking): plan 06-09's task 3 <files> named api/client.ts but not api/client.spec.ts, and task 2's <files> named no spec file at all. Both were needed to discharge the plan's own acceptance criteria — 'the prefix guard's union has at least nine members and its negative fixture turns it red' has nowhere to live without a spec, and 'a progress payload is routed to the progress store and NEVER reaches the coalescer' is a claim about client.ts that only client.spec.ts can make. Two spec files were therefore added beyond files_modified: packages/frontend/src/components/scan-lifecycle-presentation.spec.ts and cases appended to packages/frontend/src/api/client.spec.ts. No production file outside files_modified was touched. | open |  | 2026-08-31T22:03:04.886Z |  |
 | 98 | 06 | deviation | packages/backend/src/telemetry.ts |  | NO COUNTER WAS ADDED for a scan-progress emit that throws. scan/producer.ts's emitProgress swallows a send failure with no counter and no log, which is a departure from this package's habit (ingest/consumer.ts increments counters.consumerErrors on the same failure). THE REASON, stated on the catch: the event is NOT the authoritative reader — getScanStatus reads the scans row directly and does not depend on the channel at all — so a lost payload costs at most one tick of a readout the operator can refresh, and the next page emits again. Adding counters.retro.emitErrors would have required telemetry.ts, which is not in 06-09's files_modified and is AST-enforced as the single owner of every counter in the package. OWNER: whichever plan next opens telemetry.ts, if the swallow is ever judged to have cost a diagnosis. | open |  | 2026-08-31T22:03:04.976Z |  |
+| 99 | 06 | deviation | .planning/STATE.md |  | STATE.md records the SPIKE-10 recorder as running (pid 79273, 127.0.0.1:8998, .spike/recorder-data), deliberately left alive. At 06-10's close-out that pid does not exist and nothing LISTENs on 8998; the machine has been up 9 days so no reboot explains it, and .spike/recorder-data has not been written since 21 Aug. 06-10 did not kill it — nothing under scripts/phase6/ references 8998, the matrix owns 8951-8955, instance.sh SIGKILLs only the pid it launched, and the operator's live 8080 instance is still up. Needs a STATE.md correction, and a fresh recorder if the SPIKE-10 cache-rate sample is still to be extended. OWNER: whichever plan next needs the recorder or next edits STATE.md's blockers. | open |  | 2026-08-31T22:40:50.312Z |  |
+| 100 | 06 | deviation | .planning/REQUIREMENTS.md |  | requirements.mark-complete reflowed the DERIVED residual block again on 06-10's close-out, inserting three blank lines and reddening packages/backend/src/outbound-prohibition.spec.ts — the third occurrence (7ceff93, 06-08, now 06-10). Fixed the shipped block per the standing remedy; the comparison was not touched. OWNER: the fix belongs in the gsd-tools writer, which should not reflow a machine-owned block it does not own. | open |  | 2026-08-31T22:45:01.374Z |  |
 
 ````json
 [
@@ -1311,6 +1313,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T22:03:04.976Z",
+    "resolved_at": null
+  },
+  {
+    "id": 99,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/STATE.md",
+    "line": null,
+    "description": "STATE.md records the SPIKE-10 recorder as running (pid 79273, 127.0.0.1:8998, .spike/recorder-data), deliberately left alive. At 06-10's close-out that pid does not exist and nothing LISTENs on 8998; the machine has been up 9 days so no reboot explains it, and .spike/recorder-data has not been written since 21 Aug. 06-10 did not kill it — nothing under scripts/phase6/ references 8998, the matrix owns 8951-8955, instance.sh SIGKILLs only the pid it launched, and the operator's live 8080 instance is still up. Needs a STATE.md correction, and a fresh recorder if the SPIKE-10 cache-rate sample is still to be extended. OWNER: whichever plan next needs the recorder or next edits STATE.md's blockers.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:40:50.312Z",
+    "resolved_at": null
+  },
+  {
+    "id": 100,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "requirements.mark-complete reflowed the DERIVED residual block again on 06-10's close-out, inserting three blank lines and reddening packages/backend/src/outbound-prohibition.spec.ts — the third occurrence (7ceff93, 06-08, now 06-10). Fixed the shipped block per the standing remedy; the comparison was not touched. OWNER: the fix belongs in the gsd-tools writer, which should not reflow a machine-owned block it does not own.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:45:01.374Z",
     "resolved_at": null
   }
 ]
