@@ -28,14 +28,17 @@
 //      the reaction cap is silently multiplied (research P-04).
 
 import type {
+  InvalidationEventPayload,
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  ScanProgressPayload,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import {
   INVALIDATION_EVENT,
   RETENTION_MAX_ROWS_KEY,
+  SCAN_PROGRESS_KIND,
 } from "@defminer/engine/contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -186,7 +189,7 @@ const COMPAT: CompatReport = {
   surfaces: [],
 };
 
-type Listener = (summary: InvalidationSummary) => void;
+type Listener = (payload: InvalidationEventPayload) => void;
 
 type Stub = {
   /** Mutable so the factory can attach it after the object exists. NOT spread
@@ -196,11 +199,28 @@ type Stub = {
   sdk: DefMinerBackendSdk;
   readonly calls: string[];
   readonly listeners: Listener[];
-  emit: (summary: InvalidationSummary) => void;
+  emit: (payload: InvalidationEventPayload) => void;
   backendVersion: number;
   /** When set, EVERY endpoint returns this instead of its normal answer. */
   behaviour: "resolve" | "reject" | "hang";
   rejectionMessage: string;
+};
+
+/** One progress payload, as `scan/producer.ts` emits it. */
+const SCAN_PROGRESS: ScanProgressPayload = {
+  kind: SCAN_PROGRESS_KIND,
+  projectId: "p1",
+  scanId: "s1",
+  state: "running",
+  pagesWalked: 3,
+  seen: 60,
+  admitted: 12,
+  skippedDone: 4,
+  rejected: 44,
+  queued: 12,
+  analysed: null,
+  lastCreatedAt: 1_723_600_000_000,
+  heldAtWatermark: false,
 };
 
 function makeStub(): Stub {
@@ -213,8 +233,8 @@ function makeStub(): Stub {
     backendVersion: FRONTEND_CONTRACT_VERSION,
     behaviour: "resolve",
     rejectionMessage: "",
-    emit: (summary) => {
-      for (const listener of [...listeners]) listener(summary);
+    emit: (payload) => {
+      for (const listener of [...listeners]) listener(payload);
     },
     // Replaced immediately below; declared here so the object is complete.
     sdk: undefined as unknown as DefMinerBackendSdk,
@@ -497,6 +517,85 @@ describe("subscribeInvalidation — the handle is returned, not swallowed", () =
 
     expect(seen).toEqual([]);
     expect(stub.listeners).toEqual([]);
+  });
+
+  // =========================================================================
+  // ONE SUBSCRIPTION, TWO DESTINATIONS (FIND-04, D-15)
+  // =========================================================================
+  //
+  // The event carries two payload variants and the discrimination happens HERE,
+  // at the single subscription site, before either handler is called. That is
+  // what leaves both of the coalescer's triage-lock early returns literally
+  // unmodified: a progress payload never reaches `onSummary`, so there is
+  // nothing to exempt it from.
+
+  it("routes a progress payload to the progress handler and NEVER to the summary one", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const summaries: InvalidationSummary[] = [];
+    const progress: ScanProgressPayload[] = [];
+
+    client.subscribeInvalidation(
+      (s) => summaries.push(s),
+      (p) => progress.push(p),
+    );
+    stub.emit(SCAN_PROGRESS);
+
+    expect(progress).toEqual([SCAN_PROGRESS]);
+    expect(
+      summaries,
+      "a progress payload reached the coalescer's summary handler. It would be " +
+        "counted into `pending`, held behind the triage lock, and rendered as a " +
+        "row count that changed — none of which describes a scan.",
+    ).toEqual([]);
+  });
+
+  it("routes an invalidation summary to the summary handler and NEVER to the progress one", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const summaries: InvalidationSummary[] = [];
+    const progress: ScanProgressPayload[] = [];
+    const summary: InvalidationSummary = {
+      projectId: "p1",
+      category: "analyses",
+      changedCount: 2,
+      newestId: "sha-7",
+    };
+
+    client.subscribeInvalidation(
+      (s) => summaries.push(s),
+      (p) => progress.push(p),
+    );
+    stub.emit(summary);
+
+    expect(summaries).toEqual([summary]);
+    expect(progress).toEqual([]);
+  });
+
+  it("subscribes ONCE for both variants — one channel, as D-15 requires", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+
+    client.subscribeInvalidation(
+      () => undefined,
+      () => undefined,
+    );
+
+    expect(stub.listeners).toHaveLength(1);
+  });
+
+  it("DROPS a progress payload when no progress handler was given", () => {
+    // The state until a surface renders the readout. Dropping it at the client
+    // is deliberate and is the safe half: what must never happen is a progress
+    // payload arriving at the coalescer, and that is what this asserts.
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const summaries: InvalidationSummary[] = [];
+
+    client.subscribeInvalidation((s) => summaries.push(s));
+    stub.emit(SCAN_PROGRESS);
+
+    expect(summaries).toEqual([]);
   });
 });
 
