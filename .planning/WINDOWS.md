@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 66
+open_count: 71
 waived_count: 0
 fixed_count: 27
-total_count: 93
-last_updated: 2026-08-31T21:28:14.775Z
+total_count: 98
+last_updated: 2026-08-31T22:03:04.976Z
 ---
 
 # Broken Windows Ledger
@@ -129,6 +129,11 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 91 | 06 | deviation | packages/backend/src/index.spec.ts |  | settingsRows() was narrowed to exclude INTERNAL_SETTING_KEYS. Three shipped assertions counted EVERY row on the settings table to prove a scoping claim about a settings WRITE ('the caller's projectId was discarded'; 'a project-scoped write with no project stored nothing'), and init() now writes O-02's boot marker at the reserved global scope on every boot. Without the filter an unrelated feature decides whether a scoping assertion passes. Filtered over the CLOSED internal list, so a marker key added later is excluded by the vocabulary rather than by a remembered string. | open |  | 2026-08-31T21:28:00.466Z |  |
 | 92 | 06 | deviation | .planning/REQUIREMENTS.md |  | WINDOW 85 RECURRED EXACTLY AS IT PREDICTED, AND IS FIXED AGAIN. 06-08's close-out marked DEPLOY-02 complete; requirements.mark-complete reflowed the derived residual block and re-inserted the SAME three blank lines - after 'DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:', around the two-file list, and before '1. Each entry below is verified by EXECUTION'. outbound-prohibition.spec.ts went red on the byte-compare and was restored by deleting the blank lines, never by touching the comparison. The final REQUIREMENTS.md diff for this plan is ONE character: DEPLOY-02's checkbox. The tool is the defect, not the close-out - window 85 stays open and owns it. | open |  | 2026-08-31T21:28:14.684Z |  |
 | 93 | 06 | lint-warning | package.json |  | CORRECTED BY ORCHESTRATOR 2026-08-31: 'pnpm knip' exits 0, NOT 1. Measured on a clean tree: `pnpm knip >/dev/null 2>&1; echo $?` prints 0, and the only finding class is 'Tag hints (22)'. Tag hints are hints and do not fail the gate - phase 05's deferred-items.md recorded the same thing when the count was 8. 06-08's CONCLUSION was still sound (no new finding, verified against a git-stash baseline; the one new finding it introduced was fixed) but its premise was wrong, and the wrong premise is the hazard: it would let a future executor wave through a GENUINE knip failure as pre-existing baseline noise. Treat a non-zero knip exit as a real failure. ORIGINAL CLAIM, PRESERVED: 'PRE-EXISTING AND NOT 06-08's: pnpm knip exits 1 on a clean tree at 7ceff93 with 22 Tag hints' - @internal JSDoc tags knip reports as unused across compat.ts, telemetry.ts, lifecycle.ts, settings.ts, artifacts.ts, observations.ts, admit.ts, scans.ts, producer.ts and audit.ts. 06-08's acceptance criterion 'pnpm knip is clean' was therefore read as 'no NEW knip finding', and was verified by diffing the output against a git-stash baseline: identical. One new finding DID appear mid-plan (BootMarker exported but consumed only in its own file, which ignoreExportsUsedInFile:false rejects) and was fixed by un-exporting it. 06-CONTEXT.md's deferred list already names 'removing the eight now-redundant @internal JSDoc tags' as out of scope. | open |  | 2026-08-31T21:28:14.775Z |  |
+| 94 | 06 | stub | packages/backend/src/index.ts |  | ScanStatusPayload.analysed IS STILL null after plan 06-09, and 06-09 was named its owner by window 86. RE-ASSESSED AND DECLINED AGAIN, WITH THE REASON AND A NAMED OWNER, exactly as 06-06 declined it. THE REASON IS UNCHANGED AND IS STRUCTURAL: analyses rows carry NO scan attribution — the primary key is (project_id, sha256, detector_set_hash) and nothing on the row says which scan offered the work — so an honest per-scan count needs EITHER a new scans.analysed column (another permanent step in a one-way migration ladder, in store/migrations.ts + scan/scans.ts) OR provenance on the queue Entry itself (engine/queue.ts + ingest/consumer.ts + telemetry.ts). 06-09's files_modified names NONE of those five files, in its original form or in the mid-execution scope addition, so wiring it here would have been a Rule 4 architectural change taken without asking. WHAT 06-09 DID DO: it declared the field on the NEW ScanProgressPayload too, as number\|null and emitted as null, so the wiring is one edit in one place rather than a shape change on the wire; and contract.spec.ts + producer.spec.ts both assert it is null rather than a lying 0. OWNER: NO PLAN IN 06-10..06-13 NAMES ANY OF THE FIVE FILES — measured against their files_modified — so this needs a Phase 6 gap-closure plan that owns store/migrations.ts and scan/scans.ts, or engine/queue.ts, ingest/consumer.ts and telemetry.ts. Window 86 stays open and this entry names why for the second time. | open |  | 2026-08-31T22:03:04.619Z |  |
+| 95 | 06 | stub | packages/frontend/src/api/client.ts |  | subscribeInvalidation's onScanProgress argument is OPTIONAL, and when it is absent a scan-progress payload is DROPPED at the client. Deliberate and stated on the declaration: App.vue passes client.subscribeInvalidation straight to createCoalescer as its subscribe function, App.vue is owned by plan 06-13, and the alternative was a progress store created inside the client — owned by nobody and stop()ed by nobody, which is research P-04's exact leak. The SAFETY half does not depend on the argument: client.spec.ts asserts a progress payload never reaches the coalescer's summary handler whether or not a progress handler was given. OWNER: plan 06-12, which renders the readout and names api/client.ts in its files_modified; it passes the handler and this closes. | open |  | 2026-08-31T22:03:04.709Z |  |
+| 96 | 06 | stub | packages/frontend/src/components/ScanLifecycleBadge.vue |  | ScanLifecycleBadge.vue has NO production renderer yet — its only consumer is scan-lifecycle-presentation.spec.ts. That is the shape plan 06-09 was scoped to deliver (the vocabulary, its map and its badge; not the surfaces that mount it) and knip exits 0 because the spec is a frontend entry. OWNER: plan 06-13 mounts it in the toolbar scan indicator (D-13) and names App.vue and ScanPanel.vue; 06-12 renders the Scan tab body. If neither mounts it, this is a component nobody renders and the window is the record of that. | open |  | 2026-08-31T22:03:04.797Z |  |
+| 97 | 06 | deviation | packages/frontend/src/api/client.spec.ts |  | PLAN SCOPE DEVIATION, Rule 3 (blocking): plan 06-09's task 3 <files> named api/client.ts but not api/client.spec.ts, and task 2's <files> named no spec file at all. Both were needed to discharge the plan's own acceptance criteria — 'the prefix guard's union has at least nine members and its negative fixture turns it red' has nowhere to live without a spec, and 'a progress payload is routed to the progress store and NEVER reaches the coalescer' is a claim about client.ts that only client.spec.ts can make. Two spec files were therefore added beyond files_modified: packages/frontend/src/components/scan-lifecycle-presentation.spec.ts and cases appended to packages/frontend/src/api/client.spec.ts. No production file outside files_modified was touched. | open |  | 2026-08-31T22:03:04.886Z |  |
+| 98 | 06 | deviation | packages/backend/src/telemetry.ts |  | NO COUNTER WAS ADDED for a scan-progress emit that throws. scan/producer.ts's emitProgress swallows a send failure with no counter and no log, which is a departure from this package's habit (ingest/consumer.ts increments counters.consumerErrors on the same failure). THE REASON, stated on the catch: the event is NOT the authoritative reader — getScanStatus reads the scans row directly and does not depend on the channel at all — so a lost payload costs at most one tick of a readout the operator can refresh, and the next page emits again. Adding counters.retro.emitErrors would have required telemetry.ts, which is not in 06-09's files_modified and is AST-enforced as the single owner of every counter in the package. OWNER: whichever plan next opens telemetry.ts, if the swallow is ever judged to have cost a diagnosis. | open |  | 2026-08-31T22:03:04.976Z |  |
 
 ````json
 [
@@ -1246,6 +1251,66 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T21:28:14.775Z",
+    "resolved_at": null
+  },
+  {
+    "id": 94,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "ScanStatusPayload.analysed IS STILL null after plan 06-09, and 06-09 was named its owner by window 86. RE-ASSESSED AND DECLINED AGAIN, WITH THE REASON AND A NAMED OWNER, exactly as 06-06 declined it. THE REASON IS UNCHANGED AND IS STRUCTURAL: analyses rows carry NO scan attribution — the primary key is (project_id, sha256, detector_set_hash) and nothing on the row says which scan offered the work — so an honest per-scan count needs EITHER a new scans.analysed column (another permanent step in a one-way migration ladder, in store/migrations.ts + scan/scans.ts) OR provenance on the queue Entry itself (engine/queue.ts + ingest/consumer.ts + telemetry.ts). 06-09's files_modified names NONE of those five files, in its original form or in the mid-execution scope addition, so wiring it here would have been a Rule 4 architectural change taken without asking. WHAT 06-09 DID DO: it declared the field on the NEW ScanProgressPayload too, as number|null and emitted as null, so the wiring is one edit in one place rather than a shape change on the wire; and contract.spec.ts + producer.spec.ts both assert it is null rather than a lying 0. OWNER: NO PLAN IN 06-10..06-13 NAMES ANY OF THE FIVE FILES — measured against their files_modified — so this needs a Phase 6 gap-closure plan that owns store/migrations.ts and scan/scans.ts, or engine/queue.ts, ingest/consumer.ts and telemetry.ts. Window 86 stays open and this entry names why for the second time.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:03:04.619Z",
+    "resolved_at": null
+  },
+  {
+    "id": 95,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/frontend/src/api/client.ts",
+    "line": null,
+    "description": "subscribeInvalidation's onScanProgress argument is OPTIONAL, and when it is absent a scan-progress payload is DROPPED at the client. Deliberate and stated on the declaration: App.vue passes client.subscribeInvalidation straight to createCoalescer as its subscribe function, App.vue is owned by plan 06-13, and the alternative was a progress store created inside the client — owned by nobody and stop()ed by nobody, which is research P-04's exact leak. The SAFETY half does not depend on the argument: client.spec.ts asserts a progress payload never reaches the coalescer's summary handler whether or not a progress handler was given. OWNER: plan 06-12, which renders the readout and names api/client.ts in its files_modified; it passes the handler and this closes.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:03:04.709Z",
+    "resolved_at": null
+  },
+  {
+    "id": 96,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/frontend/src/components/ScanLifecycleBadge.vue",
+    "line": null,
+    "description": "ScanLifecycleBadge.vue has NO production renderer yet — its only consumer is scan-lifecycle-presentation.spec.ts. That is the shape plan 06-09 was scoped to deliver (the vocabulary, its map and its badge; not the surfaces that mount it) and knip exits 0 because the spec is a frontend entry. OWNER: plan 06-13 mounts it in the toolbar scan indicator (D-13) and names App.vue and ScanPanel.vue; 06-12 renders the Scan tab body. If neither mounts it, this is a component nobody renders and the window is the record of that.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:03:04.797Z",
+    "resolved_at": null
+  },
+  {
+    "id": 97,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/frontend/src/api/client.spec.ts",
+    "line": null,
+    "description": "PLAN SCOPE DEVIATION, Rule 3 (blocking): plan 06-09's task 3 <files> named api/client.ts but not api/client.spec.ts, and task 2's <files> named no spec file at all. Both were needed to discharge the plan's own acceptance criteria — 'the prefix guard's union has at least nine members and its negative fixture turns it red' has nowhere to live without a spec, and 'a progress payload is routed to the progress store and NEVER reaches the coalescer' is a claim about client.ts that only client.spec.ts can make. Two spec files were therefore added beyond files_modified: packages/frontend/src/components/scan-lifecycle-presentation.spec.ts and cases appended to packages/frontend/src/api/client.spec.ts. No production file outside files_modified was touched.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:03:04.886Z",
+    "resolved_at": null
+  },
+  {
+    "id": 98,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/telemetry.ts",
+    "line": null,
+    "description": "NO COUNTER WAS ADDED for a scan-progress emit that throws. scan/producer.ts's emitProgress swallows a send failure with no counter and no log, which is a departure from this package's habit (ingest/consumer.ts increments counters.consumerErrors on the same failure). THE REASON, stated on the catch: the event is NOT the authoritative reader — getScanStatus reads the scans row directly and does not depend on the channel at all — so a lost payload costs at most one tick of a readout the operator can refresh, and the next page emits again. Adding counters.retro.emitErrors would have required telemetry.ts, which is not in 06-09's files_modified and is AST-enforced as the single owner of every counter in the package. OWNER: whichever plan next opens telemetry.ts, if the swallow is ever judged to have cost a diagnosis.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T22:03:04.976Z",
     "resolved_at": null
   }
 ]
