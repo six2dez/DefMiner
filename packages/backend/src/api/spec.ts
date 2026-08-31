@@ -26,8 +26,11 @@
 
 import type { DefinePluginPackageSpec } from "@caido/sdk-shared";
 import type {
+  ExportFormat,
+  ExportRedactionMode,
   INVALIDATION_EVENT,
   InvalidationSummary,
+  PageCursor,
   PageRequest,
   PageResponse,
   ScanState,
@@ -39,6 +42,7 @@ import type { Database } from "sqlite";
 import type { SurfaceOutcome } from "../compat";
 import type { LifecycleSdk } from "../lifecycle";
 import type { ArtifactRow } from "../store/artifacts";
+import type { ExportChunkResult } from "../store/export";
 import type { ObservationRow } from "../store/observations";
 import type { ArtifactPageRow, InventoryTable } from "../store/reads";
 import type { SlimStatus } from "../telemetry";
@@ -68,9 +72,22 @@ import type { SlimStatus } from "../telemetry";
  * `getArtifactAnalysis`) would not have obliged a bump on their own: a
  * frontend that does not know a name simply never calls it.
  *
+ * BUMPED TO 3 BY PLAN 05-11, AND THIS ONE IS A DELIBERATE OVER-BUMP RATHER
+ * THAN AN APPLICATION OF THE SHAPE RULE ABOVE — recorded as such, because a bump
+ * whose justification is invented after the fact is how the rule stops meaning
+ * anything. Strictly, `exportInventory` is a NEW NAME and adding one obliges no
+ * bump: a frontend that does not know a name never calls it. It is bumped anyway
+ * for a reason the rule does not cover: the export is the first endpoint whose
+ * result the frontend must ASSEMBLE ACROSS SEVERAL CALLS, concatenating chunk
+ * bytes in order and closing a document it did not open, and a bundle pairing
+ * that loop with a backend it was not built against would produce a FILE — on
+ * the operator's own disk, outliving the session, with nothing on its face
+ * saying which version wrote it. The cost of the bump is one forced reload; the
+ * cost of the other choice is a file somebody trusts.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 2;
+export const CONTRACT_VERSION = 3;
 
 /**
  * What `getStatus` returns.
@@ -212,6 +229,41 @@ export type RetryOutcome = {
 };
 
 /**
+ * What one export chunk asks for.
+ *
+ * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
+ * (P5-D43): the store layer needs one in every predicate and the frontend is not
+ * the authority on which project is active.
+ *
+ * `cursor` AND `chunkIndex` BOTH EXIST AND THEY ARE NOT REDUNDANT. The cursor is
+ * how the rows are FOUND — 05-UI-SPEC.md's table contract bans `OFFSET` and
+ * `reads.ts` has no offset statement to answer one with — while the index is
+ * what decides two things a cursor cannot: whether this chunk carries the header
+ * and the embedded floor comment, and, together with the more-chunks flag,
+ * whether this is the call that writes the audit row.
+ *
+ * `chunkRows` is a CEILING a caller may only LOWER. It is clamped into
+ * `[1, EXPORT_RPC_CHUNK_ROWS]` by the serialiser, so nothing crossing this
+ * boundary can raise what crosses it.
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not: the registration site infers
+ * this shape from the API map rather than importing it, and knip runs with
+ * `ignoreExportsUsedInFile: false`.
+ */
+type ExportRequest = {
+  readonly projectId: string;
+  readonly table: InventoryTable;
+  readonly format: ExportFormat;
+  readonly mode: ExportRedactionMode;
+  readonly filter: PageRequest["filter"];
+  readonly sortKey: string;
+  readonly direction: "asc" | "desc";
+  readonly chunkIndex: number;
+  readonly cursor: PageCursor | null;
+  readonly chunkRows: number | null;
+};
+
+/**
  * The plugin package specification.
  *
  * NOT EXPORTED, deliberately. Nothing outside this module can consume it — the
@@ -270,6 +322,13 @@ type Spec = DefinePluginPackageSpec<{
     /** Move ONE stopped analysis back out of its terminal state, on operator
      *  command (OPS-03). Nothing re-analyses on its own as a result. */
     retryAnalysis: (req: AnalysisKey) => Promise<RetryOutcome>;
+    /** One chunk of an inventory export, as BYTES (UI-06, decision D-04).
+     *
+     *  NOTHING IS WRITTEN ON THE SERVER. The backend serialises and returns; the
+     *  frontend concatenates the chunks, builds a Blob and triggers a download
+     *  onto the operator's own machine. There is no path in the request, none in
+     *  the response, and none in the module behind it. */
+    exportInventory: (req: ExportRequest) => Promise<ExportChunkResult>;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

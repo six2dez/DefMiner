@@ -43,7 +43,14 @@
 // 0.57.1. Imported here so `crypto.createHash` is a PROBED surface rather than
 // an assumed one — it adds nothing new to the bundle's import set, which
 // scripts/ci/check-bundle-imports.mjs gates.
-import { createHash } from "crypto";
+// `randomUUID` comes from the SAME specifier and adds nothing to the bundle's
+// import set. It is a MEASURED export of Caido's `crypto` module — the Phase 0
+// capability probe lists it beside `createHash` in
+// `capabilities.json`'s `modules.crypto` — which is why it may be relied on here
+// rather than shimmed. It mints the audit event id, and `audit.ts` states why
+// that id is the CALLER's to mint: the caller owns idempotency, so a retry after
+// an ambiguous failure re-presents the same id and lands as a no-op.
+import { createHash, randomUUID } from "crypto";
 
 import type {
   PageRequest,
@@ -88,7 +95,12 @@ import {
   getLatestAnalysisForArtifact,
 } from "./store/analyses";
 import { listArtifacts } from "./store/artifacts";
+import { recordAudit } from "./store/audit";
 import { getDb, readSqliteVersion } from "./store/db";
+import {
+  readContributingArtifactCounts,
+  readExportChunk,
+} from "./store/export";
 import { migrate } from "./store/migrations";
 import { listObservations, type ObservationRow } from "./store/observations";
 import {
@@ -488,6 +500,81 @@ export async function init(sdk: PluginSdk): Promise<void> {
         changed: outcome.changes > 0,
         state: outcome.state ?? null,
       };
+    });
+    sdk.api.register("exportInventory", async (_s, req) => {
+      const pid = currentProjectId();
+      // FAIL CLOSED WITH A REASON THE DIALOG CAN RENDER. Not an empty file and
+      // not a rejection: a zero-byte download the operator then opens is the
+      // worst of the three answers, because it looks like a finished export.
+      if (!db || pid === null) {
+        return { outcome: "refused", reason: "no-project" } as const;
+      }
+
+      // Read at the moment the export is SERIALISED, from the same partition it
+      // is serialised from. The dialog shows the operator the same two numbers,
+      // but the ones the FILE carries are these.
+      const counts = await readContributingArtifactCounts(db, pid);
+
+      const result = await readExportChunk(db, {
+        projectId: pid,
+        table: req.table,
+        format: req.format,
+        mode: req.mode,
+        filter: req.filter,
+        sortKey: req.sortKey,
+        direction: req.direction,
+        chunkIndex: req.chunkIndex,
+        cursor: req.cursor,
+        chunkRows: req.chunkRows,
+        counts,
+        nowMs: Date.now(),
+      });
+
+      // THE AUDIT ROW IS WRITTEN ONCE, ON THE CHUNK THAT COMPLETES THE EXPORT.
+      //
+      // Not per call, and not optimistically at the start. Per call, a
+      // five-chunk export leaves five records of ONE disclosure and the log
+      // becomes unreadable at exactly the moment somebody is reading it to
+      // answer "what did I export". At the start, a failed export would be
+      // recorded as a disclosure that never happened — and an audit log that
+      // over-reports is an audit log nobody believes the second time.
+      if (result.outcome === "chunk" && !result.chunk.hasMore) {
+        // The reachable count for this table and filter IS the export's row
+        // count, and it is the same number the dialog put in front of the
+        // operator before they confirmed.
+        const exported = await countInventory(db, pid, req.table, req.filter);
+        // ONE id, used as BOTH the event id and the subject. One completed
+        // export is one event about one export, and inventing a second
+        // identifier would be inventing a second thing to correlate.
+        const exportId = randomUUID();
+        const written = await recordAudit(
+          db,
+          pid,
+          // The KIND names which of the two it was. Both members already exist
+          // in the shipped vocabulary (plan 05-06), so this adds a call site and
+          // not a migration.
+          req.mode === "raw" ? "export_raw" : "export_redacted",
+          exportId,
+          // A DefMiner-authored reason code, a count and two identifiers this
+          // plugin chose. NO exported value, NO URL, NO target byte — the audit
+          // writer redacts, and a caller must not rely on that to launder
+          // something it should not have passed (T-05-62).
+          `export_completed rows=${String(exported.visible)} ` +
+            `format=${req.format} table=${req.table} ` +
+            `chunks=${String(req.chunkIndex + 1)}`,
+          Date.now(),
+          exportId,
+        );
+        if (!written.ok) {
+          // LOGGED, NOT RETURNED. The description is already redacted and it
+          // still does not cross the boundary: the dialog's copy is
+          // DefMiner-authored and a message that reached it is a message
+          // somebody eventually interpolates.
+          log(sdk, "export audit failed: " + written.error);
+        }
+      }
+
+      return result;
     });
     // Not `async`, and it touches nothing: a version check that could fail for
     // any reason other than the plugin being absent would be a check the

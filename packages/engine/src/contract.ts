@@ -726,3 +726,48 @@ export type VisibleTotal = {
   /** How many rules are doing the hiding. Zero means no second line at all. */
   readonly suppressionRuleCount: number;
 };
+
+// ---------------------------------------------------------------------------
+// THE EXPORT'S TWO VOCABULARIES (UI-06, decision D-04)
+// ---------------------------------------------------------------------------
+//
+// DECLARED HERE AND NOT IN THE EXPORTER, FOR THE REASON EVERY OTHER VOCABULARY
+// IN THIS FILE IS. Both packages need these as VALUES — the backend to select a
+// serialiser and to name an audit kind, the frontend to render the two radio
+// options in the order the design contract fixes — and the two packages cannot
+// import each other. A second copy in the frontend would be a second copy of a
+// list whose ORDER is a safety property, which is the one kind of duplication
+// that fails silently and in the dangerous direction.
+
+/**
+ * The two export formats, as a closed set.
+ *
+ * The delimited format needs R3's formula neutralisation and the structured one
+ * does not; both need R2's control strip. That difference lives in the
+ * serialiser — this list is only the vocabulary the two sides agree on.
+ */
+export const EXPORT_FORMATS = ["csv", "json"] as const;
+
+/** One member of {@link EXPORT_FORMATS}. */
+export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * The two redaction modes, REDACTED FIRST.
+ *
+ * THE ORDER IS A SAFETY PROPERTY AND NOT ALPHABETICAL LUCK. The first member is
+ * what a positional mistake lands on — an index, a default, a `[0]`, a radio
+ * group rendered by iteration — and the one it must land on is the one that
+ * WITHHOLDS. 05-UI-SPEC.md R3 states the same rule in words: redacted is the
+ * default and the pre-selected radio, and raw requires actively choosing the
+ * second option and then confirming the destructive dialog. There is no
+ * "remember this choice" for raw.
+ *
+ * WHAT THE RAW MODE LIFTS, PRECISELY: the redaction applied at EXPORT time, and
+ * nothing else. Query values in observed URLs were replaced at WRITE time and
+ * are not in the database at all, so no mode can recover them — which is why the
+ * design contract's raw-export confirmation had to be amended (decision D-07).
+ */
+export const EXPORT_REDACTION_MODES = ["redacted", "raw"] as const;
+
+/** One member of {@link EXPORT_REDACTION_MODES}. */
+export type ExportRedactionMode = (typeof EXPORT_REDACTION_MODES)[number];

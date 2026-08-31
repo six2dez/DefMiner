@@ -31,6 +31,7 @@
 // what the module is FOR, which is what is here.
 
 import type { PageRequest } from "@defminer/engine/contract";
+import { EXPORT_REDACTION_MODES } from "@defminer/engine/contract";
 import { DANGEROUS_LEADS } from "@defminer/engine/csv";
 import {
   HOSTILE_CASE_IDS,
@@ -48,7 +49,6 @@ import {
   EXPORT_COLUMNS,
   EXPORT_CONTENT_TYPES,
   EXPORT_QUERY_REDACTION,
-  EXPORT_REDACTION_MODES,
   EXPORT_RPC_CHUNK_ROWS,
   type ExportableRow,
   type ExportChunkRequest,

@@ -15,6 +15,7 @@
 // These cases drive the real `init()`. They assert it RESOLVES and that the
 // failure is written down somewhere an operator can reach it.
 
+import type { ExportRedactionMode } from "@defminer/engine/contract";
 import { INVALIDATION_EVENT } from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -659,18 +660,24 @@ describe("the export endpoint (UI-06, D-04)", () => {
    *  read, so the only place a driver rejection can be introduced is `prepare`,
    *  which is also where the real one comes from. */
   function guardedDb(): Database {
-    return {
+    const db: Database = {
       exec: (sql: string) => fx.db.exec(sql),
-      prepare: async (sql: string) => {
+      prepare: (sql: string) => {
         if (sql.includes("FROM observations")) {
           observationReads += 1;
           if (observationReads > allowObservationReads) {
-            throw new Error("simulated driver rejection");
+            // A REJECTION, NOT A THROW. The fixture's own header records the
+            // difference and why it matters: `node:sqlite` throws where Caido's
+            // driver REJECTS, and store code is written against a rejection. A
+            // synchronous throw here would exercise a shape the real driver
+            // never produces.
+            return Promise.reject(new Error("simulated driver rejection"));
           }
         }
         return fx.db.prepare(sql);
       },
-    } as unknown as Database;
+    };
+    return db;
   }
 
   async function boot(projectId: string | null = "p1"): Promise<{
@@ -723,7 +730,7 @@ describe("the export endpoint (UI-06, D-04)", () => {
     projectId: "p1",
     table: "observations" as const,
     format: "csv" as const,
-    mode: "redacted" as const,
+    mode: "redacted" as ExportRedactionMode,
     filter: null,
     sortKey: "observed_at",
     direction: "asc" as const,
@@ -838,9 +845,10 @@ describe("the export endpoint (UI-06, D-04)", () => {
     const { rpc } = await boot();
 
     const { calls } = await drain(rpc);
-    expect(calls, "the fixture must actually chunk, or this proves nothing").toBe(
-      5,
-    );
+    expect(
+      calls,
+      "the fixture must actually chunk, or this proves nothing",
+    ).toBe(5);
 
     const rows = auditRows();
     expect(rows).toHaveLength(1);

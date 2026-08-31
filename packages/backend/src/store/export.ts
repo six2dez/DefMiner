@@ -67,7 +67,16 @@
 // nothing to say about this file. An export that built its own query would be a
 // second, ungated SQL surface over the same partition.
 
-import type { PageCursor, PageRequest } from "@defminer/engine/contract";
+import type {
+  ExportFormat,
+  ExportRedactionMode,
+  PageCursor,
+  PageRequest,
+} from "@defminer/engine/contract";
+import {
+  DEGRADED_ANALYSIS_FILTER,
+  EXPORT_FORMATS,
+} from "@defminer/engine/contract";
 import { CSV_LINE_TERMINATOR, csvHeader, csvRow } from "@defminer/engine/csv";
 import {
   BIDI_OVERRIDES_ISOLATES,
@@ -83,6 +92,7 @@ import type { Database } from "sqlite";
 // outcome and list reads do not.
 
 import {
+  countInventory,
   type InventoryTable,
   KEYSET_PAGE_ROWS,
   listArtifactsPage,
@@ -120,31 +130,17 @@ import {
 export const EXPORT_RPC_CHUNK_ROWS = 20_000;
 
 // ---------------------------------------------------------------------------
-// THE TWO CLOSED VOCABULARIES
+// THE TWO CLOSED VOCABULARIES — IMPORTED, NOT DECLARED HERE
 // ---------------------------------------------------------------------------
-
-/** The two formats, as a closed set. */
-export const EXPORT_FORMATS = ["csv", "json"] as const;
-
-/** One member of {@link EXPORT_FORMATS}. */
-export type ExportFormat = (typeof EXPORT_FORMATS)[number];
-
-/**
- * The two redaction modes, REDACTED FIRST.
- *
- * The order is a safety property and not alphabetical luck: the first member is
- * what a positional mistake — an index, a default, a `[0]` — lands on, and the
- * one it must land on is the one that withholds. `export.spec.ts` asserts the
- * order rather than leaving it to be preserved by care.
- *
- * WHAT THE RAW MODE LIFTS, precisely: the redaction this module applies at
- * EXPORT time, and nothing else. See the header — a query value replaced at
- * write time is not in the database, so no mode can recover it.
- */
-export const EXPORT_REDACTION_MODES = ["redacted", "raw"] as const;
-
-/** One member of {@link EXPORT_REDACTION_MODES}. */
-export type ExportRedactionMode = (typeof EXPORT_REDACTION_MODES)[number];
+//
+// `EXPORT_FORMATS` and `EXPORT_REDACTION_MODES` live in
+// `@defminer/engine/contract` beside every other vocabulary both packages bind
+// to. The frontend needs them as VALUES to render the two radio options in the
+// order the design contract fixes, and the two packages cannot import each
+// other — so a copy here would be a second copy of a list whose ORDER is a
+// safety property. See the contract's own note: the first member is what a
+// positional mistake lands on, and the one it must land on is the one that
+// withholds.
 
 /**
  * The content type each format is downloaded as.
@@ -271,6 +267,38 @@ export type ContributingArtifactCounts = {
   readonly total: number;
   readonly degraded: number;
 };
+
+/**
+ * Count the contributing artifacts, and how many of them stopped short.
+ *
+ * TWO COUNTS THROUGH `reads.ts`'s ALREADY-AUDITED STATEMENTS, and no statement
+ * of its own: the unfiltered artifact count, and the same count under
+ * {@link DEGRADED_ANALYSIS_FILTER} — the one filter that expresses "partial OR
+ * failed", which a single bound equality cannot.
+ *
+ * COUNTED ON THE BACKEND, NOT DERIVED IN THE FRONTEND. The dialog shows the
+ * operator the same two numbers before the confirmation, but the numbers the
+ * FILE carries are these — read at the moment the export is serialised, from the
+ * same partition it is serialised from. A file whose caveat came from a frontend
+ * snapshot taken some seconds earlier would be a caveat about a different view.
+ *
+ * The counts are over `artifacts` whichever table is being exported: an
+ * observation is a SIGHTING of an artifact and the analysis lives on the bytes,
+ * so the artifacts are what contribute to any inventory the export covers.
+ */
+export async function readContributingArtifactCounts(
+  db: Database,
+  projectId: string,
+): Promise<ContributingArtifactCounts> {
+  const total = await countInventory(db, projectId, "artifacts", null);
+  const degraded = await countInventory(
+    db,
+    projectId,
+    "artifacts",
+    DEGRADED_ANALYSIS_FILTER,
+  );
+  return { total: total.visible, degraded: degraded.visible };
+}
 
 /**
  * The sentence an incomplete export carries INSIDE the file, or `null`.

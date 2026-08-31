@@ -26,6 +26,8 @@ import { defineComponent } from "vue";
 import type {
   AnalysisKey,
   DefMinerBackendSdk,
+  ExportChunkOutcome,
+  ExportChunkRequest,
   ObservationRow,
   PanelAnalysis,
   RetryOutcome,
@@ -102,6 +104,15 @@ type StubOptions = {
   readonly captureHandler?: (
     handler: (summary: InvalidationSummary) => void,
   ) => void;
+  /** Every export request the page issued, in order. The toolbar action must
+   *  add NOTHING to this list — it opens the dialog and never exports. */
+  readonly exports?: ExportChunkRequest[];
+  /** Outcomes handed back in order, one per call. An exhausted queue answers
+   *  the empty outcome, which is the safe end of the range. */
+  readonly exportOutcomes?: ExportChunkOutcome[];
+  /** When true the export endpoint rejects, so the dialog's failure path is
+   *  exercised through the real client rather than around it. */
+  readonly exportReject?: boolean;
 };
 
 /**
@@ -144,6 +155,16 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         options.reject === true
           ? Promise.reject(new Error("backend exploded"))
           : Promise.resolve(TOTAL),
+      exportInventory: (request: ExportChunkRequest) => {
+        options.exports?.push(request);
+        if (options.exportReject === true) {
+          return Promise.reject(new Error("backend exploded"));
+        }
+        const next = options.exportOutcomes?.shift();
+        return Promise.resolve<ExportChunkOutcome>(
+          next ?? { outcome: "empty" },
+        );
+      },
       onEvent: (
         _event: "defminer:invalidated",
         callback: (summary: InvalidationSummary) => void,

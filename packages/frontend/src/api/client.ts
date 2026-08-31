@@ -50,7 +50,10 @@
 // compatibility smoke test's and are superseded on this page by the paged pair.
 
 import type {
+  ExportFormat,
+  ExportRedactionMode,
   InvalidationSummary,
+  PageCursor,
   PageRequest,
   PageResponse,
   ScanState,
@@ -81,8 +84,15 @@ import type { ArtifactRow } from "../backend";
  * The two numbers are still two independently shipped constants — that is what
  * makes the check able to fail at all — and this edit is the one place a
  * reviewer sees them move together.
+ *
+ * BUMPED TO 3 IN LOCKSTEP WITH PLAN 05-11's. The backend's own comment records
+ * that this one is a DELIBERATE OVER-BUMP — a new endpoint name obliges no bump
+ * under the shape rule — taken because the export is the first result this
+ * bundle ASSEMBLES across several calls into a FILE on the operator's disk, and
+ * a file outlives the session with nothing on its face saying which version
+ * wrote it.
  */
-export const FRONTEND_CONTRACT_VERSION = 2;
+export const FRONTEND_CONTRACT_VERSION = 3;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -210,6 +220,71 @@ export type CountRequest = {
   readonly filter: PageRequest["filter"];
 };
 
+/**
+ * What one export chunk asks for.
+ *
+ * Mirrors `ExportRequest` in packages/backend/src/api/spec.ts, for the reason
+ * this file's header gives — the two packages cannot import each other. The two
+ * VOCABULARIES it is built from are NOT mirrored: `ExportFormat` and
+ * `ExportRedactionMode` are imported from @defminer/engine/contract, because the
+ * redaction list's ORDER is a safety property and a second copy of it would be
+ * the one kind of duplication that fails silently and in the dangerous
+ * direction.
+ *
+ * `cursor` AND `chunkIndex` ARE NOT REDUNDANT: the cursor is how the rows are
+ * found (05-UI-SPEC.md bans `OFFSET`), the index is what decides whether the
+ * chunk carries the header and, with the more-chunks flag, whether the backend
+ * writes the audit row.
+ */
+export type ExportChunkRequest = {
+  readonly projectId: string;
+  readonly table: InventoryTable;
+  readonly format: ExportFormat;
+  readonly mode: ExportRedactionMode;
+  readonly filter: PageRequest["filter"];
+  readonly sortKey: string;
+  readonly direction: "asc" | "desc";
+  readonly chunkIndex: number;
+  readonly cursor: PageCursor | null;
+  /** A ceiling the backend clamps. `null` takes the measured constant. */
+  readonly chunkRows: number | null;
+};
+
+/** One chunk of an export, as it crosses the boundary.
+ *
+ *  `text` IS BYTES AND NOT A PATH, and that is the whole of decision D-04's
+ *  mechanism on this side: this component concatenates the chunks in order,
+ *  builds a Blob from `contentType` and triggers a download named `filename`
+ *  onto the operator's own machine. Nothing here names a location on a
+ *  server. */
+export type ExportChunk = {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly text: string;
+  readonly chunkIndex: number;
+  readonly rows: number;
+  readonly hasMore: boolean;
+  readonly nextCursor: PageCursor | null;
+};
+
+/** Why an export produced nothing. A closed, DefMiner-authored vocabulary the
+ *  dialog maps to its own copy — never a message. */
+export type ExportRefusal = "no-project" | "unknown-table" | "unknown-format";
+
+/**
+ * What the export endpoint answers with.
+ *
+ * THREE OUTCOMES AND NOT TWO. `empty` is not a chunk carrying zero rows: a
+ * zero-row export is DISABLED at the button with the reason stated on it
+ * (05-UI-SPEC.md Open Decision D3), and a serialiser that answered it with a
+ * header-only document would invite a caller that ignores the rule. The dialog
+ * reads `empty` as "the rule was bypassed" rather than as a file.
+ */
+export type ExportChunkOutcome =
+  | { readonly outcome: "chunk"; readonly chunk: ExportChunk }
+  | { readonly outcome: "empty" }
+  | { readonly outcome: "refused"; readonly reason: ExportRefusal };
+
 // ---------------------------------------------------------------------------
 // THE RESULT TYPE
 // ---------------------------------------------------------------------------
@@ -279,6 +354,9 @@ export type DefMinerBackendSdk = {
       request: PageRequest,
     ) => Promise<PageResponse<ObservationRow>>;
     countInventory: (request: CountRequest) => Promise<VisibleTotal>;
+    exportInventory: (
+      request: ExportChunkRequest,
+    ) => Promise<ExportChunkOutcome>;
     getArtifactAnalysis: (request: {
       readonly projectId: string;
       readonly sha256: string;
@@ -314,6 +392,10 @@ export type BackendClient = {
   }) => Promise<RpcResult<PanelAnalysis | null>>;
   /** Move ONE stopped analysis back out of its terminal state (OPS-03). */
   retryAnalysis: (request: AnalysisKey) => Promise<RpcResult<RetryOutcome>>;
+  /** One chunk of an inventory export, as bytes (UI-06, decision D-04). */
+  exportInventory: (
+    request: ExportChunkRequest,
+  ) => Promise<RpcResult<ExportChunkOutcome>>;
   /** Subscribe to the one backend event, RETURNING THE STOP HANDLE. */
   subscribeInvalidation: (
     handler: (summary: InvalidationSummary) => void,
@@ -428,6 +510,13 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     // where showing a state that was not persisted is the whole hazard.
     retryAnalysis: (request) =>
       guarded(() => sdk.backend.retryAnalysis(request)),
+
+    // GUARDED, and an export is the LAST thing a bundle known to be misreading
+    // the contract should take: it reads every row the operator can reach and
+    // lands the result on their disk, where it outlives the session and nothing
+    // on its face says which version wrote it.
+    exportInventory: (request) =>
+      guarded(() => sdk.backend.exportInventory(request)),
 
     // NOT guarded by the mismatch, and not by a timeout either. Subscribing is
     // not a read: it delivers a summary of four scalars whose shape a version
