@@ -25,6 +25,8 @@ import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  emitProjectChange,
+  makeFakeProject,
   makeFakeRequest,
   makeFakeResponse,
   makeFakeSdk,
@@ -38,6 +40,11 @@ import { CONTRACT_VERSION } from "./api/spec";
 import { resetPassiveForTest } from "./hooks/passive";
 import { drainConsumerForTest, resetConsumerForTest } from "./ingest/consumer";
 import { resetLifecycleForTest } from "./lifecycle";
+import {
+  composeScanFilter,
+  OPERATOR_CLAUSE_REJECTIONS,
+  positionClause,
+} from "./scan/filter";
 import { DETECTOR_CORPUS_VERSION } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
@@ -76,6 +83,10 @@ const CONTRACT_ENDPOINTS: readonly string[] = [
   "getHealth",
   "startScan",
   "getScanStatus",
+  "pauseScan",
+  "resumeScan",
+  "discardScan",
+  "listScans",
   "getContractVersion",
 ];
 
@@ -205,21 +216,49 @@ describe("the Phase 5 RPC surface", () => {
   });
 
   /** Run the real `init()` against the fixture database and hand back both the
-   *  RPCs it registered and the fake it registered them on. */
+   *  RPCs it registered and the fake it registered them on.
+   *
+   *  `runningAtRegistration` RECORDS THE DATABASE AT THE INSTANT EACH ENDPOINT
+   *  BECAME REACHABLE — how many `scans` rows still said `running` right then.
+   *  That is the only way to assert an ORDERING inside `init()` from outside it:
+   *  a check after `init()` returns proves the sweep ran SOMETIME, not that it
+   *  ran BEFORE the RPC surface was exposed, and "sometime" is exactly the
+   *  window in which a caller can see a scan the sweep has not yet moved. */
   async function boot(projectId: string | null = "p1"): Promise<{
     rpc: Record<string, (...a: unknown[]) => unknown>;
     sdk: ReturnType<typeof makeFakeSdk>;
+    runningAtRegistration: Record<string, number>;
   }> {
     const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const runningAtRegistration: Record<string, number> = {};
     const sdk = makeFakeSdk({
       projectId,
       db: () => Promise.resolve(fx.db),
       register: (name: string, fn: unknown) => {
         rpc[name] = fn as (...a: unknown[]) => unknown;
+        runningAtRegistration[name] = (
+          fx.raw
+            .prepare("SELECT COUNT(*) AS n FROM scans WHERE state = 'running'")
+            .get() as { n: number }
+        ).n;
       },
     });
     await init(sdk);
-    return { rpc, sdk };
+    return { rpc, sdk, runningAtRegistration };
+  }
+
+  /** Seed one `running` scan row directly, as a previous process would have left
+   *  it behind. */
+  function seedRunningScan(scanId: string, projectId = "p1"): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO scans (project_id, scan_id, state, suspend_reason, operator_filter, epoch, " +
+          "last_request_id, last_cursor, last_created_at, pages_walked, seen, admitted, " +
+          "skipped_done, rejected, queued, started_at, updated_at, finished_at) " +
+          "VALUES (?, ?, 'running', NULL, '', 0, '9001', 'cursor-9001', 1723600000000, " +
+          "1, 20, 3, 1, 16, 3, 1756000000000, 1756000000000, NULL)",
+      )
+      .run(projectId, scanId);
   }
 
   function seedArtifact(sha256: string, lastSeenAt: number): void {
@@ -307,19 +346,260 @@ describe("the Phase 5 RPC surface", () => {
     expect(second.reason).toBe("already-running");
   });
 
-  it("startScan refuses a non-empty operator clause on the tracer, without composing it", async () => {
-    // Plan 06-04 owns the operator-clause validator and the static HTTPQL gate.
-    // Until it lands, the honest answer is a refusal with a reason code — NOT
-    // silently dropping the clause, which would run a wider scan than the
-    // operator asked for while telling them it was narrowed.
+  it("startScan REJECTS a comment-bearing clause with a closed code and writes NO row", async () => {
+    // T-06-20. HTTPQL has `//` and `/* */` comments, and a comment is the one
+    // construct that can reach across a parenthesis. `validateOperatorClause`
+    // refuses it with a DefMiner-authored code — never Caido's parser text,
+    // which would carry the operator's own clause back through a sentence.
     const { rpc } = await boot();
     const outcome = (await rpc.startScan(null, {
-      operatorFilter: 'req.host.eq:"a.example"',
+      operatorFilter: 'req.host.eq:"a.example" // everything else',
     })) as { outcome: string; reason?: string };
 
-    expect(outcome.outcome).toBe("refused");
-    expect(outcome.reason).toBe("operator-clause-unsupported");
+    expect(outcome.outcome).toBe("clause-rejected");
+    // A MEMBER OF THE CLOSED SET, asserted against the array rather than against
+    // a copy of one of its strings.
+    expect(OPERATOR_CLAUSE_REJECTIONS).toContain(outcome.reason);
+    expect(outcome.reason).toBe("comment_construct");
+
+    // NOTHING WAS STARTED. Not a suspended row, not a discarded one, not a row
+    // at all — the operator's next press of Start scan is a fresh attempt.
     await expect(rpc.getScanStatus()).resolves.toBeNull();
+    expect(await rpc.listScans(null, { projectId: "p1", limit: null })).toEqual(
+      [],
+    );
+  });
+
+  it("startScan ACCEPTS a valid clause and composes it LAST, exactly as sent", async () => {
+    // The other half of the same claim: 06-04's validator is wired, so a clause
+    // that passes is stored and composed rather than refused. D-05's promise is
+    // that the operator may narrow and never widen, and `composedFilter` is what
+    // makes that checkable rather than merely stated.
+    const { rpc } = await boot();
+    const clause = 'req.host.eq:"a.example"';
+    const started = (await rpc.startScan(null, {
+      operatorFilter: clause,
+    })) as { outcome: string };
+    expect(started.outcome, JSON.stringify(started)).toBe("started");
+
+    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
+    expect(status.operatorFilter).toBe(clause);
+    expect(String(status.composedFilter).endsWith(`(${clause})`)).toBe(true);
+  });
+
+  it("getScanStatus's composedFilter is `composeScanFilter`'s output BYTE FOR BYTE", async () => {
+    // Rebuilt through the ONE producer, never stored and never concatenated at
+    // the registration site. Storing the composed string would let it drift from
+    // what the next page will actually send, and the whole value of showing it is
+    // that it IS what will be sent.
+    const { rpc } = await boot();
+    await rpc.startScan(null, { operatorFilter: 'req.host.eq:"a.example"' });
+    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
+
+    const row = fx.raw
+      .prepare("SELECT last_request_id, operator_filter FROM scans LIMIT 1")
+      .get() as { last_request_id: string; operator_filter: string };
+    expect(status.composedFilter).toBe(
+      composeScanFilter(
+        positionClause(row.last_request_id),
+        row.operator_filter,
+      ),
+    );
+    // REQUIRED, AND A BOOLEAN ON EVERY NON-NULL RETURN. 06-UI-SPEC.md § "The
+    // scan status payload — required fields" is binding: without an explicit
+    // hold signal a healthy backpressure hold is indistinguishable from a
+    // blocked QuickJS thread, and the stall marker cries wolf on the most common
+    // healthy state of a long backfill.
+    expect(typeof status.heldAtWatermark).toBe("boolean");
+  });
+
+  it("D-11's STARTUP SWEEP runs BEFORE any scan endpoint is reachable (ERR-02)", async () => {
+    // A `running` row left behind by a previous process. Nothing else in the
+    // system will ever move it: the producer refuses to advance a scan it cannot
+    // find in memory, the one-at-a-time rule refuses a new start beside it, and
+    // the operator is shown a badge saying it is scanning.
+    seedRunningScan("s-orphan");
+
+    const { rpc, runningAtRegistration } = await boot();
+
+    // THE ORDERING ASSERTION. At the instant each scan endpoint became callable,
+    // no row was still `running`. A check after init() returns would only prove
+    // the sweep ran SOMETIME — and "sometime" is exactly the window in which a
+    // caller can observe a scan the sweep has not yet moved.
+    for (const name of [
+      "startScan",
+      "getScanStatus",
+      "pauseScan",
+      "resumeScan",
+      "discardScan",
+      "listScans",
+    ]) {
+      expect(
+        runningAtRegistration[name],
+        `${name} was registered while a scan was still \`running\``,
+      ).toBe(0);
+    }
+
+    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
+    expect(status.state).toBe("suspended");
+    // A CLOSED CODE, so the surface can say who stopped it and what to do next.
+    expect(status.suspendReason).toBe("process_restarted");
+    // NOTHING AUTO-RESUMED, and the position survived: `last_cursor` is dropped
+    // because its lifetime across a restart is unmeasured (O-04), while
+    // `last_request_id` is the re-derivable boundary that does not depend on
+    // that answer.
+    const row = fx.raw
+      .prepare("SELECT last_cursor, last_request_id FROM scans LIMIT 1")
+      .get() as { last_cursor: string | null; last_request_id: string };
+    expect(row.last_cursor).toBeNull();
+    expect(row.last_request_id).toBe("9001");
+  });
+
+  it("a start beside a SUSPENDED scan is refused with its own code, not the running one", async () => {
+    // The operator's next action differs — resume or discard, not pause — and
+    // 06-UI-SPEC.md's start form has a separate sentence for each. Collapsing
+    // them tells the operator to press a control that is not on screen.
+    seedRunningScan("s-orphan");
+    const { rpc } = await boot();
+
+    const refused = (await rpc.startScan(null, { operatorFilter: "" })) as {
+      outcome: string;
+      reason?: string;
+    };
+    expect(refused.outcome).toBe("refused");
+    expect(refused.reason).toBe("already-suspended");
+  });
+
+  it("PAUSE keeps the position, RESUME returns it to running, DISCARD destroys the position only", async () => {
+    const { rpc } = await boot();
+    const started = (await rpc.startScan(null, { operatorFilter: "" })) as {
+      outcome: string;
+      scanId: string;
+    };
+    const ref = { projectId: "p1", scanId: started.scanId };
+
+    const paused = (await rpc.pauseScan(null, ref)) as Record<string, unknown>;
+    expect(paused.ok).toBe(true);
+    expect(paused.changed).toBe(true);
+    expect(paused.state).toBe("suspended");
+    expect(paused.suspendReason).toBe("operator_paused");
+    expect(paused.reason).toBeNull();
+
+    // A SECOND PAUSE IS AN OPERATOR DOUBLE-CLICK, NOT A FAILURE. The guard
+    // declining is the guard working, and `ok` and `changed` are not the same
+    // claim.
+    const again = (await rpc.pauseScan(null, ref)) as Record<string, unknown>;
+    expect(again.ok).toBe(true);
+    expect(again.changed).toBe(false);
+    expect(again.reason).toBe("guard-declined");
+
+    const resumed = (await rpc.resumeScan(null, ref)) as Record<
+      string,
+      unknown
+    >;
+    expect(resumed.changed).toBe(true);
+    expect(resumed.state).toBe("running");
+    expect(resumed.suspendReason).toBeNull();
+
+    const discarded = (await rpc.discardScan(null, ref)) as Record<
+      string,
+      unknown
+    >;
+    expect(discarded.changed).toBe(true);
+    expect(discarded.state).toBe("discarded");
+
+    // The scan is no longer active, so the surface renders the start form again
+    // — and the history still carries what it did.
+    await expect(rpc.getScanStatus()).resolves.toBeNull();
+    const history = (await rpc.listScans(null, {
+      projectId: "p1",
+      limit: null,
+    })) as { scanId: string; state: string }[];
+    expect(history).toHaveLength(1);
+    expect(history[0]?.state).toBe("discarded");
+  });
+
+  it("D-04: a project change SUSPENDS the running scan, and `getScanStatus` is where it is noticed", async () => {
+    // Nothing is written under a stale project and nothing silently restarts.
+    // The per-page re-check lives in `runScanProducer`, which has no driver in
+    // this build — so the polled read is the only call that can notice the
+    // change in time to tell the operator the truth about it. The correction is
+    // the same guarded statement either way and can only move a row DEFENSIVELY.
+    const { rpc, sdk } = await boot();
+    await rpc.startScan(null, { operatorFilter: "" });
+    expect(((await rpc.getScanStatus()) as Record<string, unknown>).state).toBe(
+      "running",
+    );
+
+    // Away and back. The epoch counter is MONOTONIC, so returning to the same
+    // project gives a higher number and never the old one — which is exactly why
+    // a resume re-bases it.
+    await emitProjectChange(sdk, makeFakeProject("p2"));
+    await emitProjectChange(sdk, makeFakeProject("p1"));
+
+    const status = (await rpc.getScanStatus()) as Record<string, unknown>;
+    expect(status.state).toBe("suspended");
+    expect(status.suspendReason).toBe("project_changed");
+    // IT KEPT ITS PLACE. D-04 suspends; it does not discard.
+    expect(status.pagesWalked).toBe(0);
+
+    // AND IT RESUMES ON EXPLICIT OPERATOR ACTION, from the project it belongs
+    // to. Without the epoch re-base this is where the one-way door would show:
+    // the resume would land and the very next status read would suspend it
+    // again, for ever.
+    const ref = { projectId: "p1", scanId: String(status.scanId) };
+    const resumed = (await rpc.resumeScan(null, ref)) as Record<
+      string,
+      unknown
+    >;
+    expect(resumed.changed).toBe(true);
+    const after = (await rpc.getScanStatus()) as Record<string, unknown>;
+    expect(
+      after.state,
+      "the resume did not stick — D-04 is a one-way door",
+    ).toBe("running");
+    expect(after.suspendReason).toBeNull();
+  });
+
+  it("a lifecycle command on an unknown scan answers `no-scan`, never a driver message", async () => {
+    const { rpc } = await boot();
+    for (const name of ["pauseScan", "resumeScan", "discardScan"]) {
+      const outcome = (await rpc[name]?.(null, {
+        projectId: "p1",
+        scanId: "nope",
+      })) as Record<string, unknown>;
+      expect(outcome.ok, name).toBe(false);
+      expect(outcome.reason, name).toBe("no-scan");
+      expect(outcome.state, name).toBeNull();
+    }
+  });
+
+  it("`listScans` carries a PROJECTION and no column this table may grow", async () => {
+    const { rpc } = await boot();
+    await rpc.startScan(null, { operatorFilter: "" });
+    const history = (await rpc.listScans(null, {
+      projectId: "p1",
+      limit: null,
+    })) as Record<string, unknown>[];
+
+    expect(history).toHaveLength(1);
+    // MAPPED FIELD BY FIELD, never spread. `epoch`, `last_cursor` and
+    // `last_request_id` are the backend's own bookkeeping and must not cross.
+    expect(Object.keys(history[0] ?? {}).sort()).toEqual([
+      "admitted",
+      "finishedAt",
+      "lastCreatedAt",
+      "operatorFilter",
+      "pagesWalked",
+      "queued",
+      "rejected",
+      "scanId",
+      "seen",
+      "skippedDone",
+      "startedAt",
+      "state",
+      "suspendReason",
+    ]);
   });
 
   it("returns a page whose rows come from the reads module", async () => {

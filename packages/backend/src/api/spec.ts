@@ -33,10 +33,12 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanLifecycleState,
   ScanState,
   ScanStatusPayload,
   SettingKey,
   SettingScope,
+  SuspendReason,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import type { APISDK } from "caido:plugin";
@@ -44,6 +46,7 @@ import type { Database } from "sqlite";
 
 import type { SurfaceOutcome } from "../compat";
 import type { LifecycleSdk } from "../lifecycle";
+import type { OperatorClauseRejection } from "../scan/filter";
 import type { ArtifactRow } from "../store/artifacts";
 import type { ExportChunkResult } from "../store/export";
 import type { ObservationRow } from "../store/observations";
@@ -115,6 +118,20 @@ import type { SlimStatus } from "../telemetry";
  * started a scan, which reads as "DefMiner scanned and found nothing". The
  * payload also carries `heldAtWatermark`, whose absence in an older reading
  * collapses a healthy backpressure hold into the stall marker.
+ *
+ * NOT BUMPED BY PLAN 06-05, AND THAT IS AN APPLICATION OF THE RULE RATHER THAN
+ * AN EXEMPTION FROM IT. 06-05 widens `startScan`'s outcome union and adds four
+ * names (`pauseScan`, `resumeScan`, `discardScan`, `listScans`). Adding a name
+ * obliges no bump; widening a UNION would, against a bundle built for the
+ * narrower one — but the version that carries the scan surface at all is 5, and
+ * 5 was bumped by plan 06-01 IN THIS SAME PHASE. There is no shipped frontend
+ * bundle anywhere that has seen version 5's narrower `startScan` and not 06-05's
+ * wider one; they are two halves of one release. Bumping again here would spend
+ * a forced reload on a mismatch that cannot exist, and would make the NEXT bump
+ * — the one that does protect somebody — one number harder to reason about.
+ *
+ * The rule the next author needs: bump when a SHIPPED reader could hold the old
+ * shape. Within one phase's own surface, it cannot.
  *
  * Monotonically increasing. Never reused, never decremented.
  */
@@ -397,8 +414,9 @@ export type HealthOutcome =
  */
 type StartScanRequest = {
   /** The operator's clause, or `""`. D-05: they may NARROW the scan and never
-   *  widen it. Plan 06-04 ships the validator; until then the only accepted
-   *  value is `""` and anything else is refused with a reason code. */
+   *  widen it. VALIDATED BEFORE ANYTHING IS WRITTEN, by `validateOperatorClause`
+   *  — a clause that does not pass is refused with one of its closed codes and
+   *  no row is created. `""` is a complete, valid input and the common one. */
   readonly operatorFilter: string;
 };
 
@@ -419,22 +437,164 @@ type StartScanRequest = {
  */
 type StartScanOutcome =
   | { readonly outcome: "started"; readonly scanId: string }
+  /** THE CLAUSE WAS TURNED AWAY AND NOTHING WAS STARTED — its own arm, not a
+   *  reason folded in beside the occupancy refusals. The two are different
+   *  events with different copy and different next actions: a rejected clause
+   *  is "That filter was not accepted: {reason}. Nothing was started." with the
+   *  clause echoed back for editing, while an occupied slot points at a scan
+   *  that already exists. `reason` is a member of `OPERATOR_CLAUSE_REJECTIONS` —
+   *  a DefMiner-authored code, never Caido's parser text (T-06-20). */
+  | {
+      readonly outcome: "clause-rejected";
+      readonly reason: OperatorClauseRejection;
+    }
   | {
       readonly outcome: "refused";
       readonly reason: /** No project is open, so there is nothing to scan. */
         | "no-project"
-        /** This project already has a running or suspended scan. DefMiner runs
-         *  one at a time, and the surface says which of the two it is. */
+        /** A scan is RUNNING on this project. DefMiner runs one at a time —
+         *  pause or discard it first. */
         | "already-running"
-        /** The operator supplied a clause and this build cannot validate one
-         *  yet (plan 06-04). REFUSED rather than silently dropped: running a
-         *  wider scan than the operator asked for while telling them it was
-         *  narrowed is the one outcome D-05 exists to prevent. */
-        | "operator-clause-unsupported"
+        /** A SUSPENDED scan is holding its place. Distinguished from the
+         *  running case because the operator's next action is different — resume
+         *  or discard, not pause — and 06-UI-SPEC.md's start form has a separate
+         *  sentence for each. Collapsing them would tell the operator to press a
+         *  control that is not on screen. */
+        | "already-suspended"
         /** The write itself failed. Logged in full on the backend; the caller
          *  gets the code. */
         | "write-failed";
     };
+
+/**
+ * One scan, named. The subject of every lifecycle command.
+ *
+ * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
+ * (P5-D43): the store layer needs one in every predicate, and the frontend is
+ * not the authority on which project is active. It matters as much here as on
+ * the settings surface — a caller that could name the project could PAUSE OR
+ * DISCARD another project's scan out of the one shared SQLite file (T-05-34,
+ * T-06-03), and one of those three commands destroys a cursor.
+ *
+ * `scanId` is NOT discarded, and the asymmetry is the point: the operator is
+ * acting on a row they are looking at, and the backend substitutes the project
+ * rather than the row.
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not: the registration site infers
+ * this shape from the API map, and knip runs with `ignoreExportsUsedInFile: false`.
+ */
+type ScanRef = {
+  readonly projectId: string;
+  readonly scanId: string;
+};
+
+/**
+ * What the scan history read asks for.
+ *
+ * `limit` IS A CEILING A CALLER MAY ONLY LOWER, the shape
+ * {@link ExportRequest}'s `chunkRows` already uses on this contract.
+ * `listScans` clamps it into `[1, SCAN_LIST_DEFAULT_LIMIT]`, so nothing crossing
+ * this boundary can raise what crosses it — the list is BOUNDED AT READ and not
+ * at render, which is what P5-D20 established for the suppressions list. `null`
+ * takes the default.
+ *
+ * NOT EXPORTED, for the reason above.
+ */
+type ScanListRequest = {
+  readonly projectId: string;
+  readonly limit: number | null;
+};
+
+/**
+ * One scan as the HISTORY LIST renders it — a projection, never the row.
+ *
+ * MAPPED FIELD BY FIELD at the registration site, the rule `PanelAnalysis`
+ * already follows: a spread would carry every column this table grows across the
+ * boundary on the day somebody adds one. `epoch`, `last_cursor` and
+ * `last_request_id` are deliberately absent — they are the backend's own
+ * bookkeeping and the surface has nothing to say about any of them.
+ *
+ * EVERY FIELD IS AN INTEGER, A CLOSED-VOCABULARY CODE, OR THE OPERATOR'S OWN
+ * CLAUSE (T-06-04). No response byte, no header, no URL and no target-authored
+ * string crosses on this shape. `operatorFilter` is the one unbounded string and
+ * it is the operator's own; 06-UI-SPEC.md's R2 routes it through `forCellText`
+ * in its own `font-mono` element and never into a sentence, a `title` or a
+ * `data-*` attribute.
+ *
+ * `lastCreatedAt` is the capture time of the oldest request walked — FROM
+ * `request.getCreatedAt()`, never from the clock — and it is what the row's
+ * "reached {date}" clause renders. `null` before the first page resolved, and on
+ * a scan that never walked one: absent, never the epoch.
+ */
+export type ScanHistoryRow = {
+  readonly scanId: string;
+  readonly state: ScanLifecycleState;
+  /** `null` while the scan is not suspended. A code, never a sentence. */
+  readonly suspendReason: SuspendReason | null;
+  /** What the operator typed, or `""`. */
+  readonly operatorFilter: string;
+  readonly pagesWalked: number;
+  readonly seen: number;
+  readonly admitted: number;
+  readonly skippedDone: number;
+  readonly rejected: number;
+  readonly queued: number;
+  readonly lastCreatedAt: number | null;
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+};
+
+/**
+ * Why a lifecycle command did nothing — a CLOSED, DefMiner-authored code set.
+ *
+ * NONE OF THESE IS AN EXCEPTION AND NONE OF THEM IS A MESSAGE. A driver
+ * rejection is logged on the backend, already redacted by `describeError`, and
+ * reported here as a code; the panel maps that to its own copy. A message
+ * crossing this boundary is a sentence somebody eventually interpolates
+ * (T-06-26).
+ */
+type ScanCommandRefusal =
+  /** No project is open, so there is no scan to command. */
+  | "no-project"
+  /** No such scan in this project — a stale id, one already swept, or a scan
+   *  belonging to a DIFFERENT project. That last case is D-04's other half and
+   *  it needs no code of its own: the backend substitutes `currentProjectId()`
+   *  on every call, so a scan the operator switched away from is simply not in
+   *  the partition the command reads, and "Resume it from that project" is
+   *  enforced by the predicate rather than by a rule somebody has to remember. */
+  | "no-scan"
+  /** The guard declined: the row is not in a state this command can move it
+   *  from. Pausing a suspended scan and completing a discarded one both land
+   *  here, and neither is an error. */
+  | "guard-declined"
+  /** The write itself failed. Logged in full on the backend; the caller gets
+   *  the code. */
+  | "write-failed";
+
+/**
+ * What a pause, a resume or a discard answers with.
+ *
+ * `state` IS READ BACK FROM THE ROW, never assumed from the request — this
+ * driver cannot report what a write did, and the Scan tab renders this value. A
+ * state the operator is shown that was not persisted is threat T-06-28, and it
+ * is the same argument {@link RetryOutcome} makes one table over.
+ *
+ * `changed` AND `ok` ARE NOT THE SAME CLAIM. A pause against an already-paused
+ * scan is `ok: true, changed: false` — the guard declining is the guard working,
+ * and it is an operator double-click rather than a failure. A write that could
+ * not be attempted at all is `ok: false`.
+ */
+export type ScanCommandOutcome = {
+  readonly ok: boolean;
+  /** True only when the guard let the row move. */
+  readonly changed: boolean;
+  /** The row's state AFTER the write, or `null` when there is no such scan. */
+  readonly state: ScanLifecycleState | null;
+  /** The row's suspension reason after the write. A code, never a sentence. */
+  readonly suspendReason: SuspendReason | null;
+  /** Why nothing happened, when nothing happened. `null` on success. */
+  readonly reason: ScanCommandRefusal | null;
+};
 
 /**
  * The plugin package specification.
@@ -530,6 +690,30 @@ type Spec = DefinePluginPackageSpec<{
      *  0 admitted` describes a scan that started and found nothing, which is
      *  the opposite of the truth for a project that has never run one. */
     getScanStatus: () => Promise<ScanStatusPayload | null>;
+    /** SUSPEND a scan and KEEP ITS PLACE (D-10). THIS IS A PAUSE. The position
+     *  is kept and {@link Spec} says so here rather than in a wiki, so a reader
+     *  of the contract learns D-10 without leaving the file: a resume continues
+     *  from exactly where this stopped, which is what makes a mis-clicked pause
+     *  on a multi-hour backfill cost nothing. Never named "cancel" anywhere on
+     *  this contract, because the word promises something else. */
+    pauseScan: (req: ScanRef) => Promise<ScanCommandOutcome>;
+    /** Return a suspended scan to running, on explicit operator command. THE
+     *  ONLY WAY BACK: DefMiner never resumes a scan on its own after a restart
+     *  (D-11), a project change (D-04) or a retention eviction (D-08). */
+    resumeScan: (req: ScanRef) => Promise<ScanCommandOutcome>;
+    /** Throw a scan away. IT DESTROYS THE WALKED POSITION AND NOTHING ELSE —
+     *  the artifacts and observations the scan produced went through the same
+     *  admission gate, digest and store path the live hook uses (D-01) and are
+     *  NOT touched. A separate endpoint from {@link Spec}'s `pauseScan` with its
+     *  own name, so the destructive control can never be reached by mis-clicking
+     *  the pause one (D-10, T-06-28). */
+    discardScan: (req: ScanRef) => Promise<ScanCommandOutcome>;
+    /** This project's scan history — BOUNDED AT READ, newest first, with every
+     *  `suspended` scan included regardless of age. The bound is the backend's
+     *  and a caller may only lower it: a suspended scan's row IS its cursor, and
+     *  one hidden below a display cap is unfinished work the operator has no way
+     *  to learn about (U6-1, D-26). */
+    listScans: (req: ScanListRequest) => Promise<readonly ScanHistoryRow[]>;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

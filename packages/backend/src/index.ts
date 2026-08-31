@@ -67,6 +67,8 @@ import {
   type HealthOutcome,
   type PluginSdk,
   type RetryOutcome,
+  type ScanCommandOutcome,
+  type ScanHistoryRow,
   type StatusPayload,
 } from "./api/spec";
 import {
@@ -91,8 +93,24 @@ import {
   installLifecycle,
   projectEpoch,
 } from "./lifecycle";
-import { composeScanFilter, positionClause } from "./scan/filter";
-import { getActiveScan, startScan } from "./scan/scans";
+import {
+  composeScanFilter,
+  positionClause,
+  validateOperatorClause,
+} from "./scan/filter";
+import { isHeldAtWatermark } from "./scan/producer";
+import type { ScanRow, ScanTransition } from "./scan/scans";
+import {
+  discardScan,
+  getActiveScan,
+  getScan,
+  listScans,
+  pauseScan,
+  resumeScan,
+  startScan,
+  suspendOnEpochChange,
+  suspendRunningOnInit,
+} from "./scan/scans";
 import {
   DETECTOR_CORPUS_VERSION,
   getLatestAnalysisForArtifact,
@@ -209,6 +227,94 @@ const HEALTH_UNAVAILABLE: HealthOutcome = {
   outcome: "unavailable",
   reason: "no-project",
 };
+
+/**
+ * What a lifecycle command answers with when it could not be attempted at all.
+ *
+ * `ok: false` AND `changed: false` TOGETHER, with a closed reason — never
+ * `ok: true` with no change. The Scan tab distinguishes "the guard declined to
+ * move this row" from "the command did not run", exactly as the evidence panel
+ * does for a retry (T-05-55), and collapsing the two would show the operator a
+ * decline that never happened. `reason` is a DefMiner-authored code the surface
+ * maps to its own sentence; nothing caught ever reaches it (T-06-26).
+ */
+function scanCommandRefused(
+  reason: NonNullable<ScanCommandOutcome["reason"]>,
+): ScanCommandOutcome {
+  return {
+    ok: false,
+    changed: false,
+    state: null,
+    suspendReason: null,
+    reason,
+  };
+}
+
+/**
+ * D-04's EPOCH SUSPENSION, applied to whatever scan this project currently has.
+ *
+ * A running scan started under a different project epoch must not keep walking:
+ * its rows would land in the current project's partition under the old
+ * project's filter (T-06-24, the shape T-05-34 names). The guard is a PREDICATE
+ * inside `SUSPEND_ON_EPOCH_SQL` — `AND epoch <> ?` — so a matching epoch is a
+ * no-op and the common case costs one statement that changes nothing.
+ *
+ * WHY THIS IS CALLED FROM A READ AS WELL AS FROM A COMMAND, which is the one
+ * surprising thing here and is a deliberate trade rather than an oversight. The
+ * per-page epoch re-check lives in `runScanProducer`, and in this build the
+ * producer has no driver (see the note at the scan endpoints). That leaves
+ * `getScanStatus` — the call the Scan tab polls — as the only place in the
+ * shipped build that can notice a project change in time for the operator to be
+ * told the truth about it. A read that CORRECTS a state which is already wrong
+ * is better than a read that faithfully reports the lie, and the correction is
+ * the same single guarded statement whichever call triggers it: idempotent, and
+ * it can only ever move a row DEFENSIVELY, from running to suspended.
+ *
+ * It reads the row only to learn its `scan_id`. The STATE and EPOCH guards are
+ * both inside the statement, where `store/retry.ts` puts them.
+ */
+async function reconcileScanEpoch(
+  database: Database,
+  projectId: string,
+): Promise<void> {
+  const active = await getActiveScan(database, projectId);
+  if (active === undefined || active.state !== "running") return;
+  if (active.epoch === projectEpoch()) return;
+  await suspendOnEpochChange(
+    database,
+    projectId,
+    active.scan_id,
+    projectEpoch(),
+    Date.now(),
+  );
+}
+
+/**
+ * One `scans` row, projected onto the history list's shape.
+ *
+ * MAPPED FIELD BY FIELD, NEVER SPREAD — the rule `getArtifactAnalysis` already
+ * follows. `epoch`, `last_cursor` and `last_request_id` are deliberately left
+ * behind: they are the backend's own bookkeeping, the surface has nothing to say
+ * about any of them, and a spread would carry every column this table grows
+ * across the RPC on the day somebody adds one.
+ */
+function toHistoryRow(row: ScanRow): ScanHistoryRow {
+  return {
+    scanId: row.scan_id,
+    state: row.state,
+    suspendReason: row.suspend_reason,
+    operatorFilter: row.operator_filter,
+    pagesWalked: row.pages_walked,
+    seen: row.seen,
+    admitted: row.admitted,
+    skippedDone: row.skipped_done,
+    rejected: row.rejected,
+    queued: row.queued,
+    lastCreatedAt: row.last_created_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+  };
+}
 
 /**
  * Replace the caller's `projectId` with the one the plugin resolved.
@@ -412,6 +518,51 @@ export async function init(sdk: PluginSdk): Promise<void> {
       sdk.api.register("getStatus", () => ({ ...status(), caidoVersion }));
       sdk.api.register("getCompat", () => compatReport(caidoVersion));
       return;
+    }
+
+    // 5c — D-11's STARTUP SWEEP, AND IT IS A SLICE OF **ERR-02**.
+    //
+    // ERR-02 is a Phase 2 requirement — "jobs in flight when the process died
+    // are detected on startup and either resumed or explicitly abandoned, never
+    // left permanently `running`" — and `ROADMAP.md` assigns it there. It is
+    // discharged HERE, on the one table that needs it now, and declared rather
+    // than discovered: a `scans` row still saying `running` is a lie the moment
+    // the process holding the walk is gone, and nothing else in the system will
+    // ever move it. The producer refuses to advance a scan it cannot find in
+    // memory, the one-at-a-time rule refuses a new start beside it, and the
+    // operator is shown a badge saying it is scanning. PHASE 2 INHERITS THIS
+    // PATTERN — one statement, a reason, and never an auto-resume — rather than
+    // inventing a second one.
+    //
+    // NOTHING IS RESUMED. DefMiner does not decide on the operator's behalf that
+    // a multi-hour backfill should start pulling full response bodies again the
+    // moment Caido comes back up.
+    //
+    // PLACEMENT IS THE OTHER HALF OF THE CONTRACT and it obeys this file's
+    // ordering rules: AFTER the migrations (step 3, so the table exists) and
+    // AFTER the project is resolved (step 5, so the sweep has a project to scope
+    // to), and BEFORE the RPC surface at 6b — so no scan endpoint can be reached
+    // while a `running` row the sweep has not yet moved is still visible. The
+    // sweep is project-scoped because every multi-row statement in this package
+    // is (T-01-20); a project the operator has not opened keeps its row until
+    // they do, and the sweep runs again for it then.
+    const sweptProjectId = currentProjectId();
+    if (sweptProjectId !== null) {
+      const swept = await suspendRunningOnInit(db, sweptProjectId, Date.now());
+      if (!swept.ok) {
+        // LOGGED, NOT THROWN. A failed sweep must not abort init() — the plugin
+        // is still useful — but it must not be silent either, because the state
+        // it leaves behind is the one ERR-02 forbids.
+        log(sdk, "startup scan sweep failed: " + swept.error);
+      } else if (swept.changes > 0) {
+        log(
+          sdk,
+          "suspended " +
+            String(swept.changes) +
+            " scan(s) left running by a previous process (ERR-02, D-11) — " +
+            "nothing was resumed",
+        );
+      }
     }
 
     // 6 — exactly one consumer.
@@ -681,26 +832,51 @@ export async function init(sdk: PluginSdk): Promise<void> {
         return { outcome: "refused", reason: "no-project" } as const;
       }
 
-      // THE OPERATOR CLAUSE IS REFUSED, NOT DROPPED. Plan 06-04 ships the
-      // validator and the static HTTPQL gate. Until it does, accepting a clause
-      // and ignoring it would run a WIDER scan than the operator asked for while
-      // the surface told them it was narrowed — which is exactly the outcome
-      // D-05 exists to prevent, arrived at from the opposite direction.
-      if (req.operatorFilter !== "") {
-        return {
-          outcome: "refused",
-          reason: "operator-clause-unsupported",
-        } as const;
+      // THE CLAUSE IS VALIDATED BEFORE ANYTHING IS WRITTEN, and a rejection is
+      // its OWN outcome rather than a reason folded in beside the occupancy
+      // refusals. Two reasons for that. NOTHING IS STARTED — the row is not
+      // created, so `listScans` afterwards is unchanged and the operator's next
+      // press of Start scan is a fresh attempt rather than a second scan. And
+      // the copy differs: a rejected clause is echoed back for editing, while an
+      // occupied slot points at a scan that already exists.
+      //
+      // `reason` is a member of `OPERATOR_CLAUSE_REJECTIONS` — a
+      // DefMiner-authored code and never Caido's parser text (T-06-20). The
+      // ORDER of the composition is what actually makes a hostile clause fail
+      // closed (`scan/filter.ts`'s header); this validator is a better error
+      // message and a cost bound, and it is worth having for both.
+      const verdict = validateOperatorClause(req.operatorFilter);
+      if (!verdict.ok) {
+        return { outcome: "clause-rejected", reason: verdict.reason } as const;
       }
 
-      // ONE AT A TIME. The partial unique index refuses a second RUNNING scan
+      // D-04 FIRST, so the refusal below names the state the scan is ACTUALLY
+      // in. A scan left `running` under a stale epoch would otherwise be
+      // reported as "already running" and the operator would be told to pause
+      // something that has not advanced since the project changed.
+      await reconcileScanEpoch(db, pid);
+
+      // ONE AT A TIME, AND THE SURFACE SAYS WHICH OF THE TWO OCCUPIED STATES IS
+      // HOLDING THE SLOT. The partial unique index refuses a second RUNNING scan
       // inside the insert; this read refuses a second start while a SUSPENDED
       // one is still holding its place, which the index deliberately permits so
       // that resuming is possible at all. The two together are the invariant,
       // and neither is a substitute for the other.
+      //
+      // The two reasons are distinguished because the operator's NEXT ACTION
+      // differs — pause or discard for one, resume or discard for the other —
+      // and 06-UI-SPEC.md's start form has a separate sentence for each.
+      // Collapsing them would tell the operator to press a control that is not
+      // on screen.
       const active = await getActiveScan(db, pid);
       if (active !== undefined) {
-        return { outcome: "refused", reason: "already-running" } as const;
+        return {
+          outcome: "refused",
+          reason:
+            active.state === "running"
+              ? "already-running"
+              : "already-suspended",
+        } as const;
       }
 
       // MINTED HERE, BY THE CALLER OF THE WRITE. That is what makes a retry
@@ -731,6 +907,9 @@ export async function init(sdk: PluginSdk): Promise<void> {
       // surface: there is no scan, so render the start form. A zero-filled
       // payload would instead describe a scan that ran and found nothing.
       if (!db || pid === null) return null;
+      // D-04, BEFORE THE READ. See `reconcileScanEpoch` for why a read is where
+      // this lands in a build whose producer has no driver yet.
+      await reconcileScanEpoch(db, pid);
       const row = await getActiveScan(db, pid);
       if (row === undefined) return null;
 
@@ -764,13 +943,104 @@ export async function init(sdk: PluginSdk): Promise<void> {
         startedAt: row.started_at,
         updatedAt: row.updated_at,
         finishedAt: row.finished_at,
-        // FALSE UNTIL PLAN 06-03 SHIPS THE WATERMARK. It is reported rather
-        // than omitted because the field is required by the UI contract: an
-        // absent signal collapses a healthy backpressure hold into the stall
-        // marker, and this build genuinely never holds — it walks one page per
-        // call — so `false` is the true answer and not a placeholder.
-        heldAtWatermark: false,
+        // THE REAL SIGNAL, read out of band from the producer's module state.
+        //
+        // It cannot be derived here and it cannot be carried on the walk's
+        // return value: `getScanStatus` is a DIFFERENT CALL and does not have
+        // the walk's outcome in hand, which is exactly why `scan/producer.ts`
+        // keeps the hold as module state with a reader. And from outside the
+        // backend a scan holding at the watermark and a scan whose QuickJS
+        // thread is blocked are indistinguishable — both show counters that stop
+        // advancing. Without this, `Waiting for the analysis queue` can never
+        // render, every legitimate hold falls through to `Not advancing`, and
+        // the stall marker cries wolf on the single most common healthy state of
+        // a long backfill. An operator who learns to ignore a stall marker is
+        // worse off than one who never had it (06-UI-SPEC.md § "The scan status
+        // payload — required fields", which is BINDING rather than a default).
+        heldAtWatermark: isHeldAtWatermark(),
       };
+    });
+    // --- D-10's LIFECYCLE COMMANDS ----------------------------------------
+    //
+    // THREE ENDPOINTS AND NOT ONE WITH A MODE FLAG. Pause and discard are
+    // different acts with different consequences — one keeps the walked
+    // position, the other destroys it — and a mode flag is precisely how a
+    // mis-click becomes a data loss (T-06-28). The NAMES are the mitigation, and
+    // they are why `pauseScan` is safe to put one click from the operator while
+    // `discardScan` gets its own confirmation.
+    //
+    // NONE OF THEM READS THE STATE BEFORE ITS UPDATE. The pre-read below is an
+    // EXISTENCE check and nothing else: it exists only to tell "there is no such
+    // scan" from "the guard declined to move this one", which are different
+    // sentences on the surface. The STATE guard lives inside each statement's
+    // predicate, where `store/retry.ts` puts it, because a caller-side state
+    // check is two operations this pooled driver cannot make atomic.
+    const runScanCommand = async (
+      label: string,
+      scanId: string,
+      run: (database: Database, pid: string) => Promise<ScanTransition>,
+    ): Promise<ScanCommandOutcome> => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return scanCommandRefused("no-project");
+      if ((await getScan(db, pid, scanId)) === undefined) {
+        return scanCommandRefused("no-scan");
+      }
+      const outcome = await run(db, pid);
+      if (!outcome.ok) {
+        // LOGGED HERE, NOT RETURNED. The description is already redacted and it
+        // still does not cross the boundary: the panel's copy is
+        // DefMiner-authored and a message that reached it is a message somebody
+        // eventually interpolates.
+        log(sdk, label + " failed: " + outcome.error);
+        return scanCommandRefused("write-failed");
+      }
+      return {
+        ok: true,
+        changed: outcome.changes > 0,
+        // READ BACK, never assumed from the request — this driver cannot report
+        // what a write did and the operator is about to be shown this value.
+        state: outcome.row?.state ?? null,
+        suspendReason: outcome.row?.suspend_reason ?? null,
+        reason: outcome.changes > 0 ? null : "guard-declined",
+      };
+    };
+    sdk.api.register("pauseScan", async (_s, req) =>
+      runScanCommand("pauseScan", req.scanId, (database, pid) =>
+        pauseScan(database, pid, req.scanId, Date.now()),
+      ),
+    );
+    sdk.api.register("resumeScan", async (_s, req) =>
+      runScanCommand("resumeScan", req.scanId, (database, pid) =>
+        // THE EPOCH IN FORCE NOW is written onto the row. `scan/scans.ts`'s
+        // `RESUME_SQL` carries the argument: the counter is monotonic and never
+        // returns to a previous value, so a resume that preserved a stale epoch
+        // would produce a scan that suspends itself again on its first page, for
+        // ever. A resume from the WRONG project never reaches here — the row is
+        // not in that project's partition and the pre-read answers `no-scan`.
+        resumeScan(database, pid, req.scanId, projectEpoch(), Date.now()),
+      ),
+    );
+    sdk.api.register("discardScan", async (_s, req) =>
+      runScanCommand("discardScan", req.scanId, (database, pid) =>
+        discardScan(database, pid, req.scanId, Date.now()),
+      ),
+    );
+    sdk.api.register("listScans", async (_s, req) => {
+      const pid = currentProjectId();
+      // AN EMPTY LIST AND NOT A REFUSAL. With no project there genuinely are no
+      // scans to list, which is the same claim `listSettings` makes one surface
+      // over. A LOAD FAILURE is a different thing entirely and does not arrive
+      // here: `listScans` throwing would reject this promise, and 06-UI-SPEC.md
+      // requires the history to render an explicit error rather than an empty
+      // list, because an empty scan history means "you have never run a scan"
+      // and a suspended scan the operator cannot see is a cursor they will never
+      // resume.
+      if (!db || pid === null) return [];
+      // `undefined` TAKES THE BACKEND'S DEFAULT. The limit is a ceiling a caller
+      // may only LOWER — `listScans` clamps into `[1, SCAN_LIST_DEFAULT_LIMIT]` —
+      // so nothing crossing this boundary can widen the read (U6-1).
+      const rows = await listScans(db, pid, req.limit ?? undefined);
+      return rows.map(toHistoryRow);
     });
     // Not `async`, and it touches nothing: a version check that could fail for
     // any reason other than the plugin being absent would be a check the
