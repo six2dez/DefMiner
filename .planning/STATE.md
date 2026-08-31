@@ -4,11 +4,11 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Phase 6 UI-SPEC approved
-last_updated: "2026-08-31T13:13:01.966Z"
-last_activity: 2026-08-28
-last_activity_desc: Phase 05 execution started
-state_head: 6dc51924a0a0d77b733bf379d5f59a500c67756c
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-08-31T16:12:12.206Z"
+last_activity: 2026-08-31
+last_activity_desc: Phase 06 execution started
+state_head: f2f0fe22080072bbc40da4306128cc22fa5c67cb
 progress:
   total_phases: 11
   completed_phases: 0
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-20)
 
 **Core value:** When a target's JavaScript contains something that expands the attack surface, DefMiner surfaces it — with a low enough false-positive rate that the operator actually reads every finding.
-**Current focus:** Phase 05 — Workspace & Operator Workflow
+**Current focus:** Phase 06 — Retroactive Scan & Deployment Reality
 
 ## Current Position
 
-Phase: 06 (Retroactive Scan & Deployment Reality) — READY TO EXECUTE
-Plan: 12 of 12
+Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
+Plan: 2 of 13
 Status: Ready to execute
-Last activity: 2026-08-28 — Phase 05 execution started
+Last activity: 2026-08-31 — Phase 06 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -295,6 +295,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P10 | 35 min | 4 tasks | 24 files |
 | Phase 05 P11 | 40 min | 3 tasks | 16 files |
 | Phase 05 P12 | 45 min | 3 tasks | 23 files |
+| Phase 06 P01 | 25 min | 2 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -561,6 +562,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D100 (plan 05-12): the health strip's fixed height is asserted as an identical CLASS ATTRIBUTE across magnitudes, not as an offsetHeight comparison — jsdom performs no layout: offsetHeight is 0 for every element, for a strip that wraps and for one that does not. An assertion over it would pass unconditionally while looking like the strongest test in the file. The height is decided by three classes, none conditional on any value, so that is where it is checked.
 - [Phase 05]: P5-D101 (plan 05-12): UI-08 is marked complete for the settings this build HAS, and the residual is stated rather than left to the checkbox — UI-08's text says 'every toggle, threshold, and budget'. This build has three settings and all three are editable at both scopes with their provenance shown; the thresholds and budgets belong to Phases 2-4, which have not shipped controls to expose. Marking it records that the SURFACE and its growth mechanism exist, and the SUMMARY names what is not yet on it — the same discipline P5-D69 and P5-D81 applied in the other direction, applied here to a requirement whose remaining scope is owned by phases that have not run.
 - [Phase 05]: P5-D102 (plan 05-12): the health surface carries a Refresh action beyond the plan's four behaviours — The diagnosis this surface exists for is 'does the number move' — a climbing queue depth beside a jobs-in-flight of 1 is a blocked thread, and the same two numbers held still are an idle backend. A surface that read once on mount could not answer the question it was built to answer.
+- [Phase 06]: Migration step v5 creates `scans` with the eighteen-column list approved at plan 06-01 blocking-human checkpoint (approve-as-specified, 2026-08-31): scan_id caller-minted, state never scan_state, last_request_id authoritative and last_cursor opportunistic, only the aggregate rejected durable, and one-scan-per-project enforced by a PARTIAL UNIQUE index rather than a read-then-write the pool cannot make atomic. — Shipped steps are immutable and EXPECTED_TABLES is asserted exactly, so the column list can only change by another forward step. O-04 (cursor stability across restart) is unmeasured and is designed around rather than bet on: the position is a plain integer boundary that survives anything.
+- [Phase 06]: SCAN_KIND_CLAUSE lives in @defminer/engine/contract, not in packages/backend/src/scan/filter.ts. — The start form renders DefMiner own clause read-only BEFORE any scan exists, which is what makes D-05 "you can narrow, you cannot widen" checkable rather than promised. There is no scan row to carry it across the RPC at that moment and the frontend cannot import the backend, so the engine contract — the one module both packages already import — is the only place it can live. filter.ts remains the ONLY producer of a composed filter string.
+- [Phase 06]: ScanStatusPayload.analysed is number | null — absent rather than zero — until plan 06-06 wires it. — There is no analysed column on scans: the number belongs to the consumer at the far end of the queue, not to the producer. 06-UI-SPEC.md rule is that a number DefMiner does not have is absent, never zero; a 0 would read as "nothing has been analysed" on a scan that is analysing.
 
 ### Known Risks Carried Forward
 
@@ -603,9 +607,9 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T11:51:36.754Z
-**Stopped at:** Phase 6 UI-SPEC approved
-**Resume file:** .planning/phases/06-retroactive-scan-deployment-reality/06-UI-SPEC.md
+**Last session:** 2026-08-31T16:11:36.936Z
+**Stopped at:** Completed 06-01-PLAN.md
+**Resume file:** None
 
 ### Blockers
 

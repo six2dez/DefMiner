@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 40
+open_count: 43
 waived_count: 0
 fixed_count: 24
-total_count: 64
-last_updated: 2026-08-31T09:17:48.121Z
+total_count: 67
+last_updated: 2026-08-31T16:12:21.682Z
 ---
 
 # Broken Windows Ledger
@@ -100,6 +100,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 62 | 05 | deviation | packages/backend/src/store/retry.ts |  | A retry returns the analysis to the queued state but does NOT re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The panel states this in words. Phase 2's ERR-02 recovery is what drains a pending row without a fresh sighting. | open |  | 2026-08-29T01:31:48.065Z |  |
 | 63 | 05 | unrun-verify | packages/backend/src/store/export.ts |  | The 8 MiB per-RPC-call figure is a BUDGET this project sets, not a ceiling measured from Caido; 05-02 asked 05-11 to confirm a large export against a real Caido and it could not. Coverage D13. | open |  | 2026-08-31T08:20:05.758Z |  |
 | 64 | 05 | stub | packages/frontend/src/App.vue |  | SERVER_STORAGE_PATH is null — the R5 server-path renderer in SettingsPanel.vue ships with no production data source; telemetry.ts strips sdk.meta.path() out of everything crossing the RPC, so DEPLOY-02 (Phase 6) owns the surface that supplies one | open |  | 2026-08-31T09:17:48.121Z |  |
+| 65 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports analysed: null — the scans table has no analysed column and plan 06-06 owns wiring the consumer-side number | open |  | 2026-08-31T16:12:21.498Z |  |
+| 66 | 06 | stub | packages/backend/src/index.ts |  | getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true | open |  | 2026-08-31T16:12:21.588Z |  |
+| 67 | 06 | stub | packages/backend/src/scan/producer.ts |  | runScanProducer has no caller in the shipped build — Start scan inserts the row, and plan 06-03 adds the watermark-gated loop that drives the walk | open |  | 2026-08-31T16:12:21.682Z |  |
 
 ````json
 [
@@ -869,6 +872,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T09:17:48.121Z",
+    "resolved_at": null
+  },
+  {
+    "id": 65,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "getScanStatus reports analysed: null — the scans table has no analysed column and plan 06-06 owns wiring the consumer-side number",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:12:21.498Z",
+    "resolved_at": null
+  },
+  {
+    "id": 66,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/index.ts",
+    "line": null,
+    "description": "getScanStatus reports heldAtWatermark: false unconditionally — true is the honest answer for a build that walks one page per call, and plan 06-03 ships the watermark that can make it true",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:12:21.588Z",
+    "resolved_at": null
+  },
+  {
+    "id": 67,
+    "kind": "stub",
+    "phase": "06",
+    "file": "packages/backend/src/scan/producer.ts",
+    "line": null,
+    "description": "runScanProducer has no caller in the shipped build — Start scan inserts the row, and plan 06-03 adds the watermark-gated loop that drives the walk",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:12:21.682Z",
     "resolved_at": null
   }
 ]
