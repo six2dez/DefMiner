@@ -1022,7 +1022,16 @@ export async function init(sdk: PluginSdk): Promise<void> {
     );
     sdk.api.register("discardScan", async (_s, req) =>
       runScanCommand("discardScan", req.scanId, (database, pid) =>
-        discardScan(database, pid, req.scanId, Date.now()),
+        // THE AUDIT EVENT ID IS MINTED HERE, at the call site, exactly as the
+        // export id and the scan id are. That is what makes the CALLER the owner
+        // of idempotency: a retry after an ambiguous failure re-presents the same
+        // id and lands as a no-op on the do-nothing conflict clause. Minting it
+        // inside `discardScan` would put the id somewhere no retry can reach.
+        //
+        // A second, DELIBERATE discard mints a fresh id and is stopped by the
+        // state guard instead — the row is already `discarded`, nothing moves,
+        // and nothing is recorded (D-16).
+        discardScan(database, pid, req.scanId, Date.now(), randomUUID()),
       ),
     );
     sdk.api.register("listScans", async (_s, req) => {

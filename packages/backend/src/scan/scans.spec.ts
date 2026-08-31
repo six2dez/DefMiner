@@ -591,7 +591,11 @@ describe("the two DESTRUCTIVE writes, and the audit rows that record them (D-16)
   /** Every audit row in this project, oldest first. Read raw rather than through
    *  `listAudit`, because what is under test is what LANDED and not how it
    *  renders. */
-  function auditRows(): { kind: string; subject: string; detail: string | null }[] {
+  function auditRows(): {
+    kind: string;
+    subject: string;
+    detail: string | null;
+  }[] {
     return fx.raw
       .prepare(
         "SELECT kind, subject, detail FROM audit WHERE project_id = ? ORDER BY at ASC, event_id ASC",
@@ -618,13 +622,7 @@ describe("the two DESTRUCTIVE writes, and the audit rows that record them (D-16)
       nowMs: NOW + 1,
     });
 
-    const discarded = await discardScan(
-      fx.db,
-      PROJECT,
-      "s1",
-      NOW + 2,
-      "evt-a",
-    );
+    const discarded = await discardScan(fx.db, PROJECT, "s1", NOW + 2, "evt-a");
     expect(discarded.ok, discarded.ok ? "" : discarded.error).toBe(true);
     expect(discarded.ok && discarded.changes).toBe(1);
 
@@ -664,7 +662,13 @@ describe("the two DESTRUCTIVE writes, and the audit rows that record them (D-16)
 
     // Retry after an AMBIGUOUS failure: the caller re-presents the SAME event
     // id, and the conflict clause makes it a no-op rather than a duplicate.
-    const retried = await discardScan(fx.db, PROJECT, "s1", NOW + 2, "evt-same");
+    const retried = await discardScan(
+      fx.db,
+      PROJECT,
+      "s1",
+      NOW + 2,
+      "evt-same",
+    );
     expect(retried.ok).toBe(true);
     expect(auditRows()).toHaveLength(1);
 
@@ -735,13 +739,7 @@ describe("the two DESTRUCTIVE writes, and the audit rows that record them (D-16)
   it("neither write touches ANOTHER project's scan", async () => {
     await startScan(fx.db, PROJECT, "s1", "", 0, NOW);
 
-    const wrongProject = await discardScan(
-      fx.db,
-      "p2",
-      "s1",
-      NOW + 1,
-      "evt-x",
-    );
+    const wrongProject = await discardScan(fx.db, "p2", "s1", NOW + 1, "evt-x");
     expect(wrongProject.ok && wrongProject.changes).toBe(0);
     expect((await getScan(fx.db, PROJECT, "s1"))?.state).toBe("running");
 

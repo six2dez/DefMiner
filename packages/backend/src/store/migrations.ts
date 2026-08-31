@@ -18,6 +18,12 @@
 // ordinary index and one PARTIAL UNIQUE index that makes the one-scan-per-project
 // invariant a driver-level failure rather than a read-then-write this pool cannot
 // make atomic.
+// Step v6 (plan 06-06) REBUILDS `audit` to widen its closed `kind` CHECK by two
+// members, approved at that plan's blocking-human checkpoint (2026-08-31).
+// SQLite has no `ALTER TABLE ... DROP CONSTRAINT`, so a closed CHECK can only be
+// changed by replacing the table that carries it — step v3 is NOT edited, and the
+// approved table set does not grow: the replacement is renamed onto `audit`
+// inside the step.
 
 import type { Database } from "sqlite";
 
@@ -29,17 +35,31 @@ import { describeError } from "../telemetry";
 // `artifacts.ts`. Enforced by `error-redaction.spec.ts`.
 
 /**
- * All DDL is `IF NOT EXISTS` and therefore cannot fail on a re-run, which is the
- * ONLY reason it is legal to batch it into a single multi-statement `exec`.
+ * EVERY STATEMENT IN A STEP MUST BE ONE THAT CANNOT FAIL ON A RE-RUN. That is the
+ * property, and it is the ONLY reason it is legal to batch a step into a single
+ * multi-statement `exec`.
  *
  * The rule it depends on: a single `exec` string IS an atomic unit
  * (MULTISTATEMENT_EXEC_ATOMIC), but an `exec` that FAILS leaves an open write
  * transaction on a pooled connection that nothing in the plugin API can reach —
  * every subsequent write then fails with "database is locked" until the plugin
- * restarts (Pitfall 1). So DDL that cannot fail may be batched; a data write never
- * may. This is also why `probe/tier0-budgets/backend/script.js:219-222` records a
- * CREATE that landed inside a dangling transaction and read back as "no such
- * table": every table is created UP FRONT, in `init()`, before any data write.
+ * restarts (Pitfall 1). This is also why
+ * `probe/tier0-budgets/backend/script.js:219-222` records a CREATE that landed
+ * inside a dangling transaction and read back as "no such table": every table is
+ * created UP FRONT, in `init()`, before any data write.
+ *
+ * THIS PARAGRAPH USED TO READ "DDL that cannot fail may be batched; a data write
+ * never may", AND IT IS AMENDED RATHER THAN LEFT STANDING. `IF NOT EXISTS` is the
+ * usual WAY of being unable to fail, not the property itself, and "a data write
+ * never may" was a categorical restatement of a reason that is not categorical.
+ * Step v6 batches a data write — the row copy inside a table rebuild — and a
+ * sentence above the ladder may not go on forbidding what the ladder below it
+ * does; a comment claiming a rule the code no longer follows is worse than no
+ * comment. What is BINDING is unchanged and is now stated as the thing it always
+ * was: a statement whose failure is possible does not belong in a batched `exec`,
+ * whatever its keyword. Step v6's JSDoc makes that argument statement by
+ * statement, and `migrations.spec.ts` gates every step in the ladder against the
+ * list of forms somebody has actually made the argument for.
  *
  * NOTE ON `settings` AND THE EMPTY PROJECT ID: `project_id = ''` is RESERVED and
  * means "global — applies to every project". It is legal on `settings` ONLY. On
@@ -396,6 +416,172 @@ CREATE INDEX IF NOT EXISTS idx_scans_state
   ON scans (project_id, state, started_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
   ON scans (project_id) WHERE state = 'running';
+`,
+  },
+  /**
+   * Step v6 — plan 06-06. `audit`'s closed `kind` CHECK, widened by REBUILDING
+   * the table, so a scan can record the two things it does that cannot be undone.
+   *
+   * APPROVED AT A BLOCKING-HUMAN CHECKPOINT (approve-as-specified with the gate
+   * blind spot recorded, 2026-08-31). One-way, and accepted as one-way: rows
+   * already written cannot be re-kinded, and a member added to the vocabulary
+   * after this costs a further permanent step.
+   *
+   * -------------------------------------------------------------------------
+   * WHY A REBUILD AND NOT AN EDIT
+   * -------------------------------------------------------------------------
+   * `audit.kind` is a CLOSED `CHECK (kind IN (...))` constraint created by step
+   * v3. SQLite has no `ALTER TABLE ... DROP CONSTRAINT`, so a closed CHECK can
+   * only be changed by replacing the table that carries it. STEP v3 IS NOT EDITED
+   * AND IS BYTE-IDENTICAL TO ITS SHIPPED FORM — every database already at v3 has
+   * run it, and an edit would change the schema of new installs only and silently
+   * fork the two. This is a FORWARD step, which is the only kind this ladder has.
+   *
+   * -------------------------------------------------------------------------
+   * THE TWO NEW MEMBERS, AND WHY ONLY TWO
+   * -------------------------------------------------------------------------
+   * `scan_discarded` and `scan_suspended_by_retention`. D-16 gives a retroactive
+   * scan exactly two events worth a permanent record — a discard, which destroys
+   * the walked position (D-10), and a suspension caused by retention evicting the
+   * scan's own results (D-08) — and leaves routine lifecycle in `scans` under
+   * ordinary retention. That restraint is the point rather than an omission:
+   * `audit` is the AGE-EXEMPT ledger whose row bound Phase 5's D-06 raised
+   * specifically to preserve permanent-consequence records, so filling it with
+   * background-job chatter would evict the projection records it exists for.
+   *
+   * BOTH MEMBERS HAVE A WRITER IN THIS PLAN, which is the difference from step
+   * v3's and step v5's vocabularies. Those two argued that an unused member costs
+   * nothing at run time while a missing one costs a permanent step; that argument
+   * is still true and is simply not needed here. `scan/scans.ts`'s `discardScan`
+   * writes the first and `suspendForRetentionEviction` writes the second.
+   *
+   * -------------------------------------------------------------------------
+   * WHY EACH OF THE FIVE STATEMENTS CANNOT FAIL
+   * -------------------------------------------------------------------------
+   * The header above states the property a batched `exec` depends on: not that
+   * every statement says `IF NOT EXISTS`, but that no statement in it can fail.
+   * `IF NOT EXISTS` is the usual way of getting that; here the argument is made
+   * one statement at a time, because three of the five have no such guard.
+   *
+   *   1. `CREATE TABLE IF NOT EXISTS audit_v6 (...)` — the guard makes a second
+   *      application a no-op.
+   *   2. `INSERT OR IGNORE INTO audit_v6 (...) SELECT ... FROM audit` — the
+   *      source exists, because step v3 creates it and the ladder is ordered; the
+   *      destination exists, because statement 1 just created it; and every row
+   *      satisfies the destination's constraints, because the widened CHECK is a
+   *      strict SUPERSET of the shipped one and no other column constraint moved.
+   *      `OR IGNORE` turns any conflict into a skipped row, so a re-run over rows
+   *      already copied writes nothing and raises nothing.
+   *   3. `DROP TABLE IF EXISTS audit` — the guard makes an absent target a no-op.
+   *   4. `ALTER TABLE audit_v6 RENAME TO audit` — cannot fail ONLY because
+   *      statement 3 just freed the name. This is the one statement whose safety
+   *      is not self-contained, so the ORDER is load-bearing and
+   *      `migrations.spec.ts` asserts it positionally rather than trusting this
+   *      paragraph.
+   *   5. `CREATE INDEX IF NOT EXISTS idx_audit_at ON audit (project_id, at)` — the
+   *      guard makes it a no-op, and it is REQUIRED rather than tidy: SQLite drops
+   *      a table's indexes with the table, so step v3's index went with statement
+   *      3 and `listAudit`'s `ORDER BY at DESC, event_id DESC` would silently lose
+   *      the index its leading column matches.
+   *
+   * AND THE SECOND HALF, WHICH THE FIVE ARGUMENTS ABOVE DO NOT SUPPLY.
+   * Per-statement "cannot fail" is what keeps a failure from stranding an open
+   * write transaction on an unreachable pooled connection. What keeps a PARTIAL
+   * rebuild from existing at all — `audit` dropped, `audit_v6` still holding the
+   * rows, nothing to copy from on the next boot — is MULTISTATEMENT_EXEC_ATOMIC:
+   * a single `exec` string is one atomic unit, so the five statements land
+   * together or not at all, and a process killed mid-`exec` is rolled back by
+   * SQLite's own journal. Both halves are needed. Only one of them used to be
+   * written down.
+   *
+   * -------------------------------------------------------------------------
+   * WHY STEP v2's REBUILD OBJECTION DOES NOT REACH THIS CASE
+   * -------------------------------------------------------------------------
+   * Step v2 rejected a table rebuild for the v1 tables and chose triggers, on the
+   * grounds that a rebuild is "a multi-statement migration that CAN fail and
+   * would therefore strand an open write transaction on an unreachable pooled
+   * connection". That objection is about a rebuild that CAN fail, and it was the
+   * right call there: v2's alternative — a `BEFORE INSERT` trigger — achieved the
+   * same invariant in ONE guarded statement, so the rebuild bought nothing and
+   * carried risk. There is no trigger-shaped alternative to widening a CHECK. The
+   * choice here is a rebuild or nothing.
+   *
+   * -------------------------------------------------------------------------
+   * `INSERT ... SELECT`, AND THE GATE THAT DOES NOT SEE IT
+   * -------------------------------------------------------------------------
+   * `sql-discipline.spec.ts` carries a rule named `insert-select` that bans this
+   * form package-wide, with no allowlist entry, on three grounds: the row set is
+   * decided at execution time, `ON CONFLICT` cannot make an unknown row set
+   * idempotent, and this driver has no transaction to undo a partial write.
+   *
+   * THAT RULE WILL NOT REPORT THE STATEMENT BELOW, AND NOT BECAUSE THE STATEMENT
+   * COMPLIES. The gate classifies a SQL string by its LEADING KEYWORD, and a
+   * multi-statement migration blob leads with `CREATE` — so `insertsFromSelect`,
+   * `isMultiRowStatement` and the whole row-scoping family never look at it. The
+   * same blind spot already lets step v2's `CREATE TRIGGER ... BEGIN SELECT
+   * RAISE(ABORT, ...); END` through. A green run on this file is green by
+   * NON-OBSERVATION, not by compliance, and saying so here is the point of this
+   * paragraph. The blind spot is recorded in `.planning/WINDOWS.md` with an owner;
+   * closing it was declined as scope for this plan, not as a non-issue.
+   *
+   * So the argument is made rather than delegated, and each of the rule's three
+   * grounds is answered on its own terms:
+   *
+   *   - "the row set is decided at execution time" — a rebuild's row set is EVERY
+   *     row, which is the one row set fully known before the statement runs. It is
+   *     not a query whose selectivity depends on data.
+   *   - "ON CONFLICT cannot make an unknown row set idempotent" — the natural key
+   *     `(project_id, event_id)` is carried by every row being copied, so
+   *     `OR IGNORE` is genuinely idempotent: re-copying a row that is already
+   *     there is a skip, not a duplicate and not an error.
+   *   - "no transaction to undo a partial write" — MULTISTATEMENT_EXEC_ATOMIC,
+   *     argued above.
+   *
+   * AND THE ABSENT `project_id` PREDICATE IS THE POINT, not the leak the scoping
+   * rule normally catches. `sdk.meta.db()` is ONE database for every project
+   * (T-01-20), and a table rebuild that scoped to one project would DELETE every
+   * other project's audit log. `migrations.spec.ts` seeds two projects for exactly
+   * this reason.
+   *
+   * -------------------------------------------------------------------------
+   * `INSERT OR IGNORE` FAILS SILENTLY, WHICH IS WHY THE COUNT IS ASSERTED
+   * -------------------------------------------------------------------------
+   * `OR IGNORE`'s failure mode is a SKIPPED ROW, not an error. A copy that
+   * dropped rows would migrate cleanly, report `ok`, and leave a shorter audit log
+   * than it found — in the one table whose whole value is that nothing is ever
+   * removed from it. `migrations.spec.ts` seeds one row per shipped kind in two
+   * projects, including a NULL `detail`, and compares every column of every row
+   * before and after. That assertion is load-bearing rather than
+   * belt-and-braces: it is the only thing standing between a silent skip and a
+   * green run.
+   *
+   * -------------------------------------------------------------------------
+   * THE ALTERNATIVE CONSIDERED AND REJECTED
+   * -------------------------------------------------------------------------
+   * A separate table for scan-destruction events. It would need its own retention
+   * exemption — a THIRD exception, where this project has so far taken two and
+   * writes a paragraph for each — and it would split a ledger whose entire value
+   * is being the ONE place an irreversible action is recorded. "What happened in
+   * this project that cannot be undone" would become a question with two answers.
+   */
+  {
+    v: 6,
+    sql: `
+CREATE TABLE IF NOT EXISTS audit_v6 (
+  project_id TEXT    NOT NULL CHECK (length(project_id) > 0),
+  event_id   TEXT    NOT NULL CHECK (length(event_id) > 0),
+  at         INTEGER NOT NULL,
+  kind       TEXT    NOT NULL CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed', 'scan_discarded', 'scan_suspended_by_retention')),
+  subject    TEXT    NOT NULL,
+  detail     TEXT,
+  PRIMARY KEY (project_id, event_id)
+);
+INSERT OR IGNORE INTO audit_v6 (project_id, event_id, at, kind, subject, detail)
+  SELECT project_id, event_id, at, kind, subject, detail FROM audit;
+DROP TABLE IF EXISTS audit;
+ALTER TABLE audit_v6 RENAME TO audit;
+CREATE INDEX IF NOT EXISTS idx_audit_at
+  ON audit (project_id, at);
 `,
   },
 ];

@@ -186,7 +186,13 @@ describe("the scan lifecycle — every route into and out of every state", () =>
     await advanceScan(fx.db, PROJECT, "s1", page("9001", NOW + 1));
     await pauseScan(fx.db, PROJECT, "s1", NOW + 2);
 
-    const discarded = await discardScan(fx.db, PROJECT, "s1", NOW + 3);
+    const discarded = await discardScan(
+      fx.db,
+      PROJECT,
+      "s1",
+      NOW + 3,
+      "evt-lifecycle-discard",
+    );
     const row = discarded.ok ? discarded.row : undefined;
     expect(row?.state).toBe("discarded");
     expect(row?.finished_at).toBe(NOW + 3);

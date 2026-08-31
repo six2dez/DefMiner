@@ -457,7 +457,13 @@ describe("forward-only migration ladder (STORE-05)", () => {
 
       const report = await migrate(fx.db);
       expect(report.ok, JSON.stringify(report.steps)).toBe(true);
-      expect(userVersion(fx.raw)).toBe(5);
+      // THE HEAD, NOT THE LITERAL 5. The ladder runs to its head, and pinning
+      // this case's version to the step it is named after would guarantee that
+      // appending step v6 turned it red — which is exactly what it did. The v3
+      // case above already learned this and says so; corrected here rather than
+      // the new step being written around it. What this case is about is `scans`
+      // ARRIVING, asserted below.
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
 
       expect(readArtifacts(fx)).toEqual(before);
       expect(listTables(fx.raw)).toContain("scans");
@@ -633,9 +639,10 @@ describe("forward-only migration ladder (STORE-05)", () => {
         .split(";")
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
-      expect(statements.length, `step v${m.v} declared nothing`).toBeGreaterThan(
-        0,
-      );
+      expect(
+        statements.length,
+        `step v${m.v} declared nothing`,
+      ).toBeGreaterThan(0);
       for (const st of statements) {
         const form = FORMS.find((f) => f.re.test(st));
         expect(
@@ -676,17 +683,19 @@ describe("forward-only migration ladder (STORE-05)", () => {
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
       statements.forEach((st, i) => {
-        const rename = /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+RENAME\s+TO\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(
-          st,
-        );
+        const rename =
+          /^ALTER\s+TABLE\s+([A-Za-z_][A-Za-z0-9_]*)\s+RENAME\s+TO\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(
+            st,
+          );
         if (rename === null) return;
         const target = rename[2] ?? "";
         const droppedEarlier = statements
           .slice(0, i)
           .some((prev) =>
-            new RegExp(`^DROP\\s+TABLE\\s+IF\\s+EXISTS\\s+${target}$`, "i").test(
-              prev,
-            ),
+            new RegExp(
+              `^DROP\\s+TABLE\\s+IF\\s+EXISTS\\s+${target}$`,
+              "i",
+            ).test(prev),
           );
         expect(
           droppedEarlier,

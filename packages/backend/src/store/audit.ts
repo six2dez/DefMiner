@@ -1,12 +1,14 @@
 // packages/backend/src/store/audit.ts — the operator action record (STORE-08).
 //
-// WHAT THIS TABLE IS FOR. Seven operator actions are each either irreversible, a
+// WHAT THIS TABLE IS FOR. Nine actions are each either irreversible, a
 // disclosure, or a silent change to what the operator is shown: a projected
 // Finding is permanent, a raw export leaves the tool in cleartext, a revealed
-// value cannot be unseen, and triage and suppression quietly change which rows
-// the operator is ever offered again. This table is the only record that any of
-// them happened. An audit log that omitted the disclosures would not be an audit
-// log, which is why the vocabulary below is complete rather than a subset.
+// value cannot be unseen, triage and suppression quietly change which rows the
+// operator is ever offered again, and a scan can destroy its own walked position
+// or be stopped by retention eating its results. This table is the only record
+// that any of them happened. An audit log that omitted the disclosures would not
+// be an audit log, which is why the vocabulary below is complete rather than a
+// subset.
 //
 // APPEND-ONLY, AND ONE STATEMENT PER WRITE. There is no alternative on this
 // driver: `BEGIN` does not span `exec` calls and every statement still returns
@@ -37,21 +39,36 @@ import type { StoreWriteResult } from "./artifacts";
 /**
  * Every action worth a permanent record, as a closed vocabulary.
  *
- * A CHECK-constrained closed set in migration step v3 and an `as const` array
+ * A CHECK-constrained closed set in the migration ladder and an `as const` array
  * here, matching how `SCAN_STATES` was done, so the UI binds to SHIPPED values
  * rather than inventing synonyms. Nothing anywhere restates a member string; the
  * one unavoidable second copy is the SQL constraint, and `audit.spec.ts` reads
  * that constraint back out of `sqlite_master` and compares it to this array
- * member by member rather than trusting the two to stay in step.
+ * member by member, IN ORDER, rather than trusting the two to stay in step.
  *
- * ALL SEVEN, THOUGH FOUR HAVE NO CALLER YET. `triage_set`,
+ * THE CONSTRAINT IS NOW SPREAD ACROSS TWO STEPS, AND THAT IS THE COST OF
+ * WIDENING IT. Step v3 created the CHECK with the first seven; step v6 REBUILT
+ * the table to admit the last two, because SQLite has no `ALTER TABLE ... DROP
+ * CONSTRAINT` and a shipped step is never edited. Anything added below needs a
+ * THIRD step and another rebuild — which is the reason to think before appending
+ * here, not a reason to append speculatively.
+ *
+ * FOUR OF THE SEVEN STILL HAVE NO CALLER, AND THE LAST TWO BOTH DO. `triage_set`,
  * `suppression_create`, `suppression_remove` and `finding_projected` are only
  * written by the deferred pass after Phase 4 (decision D-05(3) blocks the triage
- * key on Phase 4's entity identity). They are here anyway because the asymmetry
- * is not close: an unused member costs nothing at runtime, while a MISSING one
- * costs a second permanent step in a ladder whose entries can never be edited.
- * That trade was put to the operator at plan 05-06's `blocking-human` checkpoint
- * and approved as `option-a` on 2026-08-28.
+ * key on Phase 4's entity identity). They were listed before their callers
+ * existed because the asymmetry is not close: an unused member costs nothing at
+ * runtime, while a MISSING one costs a permanent step in a ladder whose entries
+ * can never be edited. That trade was put to the operator at plan 05-06's
+ * `blocking-human` checkpoint and approved as `option-a` on 2026-08-28.
+ *
+ * `scan_discarded` AND `scan_suspended_by_retention` DID NOT NEED THAT TRADE.
+ * Both are written by `scan/scans.ts` in the same plan that added them — D-16
+ * approved exactly two members and exactly two writers — so the "complete before
+ * its callers" argument is still true and is simply not what justifies these
+ * two. Stating that difference matters: the earlier argument is a licence to
+ * list a member speculatively, and a licence used without noticing is how a
+ * closed vocabulary stops being considered.
  */
 export const AUDIT_KINDS = [
   /** The operator set a triage state on an entity. Changes which rows they are
@@ -72,6 +89,18 @@ export const AUDIT_KINDS = [
   "export_redacted",
   /** A stored value was revealed in the UI. A DISCLOSURE that cannot be unseen. */
   "value_revealed",
+  /** A retroactive scan was thrown away (D-10, D-16). IRREVERSIBLE: what is
+   *  destroyed is the walked position, and nothing in the system can re-derive
+   *  where a multi-hour backfill had got to. The artifacts and observations it
+   *  produced are untouched — they were never the scan's property. */
+  "scan_discarded",
+  /** Retention's ROW CAP was deleting the running scan's own results, so the
+   *  scan was suspended at its cursor (D-08, D-16). Recorded because it is a
+   *  DefMiner decision taken without the operator, on a backfill they started —
+   *  and because the remedy (raise the cap, then resume) is only findable if the
+   *  stop has a reason attached to it. NOT written for an age-bound trim: a
+   *  90-day timer removing old artifacts means nothing of the sort. */
+  "scan_suspended_by_retention",
 ] as const;
 
 /** One member of {@link AUDIT_KINDS}. The database's CHECK constraint is the

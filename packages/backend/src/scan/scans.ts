@@ -92,6 +92,11 @@ import type { Database } from "sqlite";
 
 import { DETECTOR_CORPUS_VERSION } from "../store/analyses";
 import type { StoreWriteResult } from "../store/artifacts";
+// THE AGE-EXEMPT LEDGER, reached from here for the two events D-16 approved and
+// for nothing else. Routine lifecycle stays in `scans` under ordinary retention:
+// filling `audit` with background-job chatter would evict the
+// permanent-consequence records its row bound was raised to preserve.
+import { recordAudit } from "../store/audit";
 import { describeError } from "../telemetry";
 
 /**
@@ -397,6 +402,10 @@ const OPERATOR_PAUSED: SuspendReason = "operator_paused";
 const PROJECT_CHANGED: SuspendReason = "project_changed";
 /** The reason the STARTUP SWEEP writes (D-11, and ERR-02's early slice). */
 const PROCESS_RESTARTED: SuspendReason = "process_restarted";
+/** The reason a ROW-CAP EVICTION writes (D-08): the backfill was consuming its
+ *  own results. NOT written for an age-bound trim — see
+ *  {@link suspendForRetentionEviction}. */
+const RETENTION_EVICTION: SuspendReason = "retention_eviction";
 
 // `last_request_id` and `last_created_at` ARE NOT TOUCHED. A pause keeps the
 // place — that is the whole of D-10, and it is why the pause control is allowed
@@ -482,6 +491,22 @@ const SUSPEND_ON_EPOCH_SQL = `
 UPDATE scans
 SET state = 'suspended', suspend_reason = ?, updated_at = ?
 WHERE project_id = ? AND scan_id = ? AND state = 'running' AND epoch <> ?
+`;
+
+// GUARDED ON `running`, AND THE GUARD IS WHAT KEEPS THE REASON HONEST. A scan
+// that is already suspended carries the reason it actually stopped for —
+// `operator_paused`, `project_changed`, `process_restarted` — and overwriting
+// that with `retention_eviction` would erase the only record of why it stopped,
+// on the surface whose whole subject is that question. The predicate declines
+// instead, reporting `changes: 0`, exactly as a second pause does.
+//
+// THE POSITION IS NOT TOUCHED. This is a suspension, not a discard: the operator
+// raises the cap and resumes from here, which is the only reason recording the
+// stop is worth anything.
+const SUSPEND_FOR_RETENTION_SQL = `
+UPDATE scans
+SET state = 'suspended', suspend_reason = ?, updated_at = ?
+WHERE project_id = ? AND scan_id = ? AND state = 'running'
 `;
 
 // ONE STATEMENT OVER THE WHOLE PROJECT, and no `scan_id` in the predicate: the
@@ -645,6 +670,23 @@ export async function completeScan(
 }
 
 /**
+ * The `detail` a destructive scan event records.
+ *
+ * DEFMINER-AUTHORED, BOUNDED, AND ASSEMBLED FROM NUMBERS THIS MODULE OWNS. It
+ * never carries a URL, a cursor or anything else a target influenced — `audit`
+ * is the one table designed to hold no extracted value, and a detail pasted from
+ * a scan's inputs would defeat T-01-21 by the back door. `recordAudit` runs
+ * `describeError` over it before binding as a second line of defence; that is
+ * the absorber, not the licence.
+ *
+ * The scan id is NOT repeated here: it is the `subject` column, and a detail
+ * that restated it would be the second declaration of one fact.
+ */
+function destructionDetail(parts: readonly string[]): string {
+  return parts.join("; ");
+}
+
+/**
  * Throw a scan away — the ONE destructive action in this module.
  *
  * IT DESTROYS THE POSITION AND NOTHING ELSE. The artifacts and observations the
@@ -653,14 +695,50 @@ export async function completeScan(
  * What is lost is the place in history the walk had reached, which is why the
  * confirmation copy quantifies it and why this is a separate endpoint from
  * {@link pauseScan} rather than a flag on it (T-06-28).
+ *
+ * ===========================================================================
+ * IT ALSO WRITES AN `audit` ROW, AND THE ORDER IS DELIBERATE
+ * ===========================================================================
+ * D-16 gives a retroactive scan two events worth a permanent record and this is
+ * one of them. `BEGIN` does not span `exec` calls on this driver, so the state
+ * change and the audit row are two statements that CANNOT land together — there
+ * is no ordering that makes them atomic, only an ordering that chooses which
+ * half survives a failure between them. The state change goes FIRST, so the
+ * audit row is the record of an action ALREADY TAKEN: the failure mode is a
+ * missing record of something that happened, never a record of something that
+ * did not. A ledger that can claim a discard nobody performed is worse than one
+ * with a gap, because the gap is at least not a lie.
+ *
+ * NOTHING IS RECORDED WHEN THE GUARD DECLINES. `changes: 0` means the predicate
+ * refused — a terminal row, or another project's scan — and no position was
+ * destroyed, so there is nothing to record.
+ *
+ * ===========================================================================
+ * THE POSITION IS READ BEFORE THE UPDATE, AND THAT IS NOT A GUARD
+ * ===========================================================================
+ * `DISCARD_SQL` sets `last_request_id` back to `''`, so the read-back cannot
+ * say what was destroyed — the detail has to be assembled from the row as it
+ * stood BEFORE. This pre-read is for the RECORD and never for the decision: the
+ * state guard stays inside the statement's predicate, where a caller-side check
+ * would be two operations this pool cannot make one. A stale pre-read costs an
+ * imprecise detail on a row the statement then declines to move, and that row
+ * is never recorded at all.
+ *
+ * @param eventId - Minted BY THE CALLER, which is what makes a retry after an
+ * ambiguous failure a no-op instead of a duplicate: the same id re-presented
+ * hits the do-nothing conflict clause. A genuine SECOND discard mints a fresh
+ * id and is stopped by the state guard instead, because the row is already
+ * `discarded`.
  */
 export async function discardScan(
   db: Database,
   projectId: string,
   scanId: string,
   nowMs: number,
+  eventId: string,
 ): Promise<ScanTransition> {
   try {
+    const before = await getScan(db, projectId, scanId);
     const stmt = await db.prepare(DISCARD_SQL);
     const res = await stmt.run(
       nowMs,
@@ -674,6 +752,95 @@ export async function discardScan(
       ACTIVE_LIFECYCLE_STATES[0],
       ACTIVE_LIFECYCLE_STATES[1],
     );
+    if (res.changes > 0) {
+      // NOT AWAITED FOR ITS RESULT BEYOND THIS POINT, AND NOT ALLOWED TO FAIL
+      // THE TRANSITION. `recordAudit` reports rather than throws, and a discard
+      // that succeeded is a discard that succeeded — turning an unrecorded
+      // record into a failed command would tell the operator their scan is
+      // still there when it is not.
+      await recordAudit(
+        db,
+        projectId,
+        "scan_discarded",
+        scanId,
+        destructionDetail([
+          `discarded at row.id ${before?.last_request_id ?? "unknown"}`,
+          `${String(before?.pages_walked ?? 0)} pages walked`,
+          `${String(before?.seen ?? 0)} seen`,
+        ]),
+        nowMs,
+        eventId,
+      );
+    }
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Stop a RUNNING scan because retention's ROW CAP was deleting its own results
+ * (D-08), and record that DefMiner did so.
+ *
+ * ===========================================================================
+ * WHY THIS EXISTS, AND WHY IT IS NOT AN AGE-BOUND CONCERN
+ * ===========================================================================
+ * A retroactive scan walks backwards through captured traffic and stores what it
+ * admits. If the artifact ROW CAP starts evicting to make room, the backfill is
+ * consuming itself: every page it walks costs a page it already walked, and it
+ * will never finish however long it runs. An AGE-BOUND eviction means nothing of
+ * the sort — a 90-day timer removing artifacts older than the retention window
+ * is retention working exactly as configured, and stopping a scan for it would
+ * be DefMiner cancelling the operator's backfill over routine housekeeping.
+ *
+ * That distinction is the whole reason `sweepRetention` reports `rowCapDeleted`
+ * separately from `deleted`. This function is the consumer of that number and
+ * has no opinion of its own about which eviction happened.
+ *
+ * ===========================================================================
+ * THE SAME TWO-STATEMENT ORDERING AS {@link discardScan}
+ * ===========================================================================
+ * State change first, audit row second, for the reason stated there: the record
+ * is of an action already taken, so a failure between them leaves a gap rather
+ * than a claim. Nothing is recorded when the guard declines.
+ *
+ * @param evictedCount - How many of this project's artifacts the ROW CAP removed
+ * in the sweep that triggered this. It goes into the audit detail as a number
+ * and nowhere else — the operator-facing sentence is `06-UI-SPEC.md`'s, and it
+ * says the scan ran a little past the first evicted row rather than claiming it
+ * stopped at it, because the sweep runs on a cadence and the detection is
+ * therefore late by up to that many artifacts.
+ * @param eventId - Minted by the caller, same contract as {@link discardScan}.
+ */
+export async function suspendForRetentionEviction(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  evictedCount: number,
+  nowMs: number,
+  eventId: string,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(SUSPEND_FOR_RETENTION_SQL);
+    const res = await stmt.run(RETENTION_EVICTION, nowMs, projectId, scanId);
+    if (res.changes > 0) {
+      await recordAudit(
+        db,
+        projectId,
+        "scan_suspended_by_retention",
+        scanId,
+        destructionDetail([
+          `retention row cap evicted ${String(evictedCount)} artifacts`,
+          "scan suspended at its position",
+        ]),
+        nowMs,
+        eventId,
+      );
+    }
     return {
       ok: true,
       changes: res.changes,

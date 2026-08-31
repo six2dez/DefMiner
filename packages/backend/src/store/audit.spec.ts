@@ -85,7 +85,9 @@ describe("the audit log's vocabulary (STORE-08)", () => {
     // code has no reason to branch on every kind, and inventing one to give the
     // helper a home would be a switch written for the gate rather than for the
     // program.
-    const category = (kind: AuditKind): "silent-change" | "disclosure" | "destruction" => {
+    const category = (
+      kind: AuditKind,
+    ): "silent-change" | "disclosure" | "destruction" => {
       switch (kind) {
         case "triage_set":
         case "suppression_create":
@@ -107,9 +109,10 @@ describe("the audit log's vocabulary (STORE-08)", () => {
     // Non-vacuous: every member is routed, and the two D-16 added are the only
     // two in the category that did not exist before them.
     expect(AUDIT_KINDS.map(category)).toHaveLength(9);
-    expect(
-      AUDIT_KINDS.filter((k) => category(k) === "destruction"),
-    ).toEqual(["scan_discarded", "scan_suspended_by_retention"]);
+    expect(AUDIT_KINDS.filter((k) => category(k) === "destruction")).toEqual([
+      "scan_discarded",
+      "scan_suspended_by_retention",
+    ]);
   });
 
   it("the two D-16 members are ACCEPTED by the database after the rebuild", async () => {
