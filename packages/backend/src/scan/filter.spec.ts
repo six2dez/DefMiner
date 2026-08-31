@@ -208,11 +208,17 @@ describe("validateOperatorClause — the one place operator input meets a query 
   it.each(CASES.map((c) => [c.name, c] as const))("%s", (_name, c) => {
     const verdict = validateOperatorClause(c.clause);
     if (c.reason === null) {
-      expect(verdict, `expected ${JSON.stringify(c.clause.slice(0, 60))} to be ACCEPTED`).toEqual({
+      expect(
+        verdict,
+        `expected ${JSON.stringify(c.clause.slice(0, 60))} to be ACCEPTED`,
+      ).toEqual({
         ok: true,
       });
     } else {
-      expect(verdict, `expected ${JSON.stringify(c.clause.slice(0, 60))} to be REFUSED`).toEqual({
+      expect(
+        verdict,
+        `expected ${JSON.stringify(c.clause.slice(0, 60))} to be REFUSED`,
+      ).toEqual({
         ok: false,
         reason: c.reason,
       });
@@ -222,8 +228,12 @@ describe("validateOperatorClause — the one place operator input meets a query 
   it("accepts a clause of EXACTLY the cap and refuses the next character", () => {
     // The boundary asserted against the CONSTANT rather than against a literal,
     // so retuning the cap does not silently retune this case with it.
-    expect(validateOperatorClause("a".repeat(OPERATOR_CLAUSE_MAX_CHARS))).toEqual({ ok: true });
-    expect(validateOperatorClause("a".repeat(OPERATOR_CLAUSE_MAX_CHARS + 1))).toEqual({
+    expect(
+      validateOperatorClause("a".repeat(OPERATOR_CLAUSE_MAX_CHARS)),
+    ).toEqual({ ok: true });
+    expect(
+      validateOperatorClause("a".repeat(OPERATOR_CLAUSE_MAX_CHARS + 1)),
+    ).toEqual({
       ok: false,
       reason: "too_long",
     });
@@ -231,11 +241,17 @@ describe("validateOperatorClause — the one place operator input meets a query 
 
   it("refuses EVERY comment grammar the reference names, anywhere in the clause", () => {
     for (const marker of ["//", "/*", "*/"]) {
-      expect(validateOperatorClause(`${marker} req.host.eq:"a"`), `leading ${marker}`).toEqual({
+      expect(
+        validateOperatorClause(`${marker} req.host.eq:"a"`),
+        `leading ${marker}`,
+      ).toEqual({
         ok: false,
         reason: "comment_construct",
       });
-      expect(validateOperatorClause(`req.host.eq:"a" ${marker} more`), `interior ${marker}`).toEqual({
+      expect(
+        validateOperatorClause(`req.host.eq:"a" ${marker} more`),
+        `interior ${marker}`,
+      ).toEqual({
         ok: false,
         reason: "comment_construct",
       });
@@ -250,9 +266,13 @@ describe("every rejection reason has a case", () => {
     // identical: a reason with no case is a code the start form can render and
     // that nobody has ever seen produced.
     const exercised = new Set(
-      CASES.map((c) => c.reason).filter((r): r is OperatorClauseRejection => r !== null),
+      CASES.map((c) => c.reason).filter(
+        (r): r is OperatorClauseRejection => r !== null,
+      ),
     );
-    const declared = new Set<OperatorClauseRejection>(OPERATOR_CLAUSE_REJECTIONS);
+    const declared = new Set<OperatorClauseRejection>(
+      OPERATOR_CLAUSE_REJECTIONS,
+    );
     const untested = [...declared].filter((r) => !exercised.has(r));
     const stray = [...exercised].filter((r) => !declared.has(r));
     expect(
@@ -261,9 +281,10 @@ describe("every rejection reason has a case", () => {
         `A reason with no test is copy the operator can be shown for a refusal ` +
         `nobody has ever reproduced.`,
     ).toEqual([]);
-    expect(stray, `these cases assert a reason that is not declared: ${stray.join(", ")}.`).toEqual(
-      [],
-    );
+    expect(
+      stray,
+      `these cases assert a reason that is not declared: ${stray.join(", ")}.`,
+    ).toEqual([]);
   });
 
   it("OPERATOR_CLAUSE_REJECTIONS is a closed, duplicate-free vocabulary", () => {
@@ -273,9 +294,10 @@ describe("every rejection reason has a case", () => {
       "whitespace_only",
       "too_long",
     ]);
-    expect(new Set(OPERATOR_CLAUSE_REJECTIONS).size, "a duplicate rejection reason").toBe(
-      OPERATOR_CLAUSE_REJECTIONS.length,
-    );
+    expect(
+      new Set(OPERATOR_CLAUSE_REJECTIONS).size,
+      "a duplicate rejection reason",
+    ).toBe(OPERATOR_CLAUSE_REJECTIONS.length);
     expect(Object.isFrozen(OPERATOR_CLAUSE_REJECTIONS)).toBe(true);
   });
 });
@@ -302,14 +324,18 @@ describe("composeScanFilter — the ONE producer of a scan filter string", () =>
     const composed = composeScanFilter("", "");
     expect(composed).toBe(`(${SCAN_KIND_CLAUSE})`);
     expect(composed).not.toContain("()");
-    expect(balanced(composed), "the composition's parentheses do not return to depth zero").toBe(
-      true,
-    );
+    expect(
+      balanced(composed),
+      "the composition's parentheses do not return to depth zero",
+    ).toBe(true);
     expect(topLevelTerms(composed)).toHaveLength(1);
   });
 
   it("puts the OPERATOR's clause LAST, and that order is the mitigation", () => {
-    const composed = composeScanFilter(positionClause("9001"), 'req.host.eq:"a.example"');
+    const composed = composeScanFilter(
+      positionClause("9001"),
+      'req.host.eq:"a.example"',
+    );
     expect(composed).toBe(
       `(${SCAN_KIND_CLAUSE}) AND (row.id.lt:9001) AND (req.host.eq:"a.example")`,
     );
@@ -347,13 +373,17 @@ describe("composeScanFilter — the ONE producer of a scan filter string", () =>
     // caller forgets to validate. Omitting NARROWS to DefMiner's own clause; it
     // can never widen. See the composer's own comment for why it omits rather
     // than throws.
-    for (const bad of ['req.host.eq:"a" //', '(req.host.eq:"a"', "   ", "a".repeat(
-      OPERATOR_CLAUSE_MAX_CHARS + 1,
-    )]) {
+    for (const bad of [
+      'req.host.eq:"a" //',
+      '(req.host.eq:"a"',
+      "   ",
+      "a".repeat(OPERATOR_CLAUSE_MAX_CHARS + 1),
+    ]) {
       const composed = composeScanFilter("row.id.lt:7", bad);
-      expect(composed, `${JSON.stringify(bad.slice(0, 40))} reached the composed filter`).toBe(
-        `(${SCAN_KIND_CLAUSE}) AND (row.id.lt:7)`,
-      );
+      expect(
+        composed,
+        `${JSON.stringify(bad.slice(0, 40))} reached the composed filter`,
+      ).toBe(`(${SCAN_KIND_CLAUSE}) AND (row.id.lt:7)`);
       expect(composed).not.toContain("//");
       expect(balanced(composed)).toBe(true);
     }
@@ -373,11 +403,19 @@ describe("the kind clause stays on the case-INSENSITIVE cont family", () => {
   it("covers BOTH extensions, because `.mjs` does not contain `.js`", () => {
     expect(SCAN_KIND_CLAUSE).toContain('req.path.cont:".js"');
     expect(SCAN_KIND_CLAUSE).toContain('req.path.cont:".mjs"');
-    expect(".mjs".includes(".js"), "the premise of the second term").toBe(false);
+    expect(".mjs".includes(".js"), "the premise of the second term").toBe(
+      false,
+    );
   });
 
   it("carries the five media-type substrings that cover all seventeen essences", () => {
-    for (const substring of ["javascript", "ecmascript", "jscript", "livescript", "text/js"]) {
+    for (const substring of [
+      "javascript",
+      "ecmascript",
+      "jscript",
+      "livescript",
+      "text/js",
+    ]) {
       expect(SCAN_KIND_CLAUSE).toContain(`resp.raw.cont:"${substring}"`);
     }
   });
