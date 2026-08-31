@@ -182,6 +182,45 @@ export const SCAN_STATUS_STARTING = "Starting…";
 /** `running`, with a page behind it. */
 export const SCAN_STATUS_SCANNING = "Scanning";
 
+/**
+ * `running`, HELD AT D-01's BACKPRESSURE WATERMARK — and it is the word that
+ * stops the stall marker from crying wolf.
+ *
+ * The scan pages only while the analysis queue's depth is below the watermark,
+ * so live browsing always wins; `BoundedQueue.offer()` drops the OLDEST entry at
+ * cap, and during a backfill the oldest entries ARE the responses the operator
+ * is looking at. THIS IS THEREFORE A HEALTHY STATE AND THE MOST COMMON ONE ON A
+ * LONG BACKFILL. Without a word of its own every legitimate hold falls through
+ * to the stall marker below, and an operator who learns to ignore a stall marker
+ * is worse off than one who never had it — the same argument PROJECT.md makes
+ * about false positives, applied to a status line.
+ *
+ * A SENTENCE RATHER THAN A WORD, deliberately: "Waiting" alone says nothing
+ * about what is being waited for, and what is being waited for is the whole
+ * content of the reassurance.
+ */
+export const SCAN_STATUS_WAITING_FOR_QUEUE = "Waiting for the analysis queue";
+
+/**
+ * `running`, with NO counter moved for longer than the stall threshold, and NOT
+ * held at the watermark. The only one of the four running words that is bad
+ * news.
+ *
+ * `info` AND NOT `danger`, and it names the cause it cannot see. It is the same
+ * move the shipped `partial` badge makes: a state that is not "working" is
+ * marked in words rather than silently presented as fine. Its copy routes to
+ * Health by name, exactly as the shipped inventory-table error copy does,
+ * because a blocked QuickJS thread is precisely what Health's four counters
+ * exist to distinguish from a stuck interface.
+ *
+ * THE THRESHOLD IS NOT DECLARED HERE. It is `ARTIFACT_DEADLINE_MS`, imported by
+ * whoever computes this state and never restated: at
+ * `TOKENIZER_MS_PER_MB = 783` a full `PASSIVE_MAX_BYTES` artifact takes ~6.3 s
+ * to walk on a strictly serial thread, and a threshold below the shipped
+ * per-artifact ceiling would fire on every large bundle.
+ */
+export const SCAN_STATUS_NOT_ADVANCING = "Not advancing";
+
 /** `suspended`. Stopped, with a reason, and resumable. */
 export const SCAN_STATUS_SUSPENDED = "Suspended";
 

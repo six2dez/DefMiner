@@ -48,9 +48,9 @@ import {
   SCAN_STATUS_SUSPENDED,
   SCAN_STATUS_WAITING_FOR_QUEUE,
 } from "./scan-contract";
-import ScanLifecycleBadge from "./ScanLifecycleBadge.vue";
 import { SCAN_LIFECYCLE_PRESENTATION } from "./scan-lifecycle-presentation";
 import { SCAN_STATE_PRESENTATION } from "./scan-state-presentation";
+import ScanLifecycleBadge from "./ScanLifecycleBadge.vue";
 
 // ---------------------------------------------------------------------------
 // THE GUARD
@@ -152,9 +152,9 @@ describe("the two status vocabularies cannot be confused (06-UI-SPEC mechanism 4
     // shipped analysis label "Complete"; a set-disjointness check would pass it.
     const collisions = prefixCollisions(everyOperatorWord(["Complet"]));
     expect(collisions.length).toBeGreaterThan(0);
-    expect(collisions.some((c) => c.b === "Complete" || c.a === "Complete")).toBe(
-      true,
-    );
+    expect(
+      collisions.some((c) => c.b === "Complete" || c.a === "Complete"),
+    ).toBe(true);
   });
 
   it("the lifecycle terminal label is NOT the analysis vocabulary's near-twin", () => {
@@ -193,16 +193,22 @@ describe("SCAN_LIFECYCLE_PRESENTATION is a Record over the closed vocabulary", (
       expect(SCAN_LIFECYCLE_PRESENTATION[state].toneClass).not.toContain("#");
     }
     expect(SCAN_LIFECYCLE_PRESENTATION.suspended.toneClass).toContain("info");
-    expect(SCAN_LIFECYCLE_PRESENTATION.completed.toneClass).toContain("success");
+    expect(SCAN_LIFECYCLE_PRESENTATION.completed.toneClass).toContain(
+      "success",
+    );
     expect(SCAN_LIFECYCLE_PRESENTATION.running.toneClass).toContain("surface");
-    expect(SCAN_LIFECYCLE_PRESENTATION.discarded.toneClass).toContain("surface");
+    expect(SCAN_LIFECYCLE_PRESENTATION.discarded.toneClass).toContain(
+      "surface",
+    );
   });
 
   it("its labels are the words scan-contract.ts renders for the same states", () => {
     // ONE DECISION, TWO READERS. The badge renders the map; the progress readout
     // renders the computed word. They must agree for the three states that have
     // both, or the toolbar and the Scan tab would disagree about the same scan.
-    expect(SCAN_LIFECYCLE_PRESENTATION.running.label).toBe(SCAN_STATUS_SCANNING);
+    expect(SCAN_LIFECYCLE_PRESENTATION.running.label).toBe(
+      SCAN_STATUS_SCANNING,
+    );
     expect(SCAN_LIFECYCLE_PRESENTATION.suspended.label).toBe(
       SCAN_STATUS_SUSPENDED,
     );
@@ -241,7 +247,9 @@ describe("ScanLifecycleBadge renders the tone and the word on ONE element", () =
     // The prop is a member of a closed vocabulary and there is nothing else on
     // this component. R1/R2 have nothing to reach here — which is a property of
     // the component's SHAPE rather than a discipline.
-    const wrapper = mount(ScanLifecycleBadge, { props: { state: "completed" } });
+    const wrapper = mount(ScanLifecycleBadge, {
+      props: { state: "completed" },
+    });
     expect(wrapper.attributes("title")).toBeUndefined();
     expect(wrapper.html()).not.toContain("<img");
     expect(wrapper.html()).not.toContain("href");
