@@ -211,6 +211,74 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     ).toBeLessThanOrEqual(1024);
   });
 
+  // --- D-01's backpressure watermark (plan 06-03) ---------------------------
+  //
+  // THE INEQUALITY IS THE PROPERTY, not the number it currently evaluates to.
+  // Asserting `SCAN_BACKPRESSURE_WATERMARK === 1528` would keep passing while
+  // any of the three constants it hangs off moved underneath it — which is the
+  // exact failure mode this whole file exists to close. Every figure below is
+  // referenced by NAME.
+
+  it("the backpressure watermark leaves room for a full measured burst on top of a full page", () => {
+    expect(
+      T.SCAN_BACKPRESSURE_WATERMARK +
+        T.EVENTS_DELIVERED_UNDER_BLOCK +
+        T.SCAN_PAGE_SIZE,
+      `SCAN_BACKPRESSURE_WATERMARK (${T.SCAN_BACKPRESSURE_WATERMARK}) plus one measured ` +
+        `live burst (EVENTS_DELIVERED_UNDER_BLOCK = ${T.EVENTS_DELIVERED_UNDER_BLOCK}) plus ` +
+        `one scan page (SCAN_PAGE_SIZE = ${T.SCAN_PAGE_SIZE}) exceeds QUEUE_CAP ` +
+        `(${T.QUEUE_CAP}). BoundedQueue.offer() drops the OLDEST entry at cap, and during a ` +
+        `backfill the oldest entries are the operator's LIVE browsing — so a watermark above ` +
+        `this bound means a retroactive scan can provably discard the traffic the operator is ` +
+        `looking at right now, with the drop counter as the only trace (D-01, T-06-13).`,
+    ).toBeLessThanOrEqual(T.QUEUE_CAP);
+  });
+
+  it("the backpressure watermark is strictly inside the queue", () => {
+    // The non-vacuity half. The inequality above is satisfied by any watermark
+    // at or below the bound INCLUDING zero and every negative value, and a
+    // watermark of zero is a producer that never offers anything: a scan that
+    // reports "running" for ever and walks nothing. Both ends are asserted so
+    // that lowering QUEUE_CAP under EVENTS_DELIVERED_UNDER_BLOCK + SCAN_PAGE_SIZE
+    // fails HERE rather than shipping a scan that cannot start.
+    expect(
+      T.SCAN_BACKPRESSURE_WATERMARK,
+      `SCAN_BACKPRESSURE_WATERMARK is ${T.SCAN_BACKPRESSURE_WATERMARK}. QUEUE_CAP ` +
+        `(${T.QUEUE_CAP}) no longer leaves room for a measured burst ` +
+        `(${T.EVENTS_DELIVERED_UNDER_BLOCK}) plus a page (${T.SCAN_PAGE_SIZE}), so the ` +
+        `derived watermark has fallen to or below zero and the producer would never offer a ` +
+        `single page. Raise QUEUE_CAP or lower SCAN_PAGE_SIZE.`,
+    ).toBeGreaterThan(0);
+    expect(
+      T.SCAN_BACKPRESSURE_WATERMARK,
+      "SCAN_BACKPRESSURE_WATERMARK is at or above QUEUE_CAP, which makes the gate a no-op: " +
+        "the producer would offer right up to the cap and every offer past it drops a live entry.",
+    ).toBeLessThan(T.QUEUE_CAP);
+  });
+
+  it("POLICY_DERIVED_FROM names the three constants the watermark hangs off", () => {
+    // Same shape as every other entry in that object, and it is what keeps the
+    // derivation from decaying into a comment: the map is the machine-readable
+    // copy of the paragraph above the constant.
+    const derived = T.POLICY_DERIVED_FROM.SCAN_BACKPRESSURE_WATERMARK;
+    expect(
+      Object.keys(derived).sort(),
+      "POLICY_DERIVED_FROM.SCAN_BACKPRESSURE_WATERMARK must name exactly QUEUE_CAP, " +
+        "EVENTS_DELIVERED_UNDER_BLOCK and SCAN_PAGE_SIZE — the three values the derivation " +
+        "reads. A derivation whose stated inputs differ from its real ones is worse than none.",
+    ).toEqual([
+      "EVENTS_DELIVERED_UNDER_BLOCK",
+      "QUEUE_CAP",
+      "SCAN_PAGE_SIZE",
+    ]);
+    // BY REFERENCE, never by copied value — the rule CACHE_HIT_RATE's case states.
+    expect(derived.QUEUE_CAP).toBe(T.QUEUE_CAP);
+    expect(derived.EVENTS_DELIVERED_UNDER_BLOCK).toBe(
+      T.EVENTS_DELIVERED_UNDER_BLOCK,
+    );
+    expect(derived.SCAN_PAGE_SIZE).toBe(T.SCAN_PAGE_SIZE);
+  });
+
   it("CACHE_HIT_RATE takes the assumed value and never a literal", () => {
     expect(
       T.CACHE_HIT_RATE,
