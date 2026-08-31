@@ -1,0 +1,4 @@
+{"encoding": "identity", "tag": "o07-identity", "accept_encoding_sent": "identity", "direct_http_code": 200, "direct_wire_bytes": 457965, "proxied_http_code": 200, "proxied_client_bytes": 457965}
+{"encoding": "gzip", "tag": "o07-gzip", "accept_encoding_sent": "gzip", "direct_http_code": 200, "direct_wire_bytes": 122370, "proxied_http_code": 200, "proxied_client_bytes": 457965}
+{"encoding": "br", "tag": "o07-br", "accept_encoding_sent": "br", "direct_http_code": 200, "direct_wire_bytes": 101727, "proxied_http_code": 200, "proxied_client_bytes": 457965}
+{"encoding": "zstd", "tag": "o07-zstd", "accept_encoding_sent": "zstd", "direct_http_code": 200, "direct_wire_bytes": 127907, "proxied_http_code": 200, "proxied_client_bytes": 457965}

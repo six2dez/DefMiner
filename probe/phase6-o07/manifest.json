@@ -1,0 +1,15 @@
+{
+  "id": "defminer-phase6-o07",
+  "name": "DefMiner Phase 6 O-07 Read-Path Probe",
+  "version": "0.0.1",
+  "description": "Phase 6 plan 06-02 probe: does Body.length on sdk.requests.get() and sdk.requests.query() report the decompressed identity byte count?",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "phase6-o07-backend",
+      "name": "Phase6 O07 Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}

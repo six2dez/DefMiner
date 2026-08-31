@@ -1,0 +1,98 @@
+{
+  "$schema": "./o07-body-length.schema.json",
+  "probe": "O-07",
+  "status": "pass",
+  "recorded_at": "2026-08-31T16:31:46Z",
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.58.2",
+    "reported_version": "0.58.2",
+    "sha256": "b764e0094f0f97d28591f6d58d648fecb225b4446e3ffb7ea49bca030138e932"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cores": 14
+  },
+  "instances": [
+    {
+      "run_id": "20260831T163144Z-6077",
+      "listen": "127.0.0.1:8961",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "project_persistence": "temporary"
+    }
+  ],
+  "plugins": [
+    {
+      "name": "defminer",
+      "role": "the SHIPPED build, unmodified \u2014 the source of counters.byteLenMismatch",
+      "zip_sha256": "015dc1bb3fd05f91226b81884bffd5f676302efea0dbb7bbbb4663e44f689e94"
+    },
+    {
+      "name": "phase6-o07",
+      "role": "the read-path probe \u2014 sdk.requests.get() and sdk.requests.query() byte counts",
+      "zip_sha256": "38e9374709218a5397fbeac2209a7932fa0dff9340a91f67431bdc64e4b44816"
+    }
+  ],
+  "method": "One fixture (ace-small.js, 457965 decompressed bytes) served by scripts/spike/origin.py under four explicit Content-Encodings. Per encoding, two fetches: one DIRECT at the origin with no proxy and no --compressed, which is the authoritative wire byte count, and one through a fresh version-asserted Caido with a matching Accept-Encoding. The shipped DefMiner build and probe/phase6-o07 were both installed. After the consumer drained, counters.byteLenMismatch was read off the shipped getStatus; then, for each request id the probe's hook had recorded, sdk.requests.get(id) was called and toRaw().length taken, and one sdk.requests.query().descending('req','id').first(50).execute() was walked and Body.length taken from the matching item. The query walk carries NO filter: this phase's own O-03 and O-06 record Caido's req.path / req.query / cont implementations as unmeasured, and a filtered walk that returned nothing would make 'the read path reports no body' and 'the clause did not match' indistinguishable. babel-large.js is excluded because at 2,983,904 bytes it is above AST_MAX_BYTES and admit() rejects it too_large, so it could contribute nothing to byteLenMismatch.",
+  "measurements": {
+    "byte_len_mismatch": 0,
+    "reload_pairs_compared": 4,
+    "identity": {
+      "fixture": "ace-small.js",
+      "identity_byte_len": 457965,
+      "hook_body_length": 457965,
+      "reload_raw_length": 457965,
+      "reload_body_length": 457965,
+      "query_body_length": 457965,
+      "query_raw_length": 457965,
+      "wire_byte_len": 457965
+    },
+    "gzip": {
+      "fixture": "ace-small.js",
+      "identity_byte_len": 457965,
+      "hook_body_length": 457965,
+      "reload_raw_length": 457965,
+      "reload_body_length": 457965,
+      "query_body_length": 457965,
+      "query_raw_length": 457965,
+      "wire_byte_len": 122370
+    },
+    "br": {
+      "fixture": "ace-small.js",
+      "identity_byte_len": 457965,
+      "hook_body_length": 457965,
+      "reload_raw_length": 457965,
+      "reload_body_length": 457965,
+      "query_body_length": 457965,
+      "query_raw_length": 457965,
+      "wire_byte_len": 101727
+    },
+    "zstd": {
+      "fixture": "ace-small.js",
+      "identity_byte_len": 457965,
+      "hook_body_length": 457965,
+      "reload_raw_length": 457965,
+      "reload_body_length": 457965,
+      "query_body_length": 457965,
+      "query_raw_length": 457965,
+      "wire_byte_len": 127907
+    }
+  },
+  "verdict": {
+    "get_path_reports": "identity",
+    "query_path_reports": "identity",
+    "answer": "MEASURED on this build, and the FIRST measurement of either read path in this project: SPIKE-08's method names only onInterceptResponse. sdk.requests.get() reports the DECOMPRESSED identity byte count; sdk.requests.query() reports the DECOMPRESSED identity byte count. Decided on the gzip, br and zstd blocks only. Under identity the wire count and the decompressed count are the same number, so that block can agree with either hypothesis and decides nothing; it is the control. The shipped instrument agrees: counters.byteLenMismatch = 0 over 4 reload comparisons.",
+    "if_wrong": "If a read path reports the WIRE count, admit()'s size axis admits up to 7.2541x more bytes than intended on the retro path only (the observed compression-ratio ceiling on this corpus). The mitigation is already designed and does not depend on this answer: the consumer re-reads every queued entry by id through sdk.requests.get(), so plan 06-06's reload-side size gate is the authoritative check and the query-side admit() is a filter."
+  },
+  "requirements_affected": [
+    "FIND-03"
+  ]
+}

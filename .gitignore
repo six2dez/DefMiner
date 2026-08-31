@@ -35,6 +35,15 @@ tier1/*/dist/
 .planning/phases/01-skeleton-persistence-compatibility/results/runs/*/*.log
 .planning/phases/01-skeleton-persistence-compatibility/results/runs/*/raw/*.log
 
+# The SAME control for Phase 6 (threats T-00-14, T-06-10). Phase 6's probes
+# source the same instance.sh into a THIRD results root, and the rules above are
+# path-specific — without these lines a run that died before teardown could
+# commit a live guest bearer token, and every run would commit host logs carrying
+# whatever the instance proxied.
+.planning/phases/06-retroactive-scan-deployment-reality/results/runs/*/token
+.planning/phases/06-retroactive-scan-deployment-reality/results/runs/*/*.log
+.planning/phases/06-retroactive-scan-deployment-reality/results/runs/*/raw/*.log
+
 # Per-operation stderr captures copied into runs/*/raw/ by scripts/spike/ladder.sh.
 # The rule above only covers runs/*/*.log, one level up. These are the channel a
 # C-level QuickJS abort would land in, so they are CHECKED — the scan result is
