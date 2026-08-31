@@ -205,8 +205,10 @@ authoritative and the shipped text is the defect.
 
 THE SURFACES THAT COMPARISON REACHES - 2, RENDERED FROM THE ONE
 DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:
+
   - packages/backend/src/outbound-prohibition.spec.ts
   - .planning/REQUIREMENTS.md
+
 NO OTHER FILE IN THIS REPOSITORY IS REACHED BY IT. A file that is not listed
 just above - including a file under the planning directory that is not listed
 just above - carries at most a POINTER to these two and is byte-compared to
@@ -215,6 +217,7 @@ with or renders into an unlisted file is FALSE, and the disposition for such
 a sentence is to DELETE it rather than to re-date it.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
+
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
@@ -945,8 +948,8 @@ Caido is client/server. Backend plugins run in the Caido CLI/server process, whi
 
 - [ ] **DEPLOY-01**: Tested against local desktop, remote CLI, and Docker deployments both with and without a persistent volume.
 - [ ] **DEPLOY-02**: Server-side storage is labelled as such in the UI and never presented as a path on the operator's machine.
-- [ ] **DEPLOY-03**: Operator-facing artifacts — reconstructed source, exports, dumps — are delivered via `sdk.hostedFile` or a bounded authenticated frontend download, with expiry and redaction rules. Not by writing to a path and assuming the operator can reach it.
-- [ ] **DEPLOY-04**: Server disk is treated as shared instance storage with quotas and orphan cleanup; no assumption of host shell access.
+- [x] **DEPLOY-03**: Operator-facing artifacts — reconstructed source, exports, dumps — are delivered via `sdk.hostedFile` or a bounded authenticated frontend download, with expiry and redaction rules. Not by writing to a path and assuming the operator can reach it.
+- [x] **DEPLOY-04**: Server disk is treated as shared instance storage with quotas and orphan cleanup; no assumption of host shell access.
 
 ### Signal quality (QUAL)
 

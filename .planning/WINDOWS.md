@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 55
+open_count: 56
 waived_count: 0
 fixed_count: 27
-total_count: 82
-last_updated: 2026-08-31T17:53:10.642Z
+total_count: 83
+last_updated: 2026-08-31T18:52:36.722Z
 ---
 
 # Broken Windows Ledger
@@ -118,6 +118,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 80 | 06 | deviation | packages/backend/src/scan/scans.ts |  | SCAN_LIST_DEFAULT_LIMIT stays at the 200 plan 06-01 shipped, not the 50 06-05-PLAN.md's action text names. The plan itself says the number is an ASSUMPTION and 'the number may move'; what it makes binding is the SHAPE (a stated bound, enforced at read, suspended rows exempt, the truncation said in words), and all four ship. Changing an already-exported, already-asserted constant to a different unmeasured number would have been churn. The constant's JSDoc now says it is an assumption and names plan 06-13 as the owner of the surface that renders the truncation sentence. | open |  | 2026-08-31T17:53:00.019Z |  |
 | 81 | 06 | deviation | packages/backend/src/scan/scans.ts |  | RESUME_SQL re-bases the row's epoch, which 06-05-PLAN.md's behaviour text does not ask for and its task-2 line ('a resume under the ORIGINAL epoch continues') arguably contradicts. Forced as a Rule 1 bug: projectEpoch() is a MONOTONIC count of applied project changes and never returns to a previous value, so a resume preserving the stale epoch produced a scan that suspended itself again on its first page for ever — D-04's suspension was a one-way door and the must-have 'resumes only on explicit operator action' was unreachable. The plan's line is satisfied under the reading that the discriminator is the PROJECT rather than the number: a resume from the wrong project is refused by project_id scoping (getScan returns undefined -> no-scan), which is UI-SPEC's 'Resume it from that project'. | open |  | 2026-08-31T17:53:00.108Z |  |
 | 82 | 06 | deviation | packages/backend/src/scan/scans.spec.ts |  | Tasks 1 and 2 carry tdd="true" but workflow.tdd_mode is false in config.json, and 06-05 did NOT ship separate RED-then-GREEN gate commits for task 1: the statements and their spec landed in one feat() commit. Task 2's spec is its own test() commit. Non-vacuity was established by MUTATION instead, and both mutations were executed and recorded: removing LIST_SCANS_SQL's leading (state = 'suspended') DESC term fails exactly the pin case, and emptying DEFERRED_REASONS fails exactly the vocabulary case. The index.ts sweep-ordering assertion was mutation-checked the same way (moving the sweep after the registrations fails it). | open |  | 2026-08-31T17:53:00.199Z |  |
+| 83 | 06 | deviation | packages/backend/src/filesystem-prohibition.spec.ts |  | Plan 06-07 acceptance criterion 'self-audit returns an empty array' was unsatisfiable (the gate must import node:fs for its own walk); shipped a strictly stronger assertion instead - exactly one violation, and none after removing that import line. | open |  | 2026-08-31T18:52:36.722Z |  |
 
 ````json
 [
@@ -1103,6 +1104,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T17:53:00.199Z",
+    "resolved_at": null
+  },
+  {
+    "id": 83,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/filesystem-prohibition.spec.ts",
+    "line": null,
+    "description": "Plan 06-07 acceptance criterion 'self-audit returns an empty array' was unsatisfiable (the gate must import node:fs for its own walk); shipped a strictly stronger assertion instead - exactly one violation, and none after removing that import line.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T18:52:36.722Z",
     "resolved_at": null
   }
 ]

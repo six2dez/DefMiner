@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-05-PLAN.md
-last_updated: "2026-08-31T17:56:11.033Z"
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-08-31T18:52:28.029Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 7852cb648485daa3bb57cbdf07c2358b7e80187f
+state_head: d6234baf1dfd2984c4437f15b5c79f76c1652c1d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 64
+  completed_plans: 65
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -300,6 +300,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P04 | 11 min | 2 tasks | 3 files |
 | Phase 06 P03 | 22 min | 3 tasks | 6 files |
 | Phase 06 P05 | 26 min | 3 tasks | 6 files |
+| Phase 06 P07 | 25 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -586,6 +587,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: heldAtWatermark is producer module state with an out-of-band reader, not only a return value — getScanStatus is a separate RPC that does not hold the walk's outcome, and from outside the backend a watermark hold and a blocked QuickJS thread look identical. Without the explicit signal, "Waiting for the analysis queue" can never render and every healthy hold falls through to the stall marker. The index.ts projection is 06-05's edit.
 - [Phase 06]: The skip-done read is ONE bounded statement per page and scans.ts's per-item isRequestFinished was deleted rather than kept — D-03: at twenty items a page that is 2,000 indexed round trips for a 40,000-request backfill instead of 40,000. Two readers of the same question drift, and the one nobody calls stops being right without anything failing. The placeholder count is counted from the statement text and asserted at import against SCAN_PAGE_SIZE.
 - [Phase 06]: A resume RE-BASES the scan's epoch: projectEpoch() is a monotonic count of applied project changes and never returns to a previous value, so a preserved epoch made D-04's suspension a one-way door. The epoch is a freshness token; project_id is the identity, and a resume from the wrong project is refused by the scoping.
+- [Phase 06]: D-17 APPROVED as specified (blocking-human checkpoint, 06-07 Task 1): the chunked RPC download is the ONLY path by which anything DefMiner produces reaches the operator, nothing is written to server disk, and Caido's hosted-file surface is DECLINED and made unreachable by a shipped static gate. One-way, accepted as one-way. — Nine premises verified against the working tree before the checkpoint was surfaced. Two changed its basis: (7) fs is ALREADY on the DIST-05 bundle allowlist at check-bundle-imports.mjs:83 because Phase 0 measured it loadable, so the gate closes a door open today rather than double-locking a closed one; and (1) HostedFileSDK is getAll()+create() only, so a created file is permanent and unreclaimable and DEPLOY-03's own expiry clause could never be met against it.
+- [Phase 06]: DEPLOY-03's "with expiry and redaction rules" attaches to BOTH of its alternatives, and the two halves are discharged differently: under the bounded download redaction is SHIPPED (audit.kind admits export_raw/export_redacted; telemetry.ts carries PATH_REDACTION) while expiry LOSES ITS SUBJECT - a dissolution, recorded as one and NOT claimed as compliance. Under sdk.hostedFile expiry is UNSATISFIABLE, because the surface has no delete. — This is the sharpest argument in the phase for D-17 and it is easy to overstate. Recorded in these words in 06-07-SUMMARY.md and in filesystem-prohibition.spec.ts's header so it does not survive only in a checkpoint transcript.
+- [Phase 06]: No read-only allowlist for the hosted-file surface, unlike the outbound gate's REQUESTS_READ_ONLY: getAll() returns HostedFile objects each carrying a server path, so even the read half hands back the one string DEPLOY-02 and D-19 exist to keep off the operator's screen. Both members banned.
+- [Phase 06]: O-01 remains a NAMED CARRIED OBLIGATION owned by Phase 7 and is NOT settled by 06-07's checkpoint passing. Discharged by the external-RSS probe; a negative probe re-opens D-17 deliberately and the quota-and-cleanup machinery returns as a SET rather than piecemeal.
 
 ### Known Risks Carried Forward
 
@@ -628,8 +633,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T17:56:03.575Z
-**Stopped at:** Completed 06-05-PLAN.md
+**Last session:** 2026-08-31T18:52:27.942Z
+**Stopped at:** Completed 06-07-PLAN.md
 **Resume file:** None
 
 ### Blockers
