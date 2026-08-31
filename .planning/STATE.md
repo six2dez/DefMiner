@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 05
 current_phase_name: Workspace & Operator Workflow
-status: executing
-stopped_at: Completed 05-11-PLAN.md
-last_updated: "2026-08-31T08:20:05.487Z"
+status: verifying
+stopped_at: Completed 05-12-PLAN.md
+last_updated: "2026-08-31T09:15:24.279Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 05 execution started
-state_head: ec07910ca9f785fc39b860cc4027e7c40f8b77d1
+state_head: 2ec64846954a82262f67956e5101a8afb8072839
 progress:
   total_phases: 11
   completed_phases: 0
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 05 (Workspace & Operator Workflow) — EXECUTING
 Plan: 12 of 12
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-28 — Phase 05 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
@@ -294,6 +294,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 05 P09 | 42 min | 3 tasks | 25 files |
 | Phase 05 P10 | 35 min | 4 tasks | 24 files |
 | Phase 05 P11 | 40 min | 3 tasks | 16 files |
+| Phase 05 P12 | 45 min | 3 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -550,6 +551,16 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 05]: P5-D90: CONTRACT_VERSION 2 to 3 is a DELIBERATE OVER-BUMP, recorded as one rather than justified after the fact — Adding an endpoint name obliges no bump under the shape rule — a frontend that does not know a name never calls it. It is bumped because the export is the first result the frontend ASSEMBLES across several calls into a FILE on the operator's disk, which outlives the session with nothing on its face saying which version wrote it. The cost of the bump is one forced reload.
 - [Phase 05]: P5-D91: EXPORT_FORMATS and EXPORT_REDACTION_MODES live in packages/engine/src/contract.ts, not in the exporter — Both packages need them as VALUES — the backend to select a serialiser and name an audit kind, the frontend to render the radios — and the two packages cannot import each other. The redaction list's ORDER is a safety property (the first member is what a positional mistake lands on), so a second copy is the one kind of duplication that fails silently and in the dangerous direction.
 - [Phase 05]: P5-D92: the raw-export confirmation copy is asserted VERBATIM against 05-UI-SPEC.md's own row read off disk at test time, not against a second copy of the sentence — The copy was wrong twice and both wrong versions read perfectly well. A comparison against a second in-repo copy would pass just as happily if both copies were the old one.
+- [Phase 05]: P5-D93 (plan 05-12): the settings surface's section list is derived from the KEYS THE BACKEND RETURNED, not from a group vocabulary the frontend holds — A group listed in the frontend with zero controls would render an empty labelled box, and an empty labelled box reads as a MISSING CONTROL — a different and worse claim than an absent feature. Deriving from the returned keys is what makes the surface grow by addition when Phases 2-4 ship their toggles, rather than by a frontend guessing what exists.
+- [Phase 05]: P5-D94 (plan 05-12): a failed save keeps every edit because the drafts map is SEPARATE from the rows, and the re-read runs on the success path only — Making it a property of the shape rather than a rule to remember at each write site. A naive form reset is the highest-probability way to get this wrong, and when it is wrong it LOOKS like success — the operator sees stored values in the fields and believes their change landed.
+- [Phase 05]: P5-D95 (plan 05-12): the retention bounds are shown and stored in the units the sweep obeys — milliseconds for the age bound — with no conversion on this surface — A conversion bug on this particular number does not produce a wrong label, it produces a sweep that deletes ninety times too much, on the one mechanism in this plugin that deletes anything. The number the operator sees is the number the sweep obeys.
+- [Phase 05]: P5-D96 (plan 05-12): the health endpoint has TWO outcomes, and 'no project resolved' is not four zeroes — Four zeroes are exactly what a perfectly idle, perfectly healthy backend reports. Rendering them for a plugin that has resolved no project tells the operator the opposite of the truth at the moment they opened this surface to find out why nothing is happening.
+- [Phase 05]: P5-D97 (plan 05-12): the health strip reads getHealth and NOT getStatus, and getStatus stays unwrapped in the frontend client — Resolves the half of P5-D52 that plan 05-12 was the trigger for. getHealth carries four numbers and no string; getStatus carries the whole telemetry projection including lastError. A strip built over the wider shape would be one field access away from rendering a plugin-generated string that quotes what the plugin was doing, and 05-UI-SPEC.md's long-text/health-strip row makes the absence of such content a property of the surface. Resolution, not discipline.
+- [Phase 05]: P5-D98 (plan 05-12): the refusal surface depends on getCompat and on NOTHING else, and getCompat is the one client read not gated by the contract-version check — All three refusal paths register only the getStatus/getCompat pair, so a surface needing a third endpoint could not render on the only build it exists for. getContractVersion does not exist on a refusing build either, so the version guard could never have been satisfied there — gating getCompat would withhold the diagnosis at exactly the moment it is needed.
+- [Phase 05]: P5-D99 (plan 05-12): the refusal surface renders on compatible === false, never on !compatible, and renders nothing at all while the report is unread — null and undefined are both falsy and both mean 'not yet known'. A negation would flash a refusal banner on a healthy build between mount and the first answer, and a refusal an operator sees once and cannot reproduce is a refusal they will remember and act on.
+- [Phase 05]: P5-D100 (plan 05-12): the health strip's fixed height is asserted as an identical CLASS ATTRIBUTE across magnitudes, not as an offsetHeight comparison — jsdom performs no layout: offsetHeight is 0 for every element, for a strip that wraps and for one that does not. An assertion over it would pass unconditionally while looking like the strongest test in the file. The height is decided by three classes, none conditional on any value, so that is where it is checked.
+- [Phase 05]: P5-D101 (plan 05-12): UI-08 is marked complete for the settings this build HAS, and the residual is stated rather than left to the checkbox — UI-08's text says 'every toggle, threshold, and budget'. This build has three settings and all three are editable at both scopes with their provenance shown; the thresholds and budgets belong to Phases 2-4, which have not shipped controls to expose. Marking it records that the SURFACE and its growth mechanism exist, and the SUMMARY names what is not yet on it — the same discipline P5-D69 and P5-D81 applied in the other direction, applied here to a requirement whose remaining scope is owned by phases that have not run.
+- [Phase 05]: P5-D102 (plan 05-12): the health surface carries a Refresh action beyond the plan's four behaviours — The diagnosis this surface exists for is 'does the number move' — a climbing queue depth beside a jobs-in-flight of 1 is a blocked thread, and the same two numbers held still are an idle backend. A surface that read once on mount could not answer the question it was built to answer.
 
 ### Known Risks Carried Forward
 
@@ -592,8 +603,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T08:20:05.440Z
-**Stopped at:** Completed 05-11-PLAN.md
+**Last session:** 2026-08-31T09:15:24.222Z
+**Stopped at:** Completed 05-12-PLAN.md
 **Resume file:** None
 
 ### Blockers

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 39
+open_count: 40
 waived_count: 0
 fixed_count: 24
-total_count: 63
-last_updated: 2026-08-31T08:20:05.758Z
+total_count: 64
+last_updated: 2026-08-31T09:17:48.121Z
 ---
 
 # Broken Windows Ledger
@@ -99,6 +99,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 61 | 05 | stub | packages/frontend/src/components/EvidencePanel.vue |  | The source-request slot renders an explicit not-yet-available line: App.vue passes :source-request-id="null" because nothing links an artifact to the observation whose request still resolves (D-02's walk is the deferred pass's). UI-03 is deliberately NOT marked complete for this reason and the byte-offset one. | open |  | 2026-08-29T01:31:47.959Z |  |
 | 62 | 05 | deviation | packages/backend/src/store/retry.ts |  | A retry returns the analysis to the queued state but does NOT re-walk the bytes: DefMiner retains a digest, a length and a kind and no body, so the walk happens the next time the target serves them. The panel states this in words. Phase 2's ERR-02 recovery is what drains a pending row without a fresh sighting. | open |  | 2026-08-29T01:31:48.065Z |  |
 | 63 | 05 | unrun-verify | packages/backend/src/store/export.ts |  | The 8 MiB per-RPC-call figure is a BUDGET this project sets, not a ceiling measured from Caido; 05-02 asked 05-11 to confirm a large export against a real Caido and it could not. Coverage D13. | open |  | 2026-08-31T08:20:05.758Z |  |
+| 64 | 05 | stub | packages/frontend/src/App.vue |  | SERVER_STORAGE_PATH is null — the R5 server-path renderer in SettingsPanel.vue ships with no production data source; telemetry.ts strips sdk.meta.path() out of everything crossing the RPC, so DEPLOY-02 (Phase 6) owns the surface that supplies one | open |  | 2026-08-31T09:17:48.121Z |  |
 
 ````json
 [
@@ -856,6 +857,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-31T08:20:05.758Z",
+    "resolved_at": null
+  },
+  {
+    "id": 64,
+    "kind": "stub",
+    "phase": "05",
+    "file": "packages/frontend/src/App.vue",
+    "line": null,
+    "description": "SERVER_STORAGE_PATH is null — the R5 server-path renderer in SettingsPanel.vue ships with no production data source; telemetry.ts strips sdk.meta.path() out of everything crossing the RPC, so DEPLOY-02 (Phase 6) owns the surface that supplies one",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T09:17:48.121Z",
     "resolved_at": null
   }
 ]

@@ -358,7 +358,7 @@ Plans:
   7. Native Findings are created only for high-signal results with stable dedupe keys; entropy-only and hint-grade results provably never project
   8. Degraded and partial analyses are visibly marked
 
-**Plans**: 11/12 plans executed
+**Plans**: 12/12 plans executed
 
 > **Scope split, decision D-05 (2026-08-28).** Phase 5 nominally depends on Phase 4, and the
 > `entities` / `evidence` tables do not exist. Rather than re-sequence, the phase is split: what is
@@ -380,7 +380,7 @@ Plans:
 - [x] 05-09-PLAN.md
 - [x] 05-10-PLAN.md
 - [x] 05-11-PLAN.md
-- [ ] 05-12-PLAN.md
+- [x] 05-12-PLAN.md
 
 **Wave 1**
 
@@ -408,11 +408,11 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 05-10: The evidence panel frame and the retry path (OPS-03)
+- [x] 05-10: The evidence panel frame and the retry path (OPS-03)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 05-11: Safe export — serialiser, dialog, and the browser download (D-04)
+- [x] 05-11: Safe export — serialiser, dialog, and the browser download (D-04)
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
