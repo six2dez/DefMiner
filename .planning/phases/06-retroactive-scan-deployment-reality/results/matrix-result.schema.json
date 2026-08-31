@@ -1,0 +1,351 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defminer.local/schemas/matrix-result.schema.json",
+  "title": "Phase 6 deployment matrix result (DEPLOY-01)",
+  "description": "A SIBLING of spike-result.schema.json, not a reuse. Phase 0's `binary` block is `additionalProperties: false` over a path and a file hash, and a container leg's binary is an image reference with a resolved manifest digest — the two cannot be the same sub-schema. The other differences are D-23's `not_run` (with a REQUIRED reason and all-null assertions) and `shares_filesystem_with`, the field that stops four green legs being read as four independent confirmations of a property only the container legs test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "matrix",
+    "status",
+    "recorded_at",
+    "expected_version",
+    "host",
+    "legs",
+    "verdict"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "matrix": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The matrix identifier. `DEPLOY-01` — the requirement this artifact IS the evidence for."
+    },
+    "status": { "$ref": "#/$defs/status" },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "REQUIRED when status is not_run. A matrix that could not run at all is recorded with why."
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "expected_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "THE MATRIX'S OWN PINNED CONSTANT (D-21), separate from the Phase 1 tripwire value. Reusing 0.57.1 would make every leg fail by design; editing it would contaminate the tripwire that protects the Phase 0 threshold artifacts."
+    },
+    "method": { "type": "string" },
+    "host": {
+      "type": "object",
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string" },
+        "release": { "type": "string" },
+        "arch": { "type": "string" },
+        "cores": { "type": ["integer", "null"] },
+        "docker_server_version": { "type": ["string", "null"] }
+      }
+    },
+    "legs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/leg" }
+    },
+    "verdict": { "$ref": "#/$defs/verdict" },
+    "requirements_affected": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "not_run" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["reason"],
+        "properties": { "reason": { "type": "string", "minLength": 1 } }
+      }
+    }
+  ],
+  "$defs": {
+    "status": {
+      "enum": ["pass", "fail", "inconclusive", "not_run"],
+      "description": "`not_run` is D-23's state and is NOT a weak pass. It marks a leg that never executed, which the verifier reports as a PARTIAL matrix — DEPLOY-01's checkbox does not move on the strength of it."
+    },
+
+    "legName": {
+      "enum": [
+        "local-desktop",
+        "remote-cli",
+        "docker-volume",
+        "docker-no-volume"
+      ]
+    },
+
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "D-22's four assertions, IDENTICAL on every leg — each item genuinely differs by deployment shape, which is why these four and not others. `true` means the assertion held, `false` means it ran and did not hold, `null` means it did not run. A `null` is never read as a pass.",
+      "required": [
+        "install_and_compatible",
+        "migrations_and_tables",
+        "artifact_and_observation",
+        "restart_data_presence"
+      ],
+      "properties": {
+        "install_and_compatible": {
+          "type": ["boolean", "null"],
+          "description": "The plugin package installs and startup reports compatible — on `caido-cli` as well as the desktop app."
+        },
+        "migrations_and_tables": {
+          "type": ["boolean", "null"],
+          "description": "Migrations ran and the expected table set is present in the plugin database."
+        },
+        "artifact_and_observation": {
+          "type": ["boolean", "null"],
+          "description": "One proxied JavaScript response produced one artifact row and one observation row."
+        },
+        "restart_data_presence": {
+          "type": ["boolean", "null"],
+          "description": "After the leg's OWN restart semantics, the data is as this shape requires. On three legs that means PRESENT; on docker-no-volume it means ABSENT with a clean start on an empty database. The boolean says the EXPECTATION held — the observed fact is `restart.data_present`, recorded separately so the two can never be conflated."
+        }
+      }
+    },
+
+    "binaryNative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "expected_version",
+        "reported_version",
+        "sha256"
+      ],
+      "properties": {
+        "kind": { "const": "native" },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The ABSOLUTE app-bundle path. Bare `caido-cli` on PATH is a stale 0.55.3 on the recording host and is never invoked."
+        },
+        "expected_version": { "type": "string", "minLength": 1 },
+        "reported_version": { "type": ["string", "null"] },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+
+    "binaryContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "image",
+        "tag",
+        "expected_version",
+        "reported_version",
+        "manifest_digest"
+      ],
+      "properties": {
+        "kind": { "const": "container" },
+        "image": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "minLength": 1 },
+        "expected_version": { "type": "string", "minLength": 1 },
+        "reported_version": { "type": ["string", "null"] },
+        "manifest_digest": {
+          "type": ["string", "null"],
+          "description": "The RESOLVED digest, not the moving tag. A future reader knows exactly which build ran.",
+          "pattern": "^[a-z0-9./_-]+@sha256:[0-9a-f]{64}$|^sha256:[0-9a-f]{64}$"
+        },
+        "container_name": { "type": "string" },
+        "data_path": {
+          "type": "string",
+          "description": "The data directory INSIDE the image. A container-internal path, never a host path."
+        }
+      }
+    },
+
+    "restart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "expected_data_present", "data_present"],
+      "description": "The restart the leg actually performed, and what it found. `method` is asserted by the gate because a `container-restart` on the unmounted shape preserves the writable layer and would report a pass on the assertion meant to prove ABSENCE (Pitfall 8, T-06-55).",
+      "properties": {
+        "method": {
+          "enum": [
+            "process-sigkill-relaunch",
+            "container-stop-start",
+            "container-stop-rm-run"
+          ]
+        },
+        "expected_data_present": { "type": "boolean" },
+        "data_present": { "type": ["boolean", "null"] },
+        "artifacts_before": { "type": ["integer", "null"] },
+        "artifacts_after": { "type": ["integer", "null"] },
+        "observations_before": { "type": ["integer", "null"] },
+        "observations_after": { "type": ["integer", "null"] },
+        "tables_after": {
+          "type": ["array", "null"],
+          "items": { "type": "string" }
+        },
+        "startup_clean": {
+          "type": ["boolean", "null"],
+          "description": "The plugin reported itself compatible on the SECOND boot with no error. On the no-volume leg this is the half of D-22's fourth assertion that says the plugin comes back clean on an EMPTY database rather than erroring."
+        },
+        "schema_version_before": { "type": ["integer", "null"] },
+        "schema_version_after": { "type": ["integer", "null"] }
+      }
+    },
+
+    "cursorProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "O-04, recorded as an OBSERVATION whichever way it lands. Nothing in the shipped design depends on the answer: the durable resume position is `last_request_id`, a re-derivable decimal integer, and `last_cursor` is an opportunistic fast path that `init()` NULLs anyway. A negative result here is not a defect.",
+      "required": ["measured"],
+      "properties": {
+        "measured": { "type": "boolean" },
+        "reason": { "type": ["string", "null"] },
+        "cursor_present_before": { "type": ["boolean", "null"] },
+        "resolved_after_restart": {
+          "type": ["boolean", "null"],
+          "description": "O-04's answer. `true` means a Cursor survived a process restart; `false` means it did not."
+        },
+        "error_after_restart": { "type": ["string", "null"] },
+        "id_is_decimal_integer": {
+          "type": ["boolean", "null"],
+          "description": "Assumption A1. `request.getId()` returns a decimal integer string, which is what makes the `row.id.lt:N` boundary expressible as HTTPQL."
+        },
+        "id_ordering_agrees": {
+          "type": ["boolean", "null"],
+          "description": "Assumption A2. Ordering by `row.id` descending agrees with `descending(\"req\",\"id\")`, so pages neither overlap nor skip."
+        },
+        "sample_size": { "type": ["integer", "null"] },
+        "notes": { "type": "string" }
+      }
+    },
+
+    "leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg",
+        "status",
+        "assertions",
+        "binary",
+        "shares_filesystem_with",
+        "notes"
+      ],
+      "properties": {
+        "leg": { "$ref": "#/$defs/legName" },
+        "status": { "$ref": "#/$defs/status" },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "REQUIRED and non-empty when status is not_run (D-23)."
+        },
+        "assertions": { "$ref": "#/$defs/assertions" },
+        "binary": {
+          "oneOf": [
+            { "$ref": "#/$defs/binaryNative" },
+            { "$ref": "#/$defs/binaryContainer" }
+          ],
+          "description": "A ONE-OF discriminated on `kind`. Both branches are `additionalProperties: false`, so an object mixing a native `path` with a container `manifest_digest` matches NEITHER and is rejected."
+        },
+        "shares_filesystem_with": {
+          "type": ["array", "null"],
+          "items": { "$ref": "#/$defs/legName" },
+          "description": "Any other leg this one shares a filesystem with ON THE RECORDING HOST, or null. On a single machine `local-desktop` and `remote-cli` do, which is exactly the property DEPLOY-02 and DEPLOY-03 exist because of — so only the container legs genuinely test it. Required, because the overclaim this field prevents is silent when the field is merely absent."
+        },
+        "notes": { "type": "string" },
+        "run_id": { "type": ["string", "null"] },
+        "listen": {
+          "type": ["string", "null"],
+          "pattern": "^127\\.0\\.0\\.1:\\d+$",
+          "description": "Loopback only, and never port 8080 — that is the operator's live desktop instance."
+        },
+        "project_persistence": {
+          "enum": ["temporary", "persistent", "none", null]
+        },
+        "plugin_install_route": {
+          "enum": ["graphql-upload", "bind-mount", null],
+          "description": "Recorded rather than left implicit, because the two routes exercise different things."
+        },
+        "volume": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mounted": { "type": "boolean" },
+            "ownership_fixup": {
+              "type": ["string", "null"],
+              "description": "What was ACTUALLY done, not what the guide recommends. `chown -R 999:999` may be a no-op under Docker Desktop's uid mapping; recording the observed effect is the point."
+            }
+          }
+        },
+        "restart": { "$ref": "#/$defs/restart" },
+        "cursor_probe": { "$ref": "#/$defs/cursorProbe" },
+        "measurements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["number", "string", "boolean", "null"]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "not_run" } },
+            "required": ["status"]
+          },
+          "then": {
+            "required": ["reason"],
+            "properties": {
+              "reason": { "type": "string", "minLength": 1 },
+              "assertions": {
+                "type": "object",
+                "properties": {
+                  "install_and_compatible": { "type": "null" },
+                  "migrations_and_tables": { "type": "null" },
+                  "artifact_and_observation": { "type": "null" },
+                  "restart_data_presence": { "type": "null" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "legs_run",
+        "legs_not_run",
+        "legs_failed",
+        "partial",
+        "remote_filesystem_property"
+      ],
+      "properties": {
+        "answer": { "type": "string", "minLength": 1 },
+        "legs_run": { "type": "integer", "minimum": 0 },
+        "legs_not_run": { "type": "integer", "minimum": 0 },
+        "legs_failed": { "type": "integer", "minimum": 0 },
+        "partial": {
+          "type": "boolean",
+          "description": "TRUE when any declared leg is not_run. A partial matrix is not a failed one — the phase can still complete — but DEPLOY-01 is not fully evidenced by it (D-23)."
+        },
+        "remote_filesystem_property": {
+          "type": "string",
+          "minLength": 1,
+          "description": "T-06-52's mitigation as a REQUIRED field: which legs actually carry the remote-filesystem property DEPLOY-02 and DEPLOY-03 exist for. Four passing legs are not four independent confirmations."
+        },
+        "if_wrong": { "type": "string" }
+      }
+    }
+  }
+}
