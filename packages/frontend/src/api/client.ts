@@ -38,18 +38,29 @@
 // other.
 //
 // ===========================================================================
-// WHY ONLY FIVE OF THE EIGHT ENDPOINTS ARE WRAPPED
+// WHICH ENDPOINTS ARE WRAPPED, AND WHY THE REST ARE NOT
 // ===========================================================================
-// `getStatus`, `getCompat`, `getArtifacts` and `getObservations` are registered
-// by the backend and are deliberately NOT wrapped here (decision P5-D52).
-// Wrapping one means restating its payload type in this package — `StatusPayload`
-// alone is eleven fields over `SlimStatus` — and a restated type with no
-// consumer is a second copy that drifts before anybody reads it. The Health tab
-// (plan 05-12) is the first consumer of the status pair and wraps them then,
-// against a shape it actually renders. The two unpaginated reads are the
-// compatibility smoke test's and are superseded on this page by the paged pair.
+// Decision P5-D52 held that a wrapper restating a payload type with no consumer
+// is a second copy that drifts before anybody reads it, and left `getStatus`,
+// `getCompat`, `getArtifacts` and `getObservations` unwrapped until something
+// rendered them. Plan 05-12 is that something, and it resolves the four
+// SEPARATELY rather than wrapping the lot now that one of them is needed:
+//
+//   * `getCompat` IS WRAPPED. The refusal surface renders its report, and on a
+//     refusing build it is one of only TWO endpoints that exist at all.
+//   * `getStatus` IS STILL NOT, and that is a decision rather than an omission.
+//     The health strip reads `getHealth`, which carries four numbers and no
+//     string; `getStatus` carries the whole telemetry projection including
+//     `lastError`. A strip built over the wider shape would be one field access
+//     away from rendering a plugin-generated string that quotes what the plugin
+//     was doing, and 05-UI-SPEC.md's `long-text / health-strip` row makes the
+//     absence of such content a property of the surface. Resolution, not
+//     discipline.
+//   * The two unpaginated reads are the compatibility smoke test's and are
+//     superseded on this page by the paged pair.
 
 import type {
+  BoundRejection,
   ExportFormat,
   ExportRedactionMode,
   InvalidationSummary,
@@ -57,6 +68,9 @@ import type {
   PageRequest,
   PageResponse,
   ScanState,
+  SettingKey,
+  SettingScope,
+  SettingsGroup,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import { INVALIDATION_EVENT } from "@defminer/engine/contract";
@@ -91,8 +105,16 @@ import type { ArtifactRow } from "../backend";
  * bundle ASSEMBLES across several calls into a FILE on the operator's disk, and
  * a file outlives the session with nothing on its face saying which version
  * wrote it.
+ *
+ * BUMPED TO 4 IN LOCKSTEP WITH PLAN 05-12's. The backend's comment records that
+ * one as a deliberate over-bump too, and for a reason worth repeating where a
+ * reader edits this number: `writeSetting` is the first endpoint whose effect is
+ * a persistent configuration change governing a DESTRUCTIVE SWEEP, and a bundle
+ * misreading its outcome shape would report "saved" for a retention bound the
+ * backend refused. The operator would then believe a bound is in force that is
+ * not, about the one mechanism in this plugin that deletes their history.
  */
-export const FRONTEND_CONTRACT_VERSION = 3;
+export const FRONTEND_CONTRACT_VERSION = 4;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -285,6 +307,133 @@ export type ExportChunkOutcome =
   | { readonly outcome: "empty" }
   | { readonly outcome: "refused"; readonly reason: ExportRefusal };
 
+/**
+ * One settings key with all three levels of its resolution, as the panel
+ * receives it.
+ *
+ * Mirrors `KnownSettingValue` in packages/backend/src/store/settings.ts, for the
+ * reason this file's header gives — the two packages cannot import each other.
+ * The two VOCABULARIES it is built from are NOT mirrored: `SettingKey` and
+ * `SettingsGroup` come from @defminer/engine/contract, because the key list is
+ * what makes the panel's copy map exhaustive. A second copy of it here would let
+ * a key ship with no label and nothing would say so.
+ *
+ * `project` AND `global` ARE `string | null` AND THE `null` IS "NO ROW". An
+ * empty string is a row holding an empty string, which is a value somebody wrote
+ * — and it is precisely the value the write guard refuses, so it can only have
+ * arrived from before this surface existed. Collapsing the two would make it
+ * unfindable and unclearable.
+ *
+ * NOTHING HERE IS TARGET-CONTROLLED. Keys and groups are DefMiner-authored
+ * identifiers; the three values are strings the OPERATOR typed or this plugin
+ * documented. This is the one row shape in the frontend with no `font-mono`
+ * obligation, and the reason is worth stating rather than inferring.
+ */
+export type SettingRow = {
+  readonly key: SettingKey;
+  readonly group: SettingsGroup;
+  readonly documented: string;
+  readonly project: string | null;
+  readonly global: string | null;
+};
+
+/**
+ * One settings write.
+ *
+ * `value: null` IS THE CLEAR — a write of ABSENCE at this scope, which falls the
+ * resolution back to the next level down rather than pinning it to whatever the
+ * documented default happens to be today.
+ *
+ * `projectId` is carried and DISCARDED by the backend, like every other request
+ * on this contract: the store layer needs one in every predicate and the
+ * frontend is not the authority on which project is active.
+ */
+export type SettingWriteRequest = {
+  readonly projectId: string;
+  readonly scope: SettingScope;
+  readonly key: SettingKey;
+  readonly value: string | null;
+};
+
+/**
+ * What a settings write answers with.
+ *
+ * A REASON CODE, NEVER A MESSAGE — the same rule {@link RpcReason} states. The
+ * panel maps each member of the closed vocabulary to its own copy, so nothing a
+ * driver or a coercion said can be interpolated into a sentence the operator
+ * reads.
+ *
+ * `stored` IS WHAT ACTUALLY LANDED and is not always what was sent: a fractional
+ * bound is floored. The panel re-reads after a successful write anyway — this
+ * field is what lets it say so in the same breath.
+ */
+export type SettingWriteOutcome =
+  | { readonly ok: true; readonly stored: string }
+  | { readonly ok: false; readonly reason: BoundRejection };
+
+/**
+ * The four numbers the health strip renders.
+ *
+ * Mirrors `HealthPayload` in packages/backend/src/api/spec.ts. FOUR NUMBERS AND
+ * NO STRING, and the absence is the property: 05-UI-SPEC.md's `long-text /
+ * health-strip` row makes "only DefMiner-authored labels and numeric counters"
+ * a rule of this surface, and a shape with no string on it cannot break it by a
+ * later edit adding one field access.
+ */
+export type HealthCounters = {
+  readonly queueDepth: number;
+  readonly droppedCount: number;
+  readonly jobsInFlight: number;
+  readonly maxSliceMs: number;
+};
+
+/**
+ * What the health endpoint answers with.
+ *
+ * TWO OUTCOMES, because four zeroes are what a perfectly healthy idle backend
+ * reports and rendering them for a plugin with no project resolved would tell
+ * the operator the opposite of the truth at the moment they came here to
+ * diagnose something.
+ */
+export type HealthOutcome =
+  | { readonly outcome: "health"; readonly health: HealthCounters }
+  | { readonly outcome: "unavailable"; readonly reason: "no-project" };
+
+/**
+ * One runtime surface probe's result, as the refusal surface renders it.
+ *
+ * Mirrors `SurfaceOutcome` in packages/backend/src/compat.ts. `error` is a
+ * PLUGIN-GENERATED probe message — a `TypeError` from a property access this
+ * plugin made against the SDK — and carries no target byte: a surface probe
+ * never touches a response. It is still rendered through the display path,
+ * because "carries no target byte" is a claim about today's probe list and the
+ * display path costs nothing to keep in front of it.
+ */
+export type SurfaceProbe = {
+  readonly name: string;
+  readonly scope: string;
+  readonly ok: boolean;
+  readonly error: string | null;
+};
+
+/**
+ * COMPAT-02's in-runtime report, as the refusal surface renders it.
+ *
+ * Mirrors `CompatPayload` in packages/backend/src/api/spec.ts. THE ONE PAYLOAD
+ * THIS CLIENT MAY ASK FOR ON A REFUSING BUILD: `getCompat` is registered on the
+ * success path AND on all three refusal paths, and on a refusal it is one of
+ * only two endpoints that exist at all.
+ */
+export type CompatReport = {
+  readonly compatible: boolean;
+  readonly reason: string | null;
+  readonly minCaido: string;
+  readonly minSqlite: string;
+  readonly caidoVersion: string | null;
+  readonly sqliteVersion: string | null;
+  readonly surfaces: readonly SurfaceProbe[];
+};
+
 // ---------------------------------------------------------------------------
 // THE RESULT TYPE
 // ---------------------------------------------------------------------------
@@ -362,6 +511,14 @@ export type DefMinerBackendSdk = {
       readonly sha256: string;
     }) => Promise<PanelAnalysis | null>;
     retryAnalysis: (request: AnalysisKey) => Promise<RetryOutcome>;
+    listSettings: (request: {
+      readonly projectId: string;
+    }) => Promise<readonly SettingRow[]>;
+    writeSetting: (
+      request: SettingWriteRequest,
+    ) => Promise<SettingWriteOutcome>;
+    getHealth: () => Promise<HealthOutcome>;
+    getCompat: () => Promise<CompatReport>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
       callback: (summary: InvalidationSummary) => void,
@@ -396,6 +553,19 @@ export type BackendClient = {
   exportInventory: (
     request: ExportChunkRequest,
   ) => Promise<RpcResult<ExportChunkOutcome>>;
+  /** Every settings key this build has, each with its three levels (UI-08). */
+  listSettings: (request: {
+    readonly projectId: string;
+  }) => Promise<RpcResult<readonly SettingRow[]>>;
+  /** Write one setting at one scope, or clear it with a `null` value. */
+  writeSetting: (
+    request: SettingWriteRequest,
+  ) => Promise<RpcResult<SettingWriteOutcome>>;
+  /** The four counters that tell a blocked backend from a slow renderer. */
+  getHealth: () => Promise<RpcResult<HealthOutcome>>;
+  /** COMPAT-02's report. Reachable on a REFUSING build, where it is one of only
+   *  two endpoints that exist. */
+  getCompat: () => Promise<RpcResult<CompatReport>>;
   /** Subscribe to the one backend event, RETURNING THE STOP HANDLE. */
   subscribeInvalidation: (
     handler: (summary: InvalidationSummary) => void,
@@ -517,6 +687,26 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     // on its face says which version wrote it.
     exportInventory: (request) =>
       guarded(() => sdk.backend.exportInventory(request)),
+
+    listSettings: (request) => guarded(() => sdk.backend.listSettings(request)),
+
+    // GUARDED, AND IT IS THE WRITE THAT MOST NEEDS TO BE. A stale bundle
+    // misreading this outcome shape reports "saved" for a retention bound the
+    // backend refused — and the operator then believes a bound is in force that
+    // is not, about the one mechanism in this plugin that deletes their history.
+    writeSetting: (request) => guarded(() => sdk.backend.writeSetting(request)),
+
+    getHealth: () => guarded(() => sdk.backend.getHealth()),
+
+    // NOT GUARDED BY THE MISMATCH, AND THAT IS THE WHOLE POINT OF IT. A
+    // contract-version mismatch is one of the things somebody opens the
+    // compatibility report to diagnose; refusing to answer it because the
+    // versions disagree would withhold the diagnosis at exactly the moment it is
+    // needed. It is also the endpoint a REFUSING build still registers, where
+    // `getContractVersion` does not exist at all — so the guard could never have
+    // been satisfied there anyway. Still under the timeout: a call that never
+    // settles renders as a surface that never appears.
+    getCompat: () => call(() => sdk.backend.getCompat()),
 
     // NOT guarded by the mismatch, and not by a timeout either. Subscribing is
     // not a read: it delivers a summary of four scalars whose shape a version

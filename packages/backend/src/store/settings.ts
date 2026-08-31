@@ -11,6 +11,16 @@
 // operator-wide default that a single project can override, and retrofitting that
 // through a two-level lookup would mean changing every call site.
 
+import type {
+  BoundRejection,
+  SettingKey,
+  SettingsGroup,
+} from "@defminer/engine/contract";
+import {
+  AUDIT_RETENTION_MAX_ROWS_KEY,
+  RETENTION_MAX_AGE_MS_KEY,
+  RETENTION_MAX_ROWS_KEY,
+} from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 
 import { describeError } from "../telemetry";
@@ -87,18 +97,49 @@ export async function resolveSetting(
   return getSetting(db, GLOBAL_PROJECT_ID, key);
 }
 
+const CLEAR_SETTING_SQL = `DELETE FROM settings WHERE project_id = ? AND key = ?`;
+
+/**
+ * Remove one setting at exactly one scope.
+ *
+ * WHY DELETE AND NOT "WRITE THE DEFAULT". Clearing a project override must fall
+ * the resolution back to the GLOBAL row, and writing the documented default over
+ * it would pin the value instead — the operator would see the number they
+ * expected and quietly stop tracking the operator-wide default they meant to
+ * return to. Absence is the state; a value that happens to equal the default is
+ * a different one.
+ *
+ * `project_id`-SCOPED like every other statement in this package, so clearing an
+ * override cannot reach the global row it falls back to. A key with no row at
+ * this scope reports `ok` with zero changes: the caller asked for absence and
+ * absence is what is there.
+ */
+export async function clearSetting(
+  db: Database,
+  projectId: string,
+  key: string,
+): Promise<StoreWriteResult> {
+  try {
+    const stmt = await db.prepare(CLEAR_SETTING_SQL);
+    const res = await stmt.run(projectId, key);
+    return { ok: true, changes: res.changes };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
 // --- retention bounds -------------------------------------------------------
 
-/** The two settings keys `sweepRetention` reads. Named constants so a typo is a
- *  compile-time problem rather than a silently-defaulted bound. */
-export const RETENTION_MAX_ROWS_KEY = "retention.max_rows_per_table";
-/** @internal */
-export const RETENTION_MAX_AGE_MS_KEY = "retention.max_age_ms";
-/** The audit table's own row bound. A SEPARATE key, not a reuse of
- *  {@link RETENTION_MAX_ROWS_KEY}: the audit log is bounded by rows ALONE
- *  (decision D-06), so raising the per-table bound must not silently raise it and
- *  raising it must not silently raise every other table's. */
-export const AUDIT_RETENTION_MAX_ROWS_KEY = "retention.audit_max_rows";
+// THE THREE KEY LITERALS MOVED TO @defminer/engine/contract IN PLAN 05-12, and
+// they are IMPORTED here rather than re-exported: one canonical home, and every
+// consumer — this module, the sweep's specs, and the frontend's copy map —
+// reaches for the same declaration. They moved for one reason: the settings
+// SURFACE needs them as values too, the frontend cannot import this package, and
+// a key spelled twice is a setting the operator changes and the sweep never sees
+// — with nothing anywhere reporting it, because an unresolved key is
+// indistinguishable from an unset one by construction. The engine contract
+// states the rest of the reasoning, including why there is deliberately no audit
+// AGE key beside the audit row key (decision D-06).
 
 /**
  * Maximum rows per table per project.
@@ -108,6 +149,12 @@ export const AUDIT_RETENTION_MAX_ROWS_KEY = "retention.audit_max_rows";
  * the operator's history with no way to opt out. 50,000 artifacts is far more than
  * a real engagement produces and still bounds the file: at the observed row shape
  * (a digest, a byte count, three integers) that is single-digit megabytes.
+ *
+ * THE UI EXISTS AS OF PLAN 05-12 and this number is now a DEFAULT rather than a
+ * ceiling — {@link KNOWN_SETTINGS} lists this key, `SettingsPanel.vue` renders it
+ * at both scopes, and the paragraph above is the help text it carries. The value
+ * is unchanged: an operator who has not chosen still gets the conservative number,
+ * which is the whole reason it was picked conservatively.
  */
 export const DEFAULT_RETENTION_MAX_ROWS = 50_000;
 
@@ -118,6 +165,11 @@ export const DEFAULT_RETENTION_MAX_ROWS = 50_000;
  * Caido never garbage-collects it, does not delete it when a project is deleted,
  * and it survives a force-reinstall (DB_SURVIVES_REINSTALL) — but Phase 1 has no
  * way for the operator to say "keep more", so the default errs long.
+ *
+ * PLAN 05-12 GIVES THEM THAT WAY. The three facts in the paragraph above are
+ * exactly what an operator needs before raising or lowering this, so they are the
+ * help text `SettingsPanel.vue` renders beside the field rather than a summary of
+ * it. The default is unchanged.
  */
 export const DEFAULT_RETENTION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -165,14 +217,69 @@ export type RetentionBounds = {
   auditMaxRows: number;
 };
 
+/**
+ * What {@link validateBound} answers. A finite positive integer, or WHY NOT.
+ *
+ * The reason is a member of the shared closed vocabulary, never a message: the
+ * settings surface maps it to its own copy, and a driver's or a coercion's own
+ * words crossing this boundary would be words somebody eventually interpolates
+ * into a sentence the operator reads.
+ *
+ * @internal
+ */
+export type BoundValidation =
+  | { readonly ok: true; readonly value: number }
+  | { readonly ok: false; readonly reason: BoundRejection };
+
+/**
+ * Is this string a usable retention bound?
+ *
+ * ONE PREDICATE, TWO CALLERS, AND THAT IS THE POINT. {@link boundOrDefault}
+ * below reads DEFENSIVELY — it applies the documented default to anything this
+ * refuses — and {@link putBoundedSetting} validates at the WRITE EDGE so a
+ * refusal is reported to the operator instead of silently becoming a default
+ * they did not ask for. Two implementations of "usable" would eventually
+ * disagree, and the direction they would disagree in is the one where a value
+ * the form accepted is a value the sweep ignores.
+ *
+ * WHY THE WRITE EDGE VALIDATES AT ALL, WHEN THE READ ALREADY GUARDS. The guard's
+ * own comment names its reason: a stored bound is a string some future interface
+ * wrote, and `Number("")` is 0 and `Number("abc")` is NaN — either one silently
+ * applied as a retention bound would delete everything. THIS IS THAT FUTURE
+ * INTERFACE. A backstop that turns a typo into "saved, and quietly ignored" is a
+ * backstop doing the operator no favours.
+ *
+ * ZERO AND NEGATIVE ARE REPORTED SEPARATELY. "0" is what somebody types when
+ * they mean "no limit", which is the single most dangerous thing they can mean
+ * about a bound on a database nothing else garbage-collects; "-1" is a typo. The
+ * copy for the two cannot be the same sentence.
+ */
+export function validateBound(raw: string): BoundValidation {
+  if (raw.trim() === "") return { ok: false, reason: "empty" };
+  const n = Number(raw);
+  if (Number.isNaN(n)) return { ok: false, reason: "not-numeric" };
+  if (!Number.isFinite(n)) return { ok: false, reason: "not-finite" };
+  if (n === 0) return { ok: false, reason: "zero" };
+  if (n < 0) return { ok: false, reason: "negative" };
+  // FLOORED, not rounded and not rejected. This is the shipped behaviour and is
+  // deliberately not changed here: a bound is a row count or a millisecond
+  // count, and flooring a fraction can only ever make the bound tighter, which
+  // is the safe direction for a value that governs deletion.
+  return { ok: true, value: Math.floor(n) };
+}
+
 /** A finite positive integer, or the default. A stored bound is a STRING that some
  *  future UI wrote; `Number("")` is 0 and `Number("abc")` is NaN, and either one
- *  silently applied as a retention bound would delete everything. */
+ *  silently applied as a retention bound would delete everything.
+ *
+ *  DELEGATES TO {@link validateBound} rather than restating the test, so the
+ *  write edge and this defensive read cannot drift into disagreeing about what a
+ *  usable bound is. `settings.spec.ts` asserts the equivalence directly: every
+ *  input the edge rejects is an input this falls back on. */
 function boundOrDefault(raw: string | null, fallback: number): number {
   if (raw === null) return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.floor(n);
+  const checked = validateBound(raw);
+  return checked.ok ? checked.value : fallback;
 }
 
 /**
@@ -206,4 +313,153 @@ export async function getRetentionBounds(
     // from the traffic, because nothing else records that the action happened.
     auditMaxRows: boundOrDefault(auditRows, DEFAULT_AUDIT_RETENTION_MAX_ROWS),
   };
+}
+
+// --- UI-08's operator-facing surface ----------------------------------------
+//
+// WHAT THIS HALF IS FOR. Everything above is read by the sweep. Everything below
+// is read by a person. The two shipped debts this file recorded — the three-level
+// resolution written "because Phase 5 will want an operator-wide default that a
+// single project can override", and each retention default's note that "there is
+// no UI to change this until Phase 5" — are discharged here, and neither one
+// required a call site to change, which was the point of writing the resolution
+// three-deep in the first place.
+
+/**
+ * One settings key this build ACTUALLY HAS, with the group it belongs to and the
+ * documented default it falls back to.
+ *
+ * `documented` IS A STRING, not the number. All three levels a reader compares
+ * are then the same kind of thing — a stored row's value is a string, so a
+ * default rendered as a number would be the one level that looked different for
+ * a reason that is an implementation detail of where it lives.
+ */
+export type KnownSetting = {
+  readonly key: SettingKey;
+  readonly group: SettingsGroup;
+  readonly documented: string;
+};
+
+/**
+ * Every key the settings surface may render. FROZEN, and short on purpose.
+ *
+ * A PHASE THAT ADDS A TOGGLE ADDS ITS KEY HERE — and to `SETTING_KEYS` in the
+ * engine contract, which is what makes the frontend's copy map fail to typecheck
+ * until the new field has a label. That is the whole growth mechanism: this
+ * surface grows by ADDITION, not by anybody guessing what a later phase will
+ * want and rendering an empty box for it (05-UI-SPEC.md, `empty / settings-form`).
+ *
+ * ORDER IS DECLARATION ORDER and is never sorted at runtime.
+ */
+export const KNOWN_SETTINGS: readonly KnownSetting[] = Object.freeze([
+  {
+    key: RETENTION_MAX_ROWS_KEY,
+    group: "retention",
+    documented: String(DEFAULT_RETENTION_MAX_ROWS),
+  },
+  {
+    key: RETENTION_MAX_AGE_MS_KEY,
+    group: "retention",
+    documented: String(DEFAULT_RETENTION_MAX_AGE_MS),
+  },
+  {
+    key: AUDIT_RETENTION_MAX_ROWS_KEY,
+    group: "retention",
+    documented: String(DEFAULT_AUDIT_RETENTION_MAX_ROWS),
+  },
+] as const);
+
+/**
+ * One key with all THREE levels of its resolution reported separately.
+ *
+ * THREE FIELDS AND NOT ONE RESOLVED VALUE, because a three-level resolution the
+ * operator cannot see is a three-level resolution they will misconfigure. They
+ * need to know not just what is in force but WHERE it came from, so that
+ * "clearing this override falls back to 50,000" is a statement the interface can
+ * make rather than one they have to infer.
+ *
+ * `null` MEANS NO ROW. An empty string means a row holding an empty string, which
+ * `settings.value`'s NOT NULL makes a value somebody wrote — and it is precisely
+ * the value the write guard refuses, so it can only have arrived from before this
+ * surface existed. Collapsing the two would make it unfindable and unclearable.
+ */
+export type KnownSettingValue = KnownSetting & {
+  readonly project: string | null;
+  readonly global: string | null;
+};
+
+/**
+ * Every known key, with its project row, its global row and its documented
+ * default.
+ *
+ * TWO SINGLE-KEY READS PER KEY, through the shipped {@link getSetting}, rather
+ * than one multi-row statement over the table. Three reasons, in order of how
+ * much they matter: the shipped reads are already inside the SQL discipline gate
+ * and a new multi-row statement would have to earn its own scoping proof; the key
+ * count is fixed and tiny, so the cost is bounded by the vocabulary rather than
+ * by the data; and a statement that returned "whatever is in the table" would
+ * report keys this build does not have, which is the opposite of what this list
+ * is for.
+ */
+export async function listKnownSettings(
+  db: Database,
+  projectId: string,
+): Promise<readonly KnownSettingValue[]> {
+  const out: KnownSettingValue[] = [];
+  for (const setting of KNOWN_SETTINGS) {
+    out.push({
+      ...setting,
+      project: await getSetting(db, projectId, setting.key),
+      global: await getSetting(db, GLOBAL_PROJECT_ID, setting.key),
+    });
+  }
+  return out;
+}
+
+/**
+ * What a bounded write answers with. NEVER a rejection and never a message.
+ *
+ * `stored` IS THE VALUE THAT ACTUALLY LANDED, which is not always the value the
+ * caller sent: a fractional input is floored. Returning it means the form can
+ * show what was stored rather than what was typed, and the two differing is
+ * information the operator is entitled to.
+ */
+export type BoundedSettingOutcome =
+  | { readonly ok: true; readonly stored: string }
+  | { readonly ok: false; readonly reason: BoundRejection };
+
+/**
+ * Write one retention bound, VALIDATED BEFORE IT IS STORED.
+ *
+ * The write the settings surface uses, and the reason it exists beside the
+ * unvalidated {@link putSetting}: `putSetting` is the general key/value write and
+ * has no business knowing that some values govern deletion. This one does.
+ *
+ * A REJECTION STORES NOTHING AND CHANGES NOTHING. A previously stored good value
+ * survives a later typo, which is the property the form's error path depends on —
+ * the operator keeps their edits in the field and their configuration on disk,
+ * and neither is a casualty of the other.
+ *
+ * The `nowMs` a caller passes becomes `updated_at`, so writing the same value
+ * twice is an upsert that touches the timestamp and leaves one row.
+ */
+export async function putBoundedSetting(
+  db: Database,
+  projectId: string,
+  key: SettingKey,
+  raw: string,
+  nowMs: number,
+): Promise<BoundedSettingOutcome> {
+  const checked = validateBound(raw);
+  if (!checked.ok) return { ok: false, reason: checked.reason };
+  const stored = String(checked.value);
+  const written = await putSetting(db, projectId, key, stored, nowMs);
+  if (!written.ok) {
+    // THE DRIVER'S DESCRIPTION IS DISCARDED, DELIBERATELY. It is already
+    // redacted by `describeError`, and it still does not cross this boundary: the
+    // settings surface's copy is DefMiner-authored, and a message that reached it
+    // is a message somebody eventually interpolates into a sentence.
+    return { ok: false, reason: "write-failed" };
+  }
+  return { ok: true, stored };
 }

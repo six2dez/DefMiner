@@ -16,7 +16,11 @@
 // failure is written down somewhere an operator can reach it.
 
 import type { ExportRedactionMode } from "@defminer/engine/contract";
-import { INVALIDATION_EVENT } from "@defminer/engine/contract";
+import {
+  INVALIDATION_EVENT,
+  RETENTION_MAX_ROWS_KEY,
+  SETTING_KEYS,
+} from "@defminer/engine/contract";
 import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -37,6 +41,7 @@ import { resetLifecycleForTest } from "./lifecycle";
 import { DETECTOR_CORPUS_VERSION } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
+import type { KnownSettingValue } from "./store/settings";
 import { resetTelemetryForTest } from "./telemetry";
 
 import { init } from "./index";
@@ -224,6 +229,9 @@ describe("the Phase 5 RPC surface", () => {
       "getArtifactAnalysis",
       "retryAnalysis",
       "exportInventory",
+      "listSettings",
+      "writeSetting",
+      "getHealth",
       "getContractVersion",
     ]) {
       expect(names, `${expected} was not registered`).toContain(expected);
@@ -913,5 +921,253 @@ describe("the export endpoint (UI-06, D-04)", () => {
 
   it("bumps the contract version — the API map changed", () => {
     expect(CONTRACT_VERSION).toBeGreaterThan(2);
+  });
+});
+
+// ===========================================================================
+// UI-08 — THE SETTINGS SURFACE AND OBS-01's FOUR NUMBERS, AT THE ENDPOINT
+// ===========================================================================
+//
+// WHAT THE STORE-LEVEL CASES IN `store/settings.spec.ts` CANNOT REACH. Three
+// things, and each is a property of the REGISTRATION rather than of the module:
+//
+//   1. THE CALLER'S `projectId` IS DISCARDED. The store takes whatever project id
+//      it is handed; only the endpoint substitutes the lifecycle-resolved one. A
+//      settings write is the same hazard `scopedTo` guards on the paged reads
+//      (T-05-34) with a durable effect — anything holding the RPC handle could
+//      otherwise rewrite another project's retention bounds (T-05-67).
+//   2. THE SCOPE SELECTS THE ROW. A project-scoped write with nothing resolved
+//      must REFUSE, not fall through onto the global row and change every project
+//      the operator has.
+//   3. HEALTH FAILS CLOSED WITH AN OUTCOME, NOT WITH ZEROES. Four zeroes are what
+//      a perfectly healthy idle backend reports.
+
+describe("UI-08's settings endpoints", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  async function boot(projectId: string | null = "p1"): Promise<{
+    rpc: Record<string, (...a: unknown[]) => unknown>;
+  }> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId,
+      db: () => Promise.resolve(fx.db),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+    return { rpc };
+  }
+
+  function settingsRows(): {
+    project_id: string;
+    key: string;
+    value: string;
+  }[] {
+    return fx.raw
+      .prepare("SELECT project_id, key, value FROM settings")
+      .all() as unknown as { project_id: string; key: string; value: string }[];
+  }
+
+  it("lists every known key with three distinguishable levels", async () => {
+    const { rpc } = await boot();
+    const listed = (await rpc.listSettings(null, {
+      projectId: "p1",
+    })) as KnownSettingValue[];
+
+    expect(listed.map((r) => r.key)).toEqual([...SETTING_KEYS]);
+    for (const row of listed) {
+      expect(row.project).toBeNull();
+      expect(row.global).toBeNull();
+      expect(row.documented.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("DISCARDS the caller's projectId and reads under the resolved one", async () => {
+    const { rpc } = await boot("p1");
+    await rpc.writeSetting(null, {
+      projectId: "p1",
+      scope: "project",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "4321",
+    });
+
+    // A caller naming ANOTHER project must not be able to read its rows — and
+    // must not fail to read its OWN, either. Both halves of the same claim.
+    const listed = (await rpc.listSettings(null, {
+      projectId: "some-other-project",
+    })) as KnownSettingValue[];
+    expect(listed.find((r) => r.key === RETENTION_MAX_ROWS_KEY)?.project).toBe(
+      "4321",
+    );
+    expect(settingsRows().map((r) => r.project_id)).toEqual(["p1"]);
+  });
+
+  it("writes the two scopes to two rows, and the caller cannot pick the project", async () => {
+    const { rpc } = await boot("p1");
+    await rpc.writeSetting(null, {
+      projectId: "ignored",
+      scope: "project",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "11",
+    });
+    await rpc.writeSetting(null, {
+      projectId: "ignored",
+      scope: "global",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "22",
+    });
+
+    const rows = settingsRows().filter((r) => r.key === RETENTION_MAX_ROWS_KEY);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.project_id === "p1")?.value).toBe("11");
+    expect(rows.find((r) => r.project_id === "")?.value).toBe("22");
+  });
+
+  it("REFUSES a project-scoped write when no project is resolved, rather than writing globally", async () => {
+    const { rpc } = await boot(null);
+    const outcome = (await rpc.writeSetting(null, {
+      projectId: "p1",
+      scope: "project",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "11",
+    })) as { ok: boolean; reason?: string };
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe("no-project");
+    // THE ROW THAT MUST NOT EXIST. A fall-through onto the global scope would
+    // have changed every project the operator has, silently.
+    expect(settingsRows()).toHaveLength(0);
+  });
+
+  it("rejects a bad bound at the endpoint and stores nothing", async () => {
+    const { rpc } = await boot();
+    for (const [value, reason] of [
+      ["", "empty"],
+      ["abc", "not-numeric"],
+      ["0", "zero"],
+      ["-1", "negative"],
+    ] as const) {
+      const outcome = (await rpc.writeSetting(null, {
+        projectId: "p1",
+        scope: "project",
+        key: RETENTION_MAX_ROWS_KEY,
+        value,
+      })) as { ok: boolean; reason?: string };
+      expect(outcome.ok, `${JSON.stringify(value)} was accepted`).toBe(false);
+      expect(outcome.reason).toBe(reason);
+    }
+    expect(settingsRows()).toHaveLength(0);
+  });
+
+  it("clears a project override with a null value and leaves the global row", async () => {
+    const { rpc } = await boot();
+    await rpc.writeSetting(null, {
+      projectId: "p1",
+      scope: "global",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "22",
+    });
+    await rpc.writeSetting(null, {
+      projectId: "p1",
+      scope: "project",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: "11",
+    });
+
+    const cleared = (await rpc.writeSetting(null, {
+      projectId: "p1",
+      scope: "project",
+      key: RETENTION_MAX_ROWS_KEY,
+      value: null,
+    })) as { ok: boolean };
+    expect(cleared.ok).toBe(true);
+
+    const rows = settingsRows().filter((r) => r.key === RETENTION_MAX_ROWS_KEY);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.project_id).toBe("");
+  });
+});
+
+describe("OBS-01's four numbers, projected", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  async function boot(projectId: string | null = "p1"): Promise<{
+    rpc: Record<string, (...a: unknown[]) => unknown>;
+  }> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId,
+      db: () => Promise.resolve(fx.db),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+    return { rpc };
+  }
+
+  it("answers the four counters and NOTHING else — no string reaches this shape", async () => {
+    const { rpc } = await boot();
+    const answered = rpc.getHealth(null) as {
+      outcome: string;
+      health: Record<string, unknown>;
+    };
+
+    expect(answered.outcome).toBe("health");
+    // AN EQUALITY OVER THE WHOLE KEY SET, not four presence checks. The strip's
+    // safety property is NEGATIVE — it carries only DefMiner-authored labels and
+    // numeric counters — and a field added here (`lastError` being the obvious
+    // one, since `getStatus` carries it) would be invisible to a search.
+    expect(Object.keys(answered.health).sort()).toEqual([
+      "droppedCount",
+      "jobsInFlight",
+      "maxSliceMs",
+      "queueDepth",
+    ]);
+    for (const value of Object.values(answered.health)) {
+      expect(typeof value).toBe("number");
+    }
+  });
+
+  it("fails closed with an EXPLICIT outcome when no project is resolved — never four zeroes", async () => {
+    const { rpc } = await boot(null);
+    const answered = rpc.getHealth(null) as {
+      outcome: string;
+      reason?: string;
+      health?: unknown;
+    };
+    expect(answered.outcome).toBe("unavailable");
+    expect(answered.reason).toBe("no-project");
+    expect(answered.health).toBeUndefined();
+  });
+
+  it("reports jobs in flight as zero while nothing is being walked", async () => {
+    const { rpc } = await boot();
+    const answered = rpc.getHealth(null) as {
+      health: { jobsInFlight: number };
+    };
+    expect(answered.health.jobsInFlight).toBe(0);
   });
 });

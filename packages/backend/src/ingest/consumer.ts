@@ -153,6 +153,21 @@ export type ConsumerHandle = {
   /** Run one drain pass to completion. The scheduler calls this on its timer; a
    *  spec calls it directly so the loop is deterministic rather than raced. */
   drainNow: () => Promise<void>;
+  /**
+   * How many artifacts this consumer is part-way through RIGHT NOW.
+   *
+   * ZERO OR ONE, BY CONSTRUCTION, AND THAT IS THE INFORMATION RATHER THAN A
+   * LIMITATION. QuickJS is single-threaded with no worker threads and CPU-bound
+   * analysis is strictly serial, so there is never a second walk to count. What
+   * the operator learns from a `1` is the thing research pitfall P-07 is about:
+   * a `1` sitting beside a climbing queue depth and a large observed slice is a
+   * BLOCKED BACKEND THREAD, which looks from the outside exactly like a frozen
+   * renderer and is a completely different problem.
+   *
+   * A READER, NOT A COUNTER. Nothing is measured that was not already measured —
+   * this reports the drain flag the loop already keeps.
+   */
+  jobsInFlight: () => number;
 };
 
 type Extracted = {
@@ -234,6 +249,13 @@ export function resetConsumerForTest(): void {
  *  Resolves immediately when no consumer is running. */
 export function drainConsumerForTest(): Promise<void> {
   return current?.drainNow() ?? Promise.resolve();
+}
+
+/** What the health endpoint reports as jobs in flight. Zero when no consumer is
+ *  running, which is the truth rather than a gap: with no loop there is nothing
+ *  part-way through anything. See {@link ConsumerHandle.jobsInFlight}. */
+export function jobsInFlight(): number {
+  return current?.jobsInFlight() ?? 0;
 }
 
 export function startConsumer(
@@ -767,6 +789,8 @@ export function startConsumer(
   }
 
   const handle: ConsumerHandle = {
+    // The drain flag, read rather than a second thing to keep in step with it.
+    jobsInFlight: () => (draining ? 1 : 0),
     stop: () => {
       stopped = true;
       if (timer !== undefined) clearTimeout(timer);

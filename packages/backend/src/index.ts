@@ -64,6 +64,7 @@ import type { Database } from "sqlite";
 import {
   type CompatPayload,
   CONTRACT_VERSION,
+  type HealthOutcome,
   type PluginSdk,
   type RetryOutcome,
   type StatusPayload,
@@ -82,7 +83,7 @@ import {
   onResponse,
   setPassiveReady,
 } from "./hooks/passive";
-import { startConsumer } from "./ingest/consumer";
+import { jobsInFlight, startConsumer } from "./ingest/consumer";
 import {
   admissionAllowed,
   currentProjectId,
@@ -110,6 +111,12 @@ import {
   listObservationsPage,
 } from "./store/reads";
 import { retryAnalysis } from "./store/retry";
+import {
+  clearSetting,
+  GLOBAL_PROJECT_ID,
+  listKnownSettings,
+  putBoundedSetting,
+} from "./store/settings";
 import { describeError, slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
@@ -185,6 +192,21 @@ const NO_ROWS_VISIBLE: VisibleTotal = {
  * that never ran (T-05-55).
  */
 const NO_RETRY: RetryOutcome = { ok: false, changed: false, state: null };
+
+/**
+ * What the health endpoint answers when no project is resolved.
+ *
+ * AN EXPLICIT OUTCOME, NOT FOUR ZEROES. Four zeroes are what a perfectly idle,
+ * perfectly healthy backend reports, and rendering them for a plugin that has
+ * resolved no project would tell the operator the opposite of the truth at
+ * exactly the moment they opened this surface to find out why nothing is
+ * happening. The same argument the paged reads make for an explicit empty page
+ * over a rejection, applied to the one surface whose whole job is diagnosis.
+ */
+const HEALTH_UNAVAILABLE: HealthOutcome = {
+  outcome: "unavailable",
+  reason: "no-project",
+};
 
 /**
  * Replace the caller's `projectId` with the one the plugin resolved.
@@ -575,6 +597,72 @@ export async function init(sdk: PluginSdk): Promise<void> {
       }
 
       return result;
+    });
+    // --- UI-08's SETTINGS SURFACE ----------------------------------------
+    //
+    // THE CALLER DOES NOT NAME THE PROJECT, on the read OR the write, and here
+    // that matters more than anywhere else on this contract. `scopedTo`'s
+    // comment states the general rule for pages; a settings write is the same
+    // hazard with a durable effect — anything holding the RPC handle could
+    // otherwise read and rewrite ANOTHER project's retention bounds out of the
+    // one shared SQLite file (threat T-05-67, T-05-34).
+    sdk.api.register("listSettings", async () => {
+      const pid = currentProjectId();
+      // NOT A REFUSAL. With no project there is genuinely no project row for
+      // any key, and the global rows and documented defaults are
+      // project-independent — so the honest answer is the list with every
+      // `project` field null, which is exactly what this produces. Refusing
+      // would hide the operator-wide defaults they can still legitimately read.
+      if (!db) return [];
+      return listKnownSettings(db, pid ?? GLOBAL_PROJECT_ID);
+    });
+    sdk.api.register("writeSetting", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db) return { ok: false, reason: "write-failed" } as const;
+      // THE SCOPE DECIDES THE ROW, AND THE PROJECT SCOPE NEEDS A PROJECT. A
+      // project-scoped write with nothing resolved must not silently land on
+      // the global row and change every project the operator has.
+      if (req.scope === "project" && pid === null) {
+        return { ok: false, reason: "no-project" } as const;
+      }
+      const target = req.scope === "global" ? GLOBAL_PROJECT_ID : (pid ?? "");
+
+      if (req.value === null) {
+        // CLEARING IS A WRITE OF ABSENCE. `clearSetting` deletes the row at this
+        // scope only, so the resolution falls back to the next level down
+        // rather than being pinned to whatever the default happens to be today.
+        const cleared = await clearSetting(db, target, req.key);
+        if (!cleared.ok) {
+          // LOGGED, NOT RETURNED. The description is already redacted and it
+          // still does not cross the boundary: the panel's copy is
+          // DefMiner-authored and a message that reached it is a message
+          // somebody eventually interpolates.
+          log(sdk, "clearSetting failed: " + cleared.error);
+          return { ok: false, reason: "write-failed" } as const;
+        }
+        return { ok: true, stored: "" } as const;
+      }
+
+      return putBoundedSetting(db, target, req.key, req.value, Date.now());
+    });
+    // --- OBS-01's FOUR NUMBERS, PROJECTED --------------------------------
+    //
+    // Not `async` and it touches no database: every value is already in memory,
+    // and a health surface that could itself block on the thread it is
+    // reporting about would be the joke research pitfall P-07 warns against.
+    sdk.api.register("getHealth", () => {
+      if (currentProjectId() === null) return HEALTH_UNAVAILABLE;
+      return {
+        outcome: "health",
+        health: {
+          queueDepth: queue ? queue.depth : 0,
+          droppedCount: queue ? queue.overflowCount : 0,
+          jobsInFlight: jobsInFlight(),
+          // FROM THE SAME PROJECTION `getStatus` READS, not a second reader of
+          // the same module variable. One number, one owner.
+          maxSliceMs: slimStatus().maxSliceMs,
+        },
+      };
     });
     // Not `async`, and it touches nothing: a version check that could fail for
     // any reason other than the plugin being absent would be a check the

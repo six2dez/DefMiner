@@ -14,6 +14,10 @@
 //   - the cascade leaves no orphan, asserted by counting orphans directly rather
 //     than by trusting the delete order.
 
+import {
+  AUDIT_RETENTION_MAX_ROWS_KEY,
+  RETENTION_MAX_ROWS_KEY,
+} from "@defminer/engine/contract";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -29,14 +33,12 @@ import {
   sweepRetention,
 } from "./retention";
 import {
-  AUDIT_RETENTION_MAX_ROWS_KEY,
   DEFAULT_AUDIT_RETENTION_MAX_ROWS,
   DEFAULT_RETENTION_MAX_AGE_MS,
   DEFAULT_RETENTION_MAX_ROWS,
   getRetentionBounds,
   GLOBAL_PROJECT_ID,
   putSetting,
-  RETENTION_MAX_ROWS_KEY,
   type RetentionBounds,
 } from "./settings";
 

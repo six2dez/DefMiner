@@ -144,8 +144,9 @@ describe("the known-key list is what this build ACTUALLY has", () => {
     // for one name: a search cannot catch a key added under another spelling.
     // `retention.ts` has no audit-age statement to obey such a key with, so a
     // surface that offered one would be a control that does nothing.
-    expect(KNOWN_SETTINGS.filter((s) => s.key.startsWith("retention.audit"))).
-      toHaveLength(1);
+    expect(
+      KNOWN_SETTINGS.filter((s) => s.key.startsWith("retention.audit")),
+    ).toHaveLength(1);
     expect(
       KNOWN_SETTINGS.map((s) => s.key).filter((k) => k.includes("audit")),
     ).toEqual([AUDIT_RETENTION_MAX_ROWS_KEY]);
@@ -189,7 +190,13 @@ describe("listKnownSettings reports three DISTINGUISHABLE levels", () => {
   });
 
   it("reports the project value and the global value SIDE BY SIDE, not one resolved value", async () => {
-    await putSetting(fx.db, GLOBAL_PROJECT_ID, RETENTION_MAX_ROWS_KEY, "9", NOW);
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "9",
+      NOW,
+    );
     await putSetting(fx.db, P1, RETENTION_MAX_ROWS_KEY, "4", NOW);
 
     const row = (await listKnownSettings(fx.db, P1)).find(
@@ -207,7 +214,13 @@ describe("listKnownSettings reports three DISTINGUISHABLE levels", () => {
     // READ, and that is exactly why they must stay distinguishable here: an
     // override elided because it matched would silently start tracking a later
     // change to the global value.
-    await putSetting(fx.db, GLOBAL_PROJECT_ID, RETENTION_MAX_ROWS_KEY, "7", NOW);
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "7",
+      NOW,
+    );
     await putSetting(fx.db, P1, RETENTION_MAX_ROWS_KEY, "7", NOW);
 
     const row = (await listKnownSettings(fx.db, P1)).find(
@@ -225,9 +238,10 @@ describe("listKnownSettings reports three DISTINGUISHABLE levels", () => {
 
 describe("the two scopes are two rows", () => {
   it("a project write and an operator-wide write of the SAME key produce two rows", async () => {
-    expect((await putBoundedSetting(fx.db, P1, RETENTION_MAX_ROWS_KEY, "11", NOW)).ok).toBe(
-      true,
-    );
+    expect(
+      (await putBoundedSetting(fx.db, P1, RETENTION_MAX_ROWS_KEY, "11", NOW))
+        .ok,
+    ).toBe(true);
     expect(
       (
         await putBoundedSetting(
@@ -242,7 +256,10 @@ describe("the two scopes are two rows", () => {
 
     const rows = rowsForKey(RETENTION_MAX_ROWS_KEY);
     expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.project_id).sort()).toEqual([GLOBAL_PROJECT_ID, P1]);
+    expect(rows.map((r) => r.project_id).sort()).toEqual([
+      GLOBAL_PROJECT_ID,
+      P1,
+    ]);
     expect(rows.find((r) => r.project_id === P1)?.value).toBe("11");
     expect(rows.find((r) => r.project_id === GLOBAL_PROJECT_ID)?.value).toBe(
       "22",
@@ -337,7 +354,9 @@ describe("a bound that is not a finite positive number never reaches the table",
       NOW,
     );
     expect(outcome.ok).toBe(true);
-    expect(outcome.ok && outcome.stored).toBe(String(DEFAULT_RETENTION_MAX_ROWS));
+    expect(outcome.ok && outcome.stored).toBe(
+      String(DEFAULT_RETENTION_MAX_ROWS),
+    );
     expect(rowsForKey(RETENTION_MAX_ROWS_KEY)).toHaveLength(1);
   });
 

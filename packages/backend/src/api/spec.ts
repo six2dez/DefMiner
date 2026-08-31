@@ -34,6 +34,8 @@ import type {
   PageRequest,
   PageResponse,
   ScanState,
+  SettingKey,
+  SettingScope,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import type { APISDK } from "caido:plugin";
@@ -45,6 +47,10 @@ import type { ArtifactRow } from "../store/artifacts";
 import type { ExportChunkResult } from "../store/export";
 import type { ObservationRow } from "../store/observations";
 import type { ArtifactPageRow, InventoryTable } from "../store/reads";
+import type {
+  BoundedSettingOutcome,
+  KnownSettingValue,
+} from "../store/settings";
 import type { SlimStatus } from "../telemetry";
 
 /**
@@ -85,9 +91,21 @@ import type { SlimStatus } from "../telemetry";
  * saying which version wrote it. The cost of the bump is one forced reload; the
  * cost of the other choice is a file somebody trusts.
  *
+ * BUMPED TO 4 BY PLAN 05-12, AND THIS ONE IS AN OVER-BUMP TOO — recorded as
+ * one, for the reason the last one gives: a bump whose justification is invented
+ * after the fact is how the rule stops meaning anything. Strictly, `listSettings`,
+ * `writeSetting` and `getHealth` are three NEW NAMES and adding a name obliges no
+ * bump. It is bumped anyway because `writeSetting` is the first endpoint whose
+ * effect is a PERSISTENT CONFIGURATION CHANGE GOVERNING A DESTRUCTIVE SWEEP: a
+ * stale bundle reading {@link Spec}'s outcome shape with the old expectations
+ * would read `undefined` where the rejection reason is and report "saved" for a
+ * retention bound that was refused. The operator would then believe a bound is in
+ * force that is not — about the one mechanism in this plugin that deletes their
+ * history. The cost of the bump is one forced reload.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 3;
+export const CONTRACT_VERSION = 4;
 
 /**
  * What `getStatus` returns.
@@ -264,6 +282,93 @@ type ExportRequest = {
 };
 
 /**
+ * What the settings surface asks for when it lists.
+ *
+ * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
+ * (P5-D43): the store layer needs one in every predicate and the frontend is not
+ * the authority on which project is active. That matters more here than
+ * anywhere else on this contract — a caller that could name the project could
+ * read and write ANOTHER project's configuration out of the one shared SQLite
+ * file (threat T-05-67).
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not: the registration site infers
+ * this shape from the API map, and knip runs with `ignoreExportsUsedInFile: false`.
+ */
+type SettingsRequest = {
+  readonly projectId: string;
+};
+
+/**
+ * One settings write, at exactly one scope.
+ *
+ * `value` IS `string | null` AND THE `null` IS THE CLEAR. Clearing a
+ * project-scoped override is a write of ABSENCE, not a write of the documented
+ * default: writing the default over an override would pin the value and quietly
+ * stop tracking the operator-wide default the operator meant to return to. One
+ * endpoint rather than two because they are one operation on one row — "what
+ * should be stored here" — and splitting them would let a caller clear at one
+ * scope while believing it wrote at the other.
+ *
+ * `scope` IS EXPLICIT AND HAS NO DEFAULT. A missing scope defaulting to anything
+ * is a project write that lands operator-wide, or the reverse, and both are
+ * silent (threat T-05-67). `key` is the closed vocabulary, so an unknown key is a
+ * typecheck failure at the only two call sites there are.
+ *
+ * NOT EXPORTED, for the reason above.
+ */
+type SettingWriteRequest = {
+  readonly projectId: string;
+  readonly scope: SettingScope;
+  readonly key: SettingKey;
+  readonly value: string | null;
+};
+
+/**
+ * What `getHealth` answers with — OBS-01's four numbers, and nothing else.
+ *
+ * WHY THIS EXISTS BESIDE `getStatus`, WHICH ALREADY CARRIES THEM. `getStatus`
+ * carries the whole {@link SlimStatus} projection: every counter, the last error
+ * string, the compatibility verdict and the schema version. The health strip
+ * renders four numbers and 05-UI-SPEC.md's `long-text / health-strip` row makes
+ * that a PROPERTY of the surface — it carries only DefMiner-authored labels and
+ * numeric counters, and no target-controlled content reaches it. A strip built
+ * over `getStatus` would be one field access away from rendering `lastError`,
+ * which is a plugin-generated string that quotes what the plugin was doing.
+ * Resolution, not discipline: the shape that reaches the strip has no string on
+ * it at all.
+ *
+ * NO NEW MEASUREMENT. Every number here is already measured — the queue's own
+ * depth and overflow count, the consumer's drain flag, and the running maximum
+ * `recordSlice` keeps. OBS-01 formally belongs to Phase 2; this exposes what
+ * exists rather than instrumenting anything.
+ */
+export type HealthPayload = {
+  /** Entries waiting in the bounded queue right now. */
+  readonly queueDepth: number;
+  /** Entries the queue refused because it was at cap, since boot (CORE-03). */
+  readonly droppedCount: number;
+  /** Artifacts the consumer is part-way through. Zero or one, by construction —
+   *  QuickJS is single-threaded and CPU-bound analysis is strictly serial. */
+  readonly jobsInFlight: number;
+  /** The largest uninterrupted synchronous stretch observed, in float ms. THE
+   *  NUMBER THAT DISTINGUISHES A BLOCKED BACKEND FROM A SLOW RENDERER. */
+  readonly maxSliceMs: number;
+};
+
+/**
+ * What the health endpoint answers with.
+ *
+ * FAIL CLOSED WITH AN EXPLICIT OUTCOME, NOT ZEROES. Four zeroes are a perfectly
+ * healthy backend, and rendering them for a plugin that has no project resolved
+ * would tell the operator the opposite of the truth at the exact moment they are
+ * trying to diagnose why nothing is happening. `reason` is a closed
+ * DefMiner-authored code the strip maps to its own copy, never a message.
+ */
+export type HealthOutcome =
+  | { readonly outcome: "health"; readonly health: HealthPayload }
+  | { readonly outcome: "unavailable"; readonly reason: "no-project" };
+
+/**
  * The plugin package specification.
  *
  * NOT EXPORTED, deliberately. Nothing outside this module can consume it — the
@@ -329,6 +434,22 @@ type Spec = DefinePluginPackageSpec<{
      *  onto the operator's own machine. There is no path in the request, none in
      *  the response, and none in the module behind it. */
     exportInventory: (req: ExportRequest) => Promise<ExportChunkResult>;
+    /** Every settings key this build ACTUALLY has, each with its project row,
+     *  its global row and its documented default as three distinguishable
+     *  fields (UI-08). The list is the backend's, so the surface cannot render
+     *  a control for a phase that has not shipped one. */
+    listSettings: (
+      req: SettingsRequest,
+    ) => Promise<readonly KnownSettingValue[]>;
+    /** Write one setting at one scope, or clear it with a `null` value. A
+     *  retention bound is VALIDATED BEFORE IT IS STORED and a rejection reports
+     *  which of the closed reasons it was — the shipped read guard is a
+     *  backstop, and a backstop that turns a typo into "saved, and quietly
+     *  ignored" is doing the operator no favours. */
+    writeSetting: (req: SettingWriteRequest) => Promise<BoundedSettingOutcome>;
+    /** The four numbers that tell a blocked backend thread from a slow
+     *  renderer (research P-07). Adds no measurement; projects what exists. */
+    getHealth: () => HealthOutcome;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

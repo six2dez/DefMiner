@@ -33,22 +33,28 @@ import type {
   PageResponse,
   VisibleTotal,
 } from "@defminer/engine/contract";
-import { INVALIDATION_EVENT } from "@defminer/engine/contract";
+import {
+  INVALIDATION_EVENT,
+  RETENTION_MAX_ROWS_KEY,
+} from "@defminer/engine/contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ArtifactRow } from "../backend";
 
 import type {
   BackendClient,
+  CompatReport,
   ContractVersions,
   CountRequest,
   DefMinerBackendSdk,
   ExportChunkOutcome,
   ExportChunkRequest,
+  HealthOutcome,
   ObservationRow,
   RpcFailure,
   RpcReason,
   RpcResult,
+  SettingRow,
 } from "./client";
 import {
   createBackendClient,
@@ -145,6 +151,31 @@ const EXPORT_CHUNK: ExportChunkOutcome = {
   },
 };
 
+const SETTING_ROWS: readonly SettingRow[] = [
+  {
+    key: RETENTION_MAX_ROWS_KEY,
+    group: "retention",
+    documented: "50000",
+    project: null,
+    global: null,
+  },
+];
+
+const HEALTH: HealthOutcome = {
+  outcome: "health",
+  health: { queueDepth: 0, droppedCount: 0, jobsInFlight: 0, maxSliceMs: 0 },
+};
+
+const COMPAT: CompatReport = {
+  compatible: true,
+  reason: null,
+  minCaido: "0.57.1",
+  minSqlite: "3.24.0",
+  caidoVersion: "0.58.0",
+  sqliteVersion: "3.46.0",
+  surfaces: [],
+};
+
 type Listener = (summary: InvalidationSummary) => void;
 
 type Stub = {
@@ -211,6 +242,11 @@ function makeStub(): Stub {
         expect(request).toEqual(EXPORT_REQUEST);
         return answer("exportInventory", EXPORT_CHUNK);
       },
+      listSettings: () => answer("listSettings", SETTING_ROWS),
+      writeSetting: () =>
+        answer("writeSetting", { ok: true as const, stored: "1" }),
+      getHealth: () => answer("getHealth", HEALTH),
+      getCompat: () => answer("getCompat", COMPAT),
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);
         listeners.push(callback);

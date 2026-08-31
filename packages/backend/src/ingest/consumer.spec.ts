@@ -37,6 +37,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { RETENTION_MAX_ROWS_KEY } from "@defminer/engine/contract";
 import { BoundedQueue } from "@defminer/engine/queue";
 import {
   ARTIFACT_DEADLINE_MS,
@@ -70,11 +71,7 @@ import { getArtifact } from "../store/artifacts";
 import { migrate } from "../store/migrations";
 import { listObservations } from "../store/observations";
 import { retentionCounts } from "../store/retention";
-import {
-  GLOBAL_PROJECT_ID,
-  putSetting,
-  RETENTION_MAX_ROWS_KEY,
-} from "../store/settings";
+import { GLOBAL_PROJECT_ID, putSetting } from "../store/settings";
 import { counters, resetTelemetryForTest, slimStatus } from "../telemetry";
 
 import {

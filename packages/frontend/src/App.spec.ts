@@ -25,12 +25,15 @@ import { defineComponent } from "vue";
 
 import type {
   AnalysisKey,
+  CompatReport,
   DefMinerBackendSdk,
   ExportChunkOutcome,
   ExportChunkRequest,
+  HealthOutcome,
   ObservationRow,
   PanelAnalysis,
   RetryOutcome,
+  SettingRow,
 } from "./api/client";
 import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
@@ -90,6 +93,17 @@ const ScrollerStub = defineComponent({
   template: `<div><template v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></template></div>`,
 });
 
+/** A build that runs. The refusal surface must be ABSENT against this. */
+const COMPATIBLE_REPORT: CompatReport = {
+  compatible: true,
+  reason: null,
+  minCaido: "0.57.1",
+  minSqlite: "3.24.0",
+  caidoVersion: "0.58.0",
+  sqliteVersion: "3.46.0",
+  surfaces: [],
+};
+
 type StubOptions = {
   readonly artifacts?: readonly ArtifactRow[];
   /** Reject every paged read — the RPC failure path. */
@@ -114,6 +128,18 @@ type StubOptions = {
   /** When true the export endpoint rejects, so the dialog's failure path is
    *  exercised through the real client rather than around it. */
   readonly exportReject?: boolean;
+  /** The settings rows `listSettings` answers with. */
+  readonly settings?: readonly SettingRow[];
+  /** What the health endpoint answers with. Defaults to four zero counters,
+   *  which is what a healthy idle backend genuinely reports. */
+  readonly health?: HealthOutcome;
+  /** The compatibility report. Defaults to a COMPATIBLE build, so the refusal
+   *  surface is absent unless a case asks for a refusing one. */
+  readonly compat?: CompatReport;
+  /** When true every endpoint EXCEPT `getCompat` rejects — the shape of a build
+   *  that refused to run, where the compatibility report is one of only two
+   *  endpoints that exist at all. */
+  readonly onlyCompatAnswers?: boolean;
 };
 
 /**
@@ -166,6 +192,32 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
           next ?? { outcome: "empty" },
         );
       },
+      listSettings: () =>
+        options.onlyCompatAnswers === true
+          ? Promise.reject(new Error("backend refused to run"))
+          : Promise.resolve(options.settings ?? []),
+      writeSetting: () =>
+        options.onlyCompatAnswers === true
+          ? Promise.reject(new Error("backend refused to run"))
+          : Promise.resolve({ ok: true as const, stored: "1" }),
+      getHealth: () =>
+        options.onlyCompatAnswers === true
+          ? Promise.reject(new Error("backend refused to run"))
+          : Promise.resolve(
+              options.health ?? {
+                outcome: "health" as const,
+                health: {
+                  queueDepth: 0,
+                  droppedCount: 0,
+                  jobsInFlight: 0,
+                  maxSliceMs: 0,
+                },
+              },
+            ),
+      // ANSWERS EVEN WHEN NOTHING ELSE DOES. That is not a convenience of the
+      // stub, it is the shape of a refusing build: `init()` registers only
+      // `getStatus` and `getCompat` on all three refusal paths.
+      getCompat: () => Promise.resolve(options.compat ?? COMPATIBLE_REPORT),
       onEvent: (
         _event: "defminer:invalidated",
         callback: (summary: InvalidationSummary) => void,
