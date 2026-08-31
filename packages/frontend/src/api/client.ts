@@ -410,6 +410,41 @@ export type HealthOutcome =
   | { readonly outcome: "unavailable"; readonly reason: "no-project" };
 
 /**
+ * One table's footprint: how many rows, against the cap in force, and how old
+ * the oldest row is when that is knowable.
+ *
+ * Mirrors `FootprintRow` in packages/backend/src/store/settings.ts. THREE
+ * NUMBERS AND NO STRING, and the absence is the property — the shape that
+ * reaches the storage surface has nothing path-shaped on it to render.
+ */
+export type FootprintRow = {
+  readonly count: number;
+  readonly cap: number;
+  /** Whole days, or `null` when DefMiner has no oldest row. ABSENT, never
+   *  rendered as a zero: "oldest 0 days" is a fabricated number. */
+  readonly oldestDays: number | null;
+};
+
+/**
+ * What the storage surface reads (DEPLOY-02, D-19, D-25).
+ *
+ * A `null` ROW IS AN UNREAD COUNT AND NOT AN EMPTY TABLE, and the surface keeps
+ * them apart: a zero claims a measured empty project, and a read that failed
+ * claims nothing at all.
+ *
+ * `observedRestartLoss` IS AN OBSERVATION OF THE PAST. The backend cannot detect
+ * a persistent volume, so it never predicts one — it reports only that a boot
+ * once found its own durable marker gone. With the flag clear the surface says
+ * nothing, which is the honest reading of "no evidence".
+ */
+export type StorageFootprint = {
+  readonly artifacts: FootprintRow | null;
+  readonly observations: FootprintRow | null;
+  readonly analyses: FootprintRow | null;
+  readonly observedRestartLoss: boolean;
+};
+
+/**
  * One runtime surface probe's result, as the refusal surface renders it.
  *
  * Mirrors `SurfaceOutcome` in packages/backend/src/compat.ts. `error` is a
@@ -553,6 +588,7 @@ export type DefMinerBackendSdk = {
       request: SettingWriteRequest,
     ) => Promise<SettingWriteOutcome>;
     getHealth: () => Promise<HealthOutcome>;
+    getStorageFootprint: () => Promise<StorageFootprint>;
     startScan: (request: {
       readonly operatorFilter: string;
     }) => Promise<StartScanOutcome>;
@@ -602,6 +638,9 @@ export type BackendClient = {
   ) => Promise<RpcResult<SettingWriteOutcome>>;
   /** The four counters that tell a blocked backend from a slow renderer. */
   getHealth: () => Promise<RpcResult<HealthOutcome>>;
+  /** Where the data lives and how much of each retention cap it uses
+   *  (DEPLOY-02, D-19, D-25). No path, no bytes. */
+  getStorageFootprint: () => Promise<RpcResult<StorageFootprint>>;
   /** Begin one retroactive scan of already-captured traffic (FIND-03). */
   startScan: (request: {
     readonly operatorFilter: string;
@@ -743,6 +782,12 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     writeSetting: (request) => guarded(() => sdk.backend.writeSetting(request)),
 
     getHealth: () => guarded(() => sdk.backend.getHealth()),
+
+    // GUARDED like every other read. A stale bundle misreading this shape would
+    // render a count against the wrong cap — a number the operator uses to
+    // decide whether to raise the bound on the one mechanism that deletes their
+    // history.
+    getStorageFootprint: () => guarded(() => sdk.backend.getStorageFootprint()),
 
     // GUARDED, AND IT IS A WRITE. A stale bundle whose contract version
     // disagrees must not start a scan: it would be reading the outcome shape

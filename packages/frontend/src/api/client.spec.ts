@@ -55,6 +55,7 @@ import type {
   RpcReason,
   RpcResult,
   SettingRow,
+  StorageFootprint,
 } from "./client";
 import {
   createBackendClient,
@@ -166,6 +167,15 @@ const HEALTH: HealthOutcome = {
   health: { queueDepth: 0, droppedCount: 0, jobsInFlight: 0, maxSliceMs: 0 },
 };
 
+/** DEPLOY-02's footprint. Three readable rows against their caps, no path and
+ *  no bytes — the shape the storage surface reads. */
+const FOOTPRINT: StorageFootprint = {
+  artifacts: { count: 0, cap: 50_000, oldestDays: null },
+  observations: { count: 0, cap: 50_000, oldestDays: null },
+  analyses: { count: 0, cap: 50_000, oldestDays: null },
+  observedRestartLoss: false,
+};
+
 const COMPAT: CompatReport = {
   compatible: true,
   reason: null,
@@ -246,6 +256,7 @@ function makeStub(): Stub {
       writeSetting: () =>
         answer("writeSetting", { ok: true as const, stored: "1" }),
       getHealth: () => answer("getHealth", HEALTH),
+      getStorageFootprint: () => answer("getStorageFootprint", FOOTPRINT),
       // The scan pair. Both are stubbed on the LITERAL surface rather than cast
       // in, for the reason this file's header gives: a stub that has to be cast
       // is a stub that stops failing when the real surface changes — which is

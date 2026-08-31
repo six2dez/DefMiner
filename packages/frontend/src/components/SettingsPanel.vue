@@ -57,20 +57,23 @@ import type {
   SettingRow,
   SettingWriteOutcome,
   SettingWriteRequest,
+  StorageFootprint,
 } from "../api/client";
-import { copyToClipboard } from "../safety/display";
 
 import {
   CLEAR_LABEL,
-  COPIED_LABEL,
-  COPY_FAILED_LABEL,
-  COPY_PATH_LABEL,
   FIELD_COPY,
   fieldId,
+  FOOTPRINT_HEADING,
+  FOOTPRINT_ROWS,
+  type FootprintRowCopy,
+  footprintRowId,
+  footprintRowText,
   GROUP_COPY,
   groupId,
   LOAD_FAILED_BODY,
   LOADING_LABEL,
+  PERSISTENCE_OBSERVED_LOSS,
   type Provenance,
   PROVENANCE_COPY,
   REJECTION_COPY,
@@ -78,13 +81,12 @@ import {
   SAVE_LABEL,
   SAVING_LABEL,
   SCOPE_COPY,
-  SERVER_PATH_LABEL,
+  STORAGE_HEADING,
   STORAGE_NOTE,
-  truncatePathLeft,
 } from "./settings-contract";
 import { FOCUS_RING_CLASS } from "./table-contract";
 
-const { projectId, load, save, storagePath } = defineProps<{
+const { projectId, load, save, loadFootprint } = defineProps<{
   /**
    * The project id the panel asks under.
    *
@@ -105,23 +107,22 @@ const { projectId, load, save, storagePath } = defineProps<{
     request: SettingWriteRequest,
   ) => Promise<RpcResult<SettingWriteOutcome>>;
   /**
-   * A filesystem path on the CAIDO SERVER, or `null` when none is available.
+   * How much of each retention cap this project uses, and whether a restart has
+   * ever been OBSERVED to lose this database (DEPLOY-02, D-19, D-25).
    *
-   * `null` TODAY, AND FOR A STATED REASON RATHER THAN AN UNFINISHED ONE. No
-   * endpoint supplies a server path, deliberately: `telemetry.ts` strips
-   * `sdk.meta.path()` out of everything crossing the RPC because on every real
-   * deployment it carries the operator's OS username, and `telemetry.spec.ts`
-   * proves that closure at the RPC level rather than at the function. Adding a
-   * path-bearing field would contradict a shipped, gated decision, and
-   * DEPLOY-02 (Phase 6) is where a server-storage surface belongs.
+   * THERE IS NO STORAGE-PATH PROP, AND THAT IS THE FEATURE. Phase 5's renderer
+   * took one and labelled it under R5; D-19 removes the renderer instead,
+   * because the operator cannot reach a server path and `sdk.meta.path()`
+   * carries an OS username. R5's rule survives its implementation's deletion —
+   * it is vacuously satisfied by displaying no path, and it binds any later
+   * phase that displays one. `05-VERIFICATION.md`'s DEPLOY-02
+   * `behavior_unverified` item is closed BY DELETION, NOT BY SUPPLYING A VALUE.
    *
-   * The RULE is honoured now because it is free now and expensive later
-   * (05-UI-SPEC.md R5 says so in as many words): when a path does arrive, it
-   * arrives into a renderer that already labels it, already cuts it from the
-   * left, already keeps it out of every attribute and already routes the full
-   * value through the clipboard alone.
+   * ONE CALL, not two: the flag rides in the same payload as the counts, so the
+   * surface cannot render a footprint from one moment beside a persistence
+   * statement from another.
    */
-  storagePath: string | null;
+  loadFootprint: () => Promise<RpcResult<StorageFootprint>>;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -157,7 +158,14 @@ const saving = ref<SettingKey | null>(null);
 /** Why the last write for this key did not land. Cleared when it does. */
 const failures = ref<Map<SettingKey, string>>(new Map());
 
-const copyState = ref<"idle" | "copied" | "failed">("idle");
+/**
+ * The storage footprint, or `null` until it arrives — or if it never does.
+ *
+ * `null` RENDERS NOTHING RATHER THAN ZEROES. A row of zeroes claims a measured
+ * empty project, which is the opposite of "DefMiner could not read this", and the
+ * two are exactly the states this surface exists to keep apart.
+ */
+const footprint = ref<StorageFootprint | null>(null);
 
 // ---------------------------------------------------------------------------
 // READING
@@ -183,6 +191,10 @@ onMounted(() => {
   // this resolves, and `load` answers with a VALUE on every path so the failure
   // is a rendered state rather than a rejection Caido would swallow.
   void reload();
+  // TWO INDEPENDENT READS, NEITHER GATING THE OTHER. The storage statement is
+  // true whether or not the settings read landed, and a failed footprint read
+  // must not empty the settings form.
+  void reloadFootprint();
 });
 
 // ---------------------------------------------------------------------------
@@ -340,31 +352,37 @@ function onClear(row: SettingRow): void {
 }
 
 // ---------------------------------------------------------------------------
-// R5 — THE ONE UNBOUNDED STRING
+// DEPLOY-02 — WHERE THE DATA LIVES, AND HOW MUCH OF THE CAP IT USES
 // ---------------------------------------------------------------------------
 
-const shownPath = computed<string | null>(() =>
-  storagePath === null ? null : truncatePathLeft(storagePath),
-);
-
-/** The full value reaches the CLIPBOARD and never the document. `display.ts`
- *  refuses to fall back to the `execCommand` route for exactly that reason, so
- *  the unavailable case is a rendered state rather than a silent degradation. */
-async function onCopyPath(): Promise<void> {
-  if (storagePath === null) return;
-  try {
-    await copyToClipboard(storagePath);
-    copyState.value = "copied";
-  } catch {
-    copyState.value = "failed";
-  }
+/** Read the footprint once, on mount. A FAILED READ LEAVES `null`, which renders
+ *  no rows — never a row of zeroes, which would claim a measured empty project. */
+async function reloadFootprint(): Promise<void> {
+  const result = await loadFootprint();
+  footprint.value = result.ok ? result.value : null;
 }
 
-const copyLabel = computed<string>(() => {
-  if (copyState.value === "copied") return COPIED_LABEL;
-  if (copyState.value === "failed") return COPY_FAILED_LABEL;
-  return COPY_PATH_LABEL;
-});
+/**
+ * One row's sentence, or `null` when there is no row to render.
+ *
+ * THE THREE STATES THIS KEEPS APART, and keeping them apart is the whole job:
+ * a MEASURED ZERO renders "0 of 50,000 artifact rows"; an UNREADABLE count
+ * renders nothing at all; and an unavailable AGE simply ends the sentence at the
+ * count rather than fabricating one.
+ */
+function footprintText(copy: FootprintRowCopy): string | null {
+  const payload = footprint.value;
+  if (payload === null) return null;
+  const row = payload[copy.id];
+  if (row === null) return null;
+  return footprintRowText(copy, row.count, row.cap, row.oldestDays);
+}
+
+/** Has a restart ever been observed to lose this database? See the contract
+ *  module for why the clear case renders NOTHING rather than a reassurance. */
+const observedRestartLoss = computed<boolean>(
+  () => footprint.value?.observedRestartLoss === true,
+);
 
 // NO COMMENT AT THE TOP OF THE `<template>`: a comment there is a node, which
 // makes the component a fragment and leaves every root-class assertion reading
@@ -506,39 +524,56 @@ const copyLabel = computed<string>(() => {
       </div>
     </section>
 
-    <!-- R5 — SERVER-SIDE STORAGE LABELLING. The note renders whether or not a
-         path is available, because "the database is not on your machine" is
-         true and useful on its own; the path element renders only when there is
-         a path to render. -->
+    <!-- DEPLOY-02 — SERVER-SIDE STORAGE, STATED AND NEVER SHOWN AS A PATH.
+         The section marker stays as the section's hook; its `-value` and
+         `-copy` children went with the path (D-19). The order is FIXED:
+         heading, storage note, persistence sentence when observed, then the
+         three footprint rows in the order artifacts, observations, analyses. -->
     <section
       class="flex flex-col gap-2 border border-surface-600 p-6"
       data-defminer-server-path
     >
-      <h2 class="text-lg font-semibold leading-snug">
-        Storage {{ SERVER_PATH_LABEL }}
-      </h2>
+      <h2 class="text-lg font-semibold leading-snug">{{ STORAGE_HEADING }}</h2>
       <p class="text-surface-400">{{ STORAGE_NOTE }}</p>
-      <div v-if="shownPath !== null" class="flex items-center gap-2">
-        <!-- CUT AT THE LEFT END so the filename stays visible, `font-mono` so a
-             lookalike character is legible, and NO `title` and no `data-*`
-             carrying the full value — the copy action is the only route to it. -->
-        <span
-          class="whitespace-pre overflow-hidden font-mono"
-          data-defminer-server-path-value
-          >{{ shownPath }}</span
-        >
-        <button
-          type="button"
-          :class="[
-            FOCUS_RING_CLASS,
-            'border border-surface-600 px-2 py-1 text-xs font-semibold',
-          ]"
-          data-defminer-server-path-copy
-          @click="void onCopyPath()"
-        >
-          {{ copyLabel }}
-        </button>
-      </div>
+
+      <!-- AN OBSERVATION OF THE PAST, AND ONLY WHEN THERE IS ONE. With the flag
+           clear NOTHING renders here: an absent sentence claims nothing, and
+           "no loss observed" is not "your data is safe". `info`-toned, because
+           it reports a fact about the deployment rather than a failure. -->
+      <p
+        v-if="observedRestartLoss"
+        id="defminer-storage-persistence"
+        class="text-info-500"
+        role="status"
+      >
+        {{ PERSISTENCE_OBSERVED_LOSS }}
+      </p>
+
+      <!-- DELIBERATELY NOT A FIXED-HEIGHT STRIP. This is reference text an
+           operator reads once, not a live gauge they watch, so it wraps
+           normally inside a section that has no fixed height. -->
+      <section
+        v-if="footprint !== null"
+        class="flex flex-col gap-2"
+        data-defminer-footprint
+      >
+        <h3 class="text-xs font-semibold">{{ FOOTPRINT_HEADING }}</h3>
+        <dl class="flex flex-col gap-1">
+          <!-- A ROW WITH NO TEXT IS AN UNREADABLE COUNT AND RENDERS NOTHING.
+               A zero is what a measured empty project reports, and the two must
+               not collapse into one another. -->
+          <template v-for="row in FOOTPRINT_ROWS" :key="row.id">
+            <div
+              v-if="footprintText(row) !== null"
+              :id="footprintRowId(row)"
+              class="flex flex-col"
+            >
+              <dt class="text-xs font-semibold">{{ row.term }}</dt>
+              <dd class="text-surface-400">{{ footprintText(row) }}</dd>
+            </div>
+          </template>
+        </dl>
+      </section>
     </section>
   </div>
 </template>

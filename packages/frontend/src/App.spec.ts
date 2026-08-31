@@ -36,6 +36,7 @@ import type {
   RetryOutcome,
   SettingRow,
   StartScanOutcome,
+  StorageFootprint,
 } from "./api/client";
 import { FRONTEND_CONTRACT_VERSION } from "./api/client";
 import App from "./App.vue";
@@ -270,6 +271,18 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
                 },
               },
             ),
+      // DEPLOY-02's storage footprint. Three readable zero rows and a clear
+      // flag: the ordinary state, and the one in which the persistence sentence
+      // must NOT render.
+      getStorageFootprint: () =>
+        refusing
+          ? refused<StorageFootprint>()
+          : Promise.resolve<StorageFootprint>({
+              artifacts: { count: 0, cap: 50_000, oldestDays: null },
+              observations: { count: 0, cap: 50_000, oldestDays: null },
+              analyses: { count: 0, cap: 50_000, oldestDays: null },
+              observedRestartLoss: false,
+            }),
       startScan: (request: { readonly operatorFilter: string }) => {
         options.starts?.push(request);
         return refusing

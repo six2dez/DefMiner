@@ -1,5 +1,5 @@
 // packages/frontend/src/components/settings-contract.ts — UI-08's copy, its
-// provenance vocabulary, and the left-truncating server-path rule.
+// provenance vocabulary, and DEPLOY-02's storage statement.
 //
 // ===========================================================================
 // WHY THE COPY LIVES HERE AND NOT IN THE COMPONENT
@@ -42,8 +42,15 @@
 // No copy on this page contains an interpolated target-controlled string inside
 // a sentence. Nothing on this surface is target-controlled at all: the keys and
 // groups are DefMiner-authored identifiers, and the three values are strings the
-// OPERATOR typed or this plugin documented. The one string that is neither is a
-// filesystem path belonging to the HOST, and R5 below is the rule for it.
+// OPERATOR typed or this plugin documented.
+//
+// AND AS OF PLAN 06-08 THERE IS NO UNBOUNDED STRING ON THIS SURFACE AT ALL.
+// Phase 5 recorded that "the one string that is neither is a filesystem path
+// belonging to the HOST", and specified left-truncation, no `title` and
+// clipboard-only access for it. D-19 deletes the path, so every string here is
+// now a bounded DefMiner-authored sentence, an operator-typed value or a grouped
+// integer. R5's RULE survives its implementation's deletion and binds any later
+// phase that displays a path.
 
 import type {
   BoundRejection,
@@ -58,7 +65,7 @@ import {
   RETENTION_MAX_ROWS_KEY,
 } from "@defminer/engine/contract";
 
-import { forCellText } from "../safety/display";
+import { counted, groupThousands } from "./table-contract";
 
 // ---------------------------------------------------------------------------
 // SECTIONS
@@ -232,68 +239,159 @@ export const REJECTION_COPY: Record<BoundRejection, string> = {
 // ---------------------------------------------------------------------------
 
 /**
- * How a filesystem path is labelled on this surface.
+ * ===========================================================================
+ * D-19 — THE SETTINGS SURFACE NEVER SHOWS A PATH, AND NOW IT CANNOT
+ * ===========================================================================
  *
- * 05-UI-SPEC.md R5: any path the settings surface displays is labelled "on the
- * Caido server" and is NEVER presented as a path on the operator's machine.
- * Caido is client/server — the backend may be a remote VPS or a container — so a
- * server path shown as a local one sends the operator looking on the wrong disk,
- * and on a remote deployment there is no such file on their machine at all.
+ * WHAT USED TO BE HERE, AND WHY IT IS GONE. Phase 5 shipped a path renderer for
+ * this section: a `SERVER_PATH_LABEL`, a copy action with its copied and
+ * unavailable labels, a character bound, an elision character and a left-cutting
+ * helper. All seven existed to render one string — a filesystem path on the
+ * Caido server — and DEPLOY-02 says server-side storage is labelled as such and
+ * NEVER presented as a path on the operator's machine.
+ *
+ * D-19 satisfies that by SUBTRACTION rather than by labelling. The operator
+ * cannot reach a server path: on a remote or containerised Caido there is no
+ * such file on the disk they are reading this on, and `sdk.meta.path()` carries
+ * an OS username, which is exactly the string `telemetry.spec.ts`'s guard exists
+ * to keep off the RPC. A path shown here would be a string that is useless at
+ * best and identifying at worst.
+ *
+ * 05-UI-SPEC.md's R5 — "any filesystem path the Settings surface displays is
+ * labelled 'on the Caido server'" — SURVIVES ITS IMPLEMENTATION'S DELETION. It
+ * is vacuously satisfied by displaying none, and it binds any later phase that
+ * displays one. And `05-VERIFICATION.md`'s DEPLOY-02 `behavior_unverified` item,
+ * which names `App.vue`'s hardcoded null storage path, is CLOSED BY DELETION,
+ * NOT BY SUPPLYING A VALUE.
+ *
+ * WHAT THE SURFACE SAYS INSTEAD: where the data lives, whether a restart has
+ * ever been observed to lose it, and how much of each retention cap is used.
  */
-export const SERVER_PATH_LABEL = "on the Caido server";
+
+/**
+ * The storage section's heading. ONE AUTHORED CONSTANT.
+ *
+ * It replaces the shipped `"Storage " + SERVER_PATH_LABEL` composition, which
+ * built a heading out of a label whose subject was a path. There is no path, so
+ * there is no label, so the heading is a sentence somebody wrote.
+ */
+export const STORAGE_HEADING = "Storage on the Caido server";
 
 /** The storage note, which renders whether or not a path is available. */
 export const STORAGE_NOTE =
   "DefMiner's database lives on the Caido server, not on this machine. On a remote or containerised Caido that is a different disk from the one you are reading this on.";
 
-/** UISEC-03's affordance, reused here: the full value reaches the clipboard and
- *  never the document. */
-export const COPY_PATH_LABEL = "Copy full path";
+/**
+ * The ONE persistence sentence, and it is an OBSERVATION OF THE PAST.
+ *
+ * RENDERED ONLY WHEN EVIDENCE EXISTS (U6-2). Research O-02 established that the
+ * backend cannot detect a persistent volume — the metadata path reveals OS
+ * family and nothing about bind mounts, the OS module has no hostname accessor,
+ * the process global does not load, and the container marker file is unreachable
+ * under D-18 by construction. A persistence CLAIM would therefore be a
+ * prediction, and it would be false on exactly the deployment shape the
+ * DEPLOY-01 matrix tests: Docker without a volume.
+ *
+ * So the only sentence that renders is one about something that already
+ * happened: a boot that found no durable marker where a previous boot wrote one.
+ * With the flag clear, NOTHING renders in its place — an absent sentence claims
+ * nothing, and "we have not observed a loss" is not "your data is safe".
+ */
+export const PERSISTENCE_OBSERVED_LOSS =
+  "A previous restart of this Caido lost DefMiner's database, so this deployment does not keep data across restarts. Export anything you need to keep.";
 
-/** Said after a successful copy. A state, not a toast that disappears. */
-export const COPIED_LABEL = "Copied";
+// ---------------------------------------------------------------------------
+// D-25 — WHAT DEFMINER IS STORING, AGAINST THE CAPS
+// ---------------------------------------------------------------------------
 
-/** Said when the clipboard is unavailable. `display.ts` refuses to fall back to
- *  the `execCommand` path, because that one copies by putting the full value
- *  into the document and R2 forbids the untruncated value ever entering it. */
-export const COPY_FAILED_LABEL = "Clipboard unavailable";
+/** The footprint block's heading. */
+export const FOOTPRINT_HEADING = "What DefMiner is storing";
+
+/** One footprint row's identity, its TERM and its noun in both numbers. */
+export type FootprintRowCopy = {
+  /** The stable half of the row's element id. */
+  readonly id: "artifacts" | "observations" | "analyses";
+  /**
+   * What the row is ABOUT — the `<dt>` of a genuine term/definition pair, the
+   * same shape `HealthPanel.vue`'s reference rows use.
+   *
+   * NOT A REPEAT OF THE NOUN. "Artifacts" beside "12,400 of 50,000 artifact
+   * rows" would be one string said twice; the term names the thing and the
+   * definition measures it.
+   */
+  readonly term: string;
+  readonly singular: string;
+  readonly plural: string;
+};
 
 /**
- * How many characters of a path are shown before it is cut.
+ * The three rows, IN THE ORDER THEY RENDER.
  *
- * Not one of the two grapheme caps in `@defminer/engine/sanitise`: those bound
- * TARGET-CONTROLLED text in a table cell and in the evidence panel. This bounds
- * a host filesystem path in a settings row, which is a different subject at a
- * different width.
+ * DECLARATION ORDER IS THE RENDER ORDER and is never sorted at runtime, the same
+ * rule `SETTINGS_GROUPS` and `KNOWN_SETTINGS` already follow: a row does not move
+ * under an operator who reaches for it by position. Artifacts first because it is
+ * the count the retention cap bites on first and the one a scan suspended by
+ * D-08 is about.
  */
-export const PATH_DISPLAY_CHARS = 48;
-
-/** What replaces the cut-off head of a path. A single character, so the cut is
- *  visible without the marker itself being mistaken for part of the path. */
-export const PATH_ELISION = "…";
+export const FOOTPRINT_ROWS: readonly FootprintRowCopy[] = Object.freeze([
+  {
+    id: "artifacts",
+    term: "Scripts DefMiner has seen",
+    singular: "artifact row",
+    plural: "artifact rows",
+  },
+  {
+    id: "observations",
+    term: "Where it saw them",
+    singular: "observation row",
+    plural: "observation rows",
+  },
+  {
+    id: "analyses",
+    term: "Times it read them",
+    singular: "analysis row",
+    plural: "analysis rows",
+  },
+] as const);
 
 /**
- * Cut a path at its LEFT end, so the filename stays visible.
+ * One footprint row's sentence: the count, the cap, the noun, and the age when
+ * DefMiner has one.
  *
- * THE DIRECTION IS THE WHOLE RULE. Paths differ at the end and agree at the
- * start — every plugin data file under one Caido install shares its first sixty
- * characters — so right-truncation shows the operator the part that is the same
- * for everything and hides the part that identifies the file.
+ * BOTH NUMBERS ALWAYS RENDER, including when they are equal. "50,000 of 50,000"
+ * is the state an operator most needs to see — it is the one where the next
+ * write evicts something — and collapsing it to one number would hide exactly
+ * that.
  *
- * SANITISED FIRST, THEN CUT. `forCellText` strips C0/C1 controls and bidi
- * overrides and is grapheme-safe; a bidi override surviving into a path
- * rendered beside a copy action would be a path that reads as one thing and
- * copies as another. The path is the host's and not the target's, so this is
- * belt-and-braces rather than the primary control — which is exactly why it
- * costs nothing to keep in front of it.
+ * THE NOUN AGREES WITH THE CAP, which is the number it sits beside. `counted` is
+ * the shipped helper and the only one permitted: 05-UI-SPEC.md forbids the
+ * parenthesised "row(s)" suffix outright.
  *
- * THE FULL VALUE IS NEVER PUT IN A `title`, A TOOLTIP OR A `data-*` ATTRIBUTE.
- * R2 is categorical about that, and the copy action is the only route to it.
+ * THE AGE CLAUSE IS ABSENT RATHER THAN FABRICATED (U6-3). A `null` age is a
+ * number DefMiner does not have — an empty table genuinely has no oldest row —
+ * and the sentence ends at the count. Never "oldest 0 days", never a placeholder
+ * character standing in for a number.
  */
-export function truncatePathLeft(path: string): string {
-  const safe = forCellText(path);
-  if (safe.length <= PATH_DISPLAY_CHARS) return safe;
-  return PATH_ELISION + safe.slice(safe.length - PATH_DISPLAY_CHARS);
+export function footprintRowText(
+  copy: FootprintRowCopy,
+  count: number,
+  cap: number,
+  oldestDays: number | null,
+): string {
+  const head = `${groupThousands(count)} of ${counted(cap, copy.singular, copy.plural)}`;
+  if (oldestDays === null) return head;
+  return `${head}, oldest ${counted(oldestDays, "day", "days")}`;
+}
+
+/**
+ * A stable element id for one footprint row.
+ *
+ * AN `id` AND NOT A `data-*` ATTRIBUTE, for the reason {@link groupId} states
+ * below: the static gate reports ANY bound `data-*` binding categorically, and
+ * the per-row hooks on this surface are ids.
+ */
+export function footprintRowId(copy: FootprintRowCopy): string {
+  return "defminer-footprint-" + copy.id;
 }
 
 /**

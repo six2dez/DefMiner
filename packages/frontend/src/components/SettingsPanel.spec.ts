@@ -6,7 +6,7 @@
 // ===========================================================================
 // WHAT THESE CASES ARE ACTUALLY GUARDING
 // ===========================================================================
-// Not "does an input render". Five things, and four of them cost the operator
+// Not "does an input render". Six things, and five of them cost the operator
 // something real when they break:
 //
 //   1. THE FAILED SAVE THAT EATS THE EDITS. The design contract's `error /
@@ -25,9 +25,15 @@
 //   4. THE DOUBLE SUBMIT. Two writes of the same bound is harmless; two writes
 //      the operator did not intend, against a field they were mid-edit on, is
 //      not — and the in-flight state is the only thing between them.
-//   5. THE SERVER PATH SHOWN AS A LOCAL ONE (R5). Caido is client/server, so a
-//      path on the backend may be on a VPS or inside a container; presented as
-//      local it sends the operator looking on a disk that has no such file.
+//   5. THE PERSISTENCE PROMISE NOBODY CAN KEEP (DEPLOY-02, D-19). The backend
+//      cannot detect a persistent volume, so any sentence claiming that findings
+//      survive a restart would be a prediction — and it would be false on
+//      exactly the deployment shape the matrix tests. The forbidden-claim list
+//      lives in THIS file rather than in the contract module, so the assertion
+//      cannot be satisfied by editing the thing it checks.
+//   6. THE FABRICATED NUMBER. A count DefMiner could not read must render as an
+//      absent row and never as a zero, and an age it does not have must end the
+//      sentence rather than become "oldest 0 days".
 
 import type { BoundRejection, SettingScope } from "@defminer/engine/contract";
 import {
@@ -41,27 +47,31 @@ import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
 import type {
+  FootprintRow,
   RpcResult,
   SettingRow,
   SettingWriteOutcome,
   SettingWriteRequest,
+  StorageFootprint,
 } from "../api/client";
 
 import {
   CLEAR_LABEL,
   FIELD_COPY,
   fieldId,
+  FOOTPRINT_ROWS,
+  footprintRowId,
   GROUP_COPY,
   groupId,
   LOAD_FAILED_BODY,
-  PATH_DISPLAY_CHARS,
-  PATH_ELISION,
+  PERSISTENCE_OBSERVED_LOSS,
   PROVENANCE_COPY,
   REJECTION_COPY,
   SAVE_FAILED_BODY,
   SAVE_LABEL,
   SAVING_LABEL,
-  SERVER_PATH_LABEL,
+  STORAGE_HEADING,
+  STORAGE_NOTE,
 } from "./settings-contract";
 import SettingsPanel from "./SettingsPanel.vue";
 
@@ -104,8 +114,28 @@ type Options = {
   readonly writeOutcome?: RpcResult<SettingWriteOutcome>;
   /** When set, the write never settles — the in-flight state, held open. */
   readonly hangWrite?: boolean;
-  readonly storagePath?: string | null;
+  /** What `loadFootprint` answers with. Defaults to three readable zero rows. */
+  readonly footprint?: StorageFootprint;
+  /** When set, the footprint read FAILS — a different state from three zeroes. */
+  readonly footprintFails?: boolean;
 };
+
+/** A footprint with three readable rows, overridable one table at a time. A
+ *  `null` override is an UNREADABLE count, which is not the same as a zero. */
+function footprintOf(over: {
+  artifacts?: FootprintRow | null;
+  observations?: FootprintRow | null;
+  analyses?: FootprintRow | null;
+  observedRestartLoss?: boolean;
+}): StorageFootprint {
+  const zero: FootprintRow = { count: 0, cap: 50_000, oldestDays: null };
+  return {
+    artifacts: over.artifacts === undefined ? zero : over.artifacts,
+    observations: over.observations === undefined ? zero : over.observations,
+    analyses: over.analyses === undefined ? zero : over.analyses,
+    observedRestartLoss: over.observedRestartLoss ?? false,
+  };
+}
 
 function harness(options: Options = {}): Harness {
   const writes: SettingWriteRequest[] = [];
@@ -142,12 +172,26 @@ function harness(options: Options = {}): Harness {
     );
   };
 
+  const loadFootprint = (): Promise<RpcResult<StorageFootprint>> => {
+    if (options.footprintFails === true) {
+      return Promise.resolve({
+        ok: false,
+        reason: "rpc-rejected",
+        versions: null,
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      value: options.footprint ?? footprintOf({}),
+    });
+  };
+
   const wrapper = mount(SettingsPanel, {
     props: {
       projectId: "server-scoped",
       load,
       save,
-      storagePath: options.storagePath ?? null,
+      loadFootprint,
     },
   });
 
@@ -544,59 +588,247 @@ describe("clearing a project override", () => {
 });
 
 // ---------------------------------------------------------------------------
-// R5 — THE ONE UNBOUNDED STRING THIS SURFACE CAN SHOW
+// DEPLOY-02 — THE SURFACE SHOWS NO PATH, BECAUSE THERE IS NO CODE THAT COULD
 // ---------------------------------------------------------------------------
+//
+// FIVE CASES CAME OUT HERE AND THEY ARE NOT COMING BACK. Phase 5 asserted that a
+// server path was labelled, left-truncated, kept out of every attribute and
+// reachable only through a copy action. D-19 deletes the renderer instead, so
+// what replaces them is one case asserting the ABSENCE — written against the
+// rendered DOM rather than against the deleted symbols, so it keeps holding if
+// somebody re-introduces a path by a different route.
 
-describe("R5 — a filesystem path is labelled as being on the server", () => {
-  const LONG_PATH =
-    "/Users/somebody/Library/Application Support/io.caido.Caido/plugins/8f2b1c4e-0000-4a3d-9f11-c0ffee123456/data.db";
+describe("the storage section states WHERE the data lives and shows no path", () => {
+  const PATH_SHAPES = [
+    "/Users/",
+    "/home/",
+    "C:\\",
+    "/Library/Application Support/",
+    ".db",
+  ];
 
-  it("labels the path as being on the Caido server", async () => {
-    const h = harness({ storagePath: LONG_PATH });
+  it("renders the storage note verbatim under one authored heading", async () => {
+    const h = harness();
     await settle(h.wrapper);
-    expect(h.wrapper.get("[data-defminer-server-path]").text()).toContain(
-      SERVER_PATH_LABEL,
+    const section = h.wrapper.get("[data-defminer-server-path]");
+
+    expect(section.text()).toContain(STORAGE_HEADING);
+    expect(section.text()).toContain(STORAGE_NOTE);
+  });
+
+  it("renders NOTHING path-shaped, in its text OR in any attribute", async () => {
+    const h = harness({ footprint: footprintOf({}) });
+    await settle(h.wrapper);
+    const html = h.wrapper.html();
+
+    for (const shape of PATH_SHAPES) {
+      expect(html, `${shape} reached the storage surface`).not.toContain(shape);
+    }
+    // AND NO COPY ACTION AND NO VALUE ELEMENT. Both were the path's, and both
+    // went with it; asserting their absence is what makes "the renderer is gone"
+    // a checked claim rather than a described one.
+    expect(h.wrapper.find("[data-defminer-server-path-value]").exists()).toBe(
+      false,
+    );
+    expect(h.wrapper.find("[data-defminer-server-path-copy]").exists()).toBe(
+      false,
     );
   });
 
-  it("truncates at the LEFT end, so the filename stays visible", async () => {
-    const h = harness({ storagePath: LONG_PATH });
+  it("carries no title attribute anywhere on the storage section", async () => {
+    const h = harness({ footprint: footprintOf({}) });
     await settle(h.wrapper);
-    const shown = h.wrapper.get("[data-defminer-server-path-value]").text();
-
-    expect(shown.startsWith(PATH_ELISION)).toBe(true);
-    expect(shown.endsWith("data.db")).toBe(true);
-    expect(shown).not.toContain("/Users/somebody");
-    expect(shown.length).toBeLessThanOrEqual(PATH_DISPLAY_CHARS + 1);
-  });
-
-  it("carries NO title attribute and NO data attribute holding the full path", async () => {
-    const h = harness({ storagePath: LONG_PATH });
-    await settle(h.wrapper);
-    const element = h.wrapper.get("[data-defminer-server-path-value]");
-    expect(element.attributes("title")).toBeUndefined();
-    for (const value of Object.values(element.attributes())) {
-      expect(value).not.toContain("/Users/somebody");
+    for (const el of h.wrapper
+      .get("[data-defminer-server-path]")
+      .findAll("*")) {
+      expect(el.attributes("title")).toBeUndefined();
     }
-    expect(h.wrapper.html()).not.toContain("/Users/somebody");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE COPY PROHIBITION — A COPY FAILURE, SO A COPY ASSERTION
+// ---------------------------------------------------------------------------
+
+describe("no string on the storage surface claims that data survives a restart", () => {
+  /**
+   * DECLARED HERE AND NOT IN THE CONTRACT MODULE, DELIBERATELY (T-06-43).
+   *
+   * A forbidden-phrase list that lived beside the copy it polices could be
+   * satisfied by editing the thing it checks: somebody adding "your findings are
+   * saved" would find the assertion failing and the list one file away. Held
+   * here, the only way to make this pass is to not write the sentence.
+   *
+   * The backend cannot detect a persistent volume — research O-02 — so any of
+   * these would be a PREDICTION, and it would be false on exactly the deployment
+   * shape the DEPLOY-01 matrix tests: Docker without a volume.
+   */
+  const FORBIDDEN_CLAIMS = [
+    "survive a restart",
+    "survives a restart",
+    "survive restarts",
+    "data is saved",
+    "your data is safe",
+    "findings are saved",
+    "kept across restarts",
+    "persist across restarts",
+    "safely stored",
+  ];
+
+  for (const observedRestartLoss of [false, true]) {
+    it(`makes no persistence promise with the observed-loss flag ${observedRestartLoss ? "set" : "clear"}`, async () => {
+      const h = harness({ footprint: footprintOf({ observedRestartLoss }) });
+      await settle(h.wrapper);
+      const text = h.wrapper
+        .get("[data-defminer-server-path]")
+        .text()
+        .toLowerCase();
+
+      for (const claim of FORBIDDEN_CLAIMS) {
+        expect(text, `the surface claims "${claim}"`).not.toContain(claim);
+      }
+    });
+  }
+
+  it("renders the persistence sentence ONLY once a loss has been observed", async () => {
+    const clear = harness({
+      footprint: footprintOf({ observedRestartLoss: false }),
+    });
+    await settle(clear.wrapper);
+    expect(clear.wrapper.find("#defminer-storage-persistence").exists()).toBe(
+      false,
+    );
+
+    const observed = harness({
+      footprint: footprintOf({ observedRestartLoss: true }),
+    });
+    await settle(observed.wrapper);
+    expect(observed.wrapper.get("#defminer-storage-persistence").text()).toBe(
+      PERSISTENCE_OBSERVED_LOSS,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-25 — THE FOOTPRINT ROWS
+// ---------------------------------------------------------------------------
+
+describe("the footprint reports each count against its cap", () => {
+  it("renders the three rows in the fixed order artifacts, observations, analyses", async () => {
+    const h = harness({ footprint: footprintOf({}) });
+    await settle(h.wrapper);
+
+    const ids = h.wrapper
+      .get("[data-defminer-footprint]")
+      .findAll("div[id^='defminer-footprint-']")
+      .map((el) => el.attributes("id"));
+    expect(ids).toEqual(FOOTPRINT_ROWS.map((row) => footprintRowId(row)));
   });
 
-  it("offers the full value ONLY through a copy action", async () => {
-    const h = harness({ storagePath: LONG_PATH });
+  it("renders two grouped integers with the noun, in that order", async () => {
+    const h = harness({
+      footprint: footprintOf({
+        artifacts: { count: 12_400, cap: 50_000, oldestDays: null },
+      }),
+    });
     await settle(h.wrapper);
-    expect(h.wrapper.find("[data-defminer-server-path-copy]").exists()).toBe(
+    expect(h.wrapper.get("#defminer-footprint-artifacts dd").text()).toBe(
+      "12,400 of 50,000 artifact rows",
+    );
+  });
+
+  it("renders BOTH numbers when the count equals its cap", async () => {
+    const h = harness({
+      footprint: footprintOf({
+        artifacts: { count: 50_000, cap: 50_000, oldestDays: null },
+      }),
+    });
+    await settle(h.wrapper);
+    expect(h.wrapper.get("#defminer-footprint-artifacts dd").text()).toBe(
+      "50,000 of 50,000 artifact rows",
+    );
+  });
+
+  it("renders a count and an adjacent cap DISTINCTLY", async () => {
+    const h = harness({
+      footprint: footprintOf({
+        artifacts: { count: 49_999, cap: 50_000, oldestDays: null },
+      }),
+    });
+    await settle(h.wrapper);
+    const text = h.wrapper.get("#defminer-footprint-artifacts dd").text();
+    expect(text).toContain("49,999");
+    expect(text).toContain("50,000");
+  });
+
+  it("renders a MEASURED ZERO as a zero", async () => {
+    const h = harness({
+      footprint: footprintOf({
+        artifacts: { count: 0, cap: 50_000, oldestDays: null },
+      }),
+    });
+    await settle(h.wrapper);
+    expect(h.wrapper.get("#defminer-footprint-artifacts dd").text()).toBe(
+      "0 of 50,000 artifact rows",
+    );
+  });
+
+  it("renders an UNREADABLE count as an absent row, never as a zero", async () => {
+    const h = harness({ footprint: footprintOf({ artifacts: null }) });
+    await settle(h.wrapper);
+
+    expect(h.wrapper.find("#defminer-footprint-artifacts").exists()).toBe(
+      false,
+    );
+    // And one unreadable table does not take the other two with it.
+    expect(h.wrapper.find("#defminer-footprint-observations").exists()).toBe(
       true,
     );
   });
 
-  it("renders the storage note but NO path element when no path is available", async () => {
-    const h = harness({ storagePath: null });
-    await settle(h.wrapper);
-    expect(h.wrapper.find("[data-defminer-server-path-value]").exists()).toBe(
-      false,
+  it("adds the age clause with agreement, and OMITS it entirely when absent", async () => {
+    const plural = harness({
+      footprint: footprintOf({
+        artifacts: { count: 3, cap: 50_000, oldestDays: 41 },
+      }),
+    });
+    await settle(plural.wrapper);
+    expect(plural.wrapper.get("#defminer-footprint-artifacts dd").text()).toBe(
+      "3 of 50,000 artifact rows, oldest 41 days",
     );
+
+    const singular = harness({
+      footprint: footprintOf({
+        artifacts: { count: 3, cap: 50_000, oldestDays: 1 },
+      }),
+    });
+    await settle(singular.wrapper);
+    expect(
+      singular.wrapper.get("#defminer-footprint-artifacts dd").text(),
+    ).toBe("3 of 50,000 artifact rows, oldest 1 day");
+
+    const none = harness({
+      footprint: footprintOf({
+        artifacts: { count: 3, cap: 50_000, oldestDays: null },
+      }),
+    });
+    await settle(none.wrapper);
+    const text = none.wrapper.get("#defminer-footprint-artifacts dd").text();
+    expect(text).toBe("3 of 50,000 artifact rows");
+    // NO PLACEHOLDER IN ITS PLACE. Not a zero, not an em dash, not a "—".
+    expect(text).not.toContain("oldest");
+    expect(text).not.toContain("—");
+  });
+
+  it("renders no footprint block at all when the read FAILED", async () => {
+    const h = harness({ footprintFails: true });
+    await settle(h.wrapper);
+
+    expect(h.wrapper.find("[data-defminer-footprint]").exists()).toBe(false);
+    // The storage note still renders: "the database is not on your machine" is
+    // true and useful whether or not the counts arrived.
     expect(h.wrapper.get("[data-defminer-server-path]").text()).toContain(
-      SERVER_PATH_LABEL,
+      STORAGE_NOTE,
     );
   });
 });

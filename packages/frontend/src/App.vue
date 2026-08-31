@@ -39,6 +39,7 @@ import type {
   SettingWriteOutcome,
   SettingWriteRequest,
   StartScanOutcome,
+  StorageFootprint,
 } from "./api/client";
 import { createBackendClient } from "./api/client";
 import type { ArtifactRow } from "./backend";
@@ -563,19 +564,29 @@ function saveSetting(
 }
 
 /**
- * The server path the settings surface would label under R5.
+ * WHERE THE HARDCODED NULL SERVER PATH WENT (DEPLOY-02, D-19).
  *
- * `null`, AND DELIBERATELY SO RATHER THAN UNFINISHED. No endpoint supplies one:
- * `telemetry.ts` strips `sdk.meta.path()` out of everything crossing the RPC
- * because it carries the operator's OS username on every real deployment, and
- * `telemetry.spec.ts` proves that closure at the RPC level. R5 is honoured as a
- * RULE — the renderer labels, left-truncates, keeps the value out of every
- * attribute and routes the full string through the clipboard alone — so the
- * phase that does surface a path (DEPLOY-02, Phase 6) inherits the rule rather
- * than retrofitting it. Stated here, at the call site, because a bare `null`
- * prop is exactly the kind of thing a later reader would "fix".
+ * The rendering-safety rule about labelling a displayed server path survives its
+ * implementation's deletion: it is vacuously satisfied by displaying none, and
+ * it binds any later phase that displays one. And `05-VERIFICATION.md`'s
+ * DEPLOY-02 `behavior_unverified` item — which named this constant and its
+ * hardcoded `null` — is closed by deletion, not by supplying a value.
+ *
+ * What the Settings surface reads instead is {@link loadStorageFootprint}: three
+ * row counts against their retention caps, and whether a restart has ever been
+ * observed to lose this database. Neither is a path, and there is no longer any
+ * code here that could render one.
  */
-const SERVER_STORAGE_PATH: string | null = null;
+function loadStorageFootprint(): Promise<RpcResult<StorageFootprint>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.getStorageFootprint();
+}
 
 /** The table asked for Health. The TAB STRIP is this component's to move; a
  *  table that switched tabs itself would be a component writing to a sibling. */
@@ -825,7 +836,7 @@ async function loadCompat(): Promise<void> {
           :project-id="SERVER_SCOPED_PROJECT"
           :load="loadSettings"
           :save="saveSetting"
-          :storage-path="SERVER_STORAGE_PATH"
+          :load-footprint="loadStorageFootprint"
         />
 
         <!-- OBS-01's HEALTH BODY, replacing the tracer's placeholder.
