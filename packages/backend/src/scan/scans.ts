@@ -44,6 +44,29 @@
 // repudiation the phase's threat register names, so every mutation that a
 // surface renders is followed by a read.
 //
+// ===========================================================================
+// ONE SCAN PER PROJECT IS AN INVARIANT, AND IT LIVES IN AN INDEX
+// ===========================================================================
+// Not "nothing calls start twice". The rule is enforced by the PARTIAL UNIQUE
+// index `idx_scans_one_running` — `UNIQUE (project_id) WHERE state = 'running'`
+// — created in migration step v5, so a second start FAILS AT THE DRIVER inside
+// the insert rather than being turned away by a read this pool cannot make
+// atomic with the write that follows it. `06-CONTEXT.md` asks that this be an
+// explicit invariant rather than an accident of how the RPC happens to be
+// written; this is where it is stated.
+//
+// The index deliberately does NOT cover `suspended`, because a suspended scan
+// has to be able to sit there in order to be resumed at all. The other half of
+// the invariant — refusing a start while a SUSPENDED scan is holding the slot —
+// is a read in the RPC, and it is a read rather than a constraint because the
+// two occupied states mean different things to the operator and the surface has
+// a different sentence for each.
+//
+// That pair is also what BOUNDS the suspended pin in `LIST_SCANS_SQL` below: at
+// most one suspended row per project can exist at a time, so pinning every
+// suspended row into the returned window can displace at most one row of it.
+// The bound stays a bound rather than becoming a soft suggestion.
+//
 // Driver constraints inherited unchanged: positional `?` only, `prepare()`
 // INSIDE the call because `sdk.meta.db()` is a pool over worker threads, and
 // `project_id` in every predicate because one SQLite file serves every Caido
@@ -85,8 +108,11 @@ const ACTIVE_LIFECYCLE_STATES: readonly ScanLifecycleState[] =
   );
 
 /**
- * The ARITY of {@link ACTIVE_LIFECYCLE_STATES} is part of `GET_ACTIVE_SCAN_SQL`,
- * so it is asserted at import rather than assumed at the bind.
+ * The ARITY of {@link ACTIVE_LIFECYCLE_STATES} is part of `GET_ACTIVE_SCAN_SQL`
+ * AND of `DISCARD_SQL`, so it is asserted at import rather than assumed at the
+ * bind. Those are the two statements in this module whose guard is a LIST; every
+ * other transition names its single guard state in the statement text, the way
+ * `START_SQL` names `'running'`.
  *
  * `IN (?, ?)` has two placeholders written as literal text, because every
  * statement in this package is a complete literal and an arity computed from a
@@ -99,7 +125,8 @@ const ACTIVE_LIFECYCLE_STATES: readonly ScanLifecycleState[] =
 const ACTIVE_STATE_PLACEHOLDERS = 2;
 if (ACTIVE_LIFECYCLE_STATES.length !== ACTIVE_STATE_PLACEHOLDERS) {
   throw new Error(
-    `scan/scans.ts: GET_ACTIVE_SCAN_SQL binds ${String(ACTIVE_STATE_PLACEHOLDERS)} ` +
+    `scan/scans.ts: GET_ACTIVE_SCAN_SQL and DISCARD_SQL each bind ` +
+      `${String(ACTIVE_STATE_PLACEHOLDERS)} ` +
       `state placeholders but ACTIVE_LIFECYCLE_STATES now holds ` +
       `${String(ACTIVE_LIFECYCLE_STATES.length)}. Every statement in this package is a ` +
       `complete literal, so the guard list cannot be sized at run time — widen the ` +
@@ -332,14 +359,392 @@ export async function advanceScan(
   }
 }
 
+// ===========================================================================
+// THE TRANSITIONS (D-04, D-10, D-11)
+// ===========================================================================
+//
+// EVERY ONE OF THEM IS A SINGLE `UPDATE … WHERE … AND state = …` WITH THE GUARD
+// INSIDE THE PREDICATE. `store/retry.ts` states the reason at length and it
+// applies here unchanged: a caller-side "read the state, then move it if it is
+// still X" is TWO operations, and this driver has no transaction primitive to
+// make them one — `BEGIN` does not span `exec` calls and every statement still
+// reports success (Pitfall 2). The interleaving that window permits is exactly
+// the running walk being reset: a scan the operator paused between the read and
+// the write is resumed, or advanced, underneath them.
+//
+// THE GUARD STATE IS WRITTEN INTO THE STATEMENT TEXT rather than bound, which is
+// the shape `START_SQL` above already uses and for the reason it gives there: a
+// pause that could move any state other than `running` is not a pause, so the
+// state is part of what the statement MEANS rather than a value it takes. The
+// one transition whose guard is a LIST binds it, because a list has an arity and
+// an arity can drift — see {@link ACTIVE_STATE_PLACEHOLDERS}, which is asserted
+// at import for `DISCARD_SQL` as well as for the active-scan read.
+//
+// THE SUSPENSION REASON IS ALWAYS BOUND AND NEVER WRITTEN INTO THE TEXT. It is a
+// value rather than a shape, and binding it is what lets the three constants
+// below carry a `SuspendReason` annotation — which is the mechanism that makes
+// deleting a member from the closed vocabulary a typecheck failure here instead
+// of a string that quietly stops matching the frontend's copy map.
+//
+// NOTHING BELOW WRITES AN `audit` ROW. D-16 gives a scan exactly two destructive
+// events and both land in plan 06-06, together with the forward migration step
+// that widens `audit`'s closed `kind` CHECK.
+
+/** The reason a PAUSE writes (D-10). The ANNOTATION is the binding to the closed
+ *  vocabulary, not the spelling. */
+const OPERATOR_PAUSED: SuspendReason = "operator_paused";
+/** The reason an EPOCH CHANGE writes (D-04). */
+const PROJECT_CHANGED: SuspendReason = "project_changed";
+/** The reason the STARTUP SWEEP writes (D-11, and ERR-02's early slice). */
+const PROCESS_RESTARTED: SuspendReason = "process_restarted";
+
+// `last_request_id` and `last_created_at` ARE NOT TOUCHED. A pause keeps the
+// place — that is the whole of D-10, and it is why the pause control is allowed
+// to be one click away from nothing.
+const PAUSE_SQL = `
+UPDATE scans
+SET state = 'suspended', suspend_reason = ?, updated_at = ?
+WHERE project_id = ? AND scan_id = ? AND state = 'running'
+`;
+
+// The reason is CLEARED, not left behind. A running scan still carrying
+// `operator_paused` would render its suspension sentence under a badge that says
+// it is scanning, on the surface whose entire subject is which of those two it
+// is.
+const RESUME_SQL = `
+UPDATE scans
+SET state = 'running', suspend_reason = NULL, updated_at = ?
+WHERE project_id = ? AND scan_id = ? AND state = 'suspended'
+`;
+
+// GUARDED ON `running` AND NOT ON THE ACTIVE PAIR. A suspended scan has not
+// reached the end of its range — it stopped somewhere in the middle and kept its
+// place — so completing one would file an unfinished backfill under **Finished**
+// and lose the operator's cursor behind a word that says there is nothing left
+// to do.
+const COMPLETE_SQL = `
+UPDATE scans
+SET state = 'completed', suspend_reason = NULL, updated_at = ?, finished_at = ?
+WHERE project_id = ? AND scan_id = ? AND state = 'running'
+`;
+
+// THE POSITION IS WHAT DISCARD DESTROYS, AND IT IS THE ONLY THING IT DESTROYS.
+// `last_request_id` goes back to `''` — the same "no boundary" value a fresh row
+// carries — and `last_cursor` to NULL. The COUNTERS and `last_created_at` are
+// left alone deliberately: the history row renders "Discarded · {n} seen ·
+// reached {date}" from them, and the artifacts and observations the scan already
+// produced are not this table's to touch at all.
+//
+// The guard is the ACTIVE PAIR, bound: a scan can be discarded whether it is
+// running or suspended, and discarding an already-terminal row would move
+// `completed` history into `discarded` — a rewrite of what happened.
+const DISCARD_SQL = `
+UPDATE scans
+SET state = 'discarded', suspend_reason = NULL,
+    last_request_id = '', last_cursor = NULL,
+    updated_at = ?, finished_at = ?
+WHERE project_id = ? AND scan_id = ? AND state IN (?, ?)
+`;
+
+// THE EPOCH GUARD IS A PREDICATE, NOT A BRANCH — `AND epoch <> ?`. Written as an
+// `if` in the caller it would be the same two-operation shape the state guard
+// avoids, and the window it opens is the one D-04 exists to close: a scan that
+// keeps writing after the Caido project changed lands the old project's traffic
+// in the new project's partition. It matches how `runScanProducer` re-checks the
+// epoch every page — the check is on the same value, in the same direction.
+const SUSPEND_ON_EPOCH_SQL = `
+UPDATE scans
+SET state = 'suspended', suspend_reason = ?, updated_at = ?
+WHERE project_id = ? AND scan_id = ? AND state = 'running' AND epoch <> ?
+`;
+
+// ONE STATEMENT OVER THE WHOLE PROJECT, and no `scan_id` in the predicate: the
+// sweep does not know which scans it is about to find and must not have to read
+// them first. `last_cursor` is NULLed because a cursor's lifetime across a
+// process restart is NOT MEASURED (O-04) — `last_request_id` is the re-derivable
+// position that does not depend on the answer, so it survives and the cursor
+// does not.
+const SUSPEND_RUNNING_ON_INIT_SQL = `
+UPDATE scans
+SET state = 'suspended', suspend_reason = ?, last_cursor = NULL, updated_at = ?
+WHERE project_id = ? AND state = 'running'
+`;
+
 /**
- * Default page size for the scan history read.
+ * What one transition did, and what the row HOLDS afterwards.
+ *
+ * `row` IS READ BACK, never assumed from the request — this driver has no
+ * `RETURNING` and cannot report what a write did, and the operator is about to
+ * be shown this state. `store/retry.ts`'s `AnalysisRetry` is the same shape for
+ * the same reason; it carries a single field because the panel renders one, and
+ * this carries the row because the Scan tab renders several.
+ *
+ * `undefined` for `row` means there is no such scan — a scan_id that never
+ * existed, or one in another project. That is deliberately not collapsed into a
+ * fabricated row, because a state the operator is shown that was never persisted
+ * is the repudiation T-06-28 names.
+ *
+ * `changes: 0` IS NOT AN ERROR on any of these. It is the guard declining, and
+ * the caller tells the cases apart by reading `changes` and `row.state` rather
+ * than by catching something.
+ *
+ * @internal
+ */
+export type ScanTransition =
+  | (StoreWriteResult & { ok: true; row: ScanRow | undefined })
+  | { ok: false; error: string };
+
+const GET_SCAN_SQL = `
+SELECT project_id, scan_id, state, suspend_reason, operator_filter, epoch,
+       last_request_id, last_cursor, last_created_at,
+       pages_walked, seen, admitted, skipped_done, rejected, queued,
+       started_at, updated_at, finished_at
+FROM scans
+WHERE project_id = ? AND scan_id = ?
+LIMIT 1
+`;
+
+/**
+ * One scan by its id, in this project.
+ *
+ * The READ-BACK half of every transition below, and the only way any of them can
+ * report what it produced. Exported because the RPC layer needs to answer
+ * "what does this row hold now" after a command the operator issued, and because
+ * `getActiveScan` cannot answer it: a scan the operator just discarded is no
+ * longer active and is exactly the row they are looking at.
+ *
+ * @internal
+ */
+export async function getScan(
+  db: Database,
+  projectId: string,
+  scanId: string,
+): Promise<ScanRow | undefined> {
+  const stmt = await db.prepare(GET_SCAN_SQL);
+  return stmt.get<ScanRow>(projectId, scanId);
+}
+
+/**
+ * Suspend a RUNNING scan on operator command — a PAUSE, and never a cancel.
+ *
+ * D-10: the position is kept and a resume continues from exactly where this
+ * stopped, which is what makes a mis-clicked pause on a multi-hour backfill cost
+ * nothing. Destroying the position is {@link discardScan}, a different function
+ * with a different name and its own confirmation.
+ *
+ * A row that is ALREADY suspended reports `changes: 0` and does not throw. Two
+ * pauses in a row is an operator double-click, not an error, and the second one
+ * must not rewrite `suspend_reason` — a pause that overwrote `project_changed`
+ * would erase the only record of why the scan actually stopped.
+ */
+export async function pauseScan(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  nowMs: number,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(PAUSE_SQL);
+    const res = await stmt.run(OPERATOR_PAUSED, nowMs, projectId, scanId);
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Return a SUSPENDED scan to `running`, on explicit operator command.
+ *
+ * THE ONLY WAY BACK TO `running` FROM A SUSPENSION, and it is never automatic:
+ * D-11 forbids an auto-resume after a restart, D-04 forbids one after a project
+ * change, and there is no timer anywhere in this module. A `completed` or
+ * `discarded` row reports `changes: 0` — a scan that reached the end of its
+ * range has nothing to continue, and a discarded one has no position to continue
+ * from.
+ */
+export async function resumeScan(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  nowMs: number,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(RESUME_SQL);
+    const res = await stmt.run(nowMs, projectId, scanId);
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Mark a RUNNING scan as having reached the end of its filter's range.
+ *
+ * Not reachable from a suspension, by the statement's own guard: see
+ * {@link COMPLETE_SQL}. `runScanProducer` reports `completed` when a page comes
+ * back empty — an empty result IS a finished scan, never an error — and this is
+ * the transition that reports into.
+ */
+export async function completeScan(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  nowMs: number,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(COMPLETE_SQL);
+    const res = await stmt.run(nowMs, nowMs, projectId, scanId);
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Throw a scan away — the ONE destructive action in this module.
+ *
+ * IT DESTROYS THE POSITION AND NOTHING ELSE. The artifacts and observations the
+ * scan produced went through the same admission gate, digest and store path the
+ * live hook uses (D-01); they are not this scan's property and are not touched.
+ * What is lost is the place in history the walk had reached, which is why the
+ * confirmation copy quantifies it and why this is a separate endpoint from
+ * {@link pauseScan} rather than a flag on it (T-06-28).
+ */
+export async function discardScan(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  nowMs: number,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(DISCARD_SQL);
+    const res = await stmt.run(
+      nowMs,
+      nowMs,
+      projectId,
+      scanId,
+      // SPREAD, never passed as one array: an array handed to a bind position is
+      // silently ignored on this driver. Indexed rather than destructured
+      // because the arity is asserted at import and the compiler cannot see
+      // that assertion.
+      ACTIVE_LIFECYCLE_STATES[0],
+      ACTIVE_LIFECYCLE_STATES[1],
+    );
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Suspend a running scan BECAUSE THE PROJECT CHANGED UNDER IT (D-04).
+ *
+ * @param currentEpoch - The epoch in force NOW. The statement moves the row only
+ * when it DIFFERS from the row's own, so a call with a matching epoch is a
+ * no-op reporting `changes: 0` rather than a suspension nobody asked for. The
+ * comparison is in the predicate for the reason {@link SUSPEND_ON_EPOCH_SQL}
+ * states: as a caller-side branch it is two operations this pool cannot make
+ * one.
+ */
+export async function suspendOnEpochChange(
+  db: Database,
+  projectId: string,
+  scanId: string,
+  currentEpoch: number,
+  nowMs: number,
+): Promise<ScanTransition> {
+  try {
+    const stmt = await db.prepare(SUSPEND_ON_EPOCH_SQL);
+    const res = await stmt.run(
+      PROJECT_CHANGED,
+      nowMs,
+      projectId,
+      scanId,
+      currentEpoch,
+    );
+    return {
+      ok: true,
+      changes: res.changes,
+      row: await getScan(db, projectId, scanId),
+    };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * D-11's STARTUP SWEEP: move every `running` scan in this project to
+ * `suspended`, with a reason, in ONE statement.
+ *
+ * THIS IS A SLICE OF ERR-02, A PHASE 2 REQUIREMENT, SHIPPED EARLY AND DECLARED.
+ * ERR-02's rule is that jobs in flight when the process died are detected on
+ * startup and either resumed or explicitly abandoned, never left permanently
+ * running. Applied to the one table that needs it now: a `running` row is a lie
+ * the moment the process holding the walk is gone, and nothing else in the
+ * system will ever move it — the producer refuses to advance a scan it cannot
+ * find in memory, and the operator is shown a badge saying it is scanning.
+ * Phase 2 inherits this pattern — one statement, a reason, and never an
+ * auto-resume — rather than inventing a second one.
+ *
+ * NOTHING IS RESUMED. The reason is `process_restarted` and the row sits there
+ * until the operator says otherwise, which is exactly what ERR-02's "explicitly
+ * abandoned" half means here: DefMiner does not decide on the operator's behalf
+ * that a multi-hour backfill should start pulling full response bodies again the
+ * moment Caido comes back up.
+ *
+ * Returns `changes` — the number of rows it moved. It is a `StoreWriteResult`
+ * and not a {@link ScanTransition} because there is no single row to read back:
+ * the statement is set-based by design, and reading each moved row would be the
+ * per-item shape D-03 has already removed from this package once.
+ */
+export async function suspendRunningOnInit(
+  db: Database,
+  projectId: string,
+  nowMs: number,
+): Promise<StoreWriteResult> {
+  try {
+    const stmt = await db.prepare(SUSPEND_RUNNING_ON_INIT_SQL);
+    const res = await stmt.run(PROCESS_RESTARTED, nowMs, projectId);
+    return { ok: true, changes: res.changes };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Default AND MAXIMUM page size for the scan history read.
  *
  * Same reasoning as `AUDIT_LIST_DEFAULT_LIMIT`, and NOT tagged `@internal` for
  * the same reason: the spec asserts the default against THIS constant rather
  * than against a copy of its value, so a test cannot keep passing while the
  * code that matters drifts. A read with no limit is a read whose cost is set by
  * how long the operator has had DefMiner installed.
+ *
+ * THE NUMBER IS AN ASSUMPTION, NOT A MEASUREMENT, and saying so here is the
+ * point of this paragraph. No requirement bounds the number of scans a project
+ * is expected to accumulate, and nothing in this phase measured one. What is
+ * BINDING is the SHAPE — a stated bound, enforced at read rather than at render,
+ * suspended rows exempt from it, and the truncation said in words on the surface
+ * — and the number may move without any of that changing. Plan 06-13 owns the
+ * surface that renders `Showing the {n} most recent scans`, and carries the
+ * number as an explicit planner assumption; presenting it here as derived would
+ * be the more comfortable lie.
  */
 export const SCAN_LIST_DEFAULT_LIMIT = 200;
 
@@ -392,6 +797,74 @@ export async function getActiveScan(
     ACTIVE_LIFECYCLE_STATES[0],
     ACTIVE_LIFECYCLE_STATES[1],
   );
+}
+
+// THE LEADING `(state = 'suspended') DESC` TERM IS THE PIN, AND IT IS LOAD
+// BEARING RATHER THAN COSMETIC.
+//
+// A suspended scan's ROW IS ITS CURSOR. That is why D-26 exempts the state from
+// the retention age bound, and it is the same reason it must be exempt from this
+// display bound: a suspended row cut off below a limit is an operator's
+// unfinished work hidden behind a number nobody chose deliberately, and the
+// operator has no way to learn it is there. The list is the only surface that
+// shows it.
+//
+// PINNED INSIDE THE `ORDER BY` rather than as a second statement or a UNION,
+// because this stays ONE bounded `project_id`-scoped read — which is the shape
+// `sql-discipline.spec.ts` requires and the shape P5-D20 established for the
+// suppressions list. A second statement would also be two round trips on a
+// pooled connection to answer one question.
+//
+// THE PIN COSTS AT MOST ONE ROW OF THE WINDOW. The one-at-a-time rule refuses a
+// start while a suspended scan holds the slot, so at most one suspended row per
+// project exists at a time — see this file's header. The bound therefore stays a
+// bound rather than becoming a soft suggestion.
+//
+// AND THE SECONDARY KEYS ARE THE POINT, exactly as `listAudit`'s are:
+// `started_at` alone is not a total order — two scans started in the same
+// millisecond tie, and SQLite is then free to return them in whatever order the
+// scan produced. `scan_id DESC` breaks every tie deterministically, so two reads
+// of the same set agree and a caller may compare two sequences for equality and
+// have that mean something.
+const LIST_SCANS_SQL = `
+SELECT project_id, scan_id, state, suspend_reason, operator_filter, epoch,
+       last_request_id, last_cursor, last_created_at,
+       pages_walked, seen, admitted, skipped_done, rejected, queued,
+       started_at, updated_at, finished_at
+FROM scans
+WHERE project_id = ?
+ORDER BY (state = 'suspended') DESC, started_at DESC, scan_id DESC
+LIMIT ?
+`;
+
+/**
+ * This project's scan history — newest first, every suspended scan pinned in.
+ *
+ * BOUNDED AT READ, NOT AT RENDER, and the bound CANNOT BE WIDENED FROM THE RPC.
+ * `limit` is CLAMPED into `[1, SCAN_LIST_DEFAULT_LIMIT]`, which is a stricter
+ * rule than `listAudit`'s fallback and the difference is deliberate: this list's
+ * only caller is an RPC the frontend drives, and a ceiling a caller may only
+ * LOWER is the shape `ExportRequest.chunkRows` already uses on this contract. A
+ * zero, negative or non-finite limit falls back to the default rather than being
+ * passed through — `Number("")` is 0, which SQLite would honour as "no rows",
+ * silently showing the operator an empty scan history.
+ *
+ * A read with no limit at all is a read whose cost is set by how long the
+ * operator has had DefMiner installed.
+ *
+ * @internal
+ */
+export async function listScans(
+  db: Database,
+  projectId: string,
+  limit: number = SCAN_LIST_DEFAULT_LIMIT,
+): Promise<ScanRow[]> {
+  const bounded =
+    Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), SCAN_LIST_DEFAULT_LIMIT)
+      : SCAN_LIST_DEFAULT_LIMIT;
+  const stmt = await db.prepare(LIST_SCANS_SQL);
+  return stmt.all<ScanRow>(projectId, bounded);
 }
 
 // ===========================================================================
