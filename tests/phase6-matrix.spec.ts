@@ -774,6 +774,27 @@ describe("the matrix does not overclaim what its legs prove", () => {
 });
 
 describe("O-04 is recorded as an observation, whichever way it landed", () => {
+  it("an UNmeasured cursor probe says why, and claims no answer", () => {
+    const unmeasured = (d?.legs ?? []).filter(
+      (l: any) =>
+        l?.cursor_probe !== undefined && l?.cursor_probe?.measured !== true,
+    );
+    for (const l of unmeasured) {
+      expect(
+        String(l.cursor_probe.reason ?? "").trim(),
+        `${RESULT}: leg ${l.leg} did not measure the cursor probe and did not ` +
+          `say why. An unmeasured probe is recorded as an absence WITH ITS ` +
+          `REASON — the same discipline D-23 applies to an unreachable leg.`,
+      ).toBeTruthy();
+      expect(
+        l.cursor_probe.resolved_after_restart,
+        `${RESULT}: leg ${l.leg} did not measure the cursor probe but recorded ` +
+          `an answer anyway. That is O-04 being reported from a run that never ` +
+          `established it.`,
+      ).toBeNull();
+    }
+  });
+
   it("at least one leg that ran carries the cursor probe", () => {
     const legs: any[] = (d?.legs ?? []).filter(
       (l: any) => l?.status !== "not_run",
@@ -797,6 +818,19 @@ describe("O-04 is recorded as an observation, whichever way it landed", () => {
     );
     if (measured.length === 0) return;
     for (const l of measured) {
+      // The attribution control FIRST. A cursored query that failed alongside a
+      // cursorless query that also failed is not a measurement of the cursor —
+      // it is a measurement of there being no project selected, which is what
+      // happens on a guest instance whose temporary project did not survive the
+      // restart. Marking that `measured: true` would publish a NEGATIVE ANSWER
+      // TO O-04 that the run never established.
+      expect(
+        l.cursor_probe.control_query_resolved,
+        `${RESULT}: leg ${l.leg} marked the cursor probe measured while its ` +
+          `cursorless control query did not resolve. Without the control, a ` +
+          `failure that EVERY query shares is indistinguishable from a cursor ` +
+          `that was rejected, and only the second is an answer to O-04.`,
+      ).toBe(true);
       expect(
         typeof l.cursor_probe.resolved_after_restart,
         `${RESULT}: leg ${l.leg} measured the cursor probe but recorded no ` +

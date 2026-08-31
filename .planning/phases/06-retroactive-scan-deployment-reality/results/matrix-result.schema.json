@@ -211,9 +211,13 @@
         "measured": { "type": "boolean" },
         "reason": { "type": ["string", "null"] },
         "cursor_present_before": { "type": ["boolean", "null"] },
+        "control_query_resolved": {
+          "type": ["boolean", "null"],
+          "description": "THE ATTRIBUTION CONTROL, and the measurement is worthless without it. A CURSORLESS query run at the same moment as the cursored one. A cursor query failing after a restart has two possible causes and they are DIFFERENT answers to O-04: the cursor was rejected, or no query could run at all. On a guest instance the project is temporary and does not survive the restart, and with none selected every request query fails — which says nothing about cursor lifetime. Only when this is `true` is `resolved_after_restart` attributable to the cursor."
+        },
         "resolved_after_restart": {
           "type": ["boolean", "null"],
-          "description": "O-04's answer. `true` means a Cursor survived a process restart; `false` means it did not."
+          "description": "O-04's answer, and ONLY meaningful when `control_query_resolved` is true. `true` means a Cursor survived a process restart; `false` means it was rejected; `null` means the cursored query was never run because the control did not resolve."
         },
         "error_after_restart": { "type": ["string", "null"] },
         "id_is_decimal_integer": {

@@ -1,0 +1,15 @@
+{
+  "id": "defminer-phase6-matrix",
+  "name": "DefMiner Phase 6 Deployment-Matrix Cursor Probe",
+  "version": "0.0.1",
+  "description": "Phase 6 plan 06-10 probe: O-04 — is a Caido Cursor stable across a process restart? Plus assumptions A1 and A2, the two facts the re-derivable resume position depends on.",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "phase6-matrix-backend",
+      "name": "Phase6 Matrix Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
