@@ -172,6 +172,126 @@ function words(identifier: string): string[] {
     .map((w) => w.toLowerCase());
 }
 
+// ===========================================================================
+// 2b. D-02 — THE RETRO SUB-MAP, INSIDE THE ONE COUNTERS OBJECT
+// ===========================================================================
+//
+// A 40,000-request backfill that folded its rejections into the live counters
+// would make OBS-01's shipped drop count and reject reasons stop describing
+// live proxying — which is the one thing those numbers are for. The split is
+// D-02, and its stated cost is that every counter call site now has to know
+// which caller it is serving.
+//
+// The sub-map lives INSIDE `createCounters()` for two mechanical reasons this
+// suite proves rather than asserts in prose: the AST scan at the bottom of this
+// file fails on a second counters object anywhere in the package, and
+// `resetTelemetryForTest()` mutates the ONE object in place — a sub-map built
+// beside it would survive a reset and leak state between specs.
+
+describe("counters.retro — retro attribution over the SAME closed vocabulary (D-02)", () => {
+  it("keys its reject counters on EXACTLY the shipped reason set", () => {
+    // KEY-SET EQUALITY, not a count and not a spot check. A retro map keyed on
+    // a second vocabulary is invisible: a counter for a reason that does not
+    // exist just reads zero for ever, and a reason with no counter is a
+    // rejection nobody can see.
+    expect(
+      Object.keys(counters.retro.rejected).sort(),
+      "counters.retro.rejected does not have the same key set as counters.rejected. " +
+        "The retro sub-map must call the SHIPPED zeroedRejectCounters(REJECT_REASONS) " +
+        "over the SAME closed array — never a second vocabulary (D-02).",
+    ).toEqual(Object.keys(counters.rejected).sort());
+    // Non-vacuity: two empty objects are also equal.
+    expect(Object.keys(counters.retro.rejected).length).toBe(
+      REJECT_REASONS.length,
+    );
+  });
+
+  it("starts every retro member at zero", () => {
+    for (const [name, value] of Object.entries(counters.retro)) {
+      if (name === "rejected") continue;
+      expect(value, `counters.retro.${name} did not start at 0`).toBe(0);
+    }
+    for (const reason of REJECT_REASONS) {
+      expect(counters.retro.rejected[reason]).toBe(0);
+    }
+  });
+
+  it("moves independently of the live counters, in both directions", () => {
+    // THE WHOLE POINT, executed. If these two ever share storage, a backfill
+    // rewrites the numbers the Health panel presents as live proxying.
+    counters.retro.admitted += 1;
+    counters.retro.rejected.too_large += 1;
+    expect(counters.admitted).toBe(0);
+    expect(counters.rejected.too_large).toBe(0);
+
+    counters.admitted += 1;
+    counters.rejected.too_large += 1;
+    expect(counters.retro.admitted).toBe(1);
+    expect(counters.retro.rejected.too_large).toBe(1);
+  });
+
+  it("is zeroed by resetTelemetryForTest() without that function naming a member", () => {
+    // The reason the sub-map is built by createCounters(): the reset is
+    // `Object.assign(counters, createCounters())` and has no member list to
+    // fall behind. A retro counter added tomorrow is reset for free.
+    counters.retro.pagesWalked += 3;
+    counters.retro.seen += 20;
+    counters.retro.skippedDone += 1;
+    counters.retro.queued += 7;
+    counters.retro.reloadNoResponse += 2;
+    counters.retro.rejected.out_of_scope += 5;
+
+    resetTelemetryForTest();
+
+    expect(counters.retro.pagesWalked).toBe(0);
+    expect(counters.retro.seen).toBe(0);
+    expect(counters.retro.skippedDone).toBe(0);
+    expect(counters.retro.queued).toBe(0);
+    expect(counters.retro.reloadNoResponse).toBe(0);
+    expect(counters.retro.rejected.out_of_scope).toBe(0);
+  });
+
+  it("declares reloadOverSize beside byteLenMismatch, at zero", () => {
+    // Declared here, incremented by plan 06-06 at the reload — where the byte
+    // count is measured good and where the AUTHORITATIVE size gate lives.
+    expect(counters.reloadOverSize).toBe(0);
+  });
+});
+
+describe("slimStatus carries the retro sub-map across the RPC", () => {
+  it("projects every retro integer, deep-copied rather than aliased", () => {
+    counters.retro.pagesWalked += 2;
+    counters.retro.rejected.not_scriptish += 4;
+
+    const projected = slimStatus().counters;
+    expect(projected.retro.pagesWalked).toBe(2);
+    expect(projected.retro.rejected.not_scriptish).toBe(4);
+
+    // A SNAPSHOT, not a window. `slimStatus()` already deep-copies `rejected`
+    // for this reason; the retro map needs the same treatment or the RPC hands
+    // the caller a live reference into module state.
+    counters.retro.pagesWalked += 1;
+    counters.retro.rejected.not_scriptish += 1;
+    expect(projected.retro.pagesWalked).toBe(2);
+    expect(projected.retro.rejected.not_scriptish).toBe(4);
+  });
+
+  it("adds no new string field — the username guard still has nothing to catch", () => {
+    counters.retro.seen += 1;
+    const strings = walkValues(slimStatus()).filter(
+      (e) => typeof e.value === "string",
+    );
+    // `lastError` is the ONE string this projection is permitted, and it is
+    // null here. Every retro value is a DefMiner-authored integer.
+    expect(
+      strings.map((e) => e.path),
+      "slimStatus() grew a string field. Every value the retro sub-map projects " +
+        "must be an integer — a string is the shape WR-03's redaction rules exist " +
+        "for, and none of them run over a counter.",
+    ).toEqual([]);
+  });
+});
+
 describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
   it("carries no string that parses as a URL", () => {
     recordError(
