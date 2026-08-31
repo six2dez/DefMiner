@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-07-PLAN.md
-last_updated: "2026-08-31T18:52:28.029Z"
+stopped_at: Completed 06-06-PLAN.md
+last_updated: "2026-08-31T20:59:57.998Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: d6234baf1dfd2984c4437f15b5c79f76c1652c1d
+state_head: dab148efc8727c920e6f5d6ff8c0fecec996c3f9
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 65
+  completed_plans: 66
 ---
 
 # Project State
@@ -28,11 +28,34 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 06 PLAN 06-06: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
+> `state.advance-plan` was invoked EXACTLY ONCE — the lesson wave 4 of phase 05
+> recorded, obeyed — and moved the prose position 7 -> 8 of 13, correct against
+> the files on disk (13 PLAN files, 7 SUMMARY files in this phase).
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the SEVENTH consecutive occurrence across phases 05 and 06, recorded so the
+> run stays visible rather than being rediscovered. The `Progress:` line above
+> still describes PHASE 01 plan execution and is deliberately untouched.
+>
+> FIND-04 WAS NOT MARKED COMPLETE, AND THAT IS THE GATE WORKING.
+> `requirements.ready-ids` reported `0/1 ready`: sibling plans in this phase also
+> declare FIND-04 and have no SUMMARY yet, so marking it now would flip the
+> ledger green while the work is still running. It becomes ready when the LAST
+> declaring plan finishes.
+>
+> ONE PRE-EXISTING SUITE FAILURE IS RECORDED AS A BLOCKER RATHER THAN FIXED.
+> `outbound-prohibition.spec.ts`'s byte-compare against `.planning/REQUIREMENTS.md`
+> fails at `532491a` — plan 06-07's close-out, the last commit to touch either
+> input. 06-06 modified neither and left it alone under the scope boundary.
+> WINDOWS 85 carries the exact remedy, which the spec itself prints.
 
 > PHASE 05 WAVE 5 (plan 05-08): THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED
 > BY HAND. `state.advance-plan` was invoked EXACTLY ONCE — the lesson wave 4
@@ -301,6 +324,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P03 | 22 min | 3 tasks | 6 files |
 | Phase 06 P05 | 26 min | 3 tasks | 6 files |
 | Phase 06 P07 | 25 min | 3 tasks | 2 files |
+| Phase 06 P06 | 121 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -591,6 +615,14 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: DEPLOY-03's "with expiry and redaction rules" attaches to BOTH of its alternatives, and the two halves are discharged differently: under the bounded download redaction is SHIPPED (audit.kind admits export_raw/export_redacted; telemetry.ts carries PATH_REDACTION) while expiry LOSES ITS SUBJECT - a dissolution, recorded as one and NOT claimed as compliance. Under sdk.hostedFile expiry is UNSATISFIABLE, because the surface has no delete. — This is the sharpest argument in the phase for D-17 and it is easy to overstate. Recorded in these words in 06-07-SUMMARY.md and in filesystem-prohibition.spec.ts's header so it does not survive only in a checkpoint transcript.
 - [Phase 06]: No read-only allowlist for the hosted-file surface, unlike the outbound gate's REQUESTS_READ_ONLY: getAll() returns HostedFile objects each carrying a server path, so even the read half hands back the one string DEPLOY-02 and D-19 exist to keep off the operator's screen. Both members banned.
 - [Phase 06]: O-01 remains a NAMED CARRIED OBLIGATION owned by Phase 7 and is NOT settled by 06-07's checkpoint passing. Discharged by the external-RSS probe; a negative probe re-opens D-17 deliberately and the quota-and-cleanup machinery returns as a SET rather than piecemeal.
+- [Phase 06]: Migration step v6 REBUILDS `audit` to widen its closed `kind` CHECK by two members; step v3 stays byte-identical — SQLite has no ALTER TABLE DROP CONSTRAINT and shipped steps are immutable. Approved at a blocking-human checkpoint on 2026-08-31 with the gate blind spot recorded. Its own step v6, never folded into v5.
+- [Phase 06]: The ladder's header rule is amended from 'a data write never may' to 'no statement in a batched exec may be able to fail' — IF NOT EXISTS is the usual WAY of being unable to fail, not the property. Step v6 batches a data write, and a sentence above the ladder may not go on forbidding what the ladder below it does.
+- [Phase 06]: MULTISTATEMENT_EXEC_ATOMIC is the second half of step v6's safety argument, and is now written down — Per-statement cannot-fail avoids a poisoned pooled connection; exec atomicity is what makes a partial DROP/RENAME state impossible. Both halves are needed; only one used to be recorded.
+- [Phase 06]: sql-discipline.spec.ts's insert-select rule does NOT see step v6's copy, and migrations.ts says so in its own words — statementKind() classifies by leading keyword, so a blob leading with CREATE skips the whole row-scoping family. A green run there is green by non-observation, not by compliance. WINDOWS 84, owner Phase 11.
+- [Phase 06]: `rowCapDeleted` counts digests REMOVED, not candidates enumerated — deleteDigest now reports artifactRemoved — A cascade that ran out of per-pass budget leaves the artifact row standing; reporting that as an eviction would suspend a running scan for work that did not happen.
+- [Phase 06]: D-26's exemption is a PREDICATE (`AND state <> 'suspended'`), not an absence, and has its own paragraph beside its own statements — An absence exempts the whole table, and the table includes completed and discarded history rows with no cursor and nothing to resume. The audit exemption's closing sentence said a second exemption would need this paragraph.
+- [Phase 06]: The `scans` sweep runs inside the existing bounded pass on the existing cadence, counted into `deleted` — One sweep, one cadence, one convergence inequality. A second timer on a single-threaded runtime is a design smell, not a scheduler.
+- [Phase 06]: ScanStatusPayload.analysed stays null and is re-owned from 06-06 to 06-09 — analyses rows carry no scan attribution, so a per-scan count needs either a new scans column (another one-way migration, a Rule 4 decision this plan had no mandate for) or telemetry.ts's retro sub-map. Neither file is in 06-06's files_modified. WINDOWS 86.
 
 ### Known Risks Carried Forward
 
@@ -633,8 +665,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T18:52:27.942Z
-**Stopped at:** Completed 06-07-PLAN.md
+**Last session:** 2026-08-31T20:59:26.760Z
+**Stopped at:** Completed 06-06-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -652,3 +684,4 @@ None.
 - POINTER AMENDMENT 2026-08-26 (gap-closure round 8, plans 01-36 through 01-38, waves 36 through 38). THIS AMENDMENT RESTATES NO BOUND AND IS A POINTER: the bound of record is the machine-owned generated span in `.planning/REQUIREMENTS.md` and in the gate file, byte-compared to `deriveResidual(RESOLVER_REGISTRY)` by the suite, and this file is reached by NO mechanical comparison at all. THE ROUND OPENED MEASURED RED WHERE THE HANDOFF DESCRIBED IT GREEN: at HEAD `4105fd0` the suite ran 2 failed of 1372, both caused by that commit reverting CORE-11's checkbox while two cases still pinned the flipped state; wave 36 restored the tree by regenerating `.planning/REQUIREMENTS.md`'s machine-owned span and moving `CORE11_BOX_EXPECTED` to the shipped `[ ]`. WHAT THE ROUND'S FOUR FINDINGS WERE AND HOW THEY WERE DISPOSED OF. CR-17: the gate file's exemption keys were positional and survived a cross-construct relocation unnoticed — wave 37 anchored them with `constructAnchorFor`, watched a purpose-built relocation fixture fail first, and shipped it. WR-48: quantifier exclusion three was wider than the span it needed — wave 37 narrowed it to `4135..5767` and MEASURED the 117 restored lines, which raised ZERO new obligations. CR-18: CORE-11's ledger row stated this box's state and a superseded bar — wave 38 reduced it to the prohibition plus one pointer, relocating all three removed passages BYTE-IDENTICAL into a dated 2026-08-26 history block, on the reasoning that a row carrying no statement of the box's state cannot carry a stale one. CR-19: this section's own CORE-11 lines were stale and one was FALSE — corrected above against six probes RE-EXECUTED through `auditSource` on 2026-08-26 rather than cited from verification pass 8, all six reporting, and against a registry re-counted at 26 `measured-silence` rows of 61 with all five of plan 01-32's names present and `silence-operator-around-global-receiver` absent. THAT ROW WAS NOT RESTORED AND MUST NOT BE: the suite asserts its absence and calls its return a REGRESSION in the descent. THE TWO CLASSES OF UNREACHED SURFACE, STATED AS UNGUARDED LIMITS AND NOT AS SATISFIED CHECKS: unguarded FILES — `.planning/STATE.md` and `.planning/WINDOWS.md` are reached by no mechanical comparison, the byte comparisons reaching the gate header and the ledger and no further, so the pointer-not-a-bound rule is a prohibition with no check on either file; and undeclared PHRASINGS — a standing statement spelled outside the phrase set this round's enumeration used is invisible to that enumeration, which was a ONE-TIME GREP over four named files and not a standing gate. CORE-11's CHECKBOX IS `[ ]`, MEASURED, AND IT BELONGS TO A VERIFIER: this round produced evidence on criterion (3)'s document legs and awards no verdict on criterion (3), on whether the box may move, or on whether the gate is complete. THE FLOOR AT THE CLOSE, MEASURED NOT CLAIMED: 31 test files / 1374 tests exit 0, typecheck / lint / knip clean, the shipped bundle at one import specifier, and the real tree at 23 files with ZERO violations.
 - UI-09 remains OPEN after plan 05-09, its only declarer. The degradation-marking components ship and are exercised, but packages/backend/src/store/reads.ts's paged statements carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. Closing UI-09 needs a backend read that carries the analysis state; a scan-state filter column is additionally needed before 'Show only affected artifacts' can narrow anything. Recorded in .planning/WINDOWS.md entries 56-58.
 - The retroactive-scan producer DRIVER has no owning plan: runScanProducer is fully built and specced and nothing calls it, because wiring it needs producer.ts and test/fixtures/fake-sdk.ts and no remaining Phase 6 plan names those together with index.ts.
+- PRE-EXISTING, NOT 06-06's: outbound-prohibition.spec.ts's byte-compare of the derived residual block in .planning/REQUIREMENTS.md fails at 532491a (06-07's close-out, the last commit to touch either input). The shipped block gained three blank lines the generator does not emit. Every close-out that runs requirements.mark-complete can re-introduce it. The spec prints the authoritative bytes; WINDOWS 85 carries the remedy.
