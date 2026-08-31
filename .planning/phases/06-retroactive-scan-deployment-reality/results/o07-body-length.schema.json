@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defminer.local/schemas/o07-body-length.schema.json",
+  "title": "Phase 6 O-07 body-length probe result",
+  "description": "A SIBLING of spike-result.schema.json, never a reuse of it. Phase 0's schema is shaped around a `spike` id, a `thresholds_set` enum closed over Phase 0's own threshold names, and a `measurements` ARRAY of name/value/unit triples. O-07 asks a different question with a different shape: four named encodings, five byte counts each, and one verdict per READ PATH. Folding it into the Phase 0 schema would have required widening that closed threshold enum, which is the one edit Pitfall 7 and D-21 both exist to prevent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "probe",
+    "status",
+    "recorded_at",
+    "binary",
+    "host",
+    "instances",
+    "method",
+    "measurements",
+    "verdict"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "probe": {
+      "type": "string",
+      "description": "The Phase 6 open question this artifact answers. O-07 is the only one that writes into this schema today; the pattern admits a sibling rather than hard-coding one literal.",
+      "pattern": "^O-[0-9]{2}$"
+    },
+    "status": {
+      "description": "`not_run` is a FIRST-CLASS terminal state, not a failure dressed up. D-23: a leg that could not run is recorded with its reason and never as a pass.",
+      "enum": ["pass", "fail", "inconclusive", "not_run"]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "REQUIRED when status is `not_run`. What made the measurement unreachable, in words a later reader can act on."
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "duration_s": { "type": ["number", "null"] },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "expected_version", "reported_version", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "expected_version": { "type": "string", "minLength": 1 },
+        "reported_version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string" },
+        "release": { "type": "string" },
+        "arch": { "type": "string" },
+        "cores": { "type": ["integer", "null"] }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_id", "listen"],
+        "properties": {
+          "run_id": { "type": "string", "minLength": 1 },
+          "listen": {
+            "type": "string",
+            "description": "127.0.0.1 ONLY, and never port 8080 — that is the operator's live desktop instance.",
+            "pattern": "^127\\.0\\.0\\.1:[0-9]{2,5}$"
+          },
+          "fresh": { "type": "boolean" },
+          "flags": { "type": "array", "items": { "type": "string" } },
+          "project_persistence": {
+            "enum": ["temporary", "persistent", "none", null]
+          }
+        }
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "description": "What was installed into the instance for this run, and what each one was for. A measurement taken through a plugin nobody can identify is not re-runnable.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "role"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "role": { "type": "string", "minLength": 1 },
+          "zip_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "method": { "type": "string", "minLength": 1 },
+    "measurements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byte_len_mismatch", "identity", "gzip", "br", "zstd"],
+      "properties": {
+        "byte_len_mismatch": {
+          "type": "integer",
+          "description": "counters.byteLenMismatch read off the SHIPPED plugin's getStatus after the consumer drained. Its own JSDoc in packages/backend/src/telemetry.ts states what a non-zero value means: the hook's Body.length disagreed with toRaw().length on the reloaded response.",
+          "minimum": 0
+        },
+        "reload_pairs_compared": {
+          "type": ["integer", "null"],
+          "description": "NON-VACUITY for byte_len_mismatch. Zero comparisons and zero mismatches are the same number, and only one of them is evidence."
+        },
+        "identity": { "$ref": "#/$defs/encodingBlock" },
+        "gzip": { "$ref": "#/$defs/encodingBlock" },
+        "br": { "$ref": "#/$defs/encodingBlock" },
+        "zstd": { "$ref": "#/$defs/encodingBlock" }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["get_path_reports", "query_path_reports"],
+      "properties": {
+        "get_path_reports": { "$ref": "#/$defs/pathVerdict" },
+        "query_path_reports": { "$ref": "#/$defs/pathVerdict" },
+        "answer": { "type": "string", "minLength": 1 },
+        "if_wrong": { "type": "string", "minLength": 1 }
+      }
+    },
+    "requirements_affected": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "notes": { "type": "string" }
+  },
+  "$defs": {
+    "pathVerdict": {
+      "description": "`not_measured` is not a hedge — it is the honest answer for a read path this run could not exercise, and it must stay distinguishable from a measured `identity`.",
+      "enum": ["identity", "wire", "not_measured"]
+    },
+    "encodingBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixture",
+        "identity_byte_len",
+        "hook_body_length",
+        "reload_raw_length",
+        "query_body_length",
+        "wire_byte_len"
+      ],
+      "properties": {
+        "fixture": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The fixture NAME only. Never a path and never a URL — this artifact is committed."
+        },
+        "identity_byte_len": {
+          "type": ["integer", "null"],
+          "description": "The decompressed byte count, taken from corpus/encoded/fixtures.json which the generator computed from the file itself. This is the number every other count in this block is compared AGAINST."
+        },
+        "hook_body_length": {
+          "type": ["integer", "null"],
+          "description": "Body.length as onInterceptResponse saw it. Recorded for continuity with the hook path, NOT as evidence about either read path."
+        },
+        "reload_raw_length": {
+          "type": ["integer", "null"],
+          "description": "toRaw().length on the response returned by sdk.requests.get(id) — the get() read path."
+        },
+        "query_body_length": {
+          "type": ["integer", "null"],
+          "description": "Body.length on the response returned by sdk.requests.query().…execute() — the query() read path, the half that matters for the retro scan."
+        },
+        "wire_byte_len": {
+          "type": ["integer", "null"],
+          "description": "What the origin actually put on the wire for this encoding. The COMPETING hypothesis: a count equal to this rather than to identity_byte_len is the 7.25x hole."
+        },
+        "reload_body_length": {
+          "type": ["integer", "null"],
+          "description": "Body.length (rather than toRaw().length) on the get() path, recorded so the two spellings can be told apart."
+        },
+        "query_raw_length": {
+          "type": ["integer", "null"],
+          "description": "toRaw().length on the query() path, for the same reason."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "not_run" } }, "required": ["status"] },
+      "then": { "required": ["reason"] }
+    }
+  ]
+}
