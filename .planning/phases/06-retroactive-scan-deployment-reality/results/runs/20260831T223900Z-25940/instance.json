@@ -1,0 +1,23 @@
+{
+  "run_id": "20260831T223900Z-25940",
+  "pid": 60108,
+  "port": 8952,
+  "listen": "127.0.0.1:8952",
+  "data_path": "/var/folders/05/485xn5t96tqcmngzrsd8rh7c0000gn/T//defminer-matrix-remote-cli-data",
+  "fresh": false,
+  "binary": {
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.58.2",
+    "reported_version": "0.58.2",
+    "sha256": "b764e0094f0f97d28591f6d58d648fecb225b4446e3ffb7ea49bca030138e932"
+  },
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "started_at": "2026-08-31T22:39:02Z",
+  "exit_code": 137,
+  "stopped_at": "2026-08-31T22:39:03Z"
+}

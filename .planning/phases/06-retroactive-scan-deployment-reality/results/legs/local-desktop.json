@@ -1,0 +1,57 @@
+{
+  "leg": "local-desktop",
+  "status": "pass",
+  "assertions": {
+    "install_and_compatible": true,
+    "migrations_and_tables": true,
+    "artifact_and_observation": true,
+    "restart_data_presence": true
+  },
+  "binary": {
+    "kind": "native",
+    "path": "/Applications/Caido.app/Contents/Resources/bin/caido-cli",
+    "expected_version": "0.58.2",
+    "reported_version": "0.58.2",
+    "sha256": "b764e0094f0f97d28591f6d58d648fecb225b4446e3ffb7ea49bca030138e932"
+  },
+  "shares_filesystem_with": [
+    "remote-cli"
+  ],
+  "notes": "Plugin installed over the GraphQL upload route and reported compatible on boot 1. Desktop shape: the app-bundle caido-cli, launched headless against an isolated --data-path on this host.",
+  "run_id": "20260831T223854Z-18364",
+  "listen": "127.0.0.1:8951",
+  "project_persistence": "temporary",
+  "plugin_install_route": "graphql-upload",
+  "restart": {
+    "method": "process-sigkill-relaunch",
+    "expected_data_present": true,
+    "data_present": true,
+    "artifacts_before": 3,
+    "artifacts_after": 3,
+    "observations_before": 3,
+    "observations_after": 3,
+    "tables_after": [
+      "analyses",
+      "artifacts",
+      "audit",
+      "observations",
+      "scans",
+      "settings"
+    ],
+    "startup_clean": true,
+    "schema_version_before": 6,
+    "schema_version_after": 6
+  },
+  "cursor_probe": {
+    "measured": false,
+    "reason": "the cursorless control query did not resolve after the restart (Error: Failed to send request: RepositoryError(ConnectionFailed(MissingConnectionPool)))",
+    "cursor_present_before": true,
+    "control_query_resolved": false,
+    "resolved_after_restart": null,
+    "error_after_restart": null,
+    "id_is_decimal_integer": true,
+    "id_ordering_agrees": true,
+    "sample_size": 3,
+    "notes": "control_query_resolved is the attribution control: a CURSORLESS query run at the same moment. When it is false, the cursored query was never run and resolved_after_restart is null, because a failure that every query shares says nothing about cursor lifetime. O-04, recorded as an observation. The shipped design does not depend on it: the durable resume position is scans.last_request_id, a re-derivable decimal integer, and init() NULLs scans.last_cursor on every boot, so a resume after restart always goes through last_request_id whatever this says. A negative result here is a measurement, not a defect."
+  }
+}

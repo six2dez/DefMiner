@@ -1035,8 +1035,11 @@ run_container() {
   fi
 
   poll_ready 120 || leg_fail "the container did not become ready after the restart"
-  LEG_RUN_ID="${LEG_RUN_ID}-restart"
-  mint_token "$LEG_RUN_ID" || leg_fail "could not mint a guest token after the restart"
+  # The RESTART boot gets its own run directory and its own token, but LEG_RUN_ID
+  # keeps naming BOOT 1 — the run that produced the measurements. The native legs
+  # already behave that way, and a leg record whose run_id silently means a
+  # different boot on two of the four shapes is not a record anyone can follow.
+  mint_token "${LEG_RUN_ID}-restart" || leg_fail "could not mint a guest token after the restart"
 
   if [ "$LEG" = "docker-no-volume" ]; then
     # A NEW container: the plugin went with the writable layer, so it is

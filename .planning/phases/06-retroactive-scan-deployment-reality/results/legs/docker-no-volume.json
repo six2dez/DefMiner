@@ -1,0 +1,62 @@
+{
+  "leg": "docker-no-volume",
+  "status": "pass",
+  "assertions": {
+    "install_and_compatible": true,
+    "migrations_and_tables": true,
+    "artifact_and_observation": true,
+    "restart_data_presence": true
+  },
+  "binary": {
+    "kind": "container",
+    "image": "caido/caido",
+    "tag": "0.58.2",
+    "expected_version": "0.58.2",
+    "reported_version": "0.58.2",
+    "manifest_digest": "caido/caido@sha256:d34929fd9a657cc185262a463890d2e5094972eed25f64b2eccac28770163486",
+    "container_name": "defminer-matrix-no-volume",
+    "data_path": "/home/caido/.local/share/caido"
+  },
+  "shares_filesystem_with": null,
+  "notes": "Plugin installed over the GraphQL upload route and reported compatible on boot 1. No-volume shape: nothing mounted; the container was stopped, REMOVED and re-created, which destroys the writable layer the data lived in. A container restart would have preserved it and proven nothing. Second boot found an EMPTY database: the expected table set present, zero artifact rows, startup clean, no error.",
+  "run_id": "matrix-docker-no-volume-20260831T223915Z",
+  "listen": "127.0.0.1:8954",
+  "project_persistence": "temporary",
+  "plugin_install_route": "graphql-upload",
+  "volume": {
+    "mounted": false,
+    "ownership_fixup": null
+  },
+  "restart": {
+    "method": "container-stop-rm-run",
+    "expected_data_present": false,
+    "data_present": false,
+    "artifacts_before": 3,
+    "artifacts_after": 0,
+    "observations_before": 3,
+    "observations_after": 0,
+    "tables_after": [
+      "analyses",
+      "artifacts",
+      "audit",
+      "observations",
+      "scans",
+      "settings"
+    ],
+    "startup_clean": true,
+    "schema_version_before": 6,
+    "schema_version_after": 6
+  },
+  "cursor_probe": {
+    "measured": true,
+    "reason": null,
+    "cursor_present_before": true,
+    "control_query_resolved": true,
+    "resolved_after_restart": true,
+    "error_after_restart": null,
+    "id_is_decimal_integer": true,
+    "id_ordering_agrees": true,
+    "sample_size": 3,
+    "notes": "control_query_resolved is the attribution control: a CURSORLESS query run at the same moment. When it is false, the cursored query was never run and resolved_after_restart is null, because a failure that every query shares says nothing about cursor lifetime. O-04, recorded as an observation. The shipped design does not depend on it: the durable resume position is scans.last_request_id, a re-derivable decimal integer, and init() NULLs scans.last_cursor on every boot, so a resume after restart always goes through last_request_id whatever this says. A negative result here is a measurement, not a defect."
+  }
+}

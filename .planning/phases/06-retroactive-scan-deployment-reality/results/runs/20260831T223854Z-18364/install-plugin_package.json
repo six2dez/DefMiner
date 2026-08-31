@@ -1,0 +1,1 @@
+{"data":{"installPluginPackage":{"package":{"id":"60fe9403-f8df-445e-97f7-8cd6881c34d7","manifestId":"defminer","plugins":[{"__typename":"PluginBackend","id":"1cf0dd71-a4ec-4979-a704-0bc154a8eed1","enabled":true},{"__typename":"PluginFrontend"}]},"error":null}}}
