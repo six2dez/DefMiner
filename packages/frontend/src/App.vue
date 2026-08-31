@@ -26,6 +26,9 @@ import type {
   PanelAnalysis,
   RetryOutcome,
   RpcResult,
+  SettingRow,
+  SettingWriteOutcome,
+  SettingWriteRequest,
 } from "./api/client";
 import { createBackendClient } from "./api/client";
 import type { ArtifactRow } from "./backend";
@@ -35,6 +38,7 @@ import EvidencePanel from "./components/EvidencePanel.vue";
 import { EXPORT_CTA } from "./components/export-contract";
 import ExportDialog from "./components/ExportDialog.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 import type { InvalidationCoalescer } from "./stores/coalescer";
 import { createCoalescer } from "./stores/coalescer";
 import type {
@@ -497,6 +501,54 @@ function runExport(
   return client.exportInventory(request);
 }
 
+// ---------------------------------------------------------------------------
+// UI-08 — THE SETTINGS SURFACE
+// ---------------------------------------------------------------------------
+//
+// Both routed through the typed client and both answering a VALUE on every
+// path. A component that had to catch would be a component whose failure Caido
+// swallows — which on the settings surface would mean a save that silently did
+// nothing while the form said it had.
+
+function loadSettings(): Promise<RpcResult<readonly SettingRow[]>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.listSettings({ projectId: SERVER_SCOPED_PROJECT });
+}
+
+function saveSetting(
+  request: SettingWriteRequest,
+): Promise<RpcResult<SettingWriteOutcome>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.writeSetting(request);
+}
+
+/**
+ * The server path the settings surface would label under R5.
+ *
+ * `null`, AND DELIBERATELY SO RATHER THAN UNFINISHED. No endpoint supplies one:
+ * `telemetry.ts` strips `sdk.meta.path()` out of everything crossing the RPC
+ * because it carries the operator's OS username on every real deployment, and
+ * `telemetry.spec.ts` proves that closure at the RPC level. R5 is honoured as a
+ * RULE — the renderer labels, left-truncates, keeps the value out of every
+ * attribute and routes the full string through the clipboard alone — so the
+ * phase that does surface a path (DEPLOY-02, Phase 6) inherits the rule rather
+ * than retrofitting it. Stated here, at the call site, because a bare `null`
+ * prop is exactly the kind of thing a later reader would "fix".
+ */
+const SERVER_STORAGE_PATH: string | null = null;
+
 /** The table asked for Health. The TAB STRIP is this component's to move; a
  *  table that switched tabs itself would be a component writing to a sibling. */
 function openHealth(): void {
@@ -632,10 +684,18 @@ function openHealth(): void {
           @open-health="openHealth"
         />
 
-        <!-- Health and Settings ROUTE and RENDER from the first paint; they gain
-             real bodies in plans 05-10 and 05-12. A tab is never removed, never
-             disabled and never hidden on account of having no body yet — the
-             strip is a fixed map of the surface. -->
+        <!-- UI-08's SETTINGS BODY, replacing the tracer's placeholder. -->
+        <SettingsPanel
+          v-else-if="activeTab === 'settings'"
+          :project-id="SERVER_SCOPED_PROJECT"
+          :load="loadSettings"
+          :save="saveSetting"
+          :storage-path="SERVER_STORAGE_PATH"
+        />
+
+        <!-- Health ROUTES and RENDERS from the first paint. A tab is never
+             removed, never disabled and never hidden on account of its body —
+             the strip is a fixed map of the surface. -->
         <div v-else class="py-16">
           <h2 class="text-2xl font-semibold leading-tight">
             Nothing analysed on this target yet

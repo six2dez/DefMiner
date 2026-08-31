@@ -29,10 +29,7 @@
 //      path on the backend may be on a VPS or inside a container; presented as
 //      local it sends the operator looking on a disk that has no such file.
 
-import type {
-  BoundRejection,
-  SettingScope,
-} from "@defminer/engine/contract";
+import type { BoundRejection, SettingScope } from "@defminer/engine/contract";
 import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
   RETENTION_MAX_AGE_MS_KEY,
@@ -52,9 +49,10 @@ import type {
 
 import {
   CLEAR_LABEL,
-  fieldId,
   FIELD_COPY,
+  fieldId,
   GROUP_COPY,
+  groupId,
   LOAD_FAILED_BODY,
   PATH_DISPLAY_CHARS,
   PATH_ELISION,
@@ -168,10 +166,8 @@ async function settle(wrapper: VueWrapper): Promise<void> {
 const input = (wrapper: VueWrapper, key: (typeof SETTING_KEYS)[number]) =>
   wrapper.get(`#${fieldId(key)}`);
 
-const saveButton = (
-  wrapper: VueWrapper,
-  key: (typeof SETTING_KEYS)[number],
-) => wrapper.get(`#${fieldId(key)}-save`);
+const saveButton = (wrapper: VueWrapper, key: (typeof SETTING_KEYS)[number]) =>
+  wrapper.get(`#${fieldId(key)}-save`);
 
 // ---------------------------------------------------------------------------
 // SECTIONS
@@ -181,9 +177,7 @@ describe("the surface renders only the sections that have controls", () => {
   it("renders the retention section when its keys are present", async () => {
     const h = harness();
     await settle(h.wrapper);
-    expect(h.wrapper.find("[data-defminer-settings-group='retention']").exists()).toBe(
-      true,
-    );
+    expect(h.wrapper.find(`#${groupId("retention")}`).exists()).toBe(true);
     expect(h.wrapper.text()).toContain(GROUP_COPY.retention.title);
   });
 
@@ -192,7 +186,9 @@ describe("the surface renders only the sections that have controls", () => {
     // missing control; an absent section says the feature is not here yet.
     const h = harness({ rows: [] });
     await settle(h.wrapper);
-    expect(h.wrapper.findAll("[data-defminer-settings-group]")).toHaveLength(0);
+    expect(
+      h.wrapper.findAll("section[id^='defminer-settings-group-']"),
+    ).toHaveLength(0);
     expect(h.wrapper.text()).not.toContain(GROUP_COPY.retention.title);
   });
 
@@ -200,9 +196,9 @@ describe("the surface renders only the sections that have controls", () => {
     const h = harness();
     await settle(h.wrapper);
     const ids = h.wrapper
-      .findAll("[data-defminer-setting-field]")
-      .map((el) => el.attributes("data-defminer-setting-field"));
-    expect(ids).toEqual([...SETTING_KEYS]);
+      .findAll("div[id$='-field']")
+      .map((el) => el.attributes("id"));
+    expect(ids).toEqual(SETTING_KEYS.map((key) => `${fieldId(key)}-field`));
   });
 
   it("carries the shipped rationale as help text, not a summary of it", async () => {
@@ -218,7 +214,9 @@ describe("the surface renders only the sections that have controls", () => {
     const h = harness({ loadFails: true });
     await settle(h.wrapper);
     expect(h.wrapper.text()).toContain(LOAD_FAILED_BODY);
-    expect(h.wrapper.findAll("[data-defminer-settings-group]")).toHaveLength(0);
+    expect(
+      h.wrapper.findAll("section[id^='defminer-settings-group-']"),
+    ).toHaveLength(0);
   });
 });
 

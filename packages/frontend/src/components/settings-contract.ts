@@ -57,7 +57,10 @@ import { forCellText } from "../safety/display";
 // SECTIONS
 // ---------------------------------------------------------------------------
 
-/** One settings section's heading and its one-line subject. */
+/** One settings section's heading and its one-line subject.
+ *
+ * @internal
+ */
 export type GroupCopy = {
   readonly title: string;
   readonly blurb: string;
@@ -84,7 +87,10 @@ export const GROUP_COPY: Record<SettingsGroup, GroupCopy> = {
 // FIELDS
 // ---------------------------------------------------------------------------
 
-/** One field's label, its unit, and the reasoning behind its default. */
+/** One field's label, its unit, and the reasoning behind its default.
+ *
+ * @internal
+ */
 export type FieldCopy = {
   readonly label: string;
   /** The unit the stored number is in. Rendered beside the input, because the
@@ -209,7 +215,8 @@ export const REJECTION_COPY: Record<BoundRejection, string> = {
   "not-finite": "That number is too large to store. Enter a whole number.",
   zero: "A bound of 0 is not “no limit” — it would sweep everything on the next pass. Enter the number of rows you want to keep.",
   negative: "Enter a number above zero.",
-  "no-project": "No project is open, so there is nothing to set this for. Open a project, or save this as your operator-wide default.",
+  "no-project":
+    "No project is open, so there is nothing to set this for. Open a project, or save this as your operator-wide default.",
   "write-failed": "The backend could not store this. Nothing was changed.",
 };
 
@@ -292,4 +299,19 @@ export function truncatePathLeft(path: string): string {
  */
 export function fieldId(key: SettingKey): string {
   return "defminer-setting-" + key.split(".").join("-");
+}
+
+/**
+ * A stable element id for one settings section.
+ *
+ * AN `id` AND NOT A `data-*` ATTRIBUTE, and that is R2 rather than taste. The
+ * static gate in `frontend-safety.spec.ts` reports ANY bound `data-*` binding,
+ * categorically — it does not ask whether the bound expression happens to be a
+ * DefMiner-authored identifier, because an attribute escapes every text-node
+ * protection R2 buys and a rule that asked would be a rule somebody argues
+ * with. So the per-row hooks on this surface are ids, which is what the rest of
+ * this package already uses for the same purpose.
+ */
+export function groupId(group: SettingsGroup): string {
+  return "defminer-settings-group-" + group;
 }
