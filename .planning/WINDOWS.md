@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 80
+open_count: 82
 waived_count: 0
-fixed_count: 30
-total_count: 110
-last_updated: 2026-09-01T21:00:38.642Z
+fixed_count: 31
+total_count: 113
+last_updated: 2026-09-01T21:29:51.747Z
 ---
 
 # Broken Windows Ledger
@@ -144,8 +144,11 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 106 | 06 | deviation | packages/backend/src/store/migrations.ts |  | CR-01 FIXED (08d623c): step v6's audit rebuild was five statements in ONE exec, and its JSDoc claimed a partial rebuild could not exist because of MULTISTATEMENT_EXEC_ATOMIC. THE ATOMICITY CLAIM WAS WRONG. SPIKE-09 measured that property on a batch CONTAINING an explicit BEGIN...COMMIT (00-GO-NO-GO.md:362); step v6 contained neither, so each statement committed in its own implicit transaction and a kill between DROP TABLE IF EXISTS audit and ALTER TABLE audit_v6 RENAME TO audit left no audit, an audit_v6 holding every row, and user_version at 5 - a state every later boot re-entered and failed in, blocking the ladder for ever while index.ts only logged MIGRATION INCOMPLETE. FIX: the rebuild is now TWO steps with a durable user_version between them (v6 creates and copies, v7 swaps), SCHEMA_VERSION is 7, and v7 re-creates BOTH names under IF NOT EXISTS and re-copies BEFORE it drops so it converges from all three states its own interruption can produce - including the post-rename one, where a naive DROP+RENAME would drop the renamed ledger itself. BEGIN...COMMIT was NOT used instead: a failing exec strands an open write transaction on an unreachable pooled connection and the boot path is the worst place for one. The JSDoc was CORRECTED rather than deleted - it now states what SPIKE-09 actually measured. Step v6 had not shipped (authored this phase in 2bc96cf, no release tag), verified from git history rather than assumed. ALSO FOUND: migrations.spec.ts defined applyThroughV5, seedAudit, readAudit and indexNames and CALLED NONE of them - the row-preservation gate the v6 JSDoc calls 'the only thing standing between a silent skip and a green run' was described but never written. Now written, plus the two interruption cases. | fixed |  | 2026-09-01T10:01:00.824Z | 2026-09-01T10:01:49.900Z |
 | 107 | 06 | deviation | .planning/phases/06-retroactive-scan-deployment-reality/06-REVIEW.md |  | TEN of the twelve 06-REVIEW.md findings REMAIN OPEN and 06-REVIEW.md is their record: HI-02 (driveScan never re-arms after a failed walk - the row stays running for ever and SCANS_OVER_AGE_SQL deletes it at 90 days), ME-01 (completed/discarded/suspended transitions emit no progress, so the panel keeps rendering running and then Not advancing), ME-02 (advanceScan returning changes===0 is treated as success, so counters go backwards on Refresh), ME-03 (filesystem-prohibition.spec.ts has no unanalysable-specifier rule, so an assembled module specifier passes silently), ME-04 (composedPreview is a second HTTPQL composer outside the gate that forbids one - the gate walks BACKEND_SRC only), ME-05 (the heldAtWatermark module flag is not cleared on the no-scan/epoch-changed/busy exits), LO-01 (retention.ts credits the suspended-row bound to idx_scans_one_running, which is ON scans(project_id) WHERE state='running' and bounds nothing suspended), LO-02 (the scans row cap silently reuses the artifact cap), LO-03 (readFinishedRequestIds truncates silently if a page exceeds SCAN_PAGE_SIZE), LO-04 (jq_get evaluates its second argument with Python eval). This pass fixed CR-01 (08d623c) and HI-01 (58d48ed) only, by instruction. NOTE ON SEVERITY: HI-01's fix does not touch ME-05, and the two interact - the module flag now has a second reader on the wire, so a stale true on an early-return path reaches the panel through getScanStatus exactly as before. ME-05 was NOT made worse and was not closed. | open |  | 2026-09-01T10:01:19.813Z |  |
 | 108 | 06 | deviation | packages/backend/src/scan/producer.ts |  | HI-01 FIXED (58d48ed): ScanProgressPayload.heldAtWatermark was structurally always false - the per-page emit is the field's only writer and runs only after the watermark gate resets the flag - and ScanPanel's live overlay layered that constant over the true value from getScanStatus, so the watermark hold could never reach the operator after the first page and the Not advancing marker fired on it instead. FIX: the watermark gate now emits one payload carrying the row's counters UNCHANGED and heldAtWatermark true, on every held re-entry (emitProgress swallows send failures on the grounds that the next page emits again, and a hold has no next page). ScanPanel.vue:485 deliberately UNCHANGED - layering progress over row is correct once the channel carries the hold, and switching to row would hide a hold that begins after mount. producer.spec.ts's toHaveLength(0) on the held path was the assertion that pinned the defect and is corrected; the toBe(false) on the walked-page case is KEPT because false is the right answer there and is only now falsifiable. | fixed |  | 2026-09-01T10:01:33.178Z | 2026-09-01T10:01:49.987Z |
-| 109 | 07 | deviation | packages/engine/src/sourcemap/map-fixture.ts |  | MAP-05/boundary truth is met by a BUILDER, not a shipped binding: the module exports sizeBoundaryCases(ceiling) rather than a frozen case at MAP_MAX_BYTES, because task 2 (fixture) precedes task 3 (constant). Plan 07-02's MAP-05 suite MUST call sizeBoundaryCases(MAP_MAX_BYTES) or the refusal boundary is never exercised at the real ceiling. | open |  | 2026-09-01T21:00:38.553Z |  |
+| 109 | 07 | deviation | packages/engine/src/sourcemap/map-fixture.ts |  | MAP-05/boundary truth is met by a BUILDER, not a shipped binding: the module exports sizeBoundaryCases(ceiling) rather than a frozen case at MAP_MAX_BYTES, because task 2 (fixture) precedes task 3 (constant). Plan 07-02's MAP-05 suite MUST call sizeBoundaryCases(MAP_MAX_BYTES) or the refusal boundary is never exercised at the real ceiling. | fixed |  | 2026-09-01T21:00:38.553Z | 2026-09-01T21:29:30.754Z |
 | 110 | 07 | unmet-truth | .planning/REQUIREMENTS.md |  | O-04 recommended action #1 is unassigned: MAP-02 still carries the unqualified parenthetical '781 sources / 12.66 MB / 21 ms', which reads as a Caido measurement and is not one (standalone quickjs-ng 0.16.1, STACK.md:546). Plan 07-01 recorded the provenance in map-bytes.json's verdict and gated it, but did not amend or strike the requirement text. | open |  | 2026-09-01T21:00:38.642Z |  |
+| 111 | 07 | deviation | packages/engine/src/sourcemap/announce.ts |  | The A2 prefilter is SHIPPED but MAP_MAX_BYTES was NOT raised. 07-01 measured announce_scan at 3.80 ms/MB (43% of the inline path) and recorded that the prefilter would move the bound up by roughly 75%. That projection is not evidence: the ladder in .../results/map-bytes.json was taken against the TWO-FULL-SCAN implementation, and thresholds.spec.ts asserts shipped <= measured. Raising the constant requires re-running scripts/phase7/map-bytes.sh with the prefiltered scan in tier1/mapbytes/src/index.ts, which is a Caido-touching operation plan 07-02 (the SDK-free half) may not perform. Until that re-run lands, MAP_MAX_BYTES stays at 2,621,440 and UI-09 must still speak loudly about refused maps. | open |  | 2026-09-01T21:29:51.570Z |  |
+| 112 | 07 | deviation | packages/engine/src/sourcemap/parse.ts |  | isCanonicalBase64 REQUIRES padding: a payload with length % 4 of 2 or 3 is refused malformed_base64 even though it is legal unpadded base64. Deliberate and fail-closed — requiring padding is what makes 'a truncated final quantum' distinguishable from 'a short last group', and Buffer.from(x, base64) silently returns a SHORTER buffer for both. Every emitter that matters here pads (Buffer.toString(base64) and btoa both do). If the field shows unpadded inline maps, relax to accept 2 and 3 and update the doc comment. | open |  | 2026-09-01T21:29:51.659Z |  |
+| 113 | 07 | unrun-verify | packages/engine/src/sourcemap/parse.spec.ts |  | The too_deep branch's TRIGGER cannot be produced on the test runtime. V8's JSON.parse is iterative and parses two million nested levels without throwing, so no document drives the RangeError catch from the front door on Node; SPIKE-06 measured Caido's QuickJS failing at 710 brackets with catchable-stack-throw. The MAPPING is executed directly against a real RangeError via the exported reasonForParseError, and the CATCH is executed by the malformed-JSON cases — but the two have never been executed TOGETHER. Plan 07-04 or a Tier-1 probe running inside Caido is where that composition can be proven. | open |  | 2026-09-01T21:29:51.747Z |  |
 
 ````json
 [
@@ -1452,10 +1455,10 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/engine/src/sourcemap/map-fixture.ts",
     "line": null,
     "description": "MAP-05/boundary truth is met by a BUILDER, not a shipped binding: the module exports sizeBoundaryCases(ceiling) rather than a frozen case at MAP_MAX_BYTES, because task 2 (fixture) precedes task 3 (constant). Plan 07-02's MAP-05 suite MUST call sizeBoundaryCases(MAP_MAX_BYTES) or the refusal boundary is never exercised at the real ceiling.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-01T21:00:38.553Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-01T21:29:30.754Z"
   },
   {
     "id": 110,
@@ -1467,6 +1470,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-01T21:00:38.642Z",
+    "resolved_at": null
+  },
+  {
+    "id": 111,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/engine/src/sourcemap/announce.ts",
+    "line": null,
+    "description": "The A2 prefilter is SHIPPED but MAP_MAX_BYTES was NOT raised. 07-01 measured announce_scan at 3.80 ms/MB (43% of the inline path) and recorded that the prefilter would move the bound up by roughly 75%. That projection is not evidence: the ladder in .../results/map-bytes.json was taken against the TWO-FULL-SCAN implementation, and thresholds.spec.ts asserts shipped <= measured. Raising the constant requires re-running scripts/phase7/map-bytes.sh with the prefiltered scan in tier1/mapbytes/src/index.ts, which is a Caido-touching operation plan 07-02 (the SDK-free half) may not perform. Until that re-run lands, MAP_MAX_BYTES stays at 2,621,440 and UI-09 must still speak loudly about refused maps.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T21:29:51.570Z",
+    "resolved_at": null
+  },
+  {
+    "id": 112,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/engine/src/sourcemap/parse.ts",
+    "line": null,
+    "description": "isCanonicalBase64 REQUIRES padding: a payload with length % 4 of 2 or 3 is refused malformed_base64 even though it is legal unpadded base64. Deliberate and fail-closed — requiring padding is what makes 'a truncated final quantum' distinguishable from 'a short last group', and Buffer.from(x, base64) silently returns a SHORTER buffer for both. Every emitter that matters here pads (Buffer.toString(base64) and btoa both do). If the field shows unpadded inline maps, relax to accept 2 and 3 and update the doc comment.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T21:29:51.659Z",
+    "resolved_at": null
+  },
+  {
+    "id": 113,
+    "kind": "unrun-verify",
+    "phase": "07",
+    "file": "packages/engine/src/sourcemap/parse.spec.ts",
+    "line": null,
+    "description": "The too_deep branch's TRIGGER cannot be produced on the test runtime. V8's JSON.parse is iterative and parses two million nested levels without throwing, so no document drives the RangeError catch from the front door on Node; SPIKE-06 measured Caido's QuickJS failing at 710 brackets with catchable-stack-throw. The MAPPING is executed directly against a real RangeError via the exported reasonForParseError, and the CATCH is executed by the malformed-JSON cases — but the two have never been executed TOGETHER. Plan 07-04 or a Tier-1 probe running inside Caido is where that composition can be proven.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T21:29:51.747Z",
     "resolved_at": null
   }
 ]
