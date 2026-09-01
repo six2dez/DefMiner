@@ -14,6 +14,7 @@ import {
   CACHE_HIT_RATE_ASSUMED,
   EVENTS_DELIVERED_UNDER_BLOCK,
   HARD_MAX_BYTES,
+  MAX_SYNC_SLICE_MS,
   RSS_BYTES_PER_INPUT_BYTE,
   TOKENIZER_MS_PER_MB,
 } from "./thresholds.generated";
@@ -190,6 +191,158 @@ export const SCAN_PAGE_SIZE = 20;
 export const SCAN_BACKPRESSURE_WATERMARK =
   QUEUE_CAP - EVENTS_DELIVERED_UNDER_BLOCK - SCAN_PAGE_SIZE;
 
+// --- PHASE 7: THE INLINE SOURCEMAP BOUNDS (D-10, D-02, MAP-06, O-02) --------
+//
+// Every constant below is DERIVED FROM ONE MEASUREMENT, and the measurement is
+// a file: `.planning/phases/07-sourcemap-reconstruction/results/map-bytes.json`.
+// A reader who asks where a number came from is one `grep map-bytes.json` from
+// the artifact, and `tests/phase7-mapbytes.spec.ts` is what keeps that artifact
+// honest.
+//
+// WHY THE MEASUREMENT HAD TO EXIST AT ALL, since the obvious move is to reuse a
+// Phase 0 number. SPIKE-06 measures exactly seven operations — `read`, `decode`,
+// `hash`, `hash_js_loop`, `vlq_decode`, `tokenize`, `parse` — and its `decode` is
+// `Buffer.toString("utf8")`, NOT a base64 decode and NOT `JSON.parse`. There is
+// no `json_parse` measurement anywhere in Phase 0. The two constants most likely
+// to be misappropriated are {@link AST_MAX_BYTES} (derived from a meriyah stall
+// at 785.8 ms/MB — a different cost curve and a different allocator profile) and
+// {@link RSS_BYTES_PER_INPUT_BYTE} (whose go-no-go rationale scopes it verbatim
+// to "the parse operation", at MEDIUM confidence). D-10 forbids both.
+
+/**
+ * The largest INLINE sourcemap, in DECODED map-JSON bytes, that the phase will
+ * accept and reconstruct.
+ *
+ * DERIVATION: `min(measured_stall_bound, measured_rss_bound, 6_291_456)`, from
+ * the four-point ladder in
+ * `.planning/phases/07-sourcemap-reconstruction/results/map-bytes.json`,
+ * measured inside a version-asserted Caido 0.58.0 with one fresh instance per
+ * point. The three terms, in the order the artifact reports them:
+ *
+ *   measured_stall_bound  2,954,422 B — the inline path (`announce_scan` +
+ *     `b64_decode_buffer` + `json_parse`) fitted at 8.87 ms/MB against
+ *     {@link MAX_SYNC_SLICE_MS}. D-08 puts that stretch on the PROXY THREAD, so
+ *     the slice budget is the binding cost, not the artifact deadline.
+ *   measured_rss_bound   94,824,930 B — 11.32 RSS bytes per decoded byte
+ *     against the same 1 GiB projection {@link PASSIVE_MAX_BYTES} is asserted
+ *     under. Slack by a factor of thirty; recorded so nobody re-derives it.
+ *   structural ceiling    6,291,456 B — `floor(PASSIVE_MAX_BYTES * 3/4)`. Base64
+ *     expands 4:3 and `admit()` refuses any body over PASSIVE_MAX_BYTES, so an
+ *     inline map's decoded JSON CANNOT exceed this. Not a preference; a
+ *     consequence of two shipped constants.
+ *
+ * THE BOUND IS BINDING — the stall term wins by more than 2x. That is O-03's
+ * first outcome and it has a UI consequence the phase owes the operator: DefMiner
+ * will refuse a minority of the inline maps `admit()` would let through, and must
+ * SAY SO rather than appear to have found nothing (UI-09). A silent floor reads
+ * as an empty result.
+ *
+ * ROUNDED DOWN, and the direction is the whole point. 2,954,422 is a
+ * least-squares fit through four timing points; a re-run moves it by a few
+ * percent in either direction (2,752,788 on the immediately preceding run). The
+ * shipped constant is 2,621,440 = 2.5 MiB — the nearest 512 KiB boundary BELOW
+ * the fit — so the policy sits outside the measurement's own noise on the safe
+ * side, and a number a reader can hold. Rounding UP would put the ceiling inside
+ * the noise on the wrong side.
+ *
+ * REFUSE, NEVER TRUNCATE, above this. A truncated map decodes to WRONG POSITIONS
+ * rather than to an error, which is the quiet-wrongness class every gate in this
+ * codebase exists to prevent.
+ */
+export const MAP_MAX_BYTES = 2_621_440;
+
+/**
+ * The longest `//# sourceMappingURL=data:...;base64,` prefix the scanner must
+ * allow for, in bytes.
+ *
+ * DERIVATION: the longest legal spelling is
+ * `//# sourceMappingURL=data:application/json;charset=utf-8;base64,` at 63
+ * bytes. 128 doubles it, which covers the `charset=UTF-8` casing, the legacy
+ * `//@` spelling, and whitespace the ECMA-426 pattern
+ * `^[@#]\s*sourceMappingURL=(\S*?)\s*$` permits between the marker and the URL.
+ * A sibling of {@link SOURCEMAP_TAIL_WINDOW_BYTES} and never used alone.
+ */
+export const ANNOUNCEMENT_PREFIX_MAX = 128;
+
+/**
+ * How far back from EOF the D-02 announcement scan reads.
+ *
+ * DERIVED, NEVER CHOSEN:
+ * `Math.ceil(MAP_MAX_BYTES * 4 / 3) + ANNOUNCEMENT_PREFIX_MAX`.
+ *
+ * WHY A SMALL CONSTANT HERE SHIPS A PHASE THAT RECOVERS NOTHING, which is the
+ * failure this derivation exists to prevent. For an EXTERNAL map the
+ * announcement is a short comment at the very end — measured at 38 bytes from
+ * EOF on babel, 67 on monaco and 35 on tfjs. For an INLINE map the marker sits
+ * `payload_length + ~45` bytes from the end, up to ~8.4 MB. A sensible-looking
+ * 64 KB window therefore finds EVERY external announcement and NO inline one —
+ * and inline is the only kind D-01 consumes. Every test passes, the D-03
+ * external counter climbs, the recovered-source count stays at zero, and nothing
+ * fails.
+ *
+ * The window only ever needs to be as wide as the largest map the phase will
+ * accept, which is what ties this discretionary number to D-10's measurement.
+ * `thresholds.spec.ts` asserts the relation rather than the value, INCLUDING
+ * that the two rounding directions oppose — the encode direction ceils and the
+ * decode direction floors — so the window can never be narrower than the payload
+ * it must contain.
+ *
+ * COST, measured rather than assumed: `announce_scan` over a window this wide
+ * was the MOST EXPENSIVE of the probe's five operations at 3.80 ms/MB, above
+ * `json_parse`'s 2.91. RESEARCH assumption A2 predicted it might be, and named
+ * the mitigation in advance: a single 16-byte `lastIndexOf("sourceMappingURL")`
+ * prefilter before the two full marker searches. That is now an evidenced
+ * optimisation rather than a precaution.
+ */
+export const SOURCEMAP_TAIL_WINDOW_BYTES =
+  Math.ceil((MAP_MAX_BYTES * 4) / 3) + ANNOUNCEMENT_PREFIX_MAX;
+
+/**
+ * The most lines the recovered-source viewer will render for one file.
+ *
+ * DERIVATION, as an inequality against the decoded ceiling rather than as a
+ * preference — this is O-02's residual, and it is a real one: a file with six
+ * million SHORT lines is line-structured and passes every other check, while the
+ * split array is then ~6M strings.
+ *
+ * A source file that reaches this cap while fitting inside
+ * `floor(PASSIVE_MAX_BYTES * 3/4)` averages 12.58 characters per line —
+ * 6,291,456 / 500,000, computed rather than eyeballed.
+ * `thresholds.spec.ts` declares that figure as `MIN_CHARS_PER_LINE` and asserts
+ * `SOURCE_LINE_COUNT_MAX * MIN_CHARS_PER_LINE <= floor(PASSIVE_MAX_BYTES * 3/4)`,
+ * so the argument is EXECUTABLE rather than prose. Below that density the file
+ * is line noise a hostile map declared as a source, and SAYING SO is more useful
+ * to the operator than rendering it — which is the same UI-09 move
+ * {@link MAP_MAX_BYTES}'s minority-recovery case needs.
+ */
+export const SOURCE_LINE_COUNT_MAX = 500_000;
+
+/**
+ * MAP-06's aggregate limit, expressed as a ROW bound.
+ *
+ * A ROW BOUND AND NOT A SOURCE-COUNT BOUND, deliberately, so that Pitfall 2's
+ * convergence fix and MAP-06's aggregate limit are THE SAME CONSTANT. Under
+ * D-05 + D-09 one map-bearing artifact inserts a derived-source row per new
+ * content hash and a sighting row per `(map, index)` — monaco's real 781-source
+ * map is 1,562 rows on its own, which is 521x
+ * {@link ROWS_INSERTED_PER_ARTIFACT_MAX}'s declared worst case. Two constants
+ * for one quantity is how the retention sweep comes to bound nothing while
+ * running exactly as designed.
+ *
+ * DERIVATION FROM THE PROBE'S RSS CURVE, not from a preference. `map-bytes.json`
+ * measured 11.32 RSS bytes per decoded map byte, and at {@link MAP_MAX_BYTES}
+ * that projects to ~29.7 MB of peak RSS for one map. The probe's own points give
+ * the source density: 1,131 sources in 6,291,456 decoded bytes at the top point,
+ * so a map at MAP_MAX_BYTES carries roughly 471 sources and 942 rows. 2,048 is
+ * the next power of two above that, giving ~2.2x headroom for a map whose
+ * sources are unusually small — and it stays inside the same RSS projection
+ * because the rows are bounded by the bytes that produced them.
+ *
+ * `million-tiny-sources` in `packages/engine/src/sourcemap/map-fixture.ts` is the
+ * fixture this refuses: a legal map declaring 1,000,000 one-character sources.
+ */
+export const SOURCE_ROWS_PER_MAP_MAX = 2_048;
+
 // Referenced by the derivations above so the imports are not "unused" to a linter
 // and so a reader can see, in one place, which measured values the policy set
 // hangs off. thresholds.spec.ts asserts every one of these relationships.
@@ -208,5 +361,49 @@ export const POLICY_DERIVED_FROM = {
     QUEUE_CAP,
     EVENTS_DELIVERED_UNDER_BLOCK,
     SCAN_PAGE_SIZE,
+  },
+
+  // --- PHASE 7 ------------------------------------------------------------
+  //
+  // THE FIRST ENTRIES WHOSE MEASURED TERM IS A FILE PATH RATHER THAN AN
+  // IMPORTED SYMBOL, and the difference is the point. Every other row above
+  // names a constant re-exported from `thresholds.generated.ts`, which the
+  // generator writes from Phase 0's `go-no-go.json`. Phase 7's measurement is
+  // NOT in go-no-go.json and must not be: `scripts/ci/gen-thresholds.mjs`
+  // emits `thresholds.generated.ts` from that one artifact, and
+  // `thresholds.spec.ts` gate 1 byte-compares the result — so adding a Phase 7
+  // number there would mean either editing a generated file or reopening a
+  // Phase 0 aggregate whose whole value is that it describes 0.57.1.
+  //
+  // Naming the artifact BY PATH is what keeps the derivation checkable anyway:
+  // `grep -rn map-bytes.json` reaches the measurement, the schema that
+  // validates it and the gate that fails when it is absent, from anywhere in
+  // the tree. `thresholds.spec.ts` asserts this string is present.
+  MAP_MAX_BYTES: {
+    PASSIVE_MAX_BYTES,
+    measured_in:
+      ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json",
+    measured_against: MAX_SYNC_SLICE_MS,
+  },
+  ANNOUNCEMENT_PREFIX_MAX: {
+    measured_in:
+      ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json",
+  },
+  SOURCEMAP_TAIL_WINDOW_BYTES: {
+    MAP_MAX_BYTES,
+    ANNOUNCEMENT_PREFIX_MAX,
+    measured_in:
+      ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json",
+  },
+  SOURCE_LINE_COUNT_MAX: {
+    PASSIVE_MAX_BYTES,
+    measured_in:
+      ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json",
+  },
+  SOURCE_ROWS_PER_MAP_MAX: {
+    MAP_MAX_BYTES,
+    ROWS_INSERTED_PER_ARTIFACT_MAX,
+    measured_in:
+      ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json",
   },
 } as const;

@@ -48,6 +48,31 @@ const GENERATED_FILE =
 
 const REGEN = "re-run `node scripts/ci/gen-thresholds.mjs`";
 
+/**
+ * The D-10 probe artifact, repo-relative — the derivation Phase 7's constants
+ * cite BY PATH rather than by an imported symbol.
+ *
+ * It is deliberately NOT in `go-no-go.json`: `scripts/ci/gen-thresholds.mjs`
+ * emits `thresholds.generated.ts` from that one file and gate 1 above
+ * byte-compares the result, so a Phase 7 number there would mean either editing
+ * a generated file or reopening a Phase 0 aggregate whose whole value is that it
+ * describes 0.57.1.
+ */
+const MAP_BYTES_ARTIFACT =
+  ".planning/phases/07-sourcemap-reconstruction/results/map-bytes.json";
+
+/**
+ * The per-RPC-call payload BUDGET, restated from
+ * `tests/export-payload-budget.spec.ts:86`.
+ *
+ * A BUDGET, NOT A DISCOVERED LIMIT. It is copied rather than imported for one
+ * reason: production code and the engine must not import from `tests/`, and this
+ * spec lives in the engine workspace. The value is asserted against
+ * `PASSIVE_MAX_BYTES` immediately below so the copy cannot drift silently — they
+ * are deliberately the same 8 MiB figure.
+ */
+const MAX_RPC_PAYLOAD_BYTES = 8 * 1024 * 1024;
+
 // Named as constants exactly as tests/go-no-go.spec.ts names them, so a rename in
 // the aggregate breaks one line here rather than four string literals.
 const CROSS_DAY = "CACHE_HIT_RATE_CROSS_DAY";
@@ -273,6 +298,251 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
       T.EVENTS_DELIVERED_UNDER_BLOCK,
     );
     expect(derived.SCAN_PAGE_SIZE).toBe(T.SCAN_PAGE_SIZE);
+  });
+
+  // --- D-10's inline sourcemap bounds (plan 07-01) --------------------------
+  //
+  // SAME RULE AS THE WATERMARK BLOCK ABOVE: THE INEQUALITY IS THE PROPERTY, not
+  // the number it currently evaluates to. `MAP_MAX_BYTES` is a MEASURED figure
+  // rounded down, and asserting `=== 2_621_440` would keep passing while
+  // PASSIVE_MAX_BYTES moved underneath it — which is the exact failure this file
+  // exists to close. Every figure below is referenced BY NAME.
+
+  it("MAP_MAX_BYTES stays inside the STRUCTURAL ceiling base64 imposes", () => {
+    // The one assertion that goes red the day PASSIVE_MAX_BYTES is raised, which
+    // is the only way O-01's composition can break.
+    const ceiling = Math.floor((T.PASSIVE_MAX_BYTES * 3) / 4);
+    expect(
+      T.MAP_MAX_BYTES,
+      `MAP_MAX_BYTES (${T.MAP_MAX_BYTES}) exceeds floor(PASSIVE_MAX_BYTES * 3/4) = ` +
+        `${ceiling}. That ceiling is not a preference: base64 expands 4:3 and admit() ` +
+        `refuses any body over PASSIVE_MAX_BYTES (${T.PASSIVE_MAX_BYTES}), so an INLINE ` +
+        `map's decoded JSON cannot physically exceed it. A MAP_MAX_BYTES above the ` +
+        `ceiling prices a case that cannot reach this code.`,
+    ).toBeLessThanOrEqual(ceiling);
+  });
+
+  it("MAP_MAX_BYTES fits the project's own RPC payload budget", () => {
+    // O-01's first required assertion. The budget is IMPORTED from the module
+    // that owns it rather than restated as 8,388,608 — a copied number is a
+    // number that drifts.
+    expect(
+      T.MAP_MAX_BYTES,
+      `MAP_MAX_BYTES (${T.MAP_MAX_BYTES}) exceeds MAX_RPC_PAYLOAD_BYTES ` +
+        `(${MAX_RPC_PAYLOAD_BYTES}). The raw \`mappings\` string is a JSON member of the ` +
+        `map, so map <= budget bounds it with no chunked string transport and no new ` +
+        `bound. TWO THINGS A READER MUST NOT TAKE FROM THIS PASSING: the 8 MiB figure is ` +
+        `a BUDGET THIS PROJECT SETS, NOT A CEILING IT MEASURED FROM CAIDO — nothing in ` +
+        `this repository can push bytes through Caido's RPC, so the real limit is ` +
+        `live-only; and \`exportInventory\` already ships 7.00 MiB responses under exactly ` +
+        `that assumption, so this residual is INHERITED by Phase 7 rather than created ` +
+        `by it.`,
+    ).toBeLessThanOrEqual(MAX_RPC_PAYLOAD_BYTES);
+    // THE ANTI-DRIFT HALF. MAX_RPC_PAYLOAD_BYTES above is a COPY of the figure
+    // tests/export-payload-budget.spec.ts:86 declares — the engine must not
+    // import from tests/, so a copy is the only option. It cannot be allowed to
+    // drift silently, and the two are deliberately the same 8 MiB number, so
+    // asserting them equal is a free tripwire on the copy.
+    expect(
+      MAX_RPC_PAYLOAD_BYTES,
+      `the MAX_RPC_PAYLOAD_BYTES copy in this file (${MAX_RPC_PAYLOAD_BYTES}) no longer ` +
+        `equals PASSIVE_MAX_BYTES (${T.PASSIVE_MAX_BYTES}). The two are deliberately the ` +
+        `same 8 MiB figure, and this spec cannot import the original from tests/. If the ` +
+        `budget genuinely moved, update BOTH and say why; if PASSIVE_MAX_BYTES moved, ` +
+        `this copy is now stale and the assertion above was checking the wrong number.`,
+    ).toBe(T.PASSIVE_MAX_BYTES);
+  });
+
+  it("the tail window can never be narrower than the payload it must contain", () => {
+    expect(
+      T.SOURCEMAP_TAIL_WINDOW_BYTES,
+      `SOURCEMAP_TAIL_WINDOW_BYTES (${T.SOURCEMAP_TAIL_WINDOW_BYTES}) is below ` +
+        `ceil(MAP_MAX_BYTES * 4/3) = ${Math.ceil((T.MAP_MAX_BYTES * 4) / 3)}. For an ` +
+        `EXTERNAL map the announcement sits 35-67 bytes from EOF (measured on babel, ` +
+        `monaco and tfjs); for an INLINE map the marker sits payload_length + ~45 bytes ` +
+        `from the end. A window narrower than the payload finds EVERY external ` +
+        `announcement and NO inline one — every test passes, the D-03 counter climbs, ` +
+        `and the phase ships recovering nothing (Pitfall 1).`,
+    ).toBeGreaterThanOrEqual(Math.ceil((T.MAP_MAX_BYTES * 4) / 3));
+  });
+
+  it("the two base64 rounding directions OPPOSE, which is what makes the window safe", () => {
+    // The subtle half, and the reason the derivation names both directions. The
+    // ENCODE direction (decoded -> base64) must CEIL and the DECODE direction
+    // (body -> decodable map) must FLOOR. Using floor on the encode side would
+    // under-size the window by up to a byte at every size that is not a multiple
+    // of three — a one-byte miss on a `lastIndexOf` is a total miss, not a
+    // slightly worse result.
+    const encode = (n: number) => Math.ceil((n * 4) / 3);
+    const decode = (n: number) => Math.floor((n * 3) / 4);
+    for (const n of [
+      1,
+      2,
+      3,
+      4,
+      5,
+      1023,
+      T.MAP_MAX_BYTES,
+      T.PASSIVE_MAX_BYTES,
+    ]) {
+      expect(
+        decode(encode(n)),
+        `the base64 round trip lost bytes at n = ${n}: encode(${n}) = ${encode(n)} and ` +
+          `decode(${encode(n)}) = ${decode(encode(n))}, which is below ${n}. The encode ` +
+          `direction must CEIL and the decode direction must FLOOR; using the same ` +
+          `rounding for both under-sizes the window at every size that is not a multiple ` +
+          `of three, and a one-byte miss on a lastIndexOf is a TOTAL miss.`,
+      ).toBeGreaterThanOrEqual(n);
+    }
+    // And the ceiling itself is computed with the FLOOR direction, so the two
+    // are consistent as a pair rather than merely each correct alone.
+    expect(
+      decode(T.PASSIVE_MAX_BYTES),
+      "floor(PASSIVE_MAX_BYTES * 3/4) is not the structural ceiling the derivation " +
+        "claims. The decode direction is what bounds a decoded map, and it floors.",
+    ).toBe(Math.floor((T.PASSIVE_MAX_BYTES * 3) / 4));
+  });
+
+  it("the announcement prefix covers the longest legal spelling with margin", () => {
+    // Non-vacuity for the window's second term. A prefix constant below the
+    // real prefix would make the window one marker short of the payload, which
+    // is the same total miss as an under-sized window.
+    const longest =
+      "//# sourceMappingURL=data:application/json;charset=utf-8;base64,".length;
+    expect(
+      T.ANNOUNCEMENT_PREFIX_MAX,
+      `ANNOUNCEMENT_PREFIX_MAX (${T.ANNOUNCEMENT_PREFIX_MAX}) is below the longest legal ` +
+        `announcement prefix (${longest} bytes for ` +
+        `\`//# sourceMappingURL=data:application/json;charset=utf-8;base64,\`). ECMA-426 ` +
+        `also permits the legacy \`//@\` spelling and whitespace between the marker and ` +
+        `the URL, so the constant needs margin over that figure and not merely equality.`,
+    ).toBeGreaterThan(longest);
+  });
+
+  it("SOURCE_LINE_COUNT_MAX's density argument is EXECUTABLE, not prose", () => {
+    // MIN_CHARS_PER_LINE is declared HERE, in the spec, as the derivation's own
+    // witness. It is not a shipped constant: nothing in production reads it, and
+    // its only job is to make the line cap's argument something a machine
+    // checks. Below this density a "source" is line noise a hostile map declared,
+    // and saying so is more useful than rendering it (O-02's residual, UI-09).
+    const MIN_CHARS_PER_LINE = 12.58;
+    const ceiling = Math.floor((T.PASSIVE_MAX_BYTES * 3) / 4);
+    expect(
+      T.SOURCE_LINE_COUNT_MAX * MIN_CHARS_PER_LINE,
+      `SOURCE_LINE_COUNT_MAX (${T.SOURCE_LINE_COUNT_MAX}) at ${MIN_CHARS_PER_LINE} ` +
+        `characters per line projects to ` +
+        `${Math.round(T.SOURCE_LINE_COUNT_MAX * MIN_CHARS_PER_LINE)} bytes, above the ` +
+        `${ceiling}-byte decoded ceiling. Either the cap admits a file that cannot fit ` +
+        `inside a map DefMiner will accept — in which case it bounds nothing — or the ` +
+        `density witness is wrong. A file at this cap averaging UNDER ` +
+        `${MIN_CHARS_PER_LINE} characters per line is line noise, not source.`,
+    ).toBeLessThanOrEqual(ceiling);
+    expect(
+      T.SOURCE_LINE_COUNT_MAX,
+      "SOURCE_LINE_COUNT_MAX is not positive, so the viewer would render nothing.",
+    ).toBeGreaterThan(0);
+  });
+
+  it("SOURCE_ROWS_PER_MAP_MAX bounds a map at MAP_MAX_BYTES with headroom", () => {
+    // MAP-06's aggregate limit, checked against the probe's OWN source density
+    // rather than against a preference: the top ladder point carried 1,131
+    // sources in 6,291,456 decoded bytes, and D-09 writes TWO rows per source.
+    const SOURCES_PER_DECODED_BYTE = 1131 / 6_291_456;
+    const ROWS_PER_SOURCE = 2; // one derived-source row, one sighting row
+    const projected = Math.ceil(
+      T.MAP_MAX_BYTES * SOURCES_PER_DECODED_BYTE * ROWS_PER_SOURCE,
+    );
+    expect(
+      T.SOURCE_ROWS_PER_MAP_MAX,
+      `SOURCE_ROWS_PER_MAP_MAX (${T.SOURCE_ROWS_PER_MAP_MAX}) is below the ~${projected} ` +
+        `rows a map at MAP_MAX_BYTES (${T.MAP_MAX_BYTES}) projects to at the source ` +
+        `density map-bytes.json measured (1,131 sources in 6,291,456 decoded bytes, two ` +
+        `rows each under D-09). A cap below the typical case refuses ordinary maps and ` +
+        `the aggregate limit stops being a limit and becomes the common path.`,
+    ).toBeGreaterThanOrEqual(projected);
+    expect(
+      T.SOURCE_ROWS_PER_MAP_MAX,
+      `SOURCE_ROWS_PER_MAP_MAX (${T.SOURCE_ROWS_PER_MAP_MAX}) is more than 4x the ` +
+        `~${projected}-row typical case. MAP-06 asks for an AGGREGATE LIMIT; a cap with ` +
+        `that much slack is not refusing anything a real map does, which means the ` +
+        `1,000,000-source fixture is the only thing it stops and the retention argument ` +
+        `it shares with Pitfall 2 has no margin left.`,
+    ).toBeLessThanOrEqual(projected * 4);
+  });
+
+  it("POLICY_DERIVED_FROM cites the probe artifact BY PATH for every Phase 7 constant", () => {
+    // What keeps the derivation from decaying into a comment. A reader who asks
+    // where MAP_MAX_BYTES came from is one grep from the measurement, the schema
+    // that validates it and the gate that fails when it is absent.
+    for (const name of [
+      "MAP_MAX_BYTES",
+      "ANNOUNCEMENT_PREFIX_MAX",
+      "SOURCEMAP_TAIL_WINDOW_BYTES",
+      "SOURCE_LINE_COUNT_MAX",
+      "SOURCE_ROWS_PER_MAP_MAX",
+    ] as const) {
+      const entry = (
+        T.POLICY_DERIVED_FROM as Record<string, Record<string, unknown>>
+      )[name];
+      expect(
+        entry,
+        `POLICY_DERIVED_FROM has no entry for ${name}. Every Phase 7 constant is derived ` +
+          `from one measurement and the map is the machine-readable copy of that claim.`,
+      ).toBeDefined();
+      expect(
+        entry?.measured_in,
+        `POLICY_DERIVED_FROM.${name} does not name ${MAP_BYTES_ARTIFACT}. These are the ` +
+          `first entries whose measured term is a FILE PATH rather than an imported ` +
+          `symbol — Phase 7's measurement is deliberately not in go-no-go.json, because ` +
+          `gen-thresholds.mjs emits thresholds.generated.ts from that one artifact and ` +
+          `gate 1 byte-compares the result. Naming the path is what keeps the derivation ` +
+          `checkable anyway.`,
+      ).toBe(MAP_BYTES_ARTIFACT);
+    }
+  });
+
+  it("the derived window is DERIVED — by reference, never by a copied number", () => {
+    // The rule CACHE_HIT_RATE's case states, applied to a computed constant:
+    // recomputing the expression here proves the export is the expression's
+    // value and not a literal that happens to match it today.
+    expect(
+      T.SOURCEMAP_TAIL_WINDOW_BYTES,
+      "SOURCEMAP_TAIL_WINDOW_BYTES is not ceil(MAP_MAX_BYTES * 4/3) + " +
+        "ANNOUNCEMENT_PREFIX_MAX. It must be COMPUTED from those two identifiers, never " +
+        "written as the number they currently produce — Pitfall 1's whole argument is " +
+        "that a chosen window silently breaks the inline path by two orders of magnitude.",
+    ).toBe(Math.ceil((T.MAP_MAX_BYTES * 4) / 3) + T.ANNOUNCEMENT_PREFIX_MAX);
+    expect(
+      T.POLICY_DERIVED_FROM.SOURCEMAP_TAIL_WINDOW_BYTES.MAP_MAX_BYTES,
+      "POLICY_DERIVED_FROM.SOURCEMAP_TAIL_WINDOW_BYTES does not carry MAP_MAX_BYTES by " +
+        "reference.",
+    ).toBe(T.MAP_MAX_BYTES);
+  });
+
+  it("the probe artifact exists and still reports the bound this constant was rounded from", () => {
+    // THE TRIPWIRE. A policy constant citing an artifact that is gone, or that
+    // now says something else, is a derivation nobody can check — which is the
+    // state this whole file exists to make impossible. Deliberately an
+    // INEQUALITY: the artifact's figure is a least-squares fit over four timing
+    // points and moves a few percent per run, so the property is "the shipped
+    // constant is at or below what was measured", not equality.
+    const artifact = JSON.parse(
+      readFileSync(REPO_ROOT + MAP_BYTES_ARTIFACT, "utf8"),
+    );
+    expect(
+      artifact?.verdict?.map_max_bytes,
+      `${MAP_BYTES_ARTIFACT} carries no verdict.map_max_bytes. Re-run ` +
+        `\`bash scripts/phase7/map-bytes.sh\`.`,
+    ).toBeGreaterThan(0);
+    expect(
+      T.MAP_MAX_BYTES,
+      `MAP_MAX_BYTES (${T.MAP_MAX_BYTES}) is ABOVE the bound the probe artifact reports ` +
+        `(${artifact?.verdict?.map_max_bytes}). The shipped constant is the measured ` +
+        `figure ROUNDED DOWN to the nearest 512 KiB boundary — down, because the ` +
+        `measurement is a least-squares fit over four timing points and a constant above ` +
+        `it sits inside the fit's own noise on the WRONG side. If the probe now reports a ` +
+        `lower bound, re-round rather than raising the constant.`,
+    ).toBeLessThanOrEqual(artifact?.verdict?.map_max_bytes);
   });
 
   it("CACHE_HIT_RATE takes the assumed value and never a literal", () => {
