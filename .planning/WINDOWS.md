@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 74
+open_count: 75
 waived_count: 0
 fixed_count: 28
-total_count: 102
-last_updated: 2026-09-01T08:10:51.804Z
+total_count: 103
+last_updated: 2026-09-01T08:51:10.765Z
 ---
 
 # Broken Windows Ledger
@@ -138,6 +138,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 100 | 06 | deviation | .planning/REQUIREMENTS.md |  | requirements.mark-complete reflowed the DERIVED residual block again on 06-10's close-out, inserting three blank lines and reddening packages/backend/src/outbound-prohibition.spec.ts — the third occurrence (7ceff93, 06-08, now 06-10). Fixed the shipped block per the standing remedy; the comparison was not touched. OWNER: the fix belongs in the gsd-tools writer, which should not reflow a machine-owned block it does not own. | open |  | 2026-08-31T22:45:01.374Z |  |
 | 101 | 06 | unmet-truth | probe/pushdown-superset/backend/script.js |  | The push-down superset proof is measured on ASCII case folding only. isScriptish uses String.prototype.toLowerCase (Unicode-aware); the clause is on SQLite LIKE, whose default folding is ASCII-only. The derivation in scan/filter.ts argues the gap is empty — no non-ASCII character lowercases INTO an ASCII j/s/m or into any letter of the seventeen essences — but that argument is a DERIVATION, not a fixture: the corpus contains no non-ASCII-cased path or media type. Closing it needs a fixture whose URL or Content-Type folds across the ASCII boundary. Low value (media types and .js suffixes are ASCII by RFC) and recorded so it is not rediscovered as a surprise. | open |  | 2026-09-01T08:10:42.068Z |  |
 | 102 | 06 | deviation | packages/engine/src/contract.ts |  | SCAN_KIND_CLAUSE was corrected inside plan 06-11 rather than in a plan that owns packages/engine. The plan's own prohibition anticipated this ('the clause is corrected in scan/filter.ts in its own commit'), and it is a separate commit (36db2af) carrying its own re-measured artifact — but contract.ts, contract.spec.ts, filter.ts and filter.spec.ts are outside 06-11's declared files_modified. Anything downstream that renders or asserts the clause string (06-UI-SPEC's read-only 'DefMiner always scans for' field) now reads seven like-terms instead of seven cont-terms. | open |  | 2026-09-01T08:10:51.804Z |  |
+| 103 | 6 | deviation | .planning/REQUIREMENTS.md |  | requirements.mark-complete reflowed the derived residual block again (4th firing of WINDOWS 85); three blank lines removed from the shipped block, comparison untouched | open |  | 2026-09-01T08:51:10.765Z |  |
 
 ````json
 [
@@ -1363,6 +1364,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-01T08:10:51.804Z",
+    "resolved_at": null
+  },
+  {
+    "id": 103,
+    "kind": "deviation",
+    "phase": "6",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "requirements.mark-complete reflowed the derived residual block again (4th firing of WINDOWS 85); three blank lines removed from the shipped block, comparison untouched",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T08:51:10.765Z",
     "resolved_at": null
   }
 ]

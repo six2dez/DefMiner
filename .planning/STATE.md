@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-11-PLAN.md
-last_updated: "2026-09-01T08:13:59.488Z"
+stopped_at: Completed 06-12-PLAN.md
+last_updated: "2026-09-01T08:50:09.958Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 0d30fb4b5691f1a81d0617a74bd9c6d3d204304b
+state_head: 8348e081e848c16426b2561360501f601c413195
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 70
+  completed_plans: 71
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 12 of 13
+Plan: 13 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -329,6 +329,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P09 | 35 min | 3 tasks | 17 files |
 | Phase 06 P10 | 42 min | 3 tasks | 26 files |
 | Phase 06 P11 | 47 min | 3 tasks | 13 files |
+| Phase 06 P12 | 46 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -639,6 +640,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: 06-11: 06-04's fail-CLOSED property is now EXECUTED against a real Caido parser — WINDOWS 72 named this plan. Two legs on the live build: the balanced composed clause did NOT throw and returned an item; DefMiner's clause followed by an operator clause ending in // THREW 'Error: Invalid filter'. The operator-clause-LAST ordering in scan/filter.ts is therefore a measured mitigation rather than a cited one. WINDOWS 72 marked fixed.
 - [Phase 06]: 06-11: state.update-progress WITHHELD the project-wide bar for the EIGHTH consecutive time — 'progress percent withheld by buildStateFrontmatter — STATE.md left unchanged'. Recorded so the run stays visible rather than being rediscovered. The prose Progress: line still describes phase 01 plan execution and is deliberately untouched.
 - [Phase 06]: 06-11: FIND-03 was NOT marked complete, and that is the gate working — requirements.ready-ids reported 0/1 ready: sibling plans in this phase also declare FIND-03 and have no SUMMARY yet. Marking it now would flip the ledger green while the work is still running. It becomes ready when the LAST declaring plan finishes.
+- [Phase 06]: The watermark hold outranks BOTH the stall marker and the starting word — a scan meeting a full queue immediately would otherwise read Starting… for as long as the hold lasts
+- [Phase 06]: The composed preview does not re-validate the operator clause; a second copy of validateOperatorClause would be a second answer to a question with one authority
+- [Phase 06]: role=alert sits on the DefMiner-authored rejection sentence alone — a live region announces a target-influenced clause the moment it changes
+- [Phase 06]: The reject-reason breakdown's not-durable sentence is the state on this surface, not an edge case: only the aggregate crosses the RPC boundary
+- [Phase 06]: dateOnlyText ships @internal for one wave so plan 06-13 consumes this formatter rather than writing a second one
 
 ### Known Risks Carried Forward
 
@@ -681,8 +687,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T08:13:59.329Z
-**Stopped at:** Completed 06-11-PLAN.md
+**Last session:** 2026-09-01T08:50:09.869Z
+**Stopped at:** Completed 06-12-PLAN.md
 **Resume file:** None
 
 ### Blockers
