@@ -284,6 +284,35 @@ function makeStub(): Stub {
       startScan: () =>
         answer("startScan", { outcome: "started" as const, scanId: "s1" }),
       getScanStatus: () => answer("getScanStatus", null),
+      // THE THREE LIFECYCLE COMMANDS, stubbed on the same literal surface. A
+      // guard that DECLINED is `ok: true, changed: false` — the shape the
+      // surface must not report as a failure — so the stub answers the
+      // successful, moved form and the declining form is asserted where it is
+      // rendered.
+      pauseScan: () =>
+        answer("pauseScan", {
+          ok: true,
+          changed: true,
+          state: "suspended" as const,
+          suspendReason: "operator_paused" as const,
+          reason: null,
+        }),
+      resumeScan: () =>
+        answer("resumeScan", {
+          ok: true,
+          changed: true,
+          state: "running" as const,
+          suspendReason: null,
+          reason: null,
+        }),
+      discardScan: () =>
+        answer("discardScan", {
+          ok: true,
+          changed: true,
+          state: "discarded" as const,
+          suspendReason: null,
+          reason: null,
+        }),
       getCompat: () => answer("getCompat", COMPAT),
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);

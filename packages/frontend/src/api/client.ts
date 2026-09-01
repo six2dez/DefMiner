@@ -68,12 +68,14 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ScanLifecycleState,
   ScanProgressPayload,
   ScanState,
   ScanStatusPayload,
   SettingKey,
   SettingScope,
   SettingsGroup,
+  SuspendReason,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import {
@@ -543,13 +545,82 @@ export type RpcResult<TValue> =
 export type StartScanOutcome =
   | { readonly outcome: "started"; readonly scanId: string }
   | {
-      readonly outcome: "refused";
+      /**
+       * THE OPERATOR'S CLAUSE WAS NOT ACCEPTED, AND ITS OWN OUTCOME RATHER THAN
+       * A REASON FOLDED IN BESIDE THE OCCUPANCY REFUSALS.
+       *
+       * Two reasons, both of which the surface acts on. NOTHING IS STARTED —
+       * no row is created, so the next press is a fresh attempt rather than a
+       * second scan. And the copy differs: a rejected clause is echoed back for
+       * editing and the typed characters are retained, while an occupied slot
+       * points at a scan that already exists.
+       *
+       * The four codes are `OPERATOR_CLAUSE_REJECTIONS` verbatim.
+       */
+      readonly outcome: "clause-rejected";
       readonly reason:
+        | "comment_construct"
+        | "unbalanced_parentheses"
+        | "whitespace_only"
+        | "too_long";
+    }
+  | {
+      readonly outcome: "refused";
+      readonly reason: /** No project is open, so there is no traffic to scan. */
         | "no-project"
+        /** THE TWO OCCUPIED STATES ARE DISTINGUISHED, and the distinction is
+         *  not cosmetic: the operator's next action differs — pause or discard
+         *  for one, resume or discard for the other — and the start form has a
+         *  separate sentence for each. Collapsing them would tell the operator
+         *  to press a control that is not on screen. */
         | "already-running"
-        | "operator-clause-unsupported"
+        | "already-suspended"
+        /** The write itself failed. Logged in full on the backend; the caller
+         *  gets the code and never the message. */
         | "write-failed";
     };
+
+/**
+ * What a pause, a resume or a discard answers with.
+ *
+ * MIRRORS THE BACKEND'S SHAPE, and the two booleans are NOT the same claim.
+ * `ok: false` is a write that could not be attempted at all. `ok: true,
+ * changed: false` is the STATE GUARD DECLINING — pausing an already-suspended
+ * scan, discarding an already-discarded one — which is the guard working, and
+ * is an operator double-click rather than a failure. A surface that treated the
+ * second as an error would report a failure for the most ordinary thing an
+ * impatient operator does.
+ *
+ * `state` and `suspendReason` are READ BACK from the row after the write rather
+ * than assumed from the request: the pooled driver cannot report what a write
+ * did, and the operator is about to be shown this value.
+ */
+export type ScanCommandOutcome = {
+  readonly ok: boolean;
+  readonly changed: boolean;
+  readonly state: ScanLifecycleState | null;
+  readonly suspendReason: SuspendReason | null;
+  readonly reason:
+    | "no-project"
+    | "no-scan"
+    | "guard-declined"
+    | "write-failed"
+    | null;
+};
+
+/**
+ * Which scan a lifecycle command addresses.
+ *
+ * THE PROJECT IS NAMED BUT NOT TRUSTED. The backend substitutes its own
+ * lifecycle-resolved project id on every one of these calls, exactly as it does
+ * for `startScan`, so a scan the operator switched away from is simply not in
+ * the partition the command reads and answers `no-scan`. D-04's other half is
+ * enforced by that predicate rather than by this field.
+ */
+export type ScanRef = {
+  readonly projectId: string;
+  readonly scanId: string;
+};
 
 /** The stop handle `onEvent` returns. Named because it is the thing that must
  *  be owned and called; research P-04 is entirely about it being dropped. */
@@ -598,6 +669,9 @@ export type DefMinerBackendSdk = {
       readonly operatorFilter: string;
     }) => Promise<StartScanOutcome>;
     getScanStatus: () => Promise<ScanStatusPayload | null>;
+    pauseScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
+    resumeScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
+    discardScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
     getCompat: () => Promise<CompatReport>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
@@ -653,6 +727,25 @@ export type BackendClient = {
   /** This project's active scan, or `null` when there is none — a real state
    *  and not a failure, and the one that puts the start form on screen. */
   getScanStatus: () => Promise<RpcResult<ScanStatusPayload | null>>;
+  /**
+   * Stop a running scan AND KEEP ITS PLACE (D-10).
+   *
+   * THREE ENDPOINTS AND NOT ONE WITH A MODE FLAG, mirrored here rather than
+   * collapsed. Pause and discard are different acts with different consequences
+   * — one keeps the walked position, the other destroys it — and a mode flag is
+   * precisely how a mis-click becomes a data loss. The NAMES are the mitigation,
+   * and they are what makes pause safe to put one click from the operator while
+   * discard gets its own confirmation.
+   */
+  pauseScan: (request: ScanRef) => Promise<RpcResult<ScanCommandOutcome>>;
+  /** Return a suspended scan to running, on explicit operator command. THE ONLY
+   *  WAY BACK: DefMiner never resumes a scan on its own after a restart, a
+   *  project change or a retention eviction. */
+  resumeScan: (request: ScanRef) => Promise<RpcResult<ScanCommandOutcome>>;
+  /** Throw a scan away. IT DESTROYS THE WALKED POSITION AND NOTHING ELSE — the
+   *  artifacts and observations it produced went through the same admission,
+   *  digest and store path the live hook uses and are NOT touched. */
+  discardScan: (request: ScanRef) => Promise<RpcResult<ScanCommandOutcome>>;
   /** COMPAT-02's report. Reachable on a REFUSING build, where it is one of only
    *  two endpoints that exist. */
   getCompat: () => Promise<RpcResult<CompatReport>>;
@@ -822,6 +915,16 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     // half render OPPOSITE surfaces, so a bundle known to be misreading the
     // contract must stop rather than pick one.
     getScanStatus: () => guarded(() => sdk.backend.getScanStatus()),
+
+    // GUARDED, AND ALL THREE ARE WRITES AGAINST A LIFECYCLE. A stale bundle
+    // misreading `ScanCommandOutcome` would read a declining guard as a
+    // success or a success as a failure — and on the discard path that is the
+    // difference between an operator believing a walked position survived and
+    // believing it is gone. The one destructive act in the phase is the last
+    // call a bundle known to be misreading the contract should take.
+    pauseScan: (request) => guarded(() => sdk.backend.pauseScan(request)),
+    resumeScan: (request) => guarded(() => sdk.backend.resumeScan(request)),
+    discardScan: (request) => guarded(() => sdk.backend.discardScan(request)),
 
     // NOT GUARDED BY THE MISMATCH, AND THAT IS THE WHOLE POINT OF IT. A
     // contract-version mismatch is one of the things somebody opens the

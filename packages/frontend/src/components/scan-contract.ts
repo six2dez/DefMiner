@@ -50,11 +50,19 @@
 // vocabulary already ships "Complete" and a one-character difference between
 // two states that mean opposite things is not a difference.
 
-import type { ScanStatusPayload } from "@defminer/engine/contract";
+import type {
+  ScanLifecycleState,
+  ScanStatusPayload,
+  SuspendReason,
+} from "@defminer/engine/contract";
+import {
+  ARTIFACT_DEADLINE_MS,
+  RETENTION_SWEEP_EVERY_N,
+} from "@defminer/engine/thresholds";
 
 import type { StartScanOutcome } from "../api/client";
 
-import { groupThousands } from "./table-contract";
+import { counted, groupThousands } from "./table-contract";
 
 /**
  * Every field on {@link ScanStatusPayload} that is a COUNTER.
@@ -84,6 +92,23 @@ type ScanRefusalReason = Extract<
   { outcome: "refused" }
 >["reason"];
 
+/**
+ * Why the start endpoint refused the operator's CLAUSE. A different question
+ * from {@link ScanRefusalReason} and deliberately a different outcome.
+ *
+ * The two are not folded together because NOTHING IS STARTED on this path — no
+ * row is created, so the operator's next press is a fresh attempt rather than a
+ * second scan — and because the copy differs: a rejected clause is echoed back
+ * for editing, while an occupied slot points at a scan that already exists.
+ * Extracted from the outcome union for the same reason as above: a fifth
+ * rejection code added to the RPC contract without a phrase here stops the
+ * build.
+ */
+type ScanClauseRejection = Extract<
+  StartScanOutcome,
+  { outcome: "clause-rejected" }
+>["reason"];
+
 // ---------------------------------------------------------------------------
 // COPY — THE START FORM
 // ---------------------------------------------------------------------------
@@ -105,6 +130,15 @@ export const SCAN_PURPOSE =
 /** Over the read-only clause. NOT an input: it is context, and it cannot be
  *  edited or removed. */
 export const SCAN_DEFMINER_CLAUSE_LABEL = "DefMiner always scans for";
+
+/** Over the operator's own input. OPTIONAL, and the label says so — an absent
+ *  clause is the common case and a complete one. */
+export const SCAN_OPERATOR_CLAUSE_LABEL = "Narrow it further (optional)";
+
+/** Beside the operator's input. It states the composition rule and D-05's
+ *  direction in one sentence, because the direction is the whole promise. */
+export const SCAN_OPERATOR_CLAUSE_HELP =
+  "An HTTPQL clause, combined with DefMiner's own with AND. You can narrow this scan; you cannot widen it.";
 
 /** Over the composed string. */
 export const SCAN_COMPOSED_LABEL = "What will be sent";
@@ -140,6 +174,31 @@ export const SCAN_SCOPE_STATEMENT =
   "Caido's scope is applied with no override. Traffic captured while a host was in scope becomes unscannable once that host leaves scope — DefMiner will not read it back. Scope is Caido's own setting, not DefMiner's.";
 
 // ---------------------------------------------------------------------------
+// COPY — ONE SCAN AT A TIME
+// ---------------------------------------------------------------------------
+//
+// TWO SENTENCES AND NOT ONE, AND THE SPLIT IS THE WHOLE VALUE OF THEM. "One
+// scan per project" is an invariant the operator did not choose, so it is
+// stated as a STATE OF THE SURFACE with a way out rather than as a disabled
+// control whose only content is "no". Which of the two occupied states is
+// holding the slot decides the operator's NEXT ACTION — pause or discard for
+// one, resume or discard for the other — so a merged sentence would tell them
+// to press a control that is not on screen.
+//
+// Each is used TWICE and typed ONCE: as the refusal body when a start is
+// declined, and as the sentence beside the live readout that explains why the
+// start form is not there. Two typings of one sentence are two sentences.
+
+/** A `running` scan holds the slot. */
+export const SCAN_ONE_AT_A_TIME_RUNNING =
+  "A scan is already running on this project. DefMiner runs one scan at a time — pause or discard it before starting another.";
+
+/** A `suspended` scan holds the slot. It is holding a POSITION, which is what
+ *  makes discarding it a loss and resuming it the cheap move. */
+export const SCAN_ONE_AT_A_TIME_SUSPENDED =
+  "A suspended scan is holding its place in this project's history. DefMiner runs one scan at a time — resume it, or discard it, before starting another.";
+
+// ---------------------------------------------------------------------------
 // COPY — REFUSALS
 // ---------------------------------------------------------------------------
 
@@ -159,17 +218,50 @@ export const SCAN_REFUSAL_COPY: Record<ScanRefusalReason, string> =
   Object.freeze({
     "no-project":
       "No project is open, so there is no traffic to scan. Open a project in Caido and start the scan from there.",
-    // TWO SENTENCES, AND THE SECOND ONE IS THE ACTION. "One scan per project"
-    // is an invariant the operator did not choose, so it is stated as a state
-    // of the surface with a way out rather than as a disabled control whose
-    // only content is "no".
-    "already-running":
-      "A scan is already running or suspended on this project. DefMiner runs one scan at a time — pause, resume or discard it before starting another.",
-    "operator-clause-unsupported":
-      "This build cannot check an additional filter yet, so it will not run one. Nothing was started. Start the scan without a filter, or wait for the build that validates one.",
+    "already-running": SCAN_ONE_AT_A_TIME_RUNNING,
+    "already-suspended": SCAN_ONE_AT_A_TIME_SUSPENDED,
     "write-failed":
       "The scan could not be recorded, so nothing was started. DefMiner has not read any traffic and nothing was changed.",
   });
+
+// ---------------------------------------------------------------------------
+// COPY — A REJECTED CLAUSE
+// ---------------------------------------------------------------------------
+
+/**
+ * Why a typed clause was not accepted, as a DefMiner-AUTHORED phrase per code.
+ *
+ * A `Record` over the closed rejection union for the same reason the refusal
+ * map is one. And the phrases are DefMiner's own rather than Caido's parser
+ * text, which is the actual threat on this path (T-06-20): Caido's HTTPQL
+ * errors quote whatever the operator typed back at them INSIDE a sentence, and
+ * the operator's clause is routinely pasted from a target's own page. The
+ * clause is echoed on this surface exactly once, in its own sanitised
+ * `font-mono` element, and never inside a sentence.
+ *
+ * NO NUMBER IN THE LENGTH PHRASE. The cap lives on the backend and is not on
+ * the RPC boundary; naming a figure here would be a second declaration of it
+ * that only ever drifts.
+ */
+export const SCAN_CLAUSE_REJECTION_COPY: Record<ScanClauseRejection, string> =
+  Object.freeze({
+    comment_construct:
+      "it contains a comment, which is the one construct that can reach across a parenthesis",
+    unbalanced_parentheses: "its parentheses are unbalanced",
+    whitespace_only: "it is only whitespace",
+    too_long: "it is longer than DefMiner will send",
+  });
+
+/**
+ * The rejection line, in the contract's words.
+ *
+ * `role="alert"` at the render site, matching the shipped settings failure
+ * line. The clause itself is NOT in this string and must not be — it goes in
+ * its own element beside it.
+ */
+export function clauseRejectedLine(reason: ScanClauseRejection): string {
+  return `That filter was not accepted: ${SCAN_CLAUSE_REJECTION_COPY[reason]}. Nothing was started.`;
+}
 
 // ---------------------------------------------------------------------------
 // COPY — THE PROGRESS READOUT
@@ -266,6 +358,258 @@ export const SCAN_REFRESH_LABEL = "Refresh";
 
 /** The re-read action in flight. */
 export const SCAN_REFRESHING_LABEL = "Refreshing…";
+
+/** The route to the one surface that can tell a blocked thread from a stuck
+ *  interface. The same label the shipped inventory-table error copy uses. */
+export const SCAN_OPEN_HEALTH_LABEL = "Open Health";
+
+/** The route to the retention bounds, offered only beside the eviction
+ *  suspension — the one suspension the operator can actually act on. */
+export const SCAN_OPEN_SETTINGS_LABEL = "Open Settings";
+
+/** The re-read after a failure. `Retry` and not `Refresh`: the two are the same
+ *  call and different acts, and the word the operator reads should name the one
+ *  they are performing. */
+export const SCAN_RETRY_LABEL = "Retry";
+
+/**
+ * The sentence under {@link SCAN_STATUS_WAITING_FOR_QUEUE}.
+ *
+ * IT SAYS THE SCAN RESUMES ON ITS OWN, which is the half that stops the
+ * operator reaching for a control. The hold is D-01's design working: the scan
+ * pages only while queue depth is below the watermark, so live browsing always
+ * wins.
+ */
+export const SCAN_WAITING_FOR_QUEUE_LINE =
+  "The queue is near its limit, so the scan is holding off. Live browsing always gets analysed first; the scan resumes on its own.";
+
+/**
+ * The sentence under {@link SCAN_STATUS_NOT_ADVANCING}.
+ *
+ * THE NUMBER OF SECONDS IS COMPUTED FROM THE ENGINE'S CEILING, never typed.
+ * `POLICY_DERIVED_FROM` in `engine/thresholds.ts` records the derivation
+ * machine-checkably: `ARTIFACT_DEADLINE_MS` hangs off `TOKENIZER_MS_PER_MB`, at
+ * which a full `PASSIVE_MAX_BYTES` artifact takes ~6.3 s to walk on a strictly
+ * serial thread, and the deadline is the shipped ceiling on ANY single
+ * artifact. A threshold below it would fire on every large bundle. Raising the
+ * ceiling therefore rewrites this sentence rather than leaving it claiming
+ * thirty seconds on a build that waits sixty.
+ *
+ * It names the two causes it cannot tell apart and routes to the surface that
+ * can, exactly as the shipped inventory-table error copy does.
+ */
+export const SCAN_NOT_ADVANCING_LINE = `No counter has moved for over ${String(
+  ARTIFACT_DEADLINE_MS / 1000,
+)} seconds. The backend is single-threaded, so one very large bundle can hold it for a while — or the queue is full. Open Health to tell those apart.`;
+
+/**
+ * What a failed status read says WHEN THERE ARE NUMBERS ON SCREEN.
+ *
+ * THE NUMBERS STAY AND ARE MARKED STALE IN WORDS. Clearing them would read as
+ * "the scan reset"; leaving them unmarked would read as a stall — and numbers
+ * that stop moving with nothing on screen to say why is the precise appearance
+ * this whole surface exists to prevent. It is careful NOT to claim the scan
+ * stopped: a backend that cannot answer a call is a backend whose thread is
+ * busy or gone, which says nothing about the walk.
+ *
+ * The moment is ABSENT rather than fabricated when no read has ever settled;
+ * that case takes {@link SCAN_FAILED_BODY} instead, which has no numbers to
+ * qualify.
+ */
+export function scanStaleBody(asOf: number | null): string {
+  const from = positionText(asOf);
+  const when = from === null ? "the last read that answered" : from;
+  return `Could not read scan progress — the DefMiner backend did not answer. The numbers below are from ${when} and are not updating. The scan itself may still be running; a backend that cannot answer a call is a backend whose thread is busy or gone.`;
+}
+
+// ---------------------------------------------------------------------------
+// COPY — WHY REQUESTS WERE REJECTED
+// ---------------------------------------------------------------------------
+
+/** The heading over the rejection breakdown. */
+export const SCAN_REJECT_HEADING = "Why requests were rejected";
+
+/** The one rejection reason whose consequence the operator can act on, and the
+ *  one D-07 makes genuinely surprising. */
+export const SCAN_REJECT_OUT_OF_SCOPE_LABEL = "Not in Caido's current scope.";
+
+/** D-07's asymmetry, in full. There is no way to soften it: no filter the
+ *  operator can write reaches traffic whose host has left scope. */
+export const SCAN_REJECT_OUT_OF_SCOPE_BODY =
+  "These were captured while the host was in scope. They are not scannable now, and raising the scan's filter will not reach them; the host has to be back in Caido's scope.";
+
+/**
+ * What the breakdown says when it is gone — WHICH IS ALWAYS, ON THIS SURFACE.
+ *
+ * Only the AGGREGATE `rejected` lives on the scan row; the per-reason breakdown
+ * lives in the backend's in-memory telemetry sub-map and is not carried on the
+ * status payload at all. So this sentence is not an edge case here, it is the
+ * state — and it is written with the REAL total rather than six zeroes, because
+ * six zeroes would claim that nothing was rejected for any reason on a scan
+ * that rejected thousands.
+ */
+export function rejectBreakdownUnavailable(rejected: number): string {
+  return `The per-reason breakdown is kept only while a scan is running. This scan's total is ${groupThousands(
+    rejected,
+  )}; the breakdown for it was not stored.`;
+}
+
+// ---------------------------------------------------------------------------
+// COPY — WHY A SCAN IS SUSPENDED
+// ---------------------------------------------------------------------------
+
+/** What a suspension sentence may name. Two values, both of which DefMiner may
+ *  legitimately NOT have — and an absent one is rendered as absent rather than
+ *  as a zero or a placeholder. */
+export type SuspendContext = {
+  /** When the scan stopped, or `null`. */
+  readonly at: number | null;
+  /** The retention row cap in force, or `null` when this surface cannot read
+   *  it. It is not on the status payload; the eviction sentence names the cap
+   *  only when the caller supplies one. */
+  readonly rowCap: number | null;
+};
+
+/**
+ * Every suspension reason, as a sentence that names WHO OR WHAT stopped the
+ * scan and what to do next.
+ *
+ * A `Record` over the closed reason union — a fifth reason added to the engine
+ * contract without a sentence here is a typecheck error, where a lookup with a
+ * fallback would render a suspension as a blank line. A scan that stopped for a
+ * reason nobody can see is the frozen-looking page this whole surface exists to
+ * prevent.
+ *
+ * FUNCTIONS RATHER THAN STRINGS, because three of the four carry a value: the
+ * moment it stopped, or the cap that evicted it. It is still a `Record` over
+ * the union and still exhaustive; what changes is that a sentence needing a
+ * number it does not have can OMIT the clause rather than print `null`.
+ *
+ * A SUSPENSION IS NOT AN ERROR. Every route here is operator-initiated, or
+ * expected and recoverable, or a resource bound doing its job — which is why
+ * the state carries the `info` tone and `role="status"` rather than
+ * `role="alert"`.
+ */
+export const SCAN_SUSPEND_COPY: Record<
+  SuspendReason,
+  (context: SuspendContext) => string
+> = Object.freeze({
+  operator_paused: ({ at }) => {
+    const when = positionText(at);
+    const moment = when === null ? "" : ` at ${when}`;
+    return `Paused by you${moment}. Resume when you like — the scan keeps its place.`;
+  },
+  project_changed: () =>
+    "Suspended because the Caido project changed. Nothing was written under the new project, and this scan kept its place in the old one. Resume it from that project.",
+  process_restarted: () =>
+    "Suspended because Caido restarted while it was running. DefMiner never resumes a scan on its own — resume it when you want it to continue.",
+  retention_eviction: ({ rowCap }) => {
+    // THE CAP IS NAMED ONLY WHEN IT IS KNOWN. A fabricated figure on the one
+    // mechanism in this plugin that deletes the operator's history would be
+    // worse than the missing clause, and the sentence reads correctly without
+    // it — the ACTION it asks for does not depend on the number.
+    const cap = rowCap === null ? "row" : `${groupThousands(rowCap)}-row`;
+    return `Suspended: your retention cap was deleting this scan's own results. Rows were evicted by the ${cap} cap while the scan was running, so the backfill was consuming itself. Raise the row cap in Settings, or narrow the filter, then resume.`;
+  },
+});
+
+/**
+ * The honesty note under the eviction suspension.
+ *
+ * THE SWEEP INTERVAL IS IMPORTED, never typed. The sweep runs once per
+ * `RETENTION_SWEEP_EVERY_N` processed artifacts, so eviction is detected a
+ * little after it starts — and saying so is what stops the operator concluding
+ * the counters lied.
+ */
+export const SCAN_EVICTION_SWEEP_NOTE = `Eviction is detected on the retention sweep, which runs every ${String(
+  RETENTION_SWEEP_EVERY_N,
+)} analysed artifacts, so the scan ran a little past the first evicted row.`;
+
+/**
+ * Appended to EVERY suspension reason, and it is the sentence that makes a
+ * suspension cheap.
+ *
+ * `null` when the scan resolved no page — absent, never the epoch. A resume
+ * from nothing continues from now, which the operator can read off the absence
+ * of this clause rather than from a fabricated date.
+ */
+export function resumePositionClause(
+  lastCreatedAt: number | null,
+): string | null {
+  const when = positionText(lastCreatedAt);
+  return when === null ? null : `Resuming continues from ${when}.`;
+}
+
+// ---------------------------------------------------------------------------
+// COPY — THE LIFECYCLE CONTROLS (D-10)
+// ---------------------------------------------------------------------------
+//
+// D-10's ASYMMETRY HAS TO BE VISIBLE, NOT MERELY TRUE. Cancel means PAUSE and
+// keeps the resumable position; discard is a separate act that destroys it. If
+// the two sat adjacent in one tone the operator would hesitate over the safe
+// one and the asymmetry D-10 bought would be invisible. Pause and Resume are
+// surface-toned; Discard is danger-toned, separated by the contract's `sm` gap,
+// and behind its own confirmation.
+
+/** THE WORD `Cancel` IS NEVER USED. D-10 makes this a pause and the label must
+ *  not promise something else — a mis-clicked pause on a multi-hour backfill
+ *  costs nothing, and a label reading "Cancel" would make the operator believe
+ *  it costs everything. */
+export const SCAN_PAUSE_CTA = "Pause scan";
+
+/** Its own in-flight label, never a spinner beside the old one. */
+export const SCAN_PAUSING_LABEL = "Pausing…";
+
+/** THE ONLY WAY BACK. DefMiner never resumes a scan on its own after a restart,
+ *  a project change or an eviction. */
+export const SCAN_RESUME_CTA = "Resume scan";
+
+export const SCAN_RESUMING_LABEL = "Resuming…";
+
+/** The phase's one destructive control, and the fifth member of the reserved
+ *  destructive list (05-UI-SPEC.md amendment A1). */
+export const SCAN_DISCARD_CTA = "Discard scan";
+
+export const SCAN_DISCARDING_LABEL = "Discarding…";
+
+/** The confirmation's title. A QUESTION, so the buttons are answers. */
+export const SCAN_DISCARD_HEADING = "Discard this scan?";
+
+/** The escape, and the DEFAULT FOCUS. The non-action holds focus for the same
+ *  reason the shipped raw-export dialog's escape does: the keyboard path out of
+ *  a destructive dialog must not be the destructive button. */
+export const SCAN_DISCARD_KEEP_LABEL = "Keep it suspended";
+
+/**
+ * What a discard destroys, and — the half that matters more — what it does not.
+ *
+ * THREE PROPERTIES CARRIED DELIBERATELY:
+ *
+ *  1. IT NAMES WHAT SURVIVES. "Discard a scan" reads to most operators as
+ *     "delete what it found", and it does not: the artifacts and observations
+ *     went through the same admission, digest and store path the live hook uses
+ *     and are not touched. Only the walked position is lost.
+ *  2. IT QUANTIFIES THE LOSS with the real position and the real count rather
+ *     than warning vaguely. D-26 makes a suspended scan's row its cursor, and
+ *     that cursor may represent hours of strictly serial backfill.
+ *  3. THE COUNT AGREES WITH ITS NOUN through `counted`, never a parenthesised
+ *     plural suffix.
+ *
+ * The position is ABSENT rather than fabricated for a scan that resolved no
+ * page — there is genuinely nothing to lose in that case and the sentence says
+ * so instead of naming the epoch.
+ */
+export function discardConfirmBody(
+  lastCreatedAt: number | null,
+  seen: number,
+): string {
+  const when = positionText(lastCreatedAt);
+  const reached =
+    when === null
+      ? `It has not reached any traffic yet, over ${counted(seen, "request", "requests")}`
+      : `It walked back to ${when} over ${counted(seen, "request", "requests")}`;
+  return `Discarding deletes this scan's position in your traffic history. ${reached}; a new scan starts again from now and walks the whole way back. Everything it already analysed stays — artifacts and observations are not touched. Only the place it had reached is lost.`;
+}
 
 // ---------------------------------------------------------------------------
 // THE COUNTERS
@@ -428,10 +772,74 @@ function pad2(value: number): string {
  * the status line carries "Starting…" instead.
  */
 export function positionText(lastCreatedAt: number | null): string | null {
-  if (lastCreatedAt === null || !Number.isFinite(lastCreatedAt)) return null;
-  const d = new Date(lastCreatedAt);
+  const day = dateOnlyText(lastCreatedAt);
+  if (day === null) return null;
+  const d = new Date(lastCreatedAt as number);
+  return `${day}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/**
+ * The DATE-ONLY form of the same instant, from the same frozen table.
+ *
+ * TWO PRECISIONS, ONE FORMATTER. The toolbar indicator is a bounded slot inside
+ * a 48px row that does not wrap and cannot truncate, so it renders the date
+ * alone; this tab is the detail surface and renders to the minute, because a
+ * scan covering a single day would leave a date-only line frozen while the
+ * counters moved — which is the stalled appearance the whole readout is built
+ * to prevent. A SECOND formatter for the second precision is how a toolbar and
+ * a tab come to disagree about the same scan, so `positionText` above is built
+ * on this rather than beside it.
+ *
+ * `@internal` for exactly one wave. Plan 06-13 builds the toolbar indicator and
+ * the history list — "reached {D MMM YYYY}" — and is the cross-module consumer
+ * that lets the tag come off. It is exported now rather than later so that plan
+ * consumes this formatter instead of writing a second one, which is the whole
+ * point of declaring it here.
+ *
+ * @internal
+ */
+export function dateOnlyText(at: number | null): string | null {
+  if (at === null || !Number.isFinite(at)) return null;
+  const d = new Date(at);
   const month = MONTHS[d.getMonth()] ?? "";
-  return `${String(d.getDate())} ${month} ${String(d.getFullYear())}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${String(d.getDate())} ${month} ${String(d.getFullYear())}`;
+}
+
+/**
+ * The exact string the backend will send, composed on this side so the operator
+ * can read it BEFORE they press anything.
+ *
+ * SHOWING THE COMPOSITION IS THE WHOLE POINT (D-05, O-06). The promise is that
+ * the operator may narrow the scan and can never widen it; a promise they
+ * cannot check is a promise, and the composed string is a fact. The ORDER is
+ * the mechanism rather than a presentation choice — DefMiner's narrowing comes
+ * FIRST, so a trailing HTTPQL comment in an operator clause fails closed at
+ * `execute()` instead of commenting the narrowing away.
+ *
+ * NO POSITION TERM, and its absence is correct rather than an omission: this
+ * preview is shown only on the start form, where no scan has walked and the
+ * backend's own composer emits no position clause either. Once a scan exists,
+ * the readout renders `composedFilter` off the status payload — the backend's
+ * actual output — rather than recomposing it here.
+ *
+ * AN EMPTY OPERATOR CLAUSE OMITS THE TERM ENTIRELY. `()` is not "no filter", it
+ * is a filter Caido would refuse for a reason the operator did not cause; an
+ * absent clause is a valid, complete input and the common one.
+ *
+ * IT DOES NOT RE-VALIDATE. A typed clause that the backend refuses starts
+ * nothing at all and the surface says so in its own alert — so a preview that
+ * silently dropped an invalid term would show a string that was never going to
+ * be sent, which is the one thing this element must never do. A second copy of
+ * the validator on this side would also be a second answer to a question with
+ * one authority.
+ */
+export function composedPreview(
+  defminerClause: string,
+  operatorClause: string,
+): string {
+  const terms = [`(${defminerClause})`];
+  if (operatorClause !== "") terms.push(`(${operatorClause})`);
+  return terms.join(" AND ");
 }
 
 /**
@@ -456,4 +864,149 @@ export function counterText(value: number | null): string {
  *  categorically. */
 export function counterId(id: ScanCounterField): string {
   return "defminer-scan-" + id;
+}
+
+// ---------------------------------------------------------------------------
+// THE COMPUTED STATUS WORD
+// ---------------------------------------------------------------------------
+//
+// ===========================================================================
+// FOUR PERSISTED STATES, SEVEN PRESENTATION WORDS, AND THE FOUR EXTRA ONES ARE
+// NEVER WRITTEN TO THE DATABASE
+// ===========================================================================
+// `scans.state` holds four values. This surface renders seven words, because a
+// single "Running" label would make three very different situations look
+// identical and only one of them is bad news. The four extra words —
+// `Starting…`, `Scanning`, `Waiting for the analysis queue`, `Not advancing` —
+// are COMPUTED here from the payload and the clock, and nothing writes them
+// anywhere. `SCAN_LIFECYCLE_PRESENTATION` in `scan-lifecycle-presentation.ts`
+// is the map for the PERSISTED half and imports its labels from this file, so
+// the toolbar badge and this line cannot spell one state two ways.
+//
+// The two vocabularies — this one and `analyses.scan_state` — are kept apart by
+// the five mechanisms this file's header names, and the no-prefix guard in
+// `scan-lifecycle-presentation.spec.ts` already walks all seven words below.
+//
+// ===========================================================================
+// THIS FUNCTION IS PURE AND LIVES OUTSIDE THE COMPONENT ON PURPOSE
+// ===========================================================================
+// Its whole content is a PRECEDENCE ORDER, and a precedence order tested
+// through a mounted component is a precedence order tested through seven
+// mounts, seven payload fixtures and seven fake clocks — reporting a rendering
+// failure and an ordering failure with the same message. The clock is a
+// parameter rather than a call to `Date.now()` for the same reason.
+
+/** One of the seven words this surface can put on the status line. A closed
+ *  union over the constants above, so a word that is not one of them cannot be
+ *  returned and a spelling drift is a typecheck failure. */
+export type ScanStatusWord =
+  | typeof SCAN_STATUS_STARTING
+  | typeof SCAN_STATUS_SCANNING
+  | typeof SCAN_STATUS_WAITING_FOR_QUEUE
+  | typeof SCAN_STATUS_NOT_ADVANCING
+  | typeof SCAN_STATUS_SUSPENDED
+  | typeof SCAN_STATUS_FINISHED
+  | typeof SCAN_STATUS_DISCARDED;
+
+/** Everything the status word is a function of, and nothing else. */
+export type ScanStatusInput = {
+  readonly state: ScanLifecycleState;
+  /**
+   * IS THE PRODUCER WITHHOLDING PAGES AT D-01'S WATERMARK?
+   *
+   * READ FROM THE PAYLOAD AND NEVER INFERRED. From outside the backend a scan
+   * holding at the watermark and a scan whose QuickJS thread is blocked are
+   * INDISTINGUISHABLE — both show counters that stop advancing — so there is no
+   * quantity this function could derive it from. Without the field the
+   * backpressure word can never render and every legitimate hold falls through
+   * to the stall marker.
+   */
+  readonly heldAtWatermark: boolean;
+  /** How many pages have resolved. Zero means the first query is still in
+   *  flight, which is not the same claim as "nothing is happening". */
+  readonly pagesWalked: number;
+  /**
+   * When ANY counter last changed, or `null` when this reader has not yet seen
+   * one change.
+   *
+   * ANY COUNTER, AND NEVER THE POSITION DATE. A scan covering a single day
+   * would leave a date-only signal frozen while the counters moved, so a stall
+   * marker derived from the date would fire on a perfectly healthy walk. `null`
+   * is "not yet observed", which is not "has not moved for thirty seconds" —
+   * conflating them puts the stall marker on screen one paint after mount.
+   */
+  readonly lastCounterChangeAt: number | null;
+  /** The clock, passed in rather than read, so the precedence is testable
+   *  without a fake timer. */
+  readonly now: number;
+};
+
+/**
+ * The status line's word.
+ *
+ * ===========================================================================
+ * THE PRECEDENCE IS LOAD-BEARING, IN THIS ORDER, AND EACH STEP HAS A REASON
+ * ===========================================================================
+ *  1. NOT `running` — the persisted state answers for itself. `completed`
+ *     renders **Finished**, never "Completed": the analysis vocabulary already
+ *     ships "Complete" and a one-character difference between two states that
+ *     mean opposite things is not a difference.
+ *
+ *  2. HELD AT THE WATERMARK — **before** the starting word and **before** the
+ *     stall marker. Before the stall marker because that is the entire reason
+ *     `heldAtWatermark` is a required field: the hold is a HEALTHY state and
+ *     the MOST COMMON one on a long backfill, and an operator who learns to
+ *     ignore a stall marker is worse off than one who never had it — the same
+ *     argument PROJECT.md makes about false positives, applied to a status
+ *     line. Before the starting word because a scan that meets a full queue
+ *     immediately would otherwise read "Starting…" for as long as the hold
+ *     lasts, which says nothing about the one thing that is actually happening.
+ *
+ *  3. NO PAGE RESOLVED — "Starting…". Nothing is wrong; the first query is in
+ *     flight, and there is no position to render yet either.
+ *
+ *  4. NOTHING MOVED PAST `ARTIFACT_DEADLINE_MS` — the stall marker, and the
+ *     only one of the four running words that is bad news. STRICTLY PAST, not
+ *     at: the deadline is the shipped ceiling on walking any single artifact,
+ *     so the boundary belongs to the healthy side.
+ *
+ *  5. OTHERWISE — "Scanning".
+ */
+export function scanStatusWord(input: ScanStatusInput): ScanStatusWord {
+  if (input.state === "suspended") return SCAN_STATUS_SUSPENDED;
+  if (input.state === "completed") return SCAN_STATUS_FINISHED;
+  if (input.state === "discarded") return SCAN_STATUS_DISCARDED;
+
+  if (input.heldAtWatermark) return SCAN_STATUS_WAITING_FOR_QUEUE;
+  if (input.pagesWalked === 0) return SCAN_STATUS_STARTING;
+
+  const { lastCounterChangeAt, now } = input;
+  if (
+    lastCounterChangeAt !== null &&
+    now - lastCounterChangeAt > ARTIFACT_DEADLINE_MS
+  ) {
+    return SCAN_STATUS_NOT_ADVANCING;
+  }
+  return SCAN_STATUS_SCANNING;
+}
+
+/**
+ * The counter tuple the stall marker watches, as one comparable string.
+ *
+ * EVERY COUNTER, INCLUDING THE ONE THAT IS `null`. The marker's rule is "ANY
+ * counter moved", and a tuple that omitted a field would leave a scan whose
+ * only moving number was the omitted one reading as stalled. Built as a string
+ * rather than compared field by field so the caller holds ONE previous value
+ * instead of seven, and so adding a counter to the strip is one edit here.
+ */
+export function counterFingerprint(payload: ScanStatusPayload): string {
+  return [
+    payload.pagesWalked,
+    payload.seen,
+    payload.admitted,
+    payload.skippedDone,
+    payload.rejected,
+    payload.queued,
+    payload.analysed,
+  ].join("|");
 }

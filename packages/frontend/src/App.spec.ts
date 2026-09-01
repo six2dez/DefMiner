@@ -34,6 +34,7 @@ import type {
   ObservationRow,
   PanelAnalysis,
   RetryOutcome,
+  ScanCommandOutcome,
   SettingRow,
   StartScanOutcome,
   StorageFootprint,
@@ -296,6 +297,38 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         refusing
           ? refused<ScanStatusPayload | null>()
           : Promise.resolve(options.scan ?? null),
+      // The three lifecycle commands. `refused` on a refusing build, exactly
+      // like every other endpoint that does not exist there.
+      pauseScan: () =>
+        refusing
+          ? refused<ScanCommandOutcome>()
+          : Promise.resolve<ScanCommandOutcome>({
+              ok: true,
+              changed: true,
+              state: "suspended",
+              suspendReason: "operator_paused",
+              reason: null,
+            }),
+      resumeScan: () =>
+        refusing
+          ? refused<ScanCommandOutcome>()
+          : Promise.resolve<ScanCommandOutcome>({
+              ok: true,
+              changed: true,
+              state: "running",
+              suspendReason: null,
+              reason: null,
+            }),
+      discardScan: () =>
+        refusing
+          ? refused<ScanCommandOutcome>()
+          : Promise.resolve<ScanCommandOutcome>({
+              ok: true,
+              changed: true,
+              state: "discarded",
+              suspendReason: null,
+              reason: null,
+            }),
       // ANSWERS EVEN WHEN NOTHING ELSE DOES. That is not a convenience of the
       // stub, it is the shape of a refusing build: `init()` registers only
       // `getStatus` and `getCompat` on all three refusal paths.

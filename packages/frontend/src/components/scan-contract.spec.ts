@@ -161,23 +161,22 @@ describe("the DefMiner-authored date formatter", () => {
     // literally by the cases above — so the assertion that matters is that the
     // module cannot produce one, which is a property of its SOURCE.
     const source = await import("node:fs").then((fs) =>
-      fs.readFileSync(
-        new URL("./scan-contract.ts", import.meta.url),
-        "utf8",
-      ),
+      fs.readFileSync(new URL("./scan-contract.ts", import.meta.url), "utf8"),
     );
-    expect(source.includes("toLocaleString")).toBe(false);
-    expect(source.includes("toLocaleDateString")).toBe(false);
-    expect(source.includes("toLocaleTimeString")).toBe(false);
-    expect(source.includes("Intl.DateTimeFormat")).toBe(false);
+    // THE CALL, NOT THE WORD. The module NAMES `toLocaleString` in its own
+    // argument for why it does not use one — an assertion over the bare word
+    // would fail on the sentence that explains the rule, and the usual repair
+    // for that is deleting the explanation. `.toLocale…(` is a member call and
+    // cannot appear in prose.
+    expect(source.includes(".toLocaleString(")).toBe(false);
+    expect(source.includes(".toLocaleDateString(")).toBe(false);
+    expect(source.includes(".toLocaleTimeString(")).toBe(false);
+    expect(source.includes("Intl.DateTimeFormat(")).toBe(false);
   });
 
   it("declares the stall threshold nowhere — it imports it", async () => {
     const source = await import("node:fs").then((fs) =>
-      fs.readFileSync(
-        new URL("./scan-contract.ts", import.meta.url),
-        "utf8",
-      ),
+      fs.readFileSync(new URL("./scan-contract.ts", import.meta.url), "utf8"),
     );
     expect(source).toContain("ARTIFACT_DEADLINE_MS");
     // The shipped ceiling is 30,000 ms. A local literal for it — in any of the
