@@ -249,13 +249,140 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** The XSSI guard ECMA-426 permits a server to prepend, through end-of-line. */
+const XSSI_PREFIX = ")]}'";
+
+/**
+ * Strip a leading `)]}'` line, by `startsWith` and `indexOf`. Never a pattern.
+ *
+ * ECMA-426 attaches this to HTTP(S) delivery, which D-01 excludes outright — so
+ * it SHOULD NEVER OCCUR inside a `data:` URI. It is handled anyway, because
+ * "should never occur" is not a property of target-controlled input, and the
+ * cost of handling it is one `startsWith` against a four-character literal.
+ *
+ * A document that is nothing but the guard line, with no newline after it,
+ * strips to the empty string and is then refused `malformed_json` — which is
+ * what it is.
+ */
+function stripXssiPrefix(json: string): string {
+  if (!json.startsWith(XSSI_PREFIX)) return json;
+  const newline = json.indexOf("\n");
+  return newline < 0 ? "" : json.slice(newline + 1);
+}
+
+/**
+ * Which reason a thrown value maps to. DefMiner's word, never the exception's.
+ *
+ * `RangeError` means the parser ran out of stack, which for target-controlled
+ * JSON means a nesting depth chosen to exhaust it (T-07-03). Everything else a
+ * `JSON.parse` can throw is a badly-formed document.
+ *
+ * SPIKE-06 measured the QuickJS failure directly: 710 nested brackets parsed and
+ * 718 did not, the `failure_class` was `catchable-stack-throw` at EVERY failing
+ * depth, and the host survived all 18 probes. Catch-and-degrade is therefore
+ * available and a pre-parse depth gate is not required — but the catch has to
+ * EXIST, and the mapping has to be executed by something rather than described.
+ *
+ * IT IS EXPORTED SO IT CAN BE, and the reason is worth stating: V8's
+ * `JSON.parse` is ITERATIVE and does not throw on nesting at any depth, so no
+ * document can drive this branch from the front door on Node. Calling the
+ * classifier directly with a real `RangeError` is the only honest way to run a
+ * branch whose trigger the test runtime cannot produce.
+ */
+export function reasonForParseError(error: unknown): MapParseReason {
+  return error instanceof RangeError ? "too_deep" : "malformed_json";
+}
+
+/** The rows collected so far, across one map or across one level of sections. */
+type Accumulator = {
+  readonly recovered: RecoveredSource[];
+  readonly skipped: SkippedSource[];
+  /** How many `sources` entries the document DECLARED, summed across sections. */
+  declared: number;
+  /** The next aggregate index to hand out. Equals `i` for a non-sectioned map. */
+  next: number;
+};
+
+/**
+ * Absorb one map's `sources` / `sourcesContent` pair into `acc`.
+ *
+ * ITERATES `sources` AND GUARDS ON THE CONTENT ARRAY'S LENGTH. Never the other
+ * way round: `sourcesContent` may legally be SHORTER than `sources` — the spec
+ * conditions on `sourcesContentCount > index` — so a loop over the content array
+ * that indexed into `sources` would read `undefined` labels for a map that is
+ * entirely well-formed.
+ *
+ * @returns a refusal reason, or null to continue.
+ */
+function absorb(
+  map: Record<string, unknown>,
+  acc: Accumulator,
+  limits: ParseLimits,
+): MapParseReason | null {
+  const sources = map["sources"];
+  // A section whose map declares no sources contributes nothing and is not an
+  // error: the aggregate is what matters, and one empty section does not make a
+  // bundle unreadable.
+  if (!Array.isArray(sources)) return null;
+
+  acc.declared += sources.length;
+  // ON THE DECLARED COUNT, BEFORE ANY ENTRY IS VISITED. The
+  // `million-tiny-sources` fixture is a legal map with a million one-character
+  // labels; walking it to discover it is too big is the cost the bound exists to
+  // avoid. Summed across sections so an index map cannot get under the bound by
+  // splitting.
+  if (acc.declared > limits.maxSourceRows) return "too_many_sources";
+
+  const contents = map["sourcesContent"];
+  const hasContents = Array.isArray(contents);
+
+  for (let i = 0; i < sources.length; i += 1) {
+    const sourcesIndex = acc.next;
+    acc.next += 1;
+    const content: unknown = hasContents ? contents[i] : undefined;
+    if (typeof content !== "string") {
+      // `sourcesContent` absent, SHORT, or null at this index — three different
+      // documents, one outcome per index, and NONE of them a failure.
+      acc.skipped.push({ sourcesIndex, reason: "empty" });
+      continue;
+    }
+    const label: unknown = sources[i];
+    acc.recovered.push({
+      sourcesIndex,
+      // A null label is a NULL, never the string "null". Anything that is not a
+      // string is recorded the same way: the content is still recoverable and the
+      // label is simply not a name.
+      sourcesVerbatim: typeof label === "string" ? label : null,
+      content,
+    });
+  }
+  return null;
+}
+
 /**
  * Reconstruct the original sources a map document carries.
  *
  * ZERO RECOVERED SOURCES IS A SUCCESS, NOT A FAILURE. `sourcesContent` is
  * OPTIONAL in ECMA-426, so a map that parses and yields nothing has done
- * everything it can and the operator must be told that rather than shown an
- * error (Pitfall 3, UI-09).
+ * everything it can, and the operator must be told that rather than shown an
+ * error (Pitfall 3, UI-09). The refusal vocabulary and the empty result list are
+ * therefore different outcomes and `parse.spec.ts` asserts they stay so.
+ *
+ * `sections` IS READ BEFORE `sources`. An index map has no top-level `sources`
+ * at all, so reading `map.sources` first gets `undefined` and reports "no
+ * sources" for a map that has hundreds (Pitfall 5).
+ *
+ * THE RECURSION BOUND IS 1, BY SPECIFICATION AND NOT BY BUDGET. ECMA-426 defines
+ * a section's `map` as a complete source map and index maps DO NOT NEST; the
+ * current spec has only an embedded `map` field with no `url` alternative, so
+ * there is no fetch to refuse and no external reference to resolve. Exactly one
+ * level is iterated and a nested `sections` is refused with its own reason — and
+ * the fixture proves the parser ENFORCES that rather than trusting the input.
+ *
+ * `ignoreList` AND ITS LEGACY SPELLING `x_google_ignoreList` ARE IGNORED. Not
+ * used, not validated, not failed on. Said out loud because "ignored" and
+ * "unimplemented" look identical from outside, and the field is newer than most
+ * of this corpus.
  */
 export function parseSourceMap(
   json: string,
@@ -263,42 +390,58 @@ export function parseSourceMap(
 ): MapParseResult {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(json);
-  } catch {
-    return { ok: false, reason: "malformed_json" };
+    // The catch is scoped to the smallest expression that can throw. A `RangeError`
+    // here is a nesting depth chosen to exhaust the stack, and the host survives it.
+    parsed = JSON.parse(stripXssiPrefix(json));
+  } catch (error) {
+    return { ok: false, reason: reasonForParseError(error) };
   }
   if (!isRecord(parsed)) return { ok: false, reason: "not_a_map" };
 
-  const sources = parsed["sources"];
-  if (!Array.isArray(sources)) return { ok: false, reason: "not_a_map" };
-  if (sources.length > limits.maxSourceRows) {
-    return { ok: false, reason: "too_many_sources" };
-  }
+  const acc: Accumulator = { recovered: [], skipped: [], declared: 0, next: 0 };
 
-  const contents = parsed["sourcesContent"];
-  const hasContents = Array.isArray(contents);
-  const recovered: RecoveredSource[] = [];
-  const skipped: SkippedSource[] = [];
-
-  for (let i = 0; i < sources.length; i += 1) {
-    const content: unknown = hasContents ? contents[i] : undefined;
-    if (typeof content !== "string") {
-      skipped.push({ sourcesIndex: i, reason: "empty" });
-      continue;
+  const sections = parsed["sections"];
+  if (Array.isArray(sections)) {
+    for (const section of sections) {
+      if (!isRecord(section)) continue;
+      const map = section["map"];
+      // A section whose `map` is null, absent or not an object is SKIPPED.
+      // `section.map.sources` would throw on a document that is otherwise
+      // well-formed JSON, so the guard belongs on the member and not on the parse.
+      if (!isRecord(map)) continue;
+      // FAIL-CLOSED ON PRESENCE, not on shape. A `sections` member inside a
+      // section's map is not something a legitimate emitter writes in any
+      // spelling, and the bound is a specification fact rather than a budget.
+      if (map["sections"] !== undefined) {
+        return { ok: false, reason: "nested_sections" };
+      }
+      const refusal = absorb(map, acc, limits);
+      if (refusal !== null) return { ok: false, reason: refusal };
     }
-    const label: unknown = sources[i];
-    recovered.push({
-      sourcesIndex: i,
-      sourcesVerbatim: typeof label === "string" ? label : null,
-      content,
-    });
+    // NOT SORTED. The spec says sections "shall be sorted by starting position
+    // and the represented sections shall not overlap" — and a SHALL is what a
+    // hostile map violates. The order is INPUT: document order is preserved, so
+    // the outcome is defined rather than merely non-fatal.
+    return {
+      ok: true,
+      recovered: acc.recovered,
+      skipped: acc.skipped,
+      declaredSources: acc.declared,
+      sectioned: true,
+    };
   }
+
+  if (!Array.isArray(parsed["sources"])) {
+    return { ok: false, reason: "not_a_map" };
+  }
+  const refusal = absorb(parsed, acc, limits);
+  if (refusal !== null) return { ok: false, reason: refusal };
 
   return {
     ok: true,
-    recovered,
-    skipped,
-    declaredSources: sources.length,
+    recovered: acc.recovered,
+    skipped: acc.skipped,
+    declaredSources: acc.declared,
     sectioned: false,
   };
 }

@@ -378,13 +378,12 @@ const CASES: Readonly<Record<string, CaseAssertion>> = {
     // cannot execute it; the mapping itself is executed directly against a real
     // RangeError below, which is the only honest way to prove a branch whose
     // trigger this runtime does not produce.
-    let result: MapParseResult | null = null;
-    expect(() => {
-      result = parse(value);
-    }).not.toThrow();
-    expect(result).not.toBeNull();
-    if (result === null) return;
-    const settled: MapParseResult = result;
+    // Called through a thunk rather than assigned inside the `expect` callback:
+    // TypeScript's control-flow analysis cannot see an assignment made inside a
+    // closure, and narrows the binding to `never` afterwards.
+    const attempt = (): MapParseResult => parse(value);
+    expect(attempt).not.toThrow();
+    const settled = attempt();
     if (settled.ok) {
       expect(recoveredOf(settled)).toHaveLength(1);
     } else {
