@@ -580,13 +580,13 @@ describe("SCAN_KIND_CLAUSE — DefMiner's own narrowing, readable by both packag
     // second construction here would be a second producer of HTTPQL, which is
     // exactly what `scan/filter.ts`'s header prohibits.
     for (const term of [
-      'req.path.cont:".js"',
-      'req.path.cont:".mjs"',
-      'resp.raw.cont:"javascript"',
-      'resp.raw.cont:"ecmascript"',
-      'resp.raw.cont:"jscript"',
-      'resp.raw.cont:"livescript"',
-      'resp.raw.cont:"text/js"',
+      'req.path.like:"%.js%"',
+      'req.path.like:"%.mjs%"',
+      'resp.raw.like:"%javascript%"',
+      'resp.raw.like:"%ecmascript%"',
+      'resp.raw.like:"%jscript%"',
+      'resp.raw.like:"%livescript%"',
+      'resp.raw.like:"%text/js%"',
     ]) {
       expect(SCAN_KIND_CLAUSE, `${term} is missing`).toContain(term);
     }
@@ -603,6 +603,18 @@ describe("SCAN_KIND_CLAUSE — DefMiner's own narrowing, readable by both packag
     // it — the push-down would then be a strict SUBSET of the admission gate,
     // and the retroactive scan would silently never see that artifact.
     expect(SCAN_KIND_CLAUSE).not.toContain("req.ext.eq");
+  });
+
+  it("uses NO `cont` term at all — measured case SENSITIVE on 0.58.2", () => {
+    // The HTTPQL reference states `cont` is case insensitive. Plan 06-11 asked
+    // Caido instead of believing it: with a `cont` clause,
+    // `sdk.requests.matches()` returned FALSE for `/F02-UPPER.JS` and for
+    // `Content-Type: TEXT/JAVASCRIPT`, both of which `isScriptish` accepts.
+    // The evidence is results/pushdown-superset.json, and
+    // `tests/phase6-pushdown.spec.ts` is what keeps this honest going forward.
+    // This assertion is the cheap tripwire that stops `cont` coming back on the
+    // strength of the documentation.
+    expect(SCAN_KIND_CLAUSE).not.toContain(".cont:");
   });
 
   it("carries no HTTPQL comment token, in either grammar", () => {

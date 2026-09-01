@@ -129,16 +129,15 @@ import { SCAN_KIND_CLAUSE } from "@defminer/engine/contract";
 //
 //   BRANCH 1 — the URL suffix, on a fragment- and query-stripped, LOWERCASED
 //   URL: `.js` or `.mjs`.
-//     req.path.cont:".js"   covers  .js
-//     req.path.cont:".mjs"  covers  .mjs
+//     req.path.like:"%.js%"   covers  .js
+//     req.path.like:"%.mjs%"  covers  .mjs
 //   TWO terms and not one, because `.mjs` does NOT contain `.js` — the
 //   characters are `.`,`m`,`j`,`s` and the substring needs `.` immediately
 //   followed by `j`. 06-RESEARCH § O-03 records catching that error rather than
 //   silently correcting it, and `filter.spec.ts` asserts the premise directly.
-//   `cont` is documented CASE INSENSITIVE, which is what makes these terms cover
-//   the lowercasing `isScriptish` does. `req.path` excludes the query string
-//   (`req.query` is a separate field), matching `isScriptish`'s query-stripping.
-//   It over-matches `/x.jsonp` — harmless, and in the SAFE direction.
+//   `req.path` excludes the query string (`req.query` is a separate field),
+//   matching `isScriptish`'s query-stripping — MEASURED, see below. It
+//   over-matches `/x.jsonp` — harmless, and in the SAFE direction.
 //
 //   BRANCH 2 — the MIME essence, parameters stripped and lowercased, exact-
 //   matched against seventeen values. There is NO `resp.content_type` field in
@@ -159,6 +158,10 @@ import { SCAN_KIND_CLAUSE } from "@defminer/engine/contract";
 //                        other four reach
 //                       10 + 4 + 1 + 1 + 1 = 17.
 //
+//   Each is spelled `resp.raw.like:"%<needle>%"`. The `%` are LIKE wildcards and
+//   no needle contains a `%` or `_` of its own, so no escape clause is needed —
+//   `filter.spec.ts` asserts that premise rather than assuming it.
+//
 //   `resp.raw` matches the BODY as well as the headers, so an HTML page
 //   containing the word "javascript" matches too. That over-matches in the SAFE
 //   direction — the push-down is an optimisation and `admit()` still runs on
@@ -172,17 +175,54 @@ import { SCAN_KIND_CLAUSE } from "@defminer/engine/contract";
 // an invisible one. No `eq` operator appears on a path or extension field in
 // this clause, and `filter.spec.ts` asserts that mechanically.
 //
+// ===========================================================================
+// AND WHY `cont` IS EXCLUDED TOO — THE PART THAT HAD TO BE MEASURED
+// ===========================================================================
+// `cont` was this clause's original operator, on the reference's own word:
+//
+//   "cont / ncont — Case insensitive."
+//   [https://docs.caido.io/app/reference/httpql]
+//
+// IT IS NOT, ON CAIDO 0.58.2. Plan 06-11 asked Caido rather than the docs, by
+// handing the clause to `sdk.requests.matches()` inside a plugin against a
+// captured fixture corpus. With the `cont` clause the evaluator returned FALSE
+// for a response served at `/F02-UPPER.JS` and for one served
+// `Content-Type: TEXT/JAVASCRIPT` — both of which `isScriptish` ACCEPTS. The
+// same probe evaluated the terms side by side: `req.path.cont:".js"` and
+// `req.path.cont:".JS"` returned DISJOINT match sets, which settles it.
+//
+// So the clause is on `like` — SQLite LIKE, whose ASCII case folding the same
+// probe measured directly: `req.path.like:"%.js%"` and `req.path.like:"%.JS%"`
+// returned the IDENTICAL match set. ASCII folding is a COMPLETE cover of
+// `toLowerCase()` for these seven needles, because every character in `.js`,
+// `.mjs` and the seventeen essences is ASCII and no non-ASCII character
+// lowercases INTO one of them; a header spelled `TEXT/JAVASCRİPT` folds to
+// `text/javascri̇pt`, which `isScriptish` rejects too, so nothing is owed there.
+//
+// THE RECORD: `.planning/phases/06-retroactive-scan-deployment-reality/results/
+// pushdown-superset.json`. THE STANDING GATE: `tests/phase6-pushdown.spec.ts`.
+//
 // THE 2xx BOUND is not part of the kind axis and is safe for a separate reason:
 // `admit()` rejects anything outside 200–299 on its FIRST axis, before the kind
 // axis is reached, so filtering to 2xx cannot drop anything `admit()` would
 // accept. 304s are correctly excluded — `admit()` turns them away under
 // `revalidation`, also before the kind axis.
 //
-// ALL OF THIS IS AN ARGUMENT, NOT A PROOF. Whether Caido's `req.path` strips the
-// query the way `isScriptish` does, and whether `cont` is byte-wise or
-// Unicode-case-folded, are UNMEASURED (06-RESEARCH § O-03). Plan 06-11's fixture
-// suite over `sdk.requests.matches()` is what proves the superset relation. This
-// comment is what tells 06-11 what it is supposed to be proving.
+// THIS WAS AN ARGUMENT AND IT IS NOW A MEASUREMENT. Plan 06-11's fixture suite
+// over `sdk.requests.matches()` ran it, and two of the three things this comment
+// used to assert on the documentation's word turned out to be false — which is
+// precisely why D-06 required the suite instead of the comment. What is now
+// MEASURED on 0.58.2, per fixture, in
+// `results/pushdown-superset.json`:
+//   * `req.path` DOES exclude the query string — `/f05-query.js?v=2` matched on
+//     the path term alone.
+//   * A fragment never crosses the wire at all, so no term is owed one.
+//   * `cont` is CASE SENSITIVE, contradicting the reference. `like` folds ASCII
+//     case, as SQLite LIKE does. Both directions measured with paired terms.
+// `tests/phase6-pushdown.spec.ts` re-derives the superset relation on every
+// `pnpm test` by importing THIS clause and the shipped `isScriptish` and joining
+// them to the recorded verdicts by fixture id. A term that stops covering the
+// kind axis is a red test naming the fixture and its URL.
 
 /**
  * The longest operator clause DefMiner will compose.

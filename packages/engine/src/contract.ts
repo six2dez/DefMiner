@@ -210,15 +210,40 @@ export type SuspendReason = (typeof SUSPEND_REASONS)[number];
  * an operator's input, and nothing outside that module may.
  *
  * ===========================================================================
- * WHY THESE SEVEN TERMS AND NOT `req.ext.eq`
+ * WHY THESE SEVEN TERMS ARE `like` AND NOT `cont`, AND NEVER `req.ext.eq`
  * ===========================================================================
  * The push-down must be a SUPERSET of `admit()`'s kind axis or the retroactive
  * scan silently never sees an artifact the live path would have taken. Two
- * substring terms cover the extensions and five cover the media-type essences
- * `isScriptish` accepts, and all of them use the case-INSENSITIVE `cont`
- * family. `req.ext.eq` is documented case sensitive and would miss `/APP.JS`,
- * which `isScriptish` accepts because it lowercases before comparing a suffix —
- * so the clause would be a strict subset and the miss would be invisible.
+ * terms cover the extensions and five cover the media-type essences
+ * `isScriptish` accepts, and `isScriptish` LOWERCASES both the URL and the MIME
+ * essence before comparing — so every one of the seven has to fold case or the
+ * relation is a strict subset and the miss is invisible.
+ *
+ * `req.ext.eq` was never a candidate: the reference documents `eq` as case
+ * sensitive outright, so it would miss `/APP.JS`.
+ *
+ * `cont` WAS the candidate, and it was WRONG. The HTTPQL reference states
+ * plainly that `cont`/`ncont` are case INSENSITIVE. On Caido 0.58.2 they are
+ * measurably case SENSITIVE, and plan 06-11 found it the only way such a thing
+ * can be found — by asking Caido. `.planning/phases/06-retroactive-scan-
+ * deployment-reality/results/pushdown-superset.json` records the run: with the
+ * `cont` clause, `sdk.requests.matches()` returned FALSE for a fixture served at
+ * `/F02-UPPER.JS` and for one served `Content-Type: TEXT/JAVASCRIPT`, both of
+ * which `isScriptish` accepts. Two silent holes, in a clause whose own comment
+ * asserted they could not exist.
+ *
+ * `like` is SQLite LIKE, whose default ASCII case folding is what the same probe
+ * measured: `req.path.like:"%.js%"` and `req.path.like:"%.JS%"` returned the
+ * IDENTICAL match set, including `/F02-UPPER.JS`. ASCII folding is a COMPLETE
+ * cover of `String.prototype.toLowerCase` for these seven terms, and that is a
+ * derivation rather than a hope: the only characters that can appear in `.js`,
+ * `.mjs` or any of the seventeen essences are ASCII, and no non-ASCII character
+ * lowercases INTO an ASCII `j`, `s`, `m` or any letter of those media types.
+ * A header spelled `TEXT/JAVASCRİPT` folds to `text/javascri̇pt`, which
+ * `isScriptish` also rejects — so there is no obligation to match it either.
+ *
+ * The `%` on both ends is a LIKE wildcard, not part of the needle. No `%` or `_`
+ * appears inside any needle, so nothing here needs a LIKE escape clause.
  *
  * The 2xx bound mirrors `admit()`'s first axis and is worth more here than
  * there: on this runtime every returned page transfers full response bodies,
@@ -230,10 +255,10 @@ export type SuspendReason = (typeof SUSPEND_REASONS)[number];
  * `contract.spec.ts` asserts both are absent.
  */
 export const SCAN_KIND_CLAUSE =
-  '(req.path.cont:".js" OR req.path.cont:".mjs" ' +
-  'OR resp.raw.cont:"javascript" OR resp.raw.cont:"ecmascript" ' +
-  'OR resp.raw.cont:"jscript" OR resp.raw.cont:"livescript" ' +
-  'OR resp.raw.cont:"text/js") ' +
+  '(req.path.like:"%.js%" OR req.path.like:"%.mjs%" ' +
+  'OR resp.raw.like:"%javascript%" OR resp.raw.like:"%ecmascript%" ' +
+  'OR resp.raw.like:"%jscript%" OR resp.raw.like:"%livescript%" ' +
+  'OR resp.raw.like:"%text/js%") ' +
   "AND resp.code.gte:200 AND resp.code.lt:300";
 
 /**

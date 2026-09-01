@@ -390,7 +390,7 @@ describe("composeScanFilter — the ONE producer of a scan filter string", () =>
   });
 });
 
-describe("the kind clause stays on the case-INSENSITIVE cont family", () => {
+describe("the kind clause stays on the case-FOLDING like family", () => {
   it("contains no `req.ext.eq` and no eq operator on a path or extension field", () => {
     // `req.ext.eq` is documented CASE SENSITIVE while `isScriptish` lowercases
     // before its suffix test, so that one term would miss `/APP.JS` — which
@@ -400,9 +400,21 @@ describe("the kind clause stays on the case-INSENSITIVE cont family", () => {
     expect(SCAN_KIND_CLAUSE).not.toContain(".eq:");
   });
 
+  it("uses no `cont` term — the reference says insensitive, 0.58.2 is not", () => {
+    // MEASURED, not read. Plan 06-11 put the `cont` clause in front of Caido's
+    // own evaluator through `sdk.requests.matches()` and it returned FALSE for
+    // `/F02-UPPER.JS` and for `Content-Type: TEXT/JAVASCRIPT` — two responses
+    // `isScriptish` accepts. `.planning/phases/06-retroactive-scan-deployment-
+    // reality/results/pushdown-superset.json` is the transcript, and
+    // `tests/phase6-pushdown.spec.ts` is the standing gate. This line is the
+    // in-package tripwire that stops `cont` returning on the documentation's
+    // word.
+    expect(SCAN_KIND_CLAUSE).not.toContain(".cont:");
+  });
+
   it("covers BOTH extensions, because `.mjs` does not contain `.js`", () => {
-    expect(SCAN_KIND_CLAUSE).toContain('req.path.cont:".js"');
-    expect(SCAN_KIND_CLAUSE).toContain('req.path.cont:".mjs"');
+    expect(SCAN_KIND_CLAUSE).toContain('req.path.like:"%.js%"');
+    expect(SCAN_KIND_CLAUSE).toContain('req.path.like:"%.mjs%"');
     expect(".mjs".includes(".js"), "the premise of the second term").toBe(
       false,
     );
@@ -416,7 +428,24 @@ describe("the kind clause stays on the case-INSENSITIVE cont family", () => {
       "livescript",
       "text/js",
     ]) {
-      expect(SCAN_KIND_CLAUSE).toContain(`resp.raw.cont:"${substring}"`);
+      expect(SCAN_KIND_CLAUSE).toContain(`resp.raw.like:"%${substring}%"`);
+    }
+  });
+
+  it("needs no LIKE escape clause — no needle contains `%` or `_`", () => {
+    // `%` and `_` are LIKE wildcards. Every one that appears in the clause is a
+    // wildcard DefMiner put there; a needle containing either would silently
+    // widen the term, so the premise is asserted rather than assumed.
+    for (const needle of [
+      ".js",
+      ".mjs",
+      "javascript",
+      "ecmascript",
+      "jscript",
+      "livescript",
+      "text/js",
+    ]) {
+      expect(needle.includes("%") || needle.includes("_")).toBe(false);
     }
   });
 
