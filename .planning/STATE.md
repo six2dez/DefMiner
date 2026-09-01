@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Phase 07 UI-SPEC approved
-last_updated: "2026-09-01T19:39:29.804Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-09-01T21:00:03.924Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 6874b69fa74644d3045fd811b18a16ab7372f993
+state_head: 7ca7ce58c2d9bd6400de73fa081d52847e0bcfc7
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 72
+  completed_plans: 73
 ---
 
 # Project State
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 1 of 10
-Status: Executing Phase 07
+Plan: 2 of 10
+Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
@@ -331,6 +331,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P11 | 47 min | 3 tasks | 13 files |
 | Phase 06 P12 | 46 min | 3 tasks | 11 files |
 | Phase 06 P13 | 32 min | 3 tasks | 10 files |
+| Phase 07 P01 | 46 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -649,6 +650,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: [Phase 06/06-13]: The scan history is an AUTHORED LIST and never calls `assertColumnContract` — the assertion binds exactly one target-controlled column and this list has ZERO — Mechanical, not aesthetic. Every column — lifecycle state, counters, position date, the operator's own clause — is DefMiner- or operator-authored, so the shipped contract is literally incapable of expressing this table. Marking a column targetControlled to satisfy the assertion would be lying to a gate AND would make the gate's own thrown message false for the next person reading it looking for the column carrying a host's bytes. Amendment A4 records the scoping in 05-UI-SPEC.md, applied in the same commit as the list, and ScanHistoryList.spec.ts asserts it mechanically rather than by comment.
 - [Phase 06]: [Phase 06/06-13]: The 50-row history bound is the number the FRONTEND SENDS, not a mirror of the backend's SCAN_LIST_DEFAULT_LIMIT — The plan preferred the backend returning the bound it applied; it does not, and adding that would have changed api/spec.ts, index.ts and index.spec.ts, none of them in files_modified. Sending the limit achieves the same non-drift property inside scope — one declaration, the backend clamps into [1, SCAN_LIST_DEFAULT_LIMIT] so a caller may only LOWER, and the surface knows exactly which bound was applied and says so in words. The NUMBER is recorded in scan-contract.ts as an explicit assumption (U6-1, mirroring P5-D20); the SHAPE is binding in four parts: a stated bound, enforced at read, suspended rows exempt, truncation said in words.
 - [Phase 06]: [Phase 06/06-13]: The toolbar indicator opens NO subscription and NO timer; it re-reads on mount and on every tab change — A second onEvent subscription owned by the shell is research P-04's leak shape opened again, for an element that renders no motion — and in App.spec.ts it broke two shipped coalescer cases outright, because captureHandler captures the last-registered summary handler. The indicator's job is that a running or suspended scan is VISIBLE AND REACHABLE from every tab, not that its counter ticks where no eye is; the Scan tab, one click away through this very element, is the live surface. Re-reading on tab change is the moment the operator's attention actually crosses the toolbar. No timer: a poll on a surface with no denominator is the fabricated-motion shape D-14 refused.
+- [Phase 07]: MAP_MAX_BYTES = 2,621,440 — the measured stall bound (2,954,422) rounded DOWN to the nearest 512 KiB boundary, and the bound is BINDING at 2.3x below the structural ceiling. — The bound is a least-squares fit over four timing points that moved 2,752,788 -> 2,954,422 between two runs of the same ladder. A constant above the fit sits inside the measurement's own noise on the wrong side; rounding down puts it outside on the safe side. The rounding DIRECTION is part of the derivation, written into the doc comment, not a formatting choice. Binding means the phase refuses a minority of the inline maps admit() would admit, and the UI must SAY SO (UI-09) rather than appear to have found nothing.
+- [Phase 07]: Assumption A2 does NOT hold cleanly: announce_scan is the MOST expensive of the five probe operations at 3.80 ms/MB, above json_parse's 2.91. — RESEARCH called the lastIndexOf announcement scan 'UNMEASURED ANYWHERE' and put it in the operation list to settle whether it was cheap. It is not — it alone is 43% of the inline path. RESEARCH named the mitigation in advance (a 16-byte lastIndexOf('sourceMappingURL') prefilter before the two full marker searches), which is now an evidenced optimisation with a number behind it. Applying it would raise MAP_MAX_BYTES by roughly 75%. Owed to plan 07-02, which should decide early because it changes how loudly UI-09 has to speak.
+- [Phase 07]: Buffer.from(payload, 'base64') over atob is MEASURED, not reasoned: the two produced DIFFERENT strings at all four ladder points and Buffer is also faster (2.16 vs 2.55 ms/MB). — Pitfall 4 predicted atob's latin1 corruption from documentation. The probe measured it: atob was strictly longer at every point (524,288 vs 523,633 chars at 0.5 MB), which is exactly latin1 splitting each multi-byte UTF-8 sequence into one code unit per byte — inside string values, where JSON.parse still succeeds and nothing throws. The gate asserts at least one point DISAGREED, because a pure-ASCII fixture corpus would report identical:true everywhere and be read as 'the primitive does not matter'.
+- [Phase 07]: corpus/ is gitignored in its entirety, so RESEARCH § O-03's corpus/maps/ instruction is NOT followed. The map corpus splits by SIZE across the two tracked homes 07-PATTERNS names. — Large real maps (megabyte scale, probe-only) go to scripts/phase7/fetch-maps.sh with committed SHA-256 hashes in the fetch-corpus.sh idiom — the script and hashes are the reproducible artifact, the ~37 MB of vendor JSON is not. Small hostile and structural fixtures (needed by CI on every commit, with no network) go to packages/engine/src/sourcemap/map-fixture.ts as string literals in the hostile.fixture.ts idiom. git check-ignore on the fixture module exits non-zero, which tests/corpus-maps.spec.ts asserts as a property of the path.
+- [Phase 07]: Phase 7's constants cite their derivation BY FILE PATH in POLICY_DERIVED_FROM — the first entries whose measured term is not an imported symbol. — Phase 7's measurement deliberately does not live in go-no-go.json: scripts/ci/gen-thresholds.mjs emits thresholds.generated.ts from that one artifact and thresholds.spec.ts gate 1 byte-compares the result, so a Phase 7 number there would mean either editing a generated file or reopening a Phase 0 aggregate whose whole value is that it describes 0.57.1. Naming the path keeps the derivation checkable anyway: grep -rn map-bytes.json reaches the measurement, its schema and its gate.
+- [Phase 07]: Open Question 1 (Caido request retention) is recorded as an OBSERVATION with status not_run and its reason, never as a retention policy. — The probe enumerated sdk.requests on Caido 0.58.0 and found query/matches/get/send/inScope and NO create, so no request could be stored and no survival curve exists. Recorded as not_run rather than a curve of zeros: zero survivors and zero attempts look identical in a chart and mean opposite things. The observation carries a not_a_policy paragraph and the schema REFUSES a pass-shaped observation status outright, so the row cannot later be cited as DefMiner's retention model. D-22's tombstone design does not depend on it.
 
 ### Known Risks Carried Forward
 
@@ -691,9 +698,9 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T15:34:26.260Z
-**Stopped at:** Phase 07 UI-SPEC approved
-**Resume file:** .planning/phases/07-sourcemap-reconstruction/07-UI-SPEC.md
+**Last session:** 2026-09-01T20:59:34.259Z
+**Stopped at:** Completed 07-01-PLAN.md
+**Resume file:** None
 
 ### Blockers
 
