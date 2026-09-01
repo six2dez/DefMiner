@@ -17,12 +17,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  decodeBase64,
   DecodeDivergence,
   decodeUtf8,
   decodeViaBuffer,
   decodeViaStringDecoder,
 } from "./decode";
 import { sha256Hex } from "./digest";
+import { HOSTILE_MAP_CASES } from "./sourcemap/map-fixture";
 
 const FIXTURE = fileURLToPath(
   new URL("../../../corpus/encoded/nonutf8.js", import.meta.url),
@@ -235,5 +237,84 @@ describe("decoding is for DISPLAY, and the file says so", () => {
     );
     expect(source).toContain("ENC-01");
     expect(source.toLowerCase()).toContain("never from text");
+  });
+});
+
+// ===========================================================================
+// PITFALL 4 — THE TWO BASE64 PRIMITIVES, DEMONSTRATED DIVERGING (T-07-21)
+// ===========================================================================
+// The D-10 probe measured this INSIDE Caido at all four ladder points and got a
+// different string from `atob` every time, `atob` strictly longer — 524,288 vs
+// 523,633 characters at the smallest point, 6,291,456 vs 6,291,441 at the largest
+// (07-01-SUMMARY.md § 3). This block reproduces the divergence on Node so the
+// choice is executed rather than cited, and so it fails here if a future edit
+// swaps the primitive.
+//
+// WHY IT IS DEMONSTRATED AND NOT MERELY ASSERTED AWAY: NOTHING THROWS when the
+// wrong one is used. `atob` returns a latin1 binary string with each multi-byte
+// UTF-8 sequence split into one code unit per byte; the corruption lands INSIDE
+// JSON string values, so `JSON.parse` still succeeds, every downstream type is
+// satisfied, and the operator reads wrong source. A test that only asserted the
+// right answer would pass against a fixture that could not tell the two apart.
+
+/** The fixture, AS A TARGET WOULD DELIVER IT — raw UTF-8, not `\uXXXX` escapes. */
+function deliveredNonAscii(): string {
+  const found = HOSTILE_MAP_CASES.find((c) => c.id === "non-ascii-round-trip");
+  if (found === undefined) {
+    throw new Error(
+      'map-fixture.ts no longer exports "non-ascii-round-trip". This block is ' +
+        "Pitfall 4's only executed proof; it must fail rather than skip.",
+    );
+  }
+  // The corpus writes its adversarial characters as escapes ON PURPOSE (a literal
+  // control or bidi character is invisible in every diff), which makes the
+  // fixture's own bytes pure ASCII — and on pure ASCII the two primitives AGREE.
+  // Re-serialising produces the raw-UTF-8 form a bundler actually emits, without
+  // forking the corpus.
+  return JSON.stringify(JSON.parse(found.value));
+}
+
+describe("Pitfall 4 — the base64 primitive is a choice, and the wrong one is silent", () => {
+  const source = deliveredNonAscii();
+  const payload = Buffer.from(source, "utf8").toString("base64");
+
+  it("THE TWO PRIMITIVES DISAGREE on a non-ASCII payload — both computed", () => {
+    const viaBuffer = decodeBase64(payload);
+    const viaLatin1 = atob(payload);
+    expect(
+      viaLatin1,
+      "atob and Buffer.from(payload, 'base64').toString('utf8') came out EQUAL. " +
+        "Either the fixture stopped carrying non-ASCII bytes — in which case " +
+        "Pitfall 4 is no longer demonstrated by anything — or this runtime's atob " +
+        "changed. The D-10 probe measured them differing at all four ladder points.",
+    ).not.toBe(viaBuffer);
+    // The direction, not merely the inequality: latin1 splits every multi-byte
+    // sequence, so it is strictly LONGER. That is what the probe recorded too.
+    expect(viaLatin1.length).toBeGreaterThan(viaBuffer.length);
+  });
+
+  it("THE SHIPPED PATH round-trips to the source file's own sha256", () => {
+    const digest = sha256Hex(new Uint8Array(Buffer.from(source, "utf8")));
+    const back = new Uint8Array(Buffer.from(decodeBase64(payload), "utf8"));
+    expect(sha256Hex(back)).toBe(digest);
+  });
+
+  it("the WRONG path does NOT round-trip — and JSON.parse still succeeds on it", () => {
+    // The whole hazard in two assertions. The digest is wrong AND nothing threw:
+    // the corrupted bytes are inside string values, so the document stays
+    // well-formed and every gate downstream of here sees a valid map.
+    const digest = sha256Hex(new Uint8Array(Buffer.from(source, "utf8")));
+    const corrupted = atob(payload);
+    expect(sha256Hex(new Uint8Array(Buffer.from(corrupted, "utf8")))).not.toBe(
+      digest,
+    );
+    expect(() => JSON.parse(corrupted)).not.toThrow();
+  });
+
+  it("agrees with the other primitive on pure ASCII — so the case is the INPUT", () => {
+    // The control. Without it "the two disagree" could just as well mean the
+    // helper is broken.
+    const ascii = Buffer.from('{"a":1}', "utf8").toString("base64");
+    expect(atob(ascii)).toBe(decodeBase64(ascii));
   });
 });
