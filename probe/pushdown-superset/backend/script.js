@@ -129,6 +129,56 @@ async function evaluate(sdk, clause) {
     count: rows.length,
     pages: pages,
     has_next_page: hasNext,
+    fail_closed: await failClosed(sdk, filter),
+  };
+}
+
+/**
+ * THE FAIL-CLOSED PROPERTY, EXECUTED RATHER THAN CITED.
+ *
+ * `scan/filter.ts` places the operator's clause LAST and rests a security
+ * property on it: a clause ending in an HTTPQL line comment can then only comment
+ * out the composer's trailing parenthesis, producing an unbalanced expression that
+ * `execute()` rejects — so the scan FAILS rather than silently running WIDER than
+ * the operator was shown. Placed first, the same input would comment DefMiner's
+ * narrowing away.
+ *
+ * Until now that rested on the SDK's own JSDoc (`@throws {Error} If a query
+ * parameter is invalid`) and had NEVER been run against a real Caido parser in
+ * this repo. `.planning/WINDOWS.md` entry 72 names this plan as where it becomes
+ * measured, so it is measured here, on the same instance and in the same call.
+ *
+ * TWO LEGS, because one proves nothing. The CONTROL executes the balanced clause
+ * and must NOT throw — without it, a `threw: true` on the truncated leg is equally
+ * consistent with `filter()` rejecting everything. The TRUNCATED leg is the exact
+ * composition `composeScanFilter` would emit if its re-validation were bypassed:
+ * DefMiner's clause, then an operator clause ending in `//`.
+ *
+ * STILL A RECORDING AND NOT A DECISION. Both outcomes are returned as they
+ * happened; whether they constitute fail-closed is asserted in
+ * `tests/phase6-pushdown.spec.ts`.
+ */
+async function failClosed(sdk, filter) {
+  const control = "(" + filter + ")";
+  const truncated = "(" + filter + ') AND (req.host.eq:"a.example" //)';
+  const run = async (expression) => {
+    try {
+      const page = await sdk.requests.query().filter(expression).first(1).execute();
+      return { threw: false, error: null, items: (page.items || []).length };
+    } catch (e) {
+      return { threw: true, error: String(e).slice(0, 300), items: null };
+    }
+  };
+  const c = await run(control);
+  const t = await run(truncated);
+  return {
+    control_expression: control,
+    control_threw: c.threw,
+    control_error: c.error,
+    control_items: c.items,
+    truncated_expression: truncated,
+    truncated_threw: t.threw,
+    truncated_error: t.error,
   };
 }
 

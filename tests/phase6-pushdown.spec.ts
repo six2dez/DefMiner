@@ -477,6 +477,64 @@ describe("the uppercase script path research found, closed by a fixture", () => 
 });
 
 // ===========================================================================
+// THE FAIL-CLOSED PROPERTY — EXECUTED, no longer cited.
+// ===========================================================================
+// `scan/filter.ts` places the operator's clause LAST and rests a security
+// property on it: a clause ending in an HTTPQL line comment can then only comment
+// out the composer's trailing parenthesis, so the expression is unbalanced and
+// the scan FAILS rather than silently running WIDER than the operator was shown.
+//
+// Plan 06-04 proved that on DefMiner's half only — the refusal, the composer's
+// omission, and the producer's handling of a rejected `execute()`. That an
+// unbalanced expression actually makes Caido throw was CITED from the SDK's
+// JSDoc and never run. `.planning/WINDOWS.md` entry 72 named this plan as where
+// it becomes measured; these are the assertions over that measurement.
+describe("a comment-truncated composition fails CLOSED at a real Caido parser", () => {
+  it("executes the balanced clause without throwing — the control", () => {
+    if (!live()) return;
+    expect(
+      d.fail_closed,
+      `${RESULT} carries no fail_closed block — ${REMEASURE}`,
+    ).toBeTruthy();
+    // Without this leg, a throw on the truncated leg is equally consistent with
+    // `filter()` rejecting everything, and would prove nothing at all.
+    expect(
+      d.fail_closed.control_threw,
+      `${RESULT}: Caido rejected the BALANCED clause (${d.fail_closed?.control_error}). ` +
+        `The truncated leg below then says nothing about comments. ${REMEASURE}`,
+    ).toBe(false);
+    expect(d.fail_closed.control_expression).toContain(SCAN_KIND_CLAUSE);
+  });
+
+  it("throws on DefMiner's clause followed by an operator clause ending in `//`", () => {
+    if (!live()) return;
+    expect(
+      d.fail_closed?.truncated_expression,
+      `${RESULT}: the truncated leg did not carry DefMiner's own clause, so it ` +
+        `did not test the composition that ships. ${REMEASURE}`,
+    ).toContain(SCAN_KIND_CLAUSE);
+    expect(
+      d.fail_closed?.truncated_expression.endsWith("//)"),
+      `${RESULT}: the truncated leg must end in a line comment — that is the ` +
+        `whole construct being measured.`,
+    ).toBe(true);
+    expect(
+      d.fail_closed?.truncated_threw,
+      `CAIDO ACCEPTED A COMMENT-TRUNCATED FILTER. The operator-clause-LAST order ` +
+        `in packages/backend/src/scan/filter.ts is a security property (T-06-HTTPQL-INJ) ` +
+        `and rests on that expression being REJECTED. If it is accepted, a trailing ` +
+        `comment silently drops DefMiner's narrowing and the scan runs WIDER than ` +
+        `the operator was shown. ${REMEASURE}`,
+    ).toBe(true);
+    expect(
+      typeof d.fail_closed?.truncated_error === "string" &&
+        d.fail_closed.truncated_error.length > 0,
+      `${RESULT}: a throw with no message is not evidence of a parser rejection.`,
+    ).toBe(true);
+  });
+});
+
+// ===========================================================================
 // TERM COVERAGE — a list member added later with no fixture is a RED TEST.
 // ===========================================================================
 describe("every shipped media type has a fixture", () => {

@@ -115,6 +115,21 @@
         }
       }
     },
+    "fail_closed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_expression", "control_threw", "truncated_expression", "truncated_threw"],
+      "description": "06-04's fail-CLOSED property, EXECUTED against a real Caido parser rather than cited from the SDK's JSDoc (.planning/WINDOWS.md entry 72). TWO legs, because one proves nothing: the balanced control must not throw, and the comment-truncated composition — DefMiner's clause followed by an operator clause ending in `//`, which is exactly what composeScanFilter would emit if its re-validation were bypassed — must. Whether the pair constitutes fail-closed is asserted in tests/phase6-pushdown.spec.ts, never here.",
+      "properties": {
+        "control_expression": { "type": "string", "minLength": 1 },
+        "control_threw": { "type": "boolean" },
+        "control_error": { "type": ["string", "null"] },
+        "control_items": { "type": ["integer", "null"] },
+        "truncated_expression": { "type": "string", "minLength": 1 },
+        "truncated_threw": { "type": "boolean" },
+        "truncated_error": { "type": ["string", "null"] }
+      }
+    },
     "unmatched": {
       "type": "object",
       "additionalProperties": false,

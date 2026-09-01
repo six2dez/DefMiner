@@ -458,6 +458,7 @@ doc = {
         "echoed_by_probe": ev.get("clause"),
     },
     "fixtures": fixtures,
+    "fail_closed": ev.get("fail_closed"),
     "unmatched": {
         "records_without_manifest_entry": extra,
         "manifest_entries_without_record": missing,
