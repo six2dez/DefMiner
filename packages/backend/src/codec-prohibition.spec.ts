@@ -97,6 +97,33 @@
 // is for the filesystem ban, because a spec never enters the shipped bundle and
 // therefore never runs on the proxy thread, which is the only thing D-17 is
 // about.
+//
+// ===========================================================================
+// ONE RULE DELIBERATELY DUPLICATED HERE, AND THE COST OF DOING SO
+// ===========================================================================
+// `filesystem-prohibition.spec.ts` DECLINED to add an `fs-unanalysable` rule,
+// because an `import(s)` whose specifier will not reduce to a literal is already
+// reported as `outbound-unanalysable` by `outbound-prohibition.spec.ts` over the
+// IDENTICAL file set, and a second entry would have reported the same node twice
+// while splitting one argument across two files.
+//
+// THIS FILE DUPLICATES IT ANYWAY, and the cost is stated rather than hidden: a
+// dynamic import with an assembled specifier now reports TWICE, once next door
+// and once here. What is bought for that is ATTRIBUTION. `FORBIDDEN_CODEC` is
+// read as the COMPLETE statement of what D-17 forbids — that is the whole point
+// of exporting a rule array as data — and a reader who consults only this file
+// must not be able to conclude that an unreadable specifier is a permitted way
+// to reach the codec. D-17's claim is that a PACKAGE is unreachable from these
+// two roots; once every literal spelling is banned, an unresolvable specifier is
+// the only remaining path to it, so a gap there is not a missing detail but the
+// whole ban defeated. The two reports carry different `why` texts pointing at
+// different requirements (CORE-11 next door, MAP-03 here), so the duplication
+// costs a second message and not a second investigation.
+//
+// AND THE SHAPE IS WORTH NAMING PRECISELY: it is the one shape that defeats an
+// AST gate SILENTLY. Every other rule here fails loudly when it fails. This one
+// exists because the walk returns nothing on an unreadable specifier, and
+// "reported nothing" is INDISTINGUISHABLE FROM A PASS.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -227,6 +254,27 @@ const RULES = Object.freeze({
       "the operator's machine, which is the inverse defect frontend-externals.mjs exists to " +
       "catch. The codec belongs to packages/frontend, where plan 07-08's viewer imports it.",
   }),
+  "codec-unanalysable": Object.freeze({
+    rule: "codec-unanalysable",
+    surface:
+      "a dynamic `import()` or a `require()` whose specifier this walk cannot reduce to a literal",
+    why:
+      "THIS IS THE ARGUMENT, NOT THE RULE. A specifier assembled from pieces, or arriving " +
+      "through a name this file never watched being bound, is the ONE shape that defeats an " +
+      "AST gate SILENTLY: the walk returns nothing and the file reports clean, which is " +
+      "INDISTINGUISHABLE FROM A PASS. Every other rule here fails loudly when it fails; this " +
+      "one exists because that rule has an exception, and D-17's claim is that a PACKAGE is " +
+      "unreachable from these two roots — so once every literal spelling is banned, an " +
+      "unreadable specifier is not a missing detail, it is the whole ban defeated. RESOLVE " +
+      "THE VALUE, OR DELETE THE INDIRECTION. THE COST, MEASURED AND ACCEPTED: the shipped " +
+      "tree contains ZERO dynamic imports and ZERO require() calls under either root today, " +
+      "so this rule reports nothing at all right now, and an ordinary `import(path)` added " +
+      "tomorrow with a parameter as its specifier WOULD report — which is the intended " +
+      "answer rather than a false positive, because such a call is exactly as unreadable as " +
+      "a concatenation. The same node is ALSO reported as `outbound-unanalysable` by " +
+      "outbound-prohibition.spec.ts over the identical file set; that duplication is " +
+      "deliberate and this file's header states what it buys.",
+  }),
 });
 
 type RuleId = keyof typeof RULES;
@@ -272,6 +320,28 @@ function shippedFiles(): string[] {
   };
   for (const root of SOURCE_ROOTS) walk(root);
   return out.sort();
+}
+
+/**
+ * Every `"packages/..."` literal in a declaration block, by `indexOf`.
+ *
+ * A HAND-ROLLED SCAN RATHER THAN A PATTERN, because none of the three sibling
+ * gates uses a regex anywhere and there is no reason for this one to be the
+ * first. It reads a SOURCE-TEXT declaration off disk, which is a place a subtly
+ * wrong pattern would fail silently by matching nothing — and a check that
+ * matches nothing is the same defect as a check that scans nothing.
+ */
+function quotedRootsIn(block: string): string[] {
+  const marker = '"packages/';
+  const out: string[] = [];
+  let at = block.indexOf(marker);
+  while (at !== -1) {
+    const close = block.indexOf('"', at + 1);
+    if (close === -1) break;
+    out.push(block.slice(at + 1, close));
+    at = block.indexOf(marker, close + 1);
+  }
+  return out;
 }
 
 /** How many times does `needle` occur in `haystack`? Non-overlapping. */
@@ -434,9 +504,43 @@ export function auditSource(file: string, source: string): Violation[] {
     return "a value import";
   };
 
+  /**
+   * `export * from "x"` and `export { y } from "x"` reach the same module and
+   * are distinguished only in the MESSAGE — a star re-export is the shape most
+   * likely to be written without noticing what it drags in.
+   */
+  const exportShapeOf = (node: ts.ExportDeclaration): string =>
+    node.exportClause === undefined
+      ? "a star re-export"
+      : "an `export ... from`";
+
   const reportSpecifier = (how: string, node: ts.Node | undefined): void => {
     const specifier = literalOf(node);
     if (specifier !== undefined && isCodecSpecifier(specifier)) {
+      add("codec-import", `${how} of \`${specifier}\``);
+    }
+  };
+
+  /**
+   * The runtime-resolved forms, where an unreadable specifier is its own rule.
+   *
+   * A STATIC `import ... from` CANNOT TAKE THIS PATH — its specifier is a string
+   * literal by grammar, so there is no unreadable case to report and no branch
+   * here that could never run. Only `import()` and `require()` accept an
+   * expression, which is exactly why they are the two shapes that can hide a
+   * package from this gate.
+   */
+  const reportResolvedSpecifier = (
+    how: string,
+    node: ts.Node | undefined,
+  ): void => {
+    if (node === undefined) return;
+    const specifier = literalOf(node);
+    if (specifier === undefined) {
+      add("codec-unanalysable", `${how} whose specifier this walk cannot read`);
+      return;
+    }
+    if (isCodecSpecifier(specifier)) {
       add("codec-import", `${how} of \`${specifier}\``);
     }
   };
@@ -446,7 +550,7 @@ export function auditSource(file: string, source: string): Violation[] {
       reportSpecifier(importShapeOf(node), node.moduleSpecifier);
     }
     if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined) {
-      reportSpecifier("an `export ... from`", node.moduleSpecifier);
+      reportSpecifier(exportShapeOf(node), node.moduleSpecifier);
     }
     if (
       ts.isImportEqualsDeclaration(node) &&
@@ -460,9 +564,9 @@ export function auditSource(file: string, source: string): Violation[] {
     if (ts.isCallExpression(node)) {
       const callee = unwrap(node.expression);
       if (callee.kind === ts.SyntaxKind.ImportKeyword) {
-        reportSpecifier("a dynamic import()", node.arguments[0]);
+        reportResolvedSpecifier("a dynamic import()", node.arguments[0]);
       } else if (ts.isIdentifier(callee) && callee.text === "require") {
-        reportSpecifier("a require()", node.arguments[0]);
+        reportResolvedSpecifier("a require()", node.arguments[0]);
       }
     }
     ts.forEachChild(node, visit);
@@ -519,6 +623,40 @@ describe(`MAP-03 — no VLQ codec is reachable from ${SOURCE_ROOTS.join(" or ")}
     }
   });
 
+  it("the walk really DESCENDED into subdirectories, per root", () => {
+    // A non-recursive read would enumerate the top-level modules of each root and
+    // pass every rule below having never opened `packages/engine/src/sourcemap/`
+    // — this phase's own subsystem, and the single directory D-17 is most about.
+    //
+    // BOTH ROOTS ARE HELD TO THIS UNCONDITIONALLY NOW, which
+    // `filesystem-prohibition.spec.ts` could not do: when that gate was written
+    // packages/engine/src was FLAT, so it had to read the condition off disk and
+    // skip a root with no subdirectory. Plan 07-02 gave the engine its first
+    // subdirectory, so the weaker form is no longer needed — and the assertion
+    // that every root HAS one is made first, so an engine that goes flat again
+    // fails loudly here rather than quietly relaxing this case back.
+    for (const root of SOURCE_ROOTS) {
+      expect(
+        readdirSync(root, { withFileTypes: true }).some((e) => e.isDirectory()),
+        `${root} has no subdirectory at all, so this walk cannot be shown to descend`,
+      ).toBe(true);
+      const relative = files
+        .filter((f) => f.startsWith(`${root}/`))
+        .map((f) => f.slice(root.length + 1));
+      expect(
+        relative.filter((r) => r.includes("/")),
+        `${root} has subdirectories but no enumerated path under it contains a separator, so the walk is flat there`,
+      ).not.toEqual([]);
+    }
+  });
+
+  it("the per-file cases iterate the SAME binding the assertions above measured", () => {
+    // Made executable rather than asserted in a comment: if the binding and a
+    // fresh walk ever disagree, the non-vacuity guarantees above stop covering
+    // what is actually scanned.
+    expect(shippedFiles()).toEqual(files);
+  });
+
   it("scans the SAME roots the outbound gate does, read off that file rather than assumed", () => {
     const parent = readFileSync(OUTBOUND_GATE, "utf8");
     const start = parent.indexOf("export const SOURCE_ROOTS");
@@ -532,6 +670,19 @@ describe(`MAP-03 — no VLQ codec is reachable from ${SOURCE_ROOTS.join(" or ")}
         `"${root}"`,
       );
     }
+    // AND THE OTHER DIRECTION, NAMED RATHER THAN COUNTED. A count alone reports
+    // "expected 2 to be 1" and leaves the reader to work out WHICH root went
+    // missing — and the root most likely to go missing is `packages/engine/src`,
+    // because it is the one somebody deletes while thinking "the codec ban is
+    // about the backend". So the parent's roots are extracted and diffed, and
+    // the failure says which one this file has dropped.
+    // Extracted by `indexOf`, never a pattern: none of the three sibling gates
+    // uses a regex anywhere, and this file has no reason to be the first.
+    const parentRoots = quotedRootsIn(block);
+    expect(
+      parentRoots.filter((root) => !SOURCE_ROOTS.includes(root)),
+      "the outbound gate scans a root this gate does not, so half the shipped tree is ungated for the codec while the outbound rules still cover it",
+    ).toEqual([]);
     expect(occurrences(block, '"packages/')).toBe(SOURCE_ROOTS.length);
   });
 
@@ -551,19 +702,336 @@ describe(`MAP-03 — no VLQ codec is reachable from ${SOURCE_ROOTS.join(" or ")}
 const rulesOf = (src: string, file = "fixture.ts"): string[] =>
   auditSource(file, src).map((v) => v.rule);
 
-describe("the gate's own failure path, executed", () => {
-  it("codec-import fires on a default import of the bare specifier", () => {
-    expect(rulesOf(`import decode from "${CODEC_PACKAGE}";`)).toEqual([
-      "codec-import",
-    ]);
+/**
+ * The import shapes a package can arrive through.
+ *
+ * Written as a table CROSSED with the specifier list rather than by hand,
+ * because the whole claim of the `codec-import` rule is that it bans the
+ * CAPABILITY and not one spelling of it — and a hand-written fixture list is
+ * exactly where one spelling goes missing.
+ *
+ * A TYPE-ONLY IMPORT IS BANNED TOO, and that is a DESIGN signal rather than a
+ * load: it erases at compile time and ships nothing. But a module typing itself
+ * against the codec is a module being written to use the codec, and catching it
+ * at the type is catching it a commit early.
+ */
+const IMPORT_SHAPES: readonly Readonly<{
+  shape: string;
+  write: (specifier: string) => string;
+}>[] = Object.freeze([
+  { shape: "a default import", write: (s) => `import decode from "${s}";` },
+  {
+    shape: "a named import",
+    write: (s) => `import { decode } from "${s}";`,
+  },
+  {
+    shape: "a namespace import",
+    write: (s) => `import * as codec from "${s}";`,
+  },
+  {
+    shape: "a type-only import",
+    write: (s) => `import type { SourceMapMappings } from "${s}";`,
+  },
+  { shape: "a side-effect import", write: (s) => `import "${s}";` },
+  { shape: "a re-export from", write: (s) => `export { decode } from "${s}";` },
+  { shape: "a star re-export", write: (s) => `export * from "${s}";` },
+  {
+    shape: "a dynamic import() with a literal specifier",
+    write: (s) => `const codec = await import("${s}");`,
+  },
+  { shape: "a require()", write: (s) => `const codec = require("${s}");` },
+  {
+    shape: "an import-equals-require",
+    write: (s) => `import codec = require("${s}");`,
+  },
+]);
+
+const CODEC_IMPORT_TABLE = CODEC_SPECIFIER_LIST.flatMap((specifier) =>
+  IMPORT_SHAPES.map(({ shape, write }) => ({
+    specifier,
+    shape,
+    source: write(specifier),
+  })),
+);
+
+/**
+ * The import shapes the plan NAMES, as an external floor on the axis above.
+ *
+ * WITHOUT THIS THE CROSS-PRODUCT ASSERTION IS SELF-REFERENTIAL AND CANNOT CATCH
+ * A DELETION, which was measured rather than reasoned about: asserting that the
+ * table's length equals `specifiers × shapes` stays TRUE when a shape is removed,
+ * because both sides shrink together. An earlier draft asserted exactly that and
+ * a scratch deletion of the star re-export did NOT redden it. The product
+ * assertion is a self-consistency claim; THIS list is what makes the axis
+ * shrinking loud, because it is written down somewhere the shrink does not
+ * reach.
+ *
+ * Two shapes in `IMPORT_SHAPES` are deliberately absent from this floor — a
+ * side-effect import and a `require()` — because they are inherited from
+ * `filesystem-prohibition.spec.ts`'s table rather than required by MAP-03, and a
+ * floor that named them would stop being a statement of the requirement.
+ */
+const REQUIRED_IMPORT_SHAPES: readonly string[] = Object.freeze([
+  "a default import",
+  "a named import",
+  "a namespace import",
+  "a type-only import",
+  "a re-export from",
+  "a star re-export",
+  "a dynamic import() with a literal specifier",
+  "an import-equals-require",
+]);
+
+/**
+ * A subpath the `exports` map does NOT declare, exercised in every shape.
+ *
+ * The MATCHER is wider than the derived axis on purpose: a deep import into the
+ * package's shipped `src/` directory is a reachable spelling that no `exports`
+ * map can be trusted to have closed, and Node's own resolution has historically
+ * allowed exactly this. Kept as its own table rather than folded into the axis,
+ * so the cross-product assertion above stays a statement about the DERIVED list.
+ */
+const UNDECLARED_SUBPATH = `${CODEC_PACKAGE}/src/sourcemap-codec.ts`;
+
+const UNDECLARED_SUBPATH_TABLE = IMPORT_SHAPES.map(({ shape, write }) => ({
+  shape,
+  source: write(UNDECLARED_SUBPATH),
+}));
+
+/**
+ * Specifiers that must stay QUIET, and each is a near-miss chosen to prove a
+ * different thing.
+ *
+ * `@jridgewell/trace-mapping` and `@jridgewell/gen-mapping` are REAL entries in
+ * this lockfile that share the scope. `sourcemap-codec` is the legacy UNSCOPED
+ * package of the same name, which is a different package. The `-extra` and
+ * `-shim` spellings prove the match is EXACT rather than a bare string prefix —
+ * they begin with the package name and are not it, which is the single most
+ * likely way a hand-rolled `startsWith` gets this wrong. `./sourcemap-codec`
+ * proves a local module may be named anything.
+ */
+const LEGAL_SPECIFIERS: readonly string[] = Object.freeze([
+  "@jridgewell/trace-mapping",
+  "@jridgewell/gen-mapping",
+  "sourcemap-codec",
+  `${CODEC_PACKAGE}-extra`,
+  `${CODEC_PACKAGE}-shim`,
+  "./sourcemap-codec",
+  "@defminer/engine/sourcemap/map-fixture",
+  "node:path",
+]);
+
+const LEGAL_IMPORT_TABLE = LEGAL_SPECIFIERS.flatMap((specifier) =>
+  IMPORT_SHAPES.map(({ shape, write }) => ({
+    specifier,
+    shape,
+    source: write(specifier),
+  })),
+);
+
+/**
+ * A firing fixture for every rule that is not `codec-import`, with its EXACT
+ * expected rule list rather than a containment check.
+ *
+ * Exact, because a containment assertion passes when a rule fires twice for one
+ * reason and once for another, and the difference between those two is the
+ * difference between a gate that is right and a gate that is loud.
+ */
+const FIRING_FIXTURES: readonly Readonly<{
+  rule: RuleId;
+  name: string;
+  source: string;
+  expected: readonly RuleId[];
+}>[] = Object.freeze([
+  {
+    rule: "codec-unanalysable",
+    name: "a string-concatenated dynamic import specifier",
+    source: 'const codec = await import("@jridgewell/" + "sourcemap-codec");',
+    expected: ["codec-unanalysable"],
+  },
+  {
+    rule: "codec-unanalysable",
+    name: "a template-assembled dynamic import specifier",
+    source: "const codec = await import(`@jridgewell/${name}`);",
+    expected: ["codec-unanalysable"],
+  },
+  {
+    rule: "codec-unanalysable",
+    name: "a specifier arriving as a parameter — as unreadable as a concatenation, and reported as such",
+    source: "async function load(spec) {\n  return await import(spec);\n}",
+    expected: ["codec-unanalysable"],
+  },
+  {
+    rule: "codec-unanalysable",
+    name: "a name bound to TWO different literals, so literalOf cannot choose",
+    source: [
+      'let spec = "@jridgewell/trace-mapping";',
+      `spec = "${CODEC_PACKAGE}";`,
+      "const codec = await import(spec);",
+    ].join("\n"),
+    expected: ["codec-unanalysable"],
+  },
+  {
+    rule: "codec-unanalysable",
+    name: "the same hole through require()",
+    source: 'const codec = require("@jridgewell/" + "sourcemap-codec");',
+    expected: ["codec-unanalysable"],
+  },
+]);
+
+/**
+ * Shapes that MUST stay quiet. Each is real in, or adjacent to, this codebase.
+ *
+ * The one-hop alias case is the counterpart of the two-literal firing fixture
+ * above: a specifier that DOES reduce is read, so a legal package behind a name
+ * reports nothing at all rather than reporting `codec-unanalysable`.
+ */
+const LEGAL_FIXTURES: readonly Readonly<{ name: string; source: string }>[] =
+  Object.freeze([
+    {
+      name: "a dynamic import whose specifier reduces through ONE hop to a legal package",
+      source: [
+        'const spec = "@jridgewell/trace-mapping";',
+        "const mapper = await import(spec);",
+      ].join("\n"),
+    },
+    {
+      name: "a comment naming the codec and every shape of importing it",
+      source: [
+        `// This module does not import ${CODEC_PACKAGE}, nor`,
+        `// ${CODEC_PACKAGE}/dist/sourcemap-codec.umd.js, and never calls`,
+        `// await import("${CODEC_PACKAGE}") or require("${CODEC_PACKAGE}").`,
+        "export const NOTHING = 0;",
+      ].join("\n"),
+    },
+    {
+      name: "a string literal that IS an import statement — the shape a substring scan cannot tell from an import",
+      source: `const documented = "import decode from \\"${CODEC_PACKAGE}\\";";`,
+    },
+    {
+      name: "a template literal naming the codec",
+      source: `const doc = \`\${scope}/sourcemap-codec is decoded in the frontend\`;`,
+    },
+    {
+      name: "an ordinary object whose method is NAMED decode",
+      source: "const positions = vlq.decode(mappings);",
+    },
+    {
+      name: "the engine's own base64 decode, which is NOT VLQ and is LEGAL",
+      source: 'import { decodeBase64 } from "../decode";',
+    },
+    {
+      name: "an ordinary property access on something called codec",
+      source: "const n = telemetry.counters.codecAttempts;",
+    },
+  ]);
+
+describe("the gate's own failure paths, every one of them executed", () => {
+  it.each(CODEC_IMPORT_TABLE)(
+    "codec-import fires on $shape of $specifier",
+    ({ source }) => {
+      expect(rulesOf(source)).toEqual(["codec-import"]);
+    },
+  );
+
+  it.each(UNDECLARED_SUBPATH_TABLE)(
+    "codec-import fires on $shape of an UNDECLARED subpath",
+    ({ source }) => {
+      expect(rulesOf(source)).toEqual(["codec-import"]);
+    },
+  );
+
+  it.each(LEGAL_IMPORT_TABLE)(
+    "codec-import stays QUIET on $shape of $specifier",
+    ({ source }) => {
+      expect(rulesOf(source)).toEqual([]);
+    },
+  );
+
+  it.each(FIRING_FIXTURES)("$rule fires on $name", ({ source, expected }) => {
+    expect(rulesOf(source)).toEqual(expected);
   });
 
-  it("stays QUIET on a neighbouring package whose name shares the scope", () => {
-    // EXACT, not a prefix: `@jridgewell/trace-mapping` is a real package in this
-    // lockfile and is not the codec.
+  it.each(LEGAL_FIXTURES)("stays QUIET on $name", ({ source }) => {
+    expect(rulesOf(source)).toEqual([]);
+  });
+});
+
+describe("the fixture set covers the rule set, and the rule set is data", () => {
+  it("EVERY declared rule id has at least one firing fixture", () => {
+    // The non-vacuity of the fixture table itself. Without this, adding a third
+    // rule and no fixture for it would leave a rule whose failing path has never
+    // run — the exact defect this file's whole shape exists to prevent, hiding
+    // inside the file that exists to prevent it.
+    const covered = new Set<string>(FIRING_FIXTURES.map((f) => f.rule));
+    if (CODEC_IMPORT_TABLE.length > 0) covered.add("codec-import");
+    expect([...covered].sort()).toEqual(Object.keys(RULES).sort());
+  });
+
+  it("EVERY declared rule id has at least one legal fixture proving it stays quiet", () => {
+    // Asserted as REACH rather than as a count: each rule is named with the
+    // fixture family that proves it silent, so a rule cannot be added with a
+    // firing case and no counter-case.
+    expect(LEGAL_IMPORT_TABLE.length).toBeGreaterThan(0); // codec-import
     expect(
-      rulesOf('import { TraceMap } from "@jridgewell/trace-mapping";'),
-    ).toEqual([]);
+      LEGAL_FIXTURES.some((f) => f.source.includes("const spec =")),
+      "no legal fixture exercises a REDUCIBLE dynamic specifier, so codec-unanalysable has no counter-case",
+    ).toBe(true); // codec-unanalysable
+  });
+
+  it("the codec-import case table is the FULL CROSS PRODUCT of specifier forms and import shapes", () => {
+    // The criterion this file is held to is a PRODUCT — every specifier form in
+    // every import shape — so it is asserted as one rather than counted by hand
+    // in a review. A shape added without a specifier, or a specifier added
+    // without every shape, fails HERE instead of leaving a spelling untested.
+    expect(CODEC_IMPORT_TABLE.length).toBe(
+      CODEC_SPECIFIER_LIST.length * IMPORT_SHAPES.length,
+    );
+    expect(
+      new Set(CODEC_IMPORT_TABLE.map((r) => `${r.specifier}|${r.shape}`)).size,
+      "the cross product contains a duplicate pair, so its length overstates its reach",
+    ).toBe(CODEC_IMPORT_TABLE.length);
+    // Asserted as the SET of pairs, not only as a count, so two shapes swapping
+    // names could not keep the arithmetic while changing what is exercised.
+    expect(
+      new Set(CODEC_IMPORT_TABLE.map((r) => `${r.specifier}|${r.shape}`)),
+    ).toEqual(
+      new Set(
+        CODEC_SPECIFIER_LIST.flatMap((s) =>
+          IMPORT_SHAPES.map((sh) => `${s}|${sh.shape}`),
+        ),
+      ),
+    );
+    // AND THE HALF THAT MAKES A DELETION LOUD. Every REQUIRED shape, crossed
+    // with every derived specifier, must be a pair the table actually exercises
+    // — asserted against a list written outside the axis, so removing a shape
+    // from `IMPORT_SHAPES` fails HERE rather than shrinking both sides of the
+    // arithmetic above in step.
+    const exercised = new Set(
+      CODEC_IMPORT_TABLE.map((r) => `${r.specifier}|${r.shape}`),
+    );
+    for (const specifier of CODEC_SPECIFIER_LIST) {
+      for (const shape of REQUIRED_IMPORT_SHAPES) {
+        expect(
+          exercised,
+          `the cross product does not exercise ${shape} of ${specifier}`,
+        ).toContain(`${specifier}|${shape}`);
+      }
+    }
+
+    // The floor the plan set: sixteen cases. Shipped is six specifiers by ten
+    // shapes, plus ten more for the undeclared subpath.
+    expect(CODEC_IMPORT_TABLE.length).toBeGreaterThanOrEqual(16);
+    expect(CODEC_IMPORT_TABLE.length).toBeGreaterThanOrEqual(
+      CODEC_SPECIFIER_LIST.length * REQUIRED_IMPORT_SHAPES.length,
+    );
+  });
+
+  it("the failure message carries the WHY, not just the rule id", () => {
+    const [violation] = auditSource("f.ts", `import "${CODEC_PACKAGE}";`);
+    expect(violation?.detail).toContain("167 ms");
+    expect(violation?.detail).toContain("FULLY BUNDLED");
+    expect(violation?.detail).toContain("a side-effect import");
   });
 
   it("FORBIDDEN_CODEC is DERIVED from RULES and cannot disagree with it", () => {
@@ -632,8 +1100,32 @@ describe("the gate's own failure path, executed", () => {
       "a substring scan finds nothing here, so it cannot be shown to disagree with the walk",
     ).toBeGreaterThan(0);
 
-    // And the walk — over the same bytes — reports nothing, because none of
-    // those mentions is an import.
+    // And the walk — over the same bytes — reports the EXACT set, which here is
+    // empty, because none of those mentions is an import. Asserted as an exact
+    // array rather than as "does not contain codec-import": the two are
+    // different claims and only the first one says the gate is quiet.
     expect(auditSource(SELF, source)).toEqual([]);
+
+    // ADDING A PROSE MENTION DOES NOT CHANGE IT. This is the half that proves
+    // the gate cannot be weakened by deleting documentation — the failure mode
+    // a substring scan creates, where the only way to make the gate pass is to
+    // stop explaining it.
+    const withMoreProse = [
+      source,
+      `// ${CODEC_PACKAGE} is decoded in the frontend, never here.`,
+      `// Not even as import decode from "${CODEC_PACKAGE}";`,
+      `const documented = 'await import("${CODEC_PACKAGE}")';`,
+    ].join("\n");
+    expect(occurrences(withMoreProse, CODEC_PACKAGE)).toBeGreaterThan(
+      substringHits,
+    );
+    expect(auditSource(SELF, withMoreProse)).toEqual([]);
+
+    // And the gate is NOT BLIND on its own file either: one real import line
+    // appended to these same bytes reports, and reports exactly once.
+    const withRealImport = `${source}\nimport decode from "${CODEC_PACKAGE}";\n`;
+    expect(auditSource(SELF, withRealImport).map((v) => v.rule)).toEqual([
+      "codec-import",
+    ]);
   });
 });
