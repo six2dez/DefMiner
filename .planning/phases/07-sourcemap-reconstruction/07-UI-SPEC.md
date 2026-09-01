@@ -1,11 +1,14 @@
 ---
 phase: "07"
 slug: sourcemap-reconstruction
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: "2026-09-01"
-extends: .planning/phases/05-workspace-operator-workflow/05-UI-SPEC.md
+extends:
+  - .planning/phases/05-workspace-operator-workflow/05-UI-SPEC.md
+  - .planning/phases/06-retroactive-scan-deployment-reality/06-UI-SPEC.md
+reviewed_at: "2026-09-01"
 ---
 
 # Phase 07 — UI Design Contract
@@ -779,25 +782,43 @@ status.
 
 ## UI Considerations
 
-Applicable state considerations resolved: **29 covered, 2 backstop, 1 unresolved** (32 applicable, 0 unclassified)
+Applicable state considerations resolved: **32 covered, 2 backstop, 1 unresolved** — 35 rows, of
+which **31 were raised by `ui-consideration-probe.cjs`** at the confirmed element kinds (0
+unclassified) and 4 are retained beyond the engine's set. Run **after** checker approval, against the
+final document, and **replacing** this section rather than appending to it.
 
-Elements classified — 6 surfaces, kinds confirmed at the propose-then-confirm step:
-`sources-count-column` (static-content), `source-tree` (list-collection + nav), `source-viewer`
-(list-collection + static-content), `viewer-position-strip` (static-content), `drilldown-header`
-(interactive-control), `manifest-export` (interactive-control).
+Elements classified — 6 surfaces, kinds settled at the propose-then-confirm step:
+`sources-count-column` (static-content + interactive-control), `source-tree` (list-collection + nav),
+`source-viewer` (list-collection + static-content + interactive-control), `viewer-position-strip`
+(static-content + interactive-control), `drilldown-header` (static-content + interactive-control),
+`manifest-export` (interactive-control).
 
-> **One kind assignment was corrected at the probe step and it changed the answer.**
-> `sources-count-column` was first classified interactive-control, which would have raised only
-> `loading` and `error` and never asked about `zero-one-many`. It is **static-content with a
-> zero-one-many axis**: a resolved `0` and an unresolved count are different facts that a single
-> renderer will collapse unless the contract forbids it — which is the most valuable row in this
-> table and the one an implementer is most likely to get wrong.
+> **The prose classifier over-fired, and the confirm step is what corrected it.** Run on the surface
+> descriptions verbatim, `classifyElement` tripped `list-collection` on all six surfaces — including
+> the `h-12` drill-down header, which is three controls in a row — proposing 48 considerations.
+> Authored `elements` overrides bring that to 31. A tripped cue is a signal, not a verdict; these
+> kinds are the verdict.
+
+> **One kind assignment was contested and the narrower reading won.** `sources-count-column` is
+> **static-content + interactive-control**, not a list-collection: the cell reports a count *of* a
+> collection but is not one, and `empty` / `populated` / `partial` for a single integer cell are rows
+> an implementer skims past. Its `zero-one-many` row is nonetheless **retained beyond the engine's
+> set**, because it is the most valuable row in this table and the one most likely to be got wrong —
+> a resolved `0` and an unresolved count are different facts that a single renderer will collapse.
+
+> **Four rows are retained beyond what the engine raises** and are marked here so a re-run does not
+> read them as drift: `sources-count-column / zero-one-many` (above), `viewer-position-strip / empty`
+> (the no-line-selected discovery line — a real empty state on a surface that is not a collection),
+> and `manifest-export / empty` and `/ zero-one-many` (the shipped `NOTHING_TO_EXPORT_LABEL` and the
+> raw-confirm count agreement). Over-coverage is kept; under-coverage is not.
 
 | Category | Element(s) | Status | Resolution / Reason |
 |----------|------------|--------|---------------------|
 | zero-one-many | sources-count-column | ✅ covered | **A resolved zero renders `0` in `surface-400` and is not a button; an unresolved count renders NOTHING.** They are different facts and are never the same pixel. `App.vue`'s own rule — a still-resolving count is absent, never `0` — extended to a count that can also legitimately be zero. |
 | overflow | sources-count-column | ✅ covered | A grouped integer in a fixed 32px row with `whitespace-pre overflow-hidden`. A count past a million never wraps the row or reflows the table. |
 | long-text | sources-count-column | ✅ covered | A property of the shape, not a discipline: the cell renders a DefMiner-computed integer and nothing else. There is no field here a later edit could render a target-controlled string into. |
+| loading | sources-count-column | ✅ covered | **An unresolved count renders NOTHING — never `0`, never a spinner, never a skeleton.** The lookup map is `ReadonlyMap<string, number> \| null`; until it resolves the cell is empty. A spinner in a 32px cell reflows the column when it resolves, and a `0` would tell the operator the opposite of the truth. This is `App.vue`'s shipped still-resolving rule applied to the one column where zero is *also* a legitimate answer. |
+| error | sources-count-column | ✅ covered | **A failed count lookup renders the empty cell — never `0`, and never a removed row.** A null map is deliberately indistinguishable from a still-resolving one, because both mean *not known*; the count cell is not where a read failure is reported. That surfaces at the artifact level in the `EvidencePanel`, where the analysis vocabulary lives — the shipped `loadCompat` rule that a call which did not answer is not evidence of anything, applied to this cell. |
 | empty | source-tree | ✅ covered | The **No recovered sources in this bundle** screen, with the inline-only / never-fetches explanation. **A different screen** from the error state below, and never the same one. |
 | loading | source-tree | ✅ covered | Skeleton rows at the fixed 32px height, never a spinner — a spinner reflows the column when it resolves. |
 | error | source-tree | ✅ covered | An explicit error with **Retry** and **Open Health**, **never an empty list**: an empty tree means "this bundle carried no inline map", so rendering a load failure that way tells the operator the opposite of the truth. |
@@ -827,6 +848,7 @@ Elements classified — 6 surfaces, kinds confirmed at the propose-then-confirm 
 | loading | manifest-export | ✅ covered | The shipped `EXPORTING_LABEL` (**Exporting…**), which is legible without colour. |
 | error | manifest-export | ✅ covered | The shipped `EXPORT_FAILED_BODY`, which is worded so it does not claim a file was written. |
 | zero-one-many | manifest-export | ✅ covered | The raw-confirmation's `{n}` is substituted through the shipped `rawExportConfirmBody` / `rawExportConfirmLabel` functions, so the sentence exists in exactly one place and agrees at one and at many. |
+| long-text | manifest-export | ✅ covered | **No target-controlled string reaches any label, dialog or download name on this path — R6 is the mechanism and it is mechanically assertable.** Both CTAs and every dialog string are DefMiner-authored (`EXPORT_LABEL`, `EXPORTING_LABEL`, `NOTHING_TO_EXPORT_LABEL`, `EXPORT_FAILED_BODY`, `CANCEL_LABEL`); the raw-confirm body interpolates only a count. The one sink that could take a 4 KB `sources` label — the download filename — is content-addressed instead: the generated name must match `^[0-9a-f]{16}\.(…)$` against U7-7's closed extension allowlist, asserted with a firing and a legal fixture. The `sources` label appears as a manifest *column*, where `redactUrlForExport` governs it, never as a control label. |
 
 <!-- Status vocabulary (locked by probe-core projectTruths):
      ✅ covered   → a plain truth string lifted into must_haves.truths
@@ -836,6 +858,7 @@ Elements classified — 6 surfaces, kinds confirmed at the propose-then-confirm 
      Rows are REPLACED (not appended) on a probe re-run — idempotent. -->
 
 ---
+
 
 ## Registry Safety
 
@@ -969,15 +992,26 @@ them distinct from `07-CONTEXT.md`'s locked `D-` decisions, which are **not** op
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
-- [ ] Dimension 7 Inventory Provenance: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
+- [x] Dimension 7 Inventory Provenance: PASS
 
-**Approval:** pending
+**Approval:** APPROVED by `gsd-ui-checker` on 2026-09-01 — 7/7 dimensions PASS, no blocking
+recommendations. Two non-blocking observations were raised and both are recorded rather than
+silently accepted:
+
+- **Frontmatter drift** — `extends:` named only `05-UI-SPEC.md` while the body binds itself to
+  both 05 and 06 (and inherits amendments A1–A4 from 06). **Fixed:** `extends:` is now a two-entry
+  list, so tooling reading that key resolves the whole inheritance chain.
+- **`surface-400` contrast** — producibility words, the line-number gutter and the display notes
+  all sit at Label role in `surface-400`, inherited from Phase 5. Not a Phase 7 divergence, and
+  the redundant explanatory sentence in the viewer body covers the discrimination without colour.
+  **Carried to the UI-05 backstop verification as a thing to look at with a low-vision operator in
+  mind, not as a spec change.**
 
 ### Notes for the checker
 
