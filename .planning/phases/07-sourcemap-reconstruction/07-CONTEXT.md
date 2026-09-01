@@ -53,7 +53,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### Map acquisition — what this phase consumes
 
-- **D-01: Inline `data:` URI sourcemaps ONLY. External `.map` files are not fetched, not looked up
+- **D-01:** **Inline `data:` URI sourcemaps ONLY. External `.map` files are not fetched, not looked up
   in existing traffic, and not admitted.** An inline map rides inside a body `admit.ts` already
   accepts, so the phase adds zero SDK surface, zero outbound traffic, and no touch to the kind
   axis, the closed `REJECT_REASONS`, or 06-11's push-down superset proof. Rejected: a retro lookup
@@ -63,7 +63,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   says "discovered AND consumed", and this meets the discovery half for external maps and the full
   requirement only for inline ones.**
 
-- **D-02: The `sourceMappingURL` announcement is located by `lastIndexOf` over a BOUNDED TAIL
+- **D-02:** **The `sourceMappingURL` announcement is located by `lastIndexOf` over a BOUNDED TAIL
   WINDOW. No regular expression, anywhere on this path.** The window size is a number the planner
   picks and defends. Bundlers put the comment on the last line by convention. This is `admit.ts`'s
   own `indexOf`/`endsWith` discipline extended to the next path that touches a full body, and it
@@ -74,7 +74,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   building it here pre-empts a phase that owns it).
   — **Reversibility:** reversible — one function, one constant.
 
-- **D-03: An external `.map` announcement increments a COUNTER and nothing else.** No table, no
+- **D-03:** **An external `.map` announcement increments a COUNTER and nothing else.** No table, no
   migration, no `COLUMN_ALLOWLIST` entry, no target-controlled URL at rest for a phase that will
   not use it. Counters live in `telemetry.ts` and nowhere else — `telemetry.spec.ts` scans the
   package AST and fails on a second counters object. **A `SourceMap:` response header always names
@@ -82,7 +82,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   code path.** Phase 8 builds its own worklist alongside its send journal, where the consumer is;
   it re-derives candidates from bundles it will be re-reading regardless.
 
-- **D-04: `data:` URIs are accepted in base64 form only** — `data:application/json;base64,` and its
+- **D-04:** **`data:` URIs are accepted in base64 form only** — `data:application/json;base64,` and its
   `;charset=` variant. One decode path, one set of malformed-input cases, smallest hostile surface,
   and the runtime is already constrained here (`TEXTDECODER_MODULE = none`). Rejected:
   percent-encoded JSON payloads and "anything the media type allows" — both widen MAP-05's fixture
@@ -90,7 +90,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### Identity, and the `sources` string
 
-- **D-05: A recovered source's identity is the sha256 of its CONTENT; each sighting is recorded as
+- **D-05:** **A recovered source's identity is the sha256 of its CONTENT; each sighting is recorded as
   `(map sha256, index)`.** This mirrors the shipped `artifacts` / `observations` split exactly, so
   every read query in `reads.ts` is already shaped for it, and it makes MAP-06's "once per content
   hash" literal rather than aspirational. It dedupes a shared vendor file across bundles, deploys
@@ -100,7 +100,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   — **Reversibility:** one-way — it is a table shape and a published identity, and `schema.spec.ts`
   asserts `EXPECTED_TABLES` exactly.
 
-- **D-06: The raw `sources` entry is stored VERBATIM and normalised only for display.** It is
+- **D-06:** **The raw `sources` entry is stored VERBATIM and normalised only for display.** It is
   evidence: the developer's real directory layout is half of what makes reconstruction valuable,
   and `webpack://`, `..` and absolute paths say how the bundle was built. The viewer builds a safe
   display tree from it under `05-UI-SPEC.md` R1 (text, never markup) and R2 (truncation and
@@ -111,7 +111,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### Where recovered source lives — the load-bearing decision
 
-- **D-07: NOTHING is held at rest. Only metadata is stored; content is DERIVED ON DEMAND by
+- **D-07:** **NOTHING is held at rest. Only metadata is stored; content is DERIVED ON DEMAND by
   reloading the originating request through `sdk.requests.get` and re-parsing the map.**
 
   Phase 6's D-17 (no server disk, `sdk.hostedFile` declined) and D-24 (no BLOB, no untyped column,
@@ -130,7 +130,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   — **Reversibility:** costly — reversing it means adding a content column, which fires
   `schema.spec.ts` by design and re-opens D-24's "DEPLOY-04 is satisfied by construction".
 
-- **D-22: When the originating request is gone, the row is KEPT AS A TOMBSTONE with a distinct
+- **D-22:** **When the originating request is gone, the row is KEPT AS A TOMBSTONE with a distinct
   state** — "recovered 14 Aug, content no longer producible" — visibly marked under Phase 5's UI-09
   stance that degraded states are never silently presented as complete. That a file called
   `src/auth/session-token.ts` existed on this target, at that size, with that hash, is intelligence
@@ -139,7 +139,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   Phase 5; and keeping it with no state, which is the "nothing found" versus "analysis broke"
   confusion ERR/OBS-02 exists to prevent, relocated into a new surface.
 
-- **D-23: Unreachability is detected LAZILY at open, and the outcome STICKS to the row.** No
+- **D-23:** **Unreachability is detected LAZILY at open, and the outcome STICKS to the row.** No
   background probing; the row is producible until an operator opens it and it is not, and that
   observation is then recorded so the next reader sees the tombstone without repeating the reload.
   Same shape as Phase 6's D-03 — one bounded read instead of thousands of megabyte reloads.
@@ -147,7 +147,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   (single statement, fully bound, `project_id`-scoped) and re-check the project epoch like every
   other write. Cost accepted: the inventory is optimistic between the loss and the first click.
 
-- **D-24: Every on-demand derivation RE-VERIFIES the reloaded body against the recorded artifact
+- **D-24:** **Every on-demand derivation RE-VERIFIES the reloaded body against the recorded artifact
   sha256 and FAILS CLOSED on a mismatch.** Exactly SEC-05's move. The operator can never be shown
   source attributed to a bundle it did not come from, and a re-deploy is detected for free — which
   is what DIFF-01 will want in v2. One native hash per open, ~13 ms at 8.3 MB. Rejected:
@@ -156,7 +156,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### Pipeline placement
 
-- **D-08: Reconstruction is a STAGE INSIDE the existing bounded consumer, always on, no toggle.**
+- **D-08:** **Reconstruction is a STAGE INSIDE the existing bounded consumer, always on, no toggle.**
   It runs where `visit` is a no-op today, one artifact at a time, sharing the 25 ms slice
   (`MAX_SYNC_SLICE_MS`) and the `setTimeout0` yield (`YIELD_PRIMITIVE`, `YIELD_COST_MS = 5.029`).
   It inherits everything the pipeline already guarantees: analysed once per content hash, epoch
@@ -167,7 +167,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   nobody has on does not get exercised). **Consequence: a large map's `JSON.parse` lands on the
   same thread as live browsing, so D-10's byte gate is load-bearing, not advisory.**
 
-- **D-09: One row per recovered source, subject to the NORMAL retention caps.** No special
+- **D-09:** **One row per recovered source, subject to the NORMAL retention caps.** No special
   exemption, no per-map cap. The workspace can then answer "every recovered source on this target"
   — the project-wide-view thesis applied to source. Cost accepted, openly: a 781-source map is 781
   rows against a `DEFAULT_RETENTION_MAX_ROWS` of 50,000, so a handful of large maps consumes the
@@ -179,7 +179,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### Bounds and hostile input (MAP-05)
 
-- **D-10: `MAP_MAX_BYTES` is MEASURED by a Phase 7 probe, not borrowed and not extrapolated.**
+- **D-10:** **`MAP_MAX_BYTES` is MEASURED by a Phase 7 probe, not borrowed and not extrapolated.**
   SPIKE-06's method: fresh instance per size point, external RSS sampler at 50 ms correlated to
   in-runtime markers, since this runtime exposes no memory introspection at all (QUAL-06). This is
   the probe O-01 was going to need, repurposed onto the question that survived D-07.
@@ -191,7 +191,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   it to `JSON.parse` is the "reasoned, not measured" move that was the weak link in O-01 to begin
   with).
 
-- **D-11: A refused, truncated or malformed map records `analyses.scan_state = 'partial'` with its
+- **D-11:** **A refused, truncated or malformed map records `analyses.scan_state = 'partial'` with its
   existing redacted 240-char error.** One degradation vocabulary, in the one place that already has
   it, rendered through `describeError` and policed by `error-redaction.spec.ts`. **This ships a
   slice of ERR-02/OBS-02's "one vocabulary defined once and used identically" ahead of Phase 2 —
@@ -202,7 +202,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   an *analysis* axis. They are different questions and must not be collapsed into one column — but
   the planner should decide that deliberately, not discover the collision.
 
-- **D-12: The MAP-05 fixture suite covers resource, display and structural hostility — AND retains
+- **D-12:** **The MAP-05 fixture suite covers resource, display and structural hostility — AND retains
   the traversal fixtures as a standing non-vacuity proof.** Resource: giant `sourcesContent`,
   millions of tiny sources, deeply nested JSON. Structural: `sections` indexed maps, reference
   cycles, absent/null `sourcesContent`. Display: RTL overrides, NUL bytes, 4 KB labels. **And the
@@ -215,7 +215,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### MAP-06, in a project with no detectors
 
-- **D-13: Recovered sources are wired into the analysis path NOW, depth capped at 1, no re-entry,
+- **D-13:** **Recovered sources are wired into the analysis path NOW, depth capped at 1, no re-entry,
   and the bound is proven by a detector that exists ONLY in the test suite.** The recursion limit
   is the valuable half of MAP-06 and it is fully testable today — designed before Phase 3 arrives
   with pressure to skip it. The day a real detector lands this works unchanged. Rejected: wiring it
@@ -223,7 +223,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   executed, and the depth bound is exactly what goes untested), and deferring (the bound would then
   be designed by whoever is mid-way through building detectors).
 
-- **D-14: Recovered sources enter through a SEPARATE derived-artifact path that BYPASSES
+- **D-14:** **Recovered sources enter through a SEPARATE derived-artifact path that BYPASSES
   `admit()`.** Admission answers "should this proxied response become an artifact" across status,
   body presence, size, kind and scope. A recovered `.ts`/`.vue`/`.scss` has no status, no scope of
   its own, and a kind that is whatever the developer wrote — running it through `admit()` means
@@ -236,7 +236,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   — **Reversibility:** costly — a second entry point into the pipeline is a contract every later
   ingestion feature reasons against.
 
-- **D-15: The reconstructed-source corpus FIXTURES ship; the false-positive RATE is recorded NOT
+- **D-15:** **The reconstructed-source corpus FIXTURES ship; the false-positive RATE is recorded NOT
   MEASURED, with its reason.** A corpus is data, not engine — real maps from real bundles, with
   their recovered source, can be committed now so Phase 3's harness finds them waiting. The rate
   cannot exist without a detector, and that is recorded the way Phase 6's D-23 recorded an
@@ -246,7 +246,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### VLQ (MAP-03)
 
-- **D-16: `@jridgewell/sourcemap-codec` is used, for minified↔source position mapping in the
+- **D-16:** **`@jridgewell/sourcemap-codec` is used, for minified↔source position mapping in the
   viewer, and the decode runs in the FRONTEND.** The backend ships the raw `mappings` string and
   the browser decodes it. This is the one position consumer that exists without detectors, and it
   is genuinely useful to a hunter reading recovered code. **Moving the decode to the browser
@@ -260,7 +260,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   **Consequence: the codec moves from a root dependency to `packages/frontend`, and the raw
   `mappings` string — target-controlled data — now crosses the RPC.** See O-01.
 
-- **D-17: A PACKAGE-LEVEL static gate: no `packages/backend` module imports the codec, in any
+- **D-17:** **A PACKAGE-LEVEL static gate: no `packages/backend` module imports the codec, in any
   specifier form.** Because D-16 puts the decode in the browser, MAP-02's "no VLQ decoding on the
   primary path" becomes a clean capability ban rather than a maintained list of which modules are
   "the primary path" — and a boundary a refactor can quietly move is the weaker kind of gate. Same
@@ -277,7 +277,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
 
 ### The viewer (UI-05) and export (MAP-07)
 
-- **D-18: The content is rendered VIRTUALISED, using the scroller already in the stack.**
+- **D-18:** **The content is rendered VIRTUALISED, using the scroller already in the stack.**
   `shims-virtual-scroller.d.ts` is already in `packages/frontend/src` and `ArtifactsTable.vue`
   established the pattern — the dependency, its typing and its precedent are all shipped. A window
   of lines, never the file, so the DOM stays bounded regardless of file size. Rejected: whole-file
@@ -285,13 +285,13 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   bound the operator cannot read past defeats it. **Cost accepted and it needs an answer:** a file
   with no usable line structure is one line of several MB. See O-02.
 
-- **D-19: No syntax highlighting. Plain monospaced text.** Recovered source renders as text and
+- **D-19:** **No syntax highlighting. Plain monospaced text.** Recovered source renders as text and
   nothing else — R1's letter and its intent, with no path by which a crafted file becomes markup,
   no highlighter dependency answering to DIST-05's bundle allowlist, and no tokenising of hostile
   bytes in the frontend. This is the most hostile data the product renders and it ships with the
   smallest possible render surface. Highlighting is recorded as a deferred idea.
 
-- **D-20: MAP-07 splits at the export path's own seam. The MANIFEST exports as rows through
+- **D-20:** **MAP-07 splits at the export path's own seam. The MANIFEST exports as rows through
   `export.ts` unchanged; CONTENT is saved one file at a time from the viewer, re-derived on demand
   per D-07.** Manifest rows — hash, `sources` label, byte length, which map, which artifact — fit
   `EXPORT_COLUMNS`/`serialiseRows` exactly, and inherit the shipped redaction and the
@@ -301,7 +301,7 @@ contradicts a roadmap assumption or costs something, that is stated rather than 
   what a long serial job costs, paid a second time. **The phase must state which half of "browsable
   and exportable with a manifest" each mechanism meets.**
 
-- **D-21: The viewer lives INSIDE the Artifacts tab as a drill-down.** A recovered source belongs
+- **D-21:** **The viewer lives INSIDE the Artifacts tab as a drill-down.** A recovered source belongs
   to an artifact and the Artifacts tab is already the inventory; selecting a JS artifact with a map
   reveals its sources. No sixth tab — the strip already wraps at five, which the Phase 5 UI
   contract noted — and the existing table and selection contracts carry it. Cost accepted: source
@@ -364,15 +364,15 @@ These are not defaults and must not be read as locked.
 
 From `06-CONTEXT.md` (2026-08-31):
 
-- **D-17 (Phase 6):** nothing reaches server disk; `llrt/fs`, `node:fs` and `sdk.hostedFile` are
+- **Phase 6 D-17**: nothing reaches server disk; `llrt/fs`, `node:fs` and `sdk.hostedFile` are
   banned by `filesystem-prohibition.spec.ts`. **D-07 keeps this whole and dissolves O-01's storage
   half; it does NOT re-open it.**
-- **D-24 (Phase 6):** no BLOB column, no untyped column, a per-table `COLUMN_ALLOWLIST`.
+- **Phase 6 D-24**: no BLOB column, no untyped column, a per-table `COLUMN_ALLOWLIST`.
   DEPLOY-04 is satisfied by construction. **Every new Phase 7 table must fit inside this gate; the
   day one does not, the gate fires and D-24 is re-opened deliberately, not routed around.**
-- **D-02/D-16 (Phase 6):** counters live in `telemetry.ts` and nowhere else, enforced by an AST
+- **Phase 6 D-02/D-16**: counters live in `telemetry.ts` and nowhere else, enforced by an AST
   scan; `audit` is written to ONLY when something is destroyed, and its `kind` is a closed CHECK.
-- **D-19/D-25 (Phase 6):** the Settings surface never shows a path; footprint is reported as row
+- **Phase 6 D-19/D-25**: the Settings surface never shows a path; footprint is reported as row
   counts against retention caps.
 - The operator's stated preference across every Phase 5 and Phase 6 decision was **the option that
   minimises permanent, unrecoverable state.** It held again throughout this phase — D-01, D-03,
@@ -380,7 +380,7 @@ From `06-CONTEXT.md` (2026-08-31):
 
 From `05-CONTEXT.md` and `05-UI-SPEC.md`:
 
-- **D-04 (Phase 5):** exports are a browser download over the RPC; no server-side file is written.
+- **Phase 5 D-04**: exports are a browser download over the RPC; no server-side file is written.
 - `05-UI-SPEC.md` `## Rendering Safety Contract` R1–R5 and `## Data & Interaction Contract` govern
   the source viewer exactly as they govern the five existing surfaces. **R1 (text, never markup) is
   the binding constraint on the most hostile data this product has ever rendered.**
@@ -584,7 +584,7 @@ From `PROJECT.md` / `STATE.md`, project-wide and non-negotiable:
   — and D-15 pre-builds corpus data that Phase 3's plan 03-04 owns the harness for. Neither should
   reach a verifier as a surprise.
 
-- **D-22's copy matters more than usual, for the same reason Phase 6's D-07 and D-14 did.** "This
+- **The copy for D-22 matters more than usual, for the same reason Phase 6's D-07 and D-14 did.** "This
   file was recovered on 14 August; the request it came from is no longer in Caido's history, so its
   content can no longer be produced" is explaining an absence, and UI-09's stance — degraded states
   visibly marked, never silently presented as complete — is what makes the difference between an
