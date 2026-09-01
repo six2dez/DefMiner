@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 75
+open_count: 77
 waived_count: 0
 fixed_count: 28
-total_count: 103
-last_updated: 2026-09-01T08:51:10.765Z
+total_count: 105
+last_updated: 2026-09-01T09:22:36.762Z
 ---
 
 # Broken Windows Ledger
@@ -139,6 +139,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 101 | 06 | unmet-truth | probe/pushdown-superset/backend/script.js |  | The push-down superset proof is measured on ASCII case folding only. isScriptish uses String.prototype.toLowerCase (Unicode-aware); the clause is on SQLite LIKE, whose default folding is ASCII-only. The derivation in scan/filter.ts argues the gap is empty — no non-ASCII character lowercases INTO an ASCII j/s/m or into any letter of the seventeen essences — but that argument is a DERIVATION, not a fixture: the corpus contains no non-ASCII-cased path or media type. Closing it needs a fixture whose URL or Content-Type folds across the ASCII boundary. Low value (media types and .js suffixes are ASCII by RFC) and recorded so it is not rediscovered as a surprise. | open |  | 2026-09-01T08:10:42.068Z |  |
 | 102 | 06 | deviation | packages/engine/src/contract.ts |  | SCAN_KIND_CLAUSE was corrected inside plan 06-11 rather than in a plan that owns packages/engine. The plan's own prohibition anticipated this ('the clause is corrected in scan/filter.ts in its own commit'), and it is a separate commit (36db2af) carrying its own re-measured artifact — but contract.ts, contract.spec.ts, filter.ts and filter.spec.ts are outside 06-11's declared files_modified. Anything downstream that renders or asserts the clause string (06-UI-SPEC's read-only 'DefMiner always scans for' field) now reads seven like-terms instead of seven cont-terms. | open |  | 2026-09-01T08:10:51.804Z |  |
 | 103 | 6 | deviation | .planning/REQUIREMENTS.md |  | requirements.mark-complete reflowed the derived residual block again (4th firing of WINDOWS 85); three blank lines removed from the shipped block, comparison untouched | open |  | 2026-09-01T08:51:10.765Z |  |
+| 104 | 06 | deviation | packages/backend/src/scan/scans.ts |  | THE SCAN HISTORY DETAIL CANNOT SHOW THE COMPOSED FILTER, AND THAT IS A MISSING COLUMN RATHER THAN A MISSING SURFACE. 06-13's task 1 action asks the disclosure to render 'the composed filter the scan actually ran'. It does not, because the scans table HAS NO composed_filter COLUMN: LIST_SCANS_SQL projects operator_filter and nothing else, and ScanStatusPayload.composedFilter is COMPUTED for the live readout from today's SCAN_KIND_CLAUSE. Recomposing it for a historical scan would describe THIS VERSION'S DefMiner clause rather than the one that scan ran - and the asset clause ships with the plugin version, so that claim goes wrong silently at the first upgrade. WHAT 06-13 DID INSTEAD: rendered the operator's own clause at the panel cap and stated the absence in words (SCAN_HISTORY_COMPOSED_ABSENT_BODY), which is this page's own rule for a fact DefMiner does not have. OWNER: a plan that owns store/migrations.ts and scan/scans.ts, to add a composed_filter column written at scan creation - the same one-way migration ladder WINDOW 86's analysed needs, and worth pairing with it rather than paying the ladder twice. | open |  | 2026-09-01T09:22:36.683Z |  |
+| 105 | 06 | unrun-verify | packages/frontend/src/components/ScanHistoryList.vue |  | ScanHistoryList's failure-beside-rows BRANCH IS UNREACHABLE FROM THE SURFACE AND THEREFORE UNTESTED. showRows deliberately does not consult failed, so a read that fails while rows are already on screen renders the error ABOVE them rather than instead of them - which is the correct shape, because a failure that replaced the rows would take a suspended scan off the screen at the moment the operator went looking for it. BUT THE ONLY RE-READ IS THE RETRY BUTTON, AND RETRY ONLY EXISTS WHILE THE ERROR IS ON SCREEN, so the sequence rows-then-failure cannot be driven from the component and ScanHistoryList.spec.ts says so in place of asserting it. OWNER: whichever plan adds a Refresh control to the populated history, or a periodic re-read; the branch is built and commented for exactly that, and the case becomes writable the moment such a trigger exists. | open |  | 2026-09-01T09:22:36.762Z |  |
 
 ````json
 [
@@ -1376,6 +1378,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-01T08:51:10.765Z",
+    "resolved_at": null
+  },
+  {
+    "id": 104,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/scans.ts",
+    "line": null,
+    "description": "THE SCAN HISTORY DETAIL CANNOT SHOW THE COMPOSED FILTER, AND THAT IS A MISSING COLUMN RATHER THAN A MISSING SURFACE. 06-13's task 1 action asks the disclosure to render 'the composed filter the scan actually ran'. It does not, because the scans table HAS NO composed_filter COLUMN: LIST_SCANS_SQL projects operator_filter and nothing else, and ScanStatusPayload.composedFilter is COMPUTED for the live readout from today's SCAN_KIND_CLAUSE. Recomposing it for a historical scan would describe THIS VERSION'S DefMiner clause rather than the one that scan ran - and the asset clause ships with the plugin version, so that claim goes wrong silently at the first upgrade. WHAT 06-13 DID INSTEAD: rendered the operator's own clause at the panel cap and stated the absence in words (SCAN_HISTORY_COMPOSED_ABSENT_BODY), which is this page's own rule for a fact DefMiner does not have. OWNER: a plan that owns store/migrations.ts and scan/scans.ts, to add a composed_filter column written at scan creation - the same one-way migration ladder WINDOW 86's analysed needs, and worth pairing with it rather than paying the ladder twice.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T09:22:36.683Z",
+    "resolved_at": null
+  },
+  {
+    "id": 105,
+    "kind": "unrun-verify",
+    "phase": "06",
+    "file": "packages/frontend/src/components/ScanHistoryList.vue",
+    "line": null,
+    "description": "ScanHistoryList's failure-beside-rows BRANCH IS UNREACHABLE FROM THE SURFACE AND THEREFORE UNTESTED. showRows deliberately does not consult failed, so a read that fails while rows are already on screen renders the error ABOVE them rather than instead of them - which is the correct shape, because a failure that replaced the rows would take a suspended scan off the screen at the moment the operator went looking for it. BUT THE ONLY RE-READ IS THE RETRY BUTTON, AND RETRY ONLY EXISTS WHILE THE ERROR IS ON SCREEN, so the sequence rows-then-failure cannot be driven from the component and ScanHistoryList.spec.ts says so in place of asserting it. OWNER: whichever plan adds a Refresh control to the populated history, or a periodic re-read; the branch is built and commented for exactly that, and the case becomes writable the moment such a trigger exists.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T09:22:36.762Z",
     "resolved_at": null
   }
 ]

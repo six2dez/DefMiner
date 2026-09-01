@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
-status: executing
-stopped_at: Completed 06-12-PLAN.md
-last_updated: "2026-09-01T08:50:09.958Z"
+status: verifying
+stopped_at: Completed 06-13-PLAN.md
+last_updated: "2026-09-01T09:28:14.121Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: 8348e081e848c16426b2561360501f601c413195
+state_head: ef1e7220d6d3156b13ddcf736edc94a485d12daa
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 71
+  completed_plans: 72
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
 Plan: 13 of 13
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-08-31 — Phase 06 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
@@ -330,6 +330,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P10 | 42 min | 3 tasks | 26 files |
 | Phase 06 P11 | 47 min | 3 tasks | 13 files |
 | Phase 06 P12 | 46 min | 3 tasks | 11 files |
+| Phase 06 P13 | 32 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -645,6 +646,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: role=alert sits on the DefMiner-authored rejection sentence alone — a live region announces a target-influenced clause the moment it changes
 - [Phase 06]: The reject-reason breakdown's not-durable sentence is the state on this surface, not an edge case: only the aggregate crosses the RPC boundary
 - [Phase 06]: dateOnlyText ships @internal for one wave so plan 06-13 consumes this formatter rather than writing a second one
+- [Phase 06]: [Phase 06/06-13]: The scan history is an AUTHORED LIST and never calls `assertColumnContract` — the assertion binds exactly one target-controlled column and this list has ZERO — Mechanical, not aesthetic. Every column — lifecycle state, counters, position date, the operator's own clause — is DefMiner- or operator-authored, so the shipped contract is literally incapable of expressing this table. Marking a column targetControlled to satisfy the assertion would be lying to a gate AND would make the gate's own thrown message false for the next person reading it looking for the column carrying a host's bytes. Amendment A4 records the scoping in 05-UI-SPEC.md, applied in the same commit as the list, and ScanHistoryList.spec.ts asserts it mechanically rather than by comment.
+- [Phase 06]: [Phase 06/06-13]: The 50-row history bound is the number the FRONTEND SENDS, not a mirror of the backend's SCAN_LIST_DEFAULT_LIMIT — The plan preferred the backend returning the bound it applied; it does not, and adding that would have changed api/spec.ts, index.ts and index.spec.ts, none of them in files_modified. Sending the limit achieves the same non-drift property inside scope — one declaration, the backend clamps into [1, SCAN_LIST_DEFAULT_LIMIT] so a caller may only LOWER, and the surface knows exactly which bound was applied and says so in words. The NUMBER is recorded in scan-contract.ts as an explicit assumption (U6-1, mirroring P5-D20); the SHAPE is binding in four parts: a stated bound, enforced at read, suspended rows exempt, truncation said in words.
+- [Phase 06]: [Phase 06/06-13]: The toolbar indicator opens NO subscription and NO timer; it re-reads on mount and on every tab change — A second onEvent subscription owned by the shell is research P-04's leak shape opened again, for an element that renders no motion — and in App.spec.ts it broke two shipped coalescer cases outright, because captureHandler captures the last-registered summary handler. The indicator's job is that a running or suspended scan is VISIBLE AND REACHABLE from every tab, not that its counter ticks where no eye is; the Scan tab, one click away through this very element, is the live surface. Re-reading on tab change is the moment the operator's attention actually crosses the toolbar. No timer: a poll on a surface with no denominator is the fabricated-motion shape D-14 refused.
 
 ### Known Risks Carried Forward
 
@@ -687,8 +691,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T08:50:09.869Z
-**Stopped at:** Completed 06-12-PLAN.md
+**Last session:** 2026-09-01T09:28:14.027Z
+**Stopped at:** Completed 06-13-PLAN.md
 **Resume file:** None
 
 ### Blockers
