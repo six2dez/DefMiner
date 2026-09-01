@@ -654,10 +654,21 @@ export type ScanCommandOutcome = {
  *
  * ONE EVENT AND NOT TWO, WHICH IS D-15's ACTUAL REASON. A second event name
  * would mean a second subscription list edited by every phase that adds a
- * surface. What D-15 asked for LITERALLY — a fourth `InvalidationCategory` —
+ * surface. What D-15 asked for LITERALLY — a `scans` `InvalidationCategory` —
  * is NOT done, and the engine contract states at length why it delivers the
- * opposite of D-15's own intent. `INVALIDATION_CATEGORIES` still holds exactly
- * three members.
+ * opposite of D-15's own intent. `INVALIDATION_CATEGORIES` holds ENTITY tables
+ * only and still holds nothing scan-shaped.
+ *
+ * THE SENTENCE HERE USED TO READ "a fourth `InvalidationCategory`" and "still
+ * holds exactly three members", and plan 07-04 made both false in the same edit
+ * — it appended `sources` and `source_sightings` for the two tables it created,
+ * under that list's own rule that entity categories are added by the phase that
+ * adds the table. Amended rather than left standing, because a contract comment
+ * that describes a build which no longer exists is how a security property
+ * becomes folklore (06-UI-SPEC.md § "Amendments"). The claim this paragraph
+ * actually makes — scan progress is a payload VARIANT and never a category —
+ * is untouched by that growth and is asserted in contract.spec.ts by the
+ * property, not by the count.
  */
 type Spec = DefinePluginPackageSpec<{
   manifestId: "defminer";

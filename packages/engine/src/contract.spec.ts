@@ -32,9 +32,13 @@
 // possible check that the frame is actually constructible by the phases that
 // have to construct it.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
+  assertNoOtherProducibility,
   DEGRADED_ANALYSIS_FILTER,
   EVIDENCE_PANEL_MANDATORY_FIELDS,
   INVALIDATION_CATEGORIES,
@@ -48,6 +52,7 @@ import {
   SCAN_LIFECYCLE_STATES,
   SCAN_PROGRESS_KIND,
   SCAN_STATES,
+  SOURCE_PRODUCIBILITY_STATES,
   SUSPEND_REASONS,
   TERMINAL_SCAN_STATES,
   TRIAGE_STATES,
@@ -69,6 +74,7 @@ import type {
   ScanStatusPayload,
   ScoreExplanation,
   ScoreSignal,
+  SourceProducibility,
   SuspendReason,
   TriageState,
   VisibleTotal,
@@ -237,22 +243,38 @@ describe("isOperatorDecided — the derived predicate over that vocabulary", () 
 });
 
 describe("INVALIDATION_CATEGORIES — what this phase actually emits (UI-07)", () => {
-  it("holds exactly the three SHIPPED table categories", () => {
+  it("holds exactly the SHIPPED table categories, in append order", () => {
+    // WAS THREE. Plan 07-04 appended `sources` and `source_sightings` in the
+    // same edit that added migration step v8, which is this list's own rule —
+    // entity categories are appended by the phase that adds the table — rather
+    // than a widening done ahead of the schema.
     expect(INVALIDATION_CATEGORIES).toEqual([
       "artifacts",
       "observations",
       "analyses",
+      "sources",
+      "source_sightings",
     ]);
-    expect(INVALIDATION_CATEGORIES).toHaveLength(3);
+    expect(INVALIDATION_CATEGORIES).toHaveLength(5);
   });
 
   it("names nothing entity-shaped — those tables do not exist", () => {
     // The guard against the failure mode this whole plan exists to prevent: a
-    // category invented for a table Phase 4 has not defined. `EXPECTED_TABLES`
-    // in schema.spec.ts is the exact set
-    // ["analyses", "artifacts", "observations", "settings"], and a category
+    // category invented for a table no phase has defined. The list below is
+    // `EXPECTED_TABLES` from schema.spec.ts minus the two tables that carry no
+    // renderable rows (`audit`, `settings` are here; `scans` is deliberately
+    // NOT a category — see 06-UI-SPEC.md § "Named Conflicts"), and a category
     // outside it is a claim about a table that is not there.
-    const shipped = ["analyses", "artifacts", "observations", "settings"];
+    const shipped = [
+      "analyses",
+      "artifacts",
+      "audit",
+      "observations",
+      "scans",
+      "settings",
+      "source_sightings",
+      "sources",
+    ];
     for (const category of INVALIDATION_CATEGORIES) {
       expect(
         shipped,
@@ -545,6 +567,159 @@ describe("SCAN_LIFECYCLE_STATES — the RETROACTIVE SCAN vocabulary (FIND-03, D-
   });
 });
 
+// ===========================================================================
+// PHASE 7 — THE THIRD CLOSED VOCABULARY, AND ITS ADJACENCY
+// ===========================================================================
+// `SOURCE_PRODUCIBILITY_STATES` answers a DIFFERENT QUESTION from either scan
+// vocabulary — can DefMiner still show you these bytes, rather than did it
+// finish looking at them — and the argument for keeping it separate is in
+// contract.ts at the declaration. These are the mechanical half: the collision
+// note is only load-bearing if the two declarations actually stay adjacent, so
+// the adjacency is asserted against the FILE'S OWN TEXT rather than trusted.
+
+/** The distance the collision note is worth reading across. A declaration that
+ *  drifts further than this is one a reader meets without the note. */
+const ADJACENCY_MAX_LINES = 40;
+
+describe("SOURCE_PRODUCIBILITY_STATES — the RECOVERED SOURCE vocabulary (D-22, O-07)", () => {
+  it("holds exactly the three states migration step v8's CHECK enforces, in order", () => {
+    // ORDER, not membership, for the reason the two assertions above give: this
+    // is also the order step v8 writes into `CHECK (producibility IN (...))`,
+    // and `sources.spec.ts` reads that constraint back out of the schema and
+    // compares it member by member rather than trusting the two to stay in step.
+    expect(SOURCE_PRODUCIBILITY_STATES).toEqual([
+      "producible",
+      "gone",
+      "changed",
+    ]);
+  });
+
+  it("is declared IMMEDIATELY AFTER SCAN_LIFECYCLE_STATES, asserted against the file", () => {
+    // THE COLLISION NOTE IS ONLY WORTH ANYTHING IF IT IS STILL BESIDE BOTH
+    // LISTS. Read from contract.ts's own text so a later edit that pushes the
+    // two declarations apart fails HERE, at the guard, rather than being
+    // discovered by somebody who read one list and not the other.
+    const source = readFileSync(
+      fileURLToPath(new URL("./contract.ts", import.meta.url)),
+      "utf8",
+    ).split("\n");
+    const lineOf = (declaration: string): number => {
+      const at = source.findIndex((line) => line.startsWith(declaration));
+      expect(at, `${declaration} not found in contract.ts`).toBeGreaterThan(-1);
+      return at;
+    };
+    const second = lineOf("export const SCAN_LIFECYCLE_STATES");
+    const third = lineOf("export const SOURCE_PRODUCIBILITY_STATES");
+    expect(third).toBeGreaterThan(second);
+    expect(
+      third - second,
+      "the third vocabulary has drifted away from the collision note",
+    ).toBeLessThanOrEqual(ADJACENCY_MAX_LINES);
+  });
+
+  it("names the THIRD collision at the point of declaration", () => {
+    // The note itself, asserted to exist in the file somebody would edit — the
+    // `decode.spec.ts` idiom. A rule that lives only in a plan document is a
+    // rule the next person does not read.
+    const source = readFileSync(
+      fileURLToPath(new URL("./contract.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(source).toContain("THE THIRD COLLISION IN THIS REGISTER");
+    expect(source).toContain("PRODUCIBILITY IS NOT A SCAN STATE");
+    // The mechanism that makes the column name load-bearing, in the file.
+    expect(source).toContain("never `state`");
+    expect(source).toContain("never `scan_state`");
+  });
+
+  it("shares NO member with either scan vocabulary", () => {
+    // `running` already sits in both scan lists. A third list that also
+    // overlapped would put three meanings under one literal in the one place
+    // the type system could no longer tell them apart.
+    const scanWords = new Set<string>([
+      ...(SCAN_STATES as readonly string[]),
+      ...(SCAN_LIFECYCLE_STATES as readonly string[]),
+    ]);
+    const shared = SOURCE_PRODUCIBILITY_STATES.filter((state) =>
+      scanWords.has(state),
+    );
+    expect(shared).toEqual([]);
+  });
+
+  it("its operator-facing words are safe against the nine already in use", () => {
+    // MECHANISM 3, MEASURED RATHER THAN ASSERTED. `Missing`, `Lost` and
+    // `Incomplete` were rejected as not clearly safe against **Partial** in an
+    // operator's peripheral vision; these two are checked the strict way, in
+    // BOTH directions — neither new word may be a prefix of an existing one,
+    // and no existing one may be a prefix of a new one.
+    const inUse = [
+      "Queued",
+      "Analysing",
+      "Complete",
+      "Partial",
+      "Failed",
+      "Scanning",
+      "Suspended",
+      "Finished",
+      "Discarded",
+    ];
+    const added = ["Gone", "Changed"];
+    for (const word of added) {
+      for (const existing of inUse) {
+        expect(word, `${word} collides with ${existing}`).not.toBe(existing);
+        expect(
+          word.toLowerCase().startsWith(existing.toLowerCase()),
+          `${word} starts with the shipped ${existing}`,
+        ).toBe(false);
+        expect(
+          existing.toLowerCase().startsWith(word.toLowerCase()),
+          `the shipped ${existing} starts with ${word}`,
+        ).toBe(false);
+      }
+    }
+    // NON-VACUITY. The check has to be able to fail: one of the rejected words
+    // is run through the same predicate and DOES collide.
+    const rejected = "Part";
+    expect(
+      inUse.some((w) => w.toLowerCase().startsWith(rejected.toLowerCase())),
+    ).toBe(true);
+  });
+
+  it("is snake_case-safe — single lowercase words, like the two lists above", () => {
+    for (const state of SOURCE_PRODUCIBILITY_STATES) {
+      expect(state, `${state} is not snake_case`).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    }
+  });
+
+  it("`assertNoOtherProducibility` has a CALL SITE, so its compile-time claim is load-bearing", () => {
+    // The `audit.spec.ts` idiom. A `never` helper nothing calls proves nothing:
+    // the compiler only refuses the widening at a switch that actually hands it
+    // the unhandled arm.
+    const describeOutcome = (value: SourceProducibility): string => {
+      switch (value) {
+        case "producible":
+          return "reloadable";
+        case "gone":
+          return "tombstone";
+        case "changed":
+          return "tombstone";
+        default:
+          return assertNoOtherProducibility(value);
+      }
+    };
+    expect(SOURCE_PRODUCIBILITY_STATES.map(describeOutcome)).toEqual([
+      "reloadable",
+      "tombstone",
+      "tombstone",
+    ]);
+  });
+
+  it("types a producibility outcome — no bare string on the recovered-source path", () => {
+    const value: SourceProducibility = "gone";
+    expect(SOURCE_PRODUCIBILITY_STATES).toContain(value);
+  });
+});
+
 describe("SUSPEND_REASONS — why a scan stopped, as a closed code set", () => {
   it("holds exactly the four reasons the phase can produce", () => {
     // Each is a DefMiner-authored CODE and never rendered error text: the
@@ -699,12 +874,20 @@ describe("ScanStatusPayload — what the Scan tab reads", () => {
 // speculative category is still exactly where it was.
 
 describe("the progress payload is a VARIANT, never a fourth CATEGORY", () => {
-  it("leaves INVALIDATION_CATEGORIES at three members with nothing scan-shaped in it", () => {
+  it("leaves INVALIDATION_CATEGORIES with nothing scan-shaped in it", () => {
     // The same assertion the shipped case above makes, restated here against
     // the CHANGE this file is now recording — so an edit that widened the list
     // to carry progress fails in the block that introduced progress rather than
     // only in the block that predates it.
-    expect(INVALIDATION_CATEGORIES).toHaveLength(3);
+    //
+    // THE COUNT WAS THE WRONG THING TO ASSERT AND IS GONE. This case pinned
+    // `toHaveLength(3)`, which made it fail the day plan 07-04 appended two
+    // ENTITY categories for tables it had just created — a change this case has
+    // no opinion about — while a `scans` member added in that same edit would
+    // have kept the length at three and passed. The property is that NOTHING
+    // SCAN-SHAPED is a category, and it is now asserted as that property. The
+    // membership-and-order pin lives in the block above, which is where a
+    // reviewer looking for the list's contents goes.
     expect(INVALIDATION_CATEGORIES).not.toContain("scans");
     expect(INVALIDATION_CATEGORIES).not.toContain("scan");
     expect(INVALIDATION_CATEGORIES).not.toContain(SCAN_PROGRESS_KIND);

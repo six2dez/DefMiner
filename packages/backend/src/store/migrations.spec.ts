@@ -336,18 +336,23 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v7 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v8 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
-    // the literal 7 rather than against `MIGRATIONS.length`: a step number that
+    // the literal 8 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
     //
     // WAS 6. The `audit` rebuild is now TWO steps — v6 creates and copies, v7
     // swaps — because a `BEGIN`-less multi-statement `exec` is a sequence and
     // not an atomic unit, so the drop had to move behind a durable
     // `user_version` boundary from the copy.
-    expect(SCHEMA_VERSION).toBe(7);
-    for (const v of [3, 4, 5, 6, 7]) {
+    //
+    // WAS 7. Step v8 is plan 07-04's `sources` / `source_sightings` pair, both
+    // tables and both indexes in ONE `exec` for the opposite half of that same
+    // measurement: one `exec` IS atomic, so an invariant spanning two tables has
+    // to live inside a single step rather than across two.
+    expect(SCHEMA_VERSION).toBe(8);
+    for (const v of [3, 4, 5, 6, 7, 8]) {
       expect(
         MIGRATIONS.find((m) => m.v === v),
         `step v${String(v)} is missing`,

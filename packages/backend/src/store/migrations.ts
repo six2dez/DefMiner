@@ -730,6 +730,112 @@ CREATE INDEX IF NOT EXISTS idx_audit_at
   ON audit (project_id, at);
 `,
   },
+  /**
+   * Step v8 — plan 07-04. The two tables recovered source is REMEMBERED in,
+   * approved at that plan's `blocking-human` checkpoint (approve-as-specified,
+   * 2026-09-02) — the FOURTH one-way `EXPECTED_TABLES` approval, named in that
+   * array's own doc comment beside the three before it.
+   *
+   * D-05's IDENTITY MODEL IS THE SHIPPED ONE, APPLIED TO A SECOND ENTITY CLASS.
+   * `sources` is `artifacts`: one row per distinct CONTENT, keyed by its digest.
+   * `source_sightings` is `observations`: one row per place that content was
+   * seen, here `(map, index)` rather than `(artifact, request)`. Two different
+   * bundles carrying the same source therefore produce ONE `sources` row and TWO
+   * sighting rows, which is the cross-bundle, cross-deploy dedupe MAP-06's
+   * once-per-content-hash guarantee is made of — literal rather than aspirational
+   * because it falls out of the primary keys.
+   *
+   * THERE IS NO CONTENT COLUMN, IN ANY ENCODING, AND THAT IS THE PHASE'S
+   * STRONGEST SECURITY PROPERTY RATHER THAN A COMPROMISE (D-07). Recovered
+   * source is the target's actual source code — plausibly credentials, internal
+   * hostnames and business logic — and a stolen copy of this database contains a
+   * list of labels, digests and byte counts and nothing else. Every column below
+   * declares `TEXT` or `INTEGER`: no BLOB and no untyped column, the two
+   * mechanisms that could reopen Phase 6's D-24 and its "DEPLOY-04 is satisfied
+   * BY CONSTRUCTION" claim, both of which `schema.spec.ts` executes as failure
+   * fixtures rather than describing.
+   *
+   * ONE STEP, BOTH TABLES, BOTH INDEXES — AND IT HAS TO BE. `exec` is atomic per
+   * call (MULTISTATEMENT_EXEC_ATOMIC) while `BEGIN` does NOT span `exec` calls
+   * and fails silently (TRANSACTION_PERSISTS_ACROSS_EXEC = false, Pitfall 2), so
+   * no invariant may require two statements to land together. A sighting whose
+   * `sources` table did not arrive is exactly such an invariant.
+   *
+   * NATURAL KEYS, NEVER `id`. `last_insert_rowid()` is unusable on the pooled
+   * connection (decision P1-D1), so both tables address rows by the key the
+   * caller already holds. `project_id` is at PRIMARY KEY ordinal 1 on both,
+   * which is STORE-02 and is read back structurally by the pk-ordinal gate.
+   *
+   * `producibility`'s CHECK IS THE ENFORCEMENT AND `SOURCE_PRODUCIBILITY_STATES`
+   * IS THE DECLARATION. The member order here is that array's order, so a
+   * reordering is a diff a reviewer can put beside this DDL; `sources.spec.ts`
+   * reads the constraint back out of the schema and compares it member by member,
+   * the way `scans` already does for the lifecycle vocabulary. The column is
+   * `producibility` and NOT `state` (taken by `scans`) and NOT `scan_state`
+   * (taken by `analyses`) — either of those names would have accepted a value
+   * from the wrong vocabulary silently.
+   *
+   * TWO NULLABLE COLUMNS, EACH FOR A MEASURED REASON (07-RESEARCH.md § Pitfall
+   * 3). `source_sha256` is NULL when that index carried no content at all, and
+   * there is then no `sources` row to point at — an index with nothing behind it
+   * is still a fact about the bundle. `sources_verbatim` is NULL when the map
+   * declares `sources[i]` as null, which ECMA-426 permits; the SQL NULL is a
+   * value and is never the three-character string "null".
+   *
+   * `sources_verbatim` IS THE ONE TARGET-CONTROLLED COLUMN, and the first since
+   * `observations.url`. It is stored UNSANITISED and UNNORMALISED because D-06
+   * says evidence is sanitised at DISPLAY time — but "verbatim" is not
+   * "unbounded", so `store/sources.ts` bounds it at `SOURCES_LABEL_MAX` exactly
+   * as `observations.url` is bounded at `URL_MAX`. `schema.spec.ts`'s allowlist
+   * entry carries the rest of that argument, including the part that must not be
+   * softened: it is NOT redacted at write time, so its safety rests on R1/R2 at
+   * render and on the O-08 normaliser, which is a DISPLAY control.
+   *
+   * BOTH INDEXES ASCENDING, one direction each, for the reason step v5 gives at
+   * length: SQLite traverses an index in reverse for the opposite `ORDER BY`, so
+   * one direction serves both reads. `idx_source_sightings_artifact` is the
+   * drill-down's keyset order — `(project_id, artifact_sha256, source_index)`,
+   * matching `listRecoveredSourcesPage`'s scope and sort exactly.
+   * `idx_sources_seen` is retention's, leading on `first_seen_at`.
+   *
+   * THE COST D-09 ACCEPTS, WITH NO EXEMPTION, PUT TO THE OPERATOR BEFORE THIS
+   * STEP WAS WRITTEN. One row per recovered source under the NORMAL retention
+   * caps: a 781-source map is 781 `sources` rows and 781 sighting rows against a
+   * `DEFAULT_RETENTION_MAX_ROWS` of 50,000, so a handful of large maps consumes
+   * the budget and the operator meets eviction sooner here than on any other
+   * table. `SOURCE_ROWS_PER_MAP_MAX` bounds the per-map half; the sweep-cadence
+   * half is plan 07-05's.
+   */
+  {
+    v: 8,
+    sql: `
+CREATE TABLE IF NOT EXISTS sources (
+  project_id    TEXT    NOT NULL CHECK (length(project_id) > 0),
+  source_sha256 TEXT    NOT NULL CHECK (length(source_sha256) = 64),
+  byte_len      INTEGER NOT NULL,
+  line_count    INTEGER NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, source_sha256)
+);
+CREATE TABLE IF NOT EXISTS source_sightings (
+  project_id       TEXT    NOT NULL CHECK (length(project_id) > 0),
+  map_sha256       TEXT    NOT NULL CHECK (length(map_sha256) = 64),
+  source_index     INTEGER NOT NULL,
+  artifact_sha256  TEXT    NOT NULL CHECK (length(artifact_sha256) = 64),
+  request_id       TEXT    NOT NULL,
+  source_sha256    TEXT,
+  sources_verbatim TEXT,
+  producibility    TEXT    NOT NULL CHECK (producibility IN ('producible','gone','changed')),
+  producibility_at INTEGER,
+  recovered_at     INTEGER NOT NULL,
+  PRIMARY KEY (project_id, map_sha256, source_index)
+);
+CREATE INDEX IF NOT EXISTS idx_source_sightings_artifact
+  ON source_sightings (project_id, artifact_sha256, source_index);
+CREATE INDEX IF NOT EXISTS idx_sources_seen
+  ON sources (project_id, first_seen_at, source_sha256);
+`,
+  },
 ];
 
 /** One step's outcome. A migration that fails must be LEGIBLE: Caido surfaces

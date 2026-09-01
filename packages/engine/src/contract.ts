@@ -154,6 +154,61 @@ export const SCAN_LIFECYCLE_STATES = [
 export type ScanLifecycleState = (typeof SCAN_LIFECYCLE_STATES)[number];
 
 /**
+ * THE THIRD COLLISION IN THIS REGISTER — PRODUCIBILITY IS NOT A SCAN STATE.
+ *
+ * Declared IMMEDIATELY AFTER the second vocabulary so the collision is visible
+ * at the declaration, not at a call site three packages away. `producibility`
+ * answers CAN DEFMINER STILL SHOW YOU THESE BYTES; `analyses.scan_state`
+ * answers DID DEFMINER FINISH LOOKING AT THEM. They are ORTHOGONAL and all four
+ * combinations are reachable and meaningful — done/producible (normal),
+ * done/gone (the map parsed fine, Caido lost the request), partial/producible
+ * (over the row bound, nothing to produce anyway), partial/gone (both) — and one
+ * column cannot carry four states across two axes without inventing product
+ * names for the combinations, which is the "nothing found versus analysis
+ * broke" confusion ERR-02/OBS-02 exists to prevent, in a new surface.
+ *
+ * TWO MORE MECHANISMS. The column is `producibility`, never `state` (taken by
+ * `scans`) nor `scan_state` (taken by `analyses`) — both would have accepted a
+ * wrong value silently. The words are **Gone** and **Changed**: nine are in use
+ * (Queued, Analysing, Complete, Partial, Failed, Scanning, Suspended, Finished,
+ * Discarded) and neither shares a stem with, nor is a prefix of, any of them;
+ * *Missing*, *Lost*, *Incomplete* were REJECTED against **Partial**.
+ */
+export const SOURCE_PRODUCIBILITY_STATES = [
+  /** The bundle is still reachable and its body still hashes to the recorded
+   *  `artifact_sha256`, so the source can be produced on demand (D-07). */
+  "producible",
+  /** Caido no longer has the originating request, so there is nothing to
+   *  reload. A TOMBSTONE: D-23 makes it sticky by statement construction. */
+  "gone",
+  /** The request came back, but the body no longer hashes to the recorded
+   *  digest. D-24 FAILS CLOSED rather than show bytes that may not be the ones
+   *  that were analysed. */
+  "changed",
+] as const;
+
+/** One producibility outcome. Derived from
+ *  {@link SOURCE_PRODUCIBILITY_STATES}, never restated. */
+export type SourceProducibility = (typeof SOURCE_PRODUCIBILITY_STATES)[number];
+
+/**
+ * Compile-time exhaustiveness over {@link SourceProducibility}.
+ *
+ * Same job as `assertNoOtherAuditKind`, whose shape this copies: STOP COMPILING
+ * when a member is added to {@link SOURCE_PRODUCIBILITY_STATES} without the
+ * matching `migrations.ts` forward step. The new value has no arm, the
+ * parameter is no longer assignable to `never`, and the build fails at the
+ * moment somebody widens the vocabulary rather than at the moment the database
+ * refuses the write — which matters more here than usual, because this list is
+ * inside a one-way migration.
+ *
+ * @internal
+ */
+export function assertNoOtherProducibility(value: never): never {
+  throw new Error(`unhandled source producibility: ${String(value)}`);
+}
+
+/**
  * Why a scan is `suspended` — a CLOSED, DefMiner-authored code set.
  *
  * A CODE AND NEVER A SENTENCE, for the reason `RpcReason` gives on the other
@@ -750,13 +805,23 @@ export const INVALIDATION_EVENT = "defminer:invalidated";
  * ENTITY CATEGORIES ARE APPENDED BY THE PHASE THAT ADDS THE TABLE, NOT GUESSED
  * AT HERE. There is no `entities` and no `evidence` member below, and adding
  * one before the table exists would be the schema invention D-05(2) forbids.
- * contract.spec.ts asserts this list holds exactly these three and nothing
- * entity-shaped, so a speculative member fails rather than lands.
+ * contract.spec.ts asserts this list holds exactly the shipped table names and
+ * nothing entity-shaped, so a speculative member fails rather than lands.
+ *
+ * `sources` and `source_sightings` WERE APPENDED BY PLAN 07-04, IN THE SAME
+ * EDIT THAT ADDED THEIR MIGRATION STEP (v8) — which is this list's own rule
+ * honoured rather than restated. They are entity tables the drill-down renders
+ * rows from, so a write to either has a page to invalidate; that is the whole
+ * membership test, and it is the reason `scans` is still absent (06-UI-SPEC.md
+ * § "Named Conflicts": scan progress rides the same EVENT and is NOT a
+ * category, because a progress payload has no rows to re-query).
  */
 export const INVALIDATION_CATEGORIES = [
   "artifacts",
   "observations",
   "analyses",
+  "sources",
+  "source_sightings",
 ] as const;
 
 /** One invalidation category. Derived from {@link INVALIDATION_CATEGORIES}. */

@@ -28,7 +28,7 @@ import {
 
 import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
 
-/** The six tables the operator approved, across THREE one-way checkpoints.
+/** The eight tables the operator approved, across FOUR one-way checkpoints.
  *  Exactly these, in this order.
  *
  *  - `analyses`, `artifacts`, `observations`, `settings` — plan 01-01's one-way
@@ -41,12 +41,23 @@ import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
  *    indexes, and the two costs the shape accepts — that only the aggregate
  *    `rejected` is durable, and that O-04 is designed around rather than bet on
  *    — before step v5 was written.
+ *  - `sources`, `source_sightings` — plan 07-04's `blocking-human` checkpoint
+ *    (approve-as-specified, 2026-09-02). The operator was shown both full column
+ *    lists, both indexes, the migration version (v8), the one-way half — that
+ *    reversing D-07 means adding a content column, which fires this gate by
+ *    design and re-opens D-24 — and the cost D-09 accepts with NO exemption: one
+ *    row per recovered source under the normal retention caps, so a 781-source
+ *    map is 781 rows in each table against a `DEFAULT_RETENTION_MAX_ROWS` of
+ *    50,000, and eviction is met sooner here than on any other table.
  *
- *  ALL THREE approval events are named on purpose. A comment reading "five"
+ *  ALL FOUR approval events are named on purpose. A comment reading "five"
  *  above an array holding six is the exact drift shape this repo keeps catching,
  *  and it would have been introduced here by the edit that added the sixth
- *  entry. `listTables()` orders `name ASC`, which is why `scans` lands between
- *  `observations` and `settings` rather than at the end. */
+ *  entry — and again by the edit that added the seventh and eighth, which is
+ *  why the count in the first line above was rewritten in the same commit as
+ *  the array. `listTables()` orders `name ASC`, which is why `scans` lands
+ *  between `observations` and `settings`, and why `source_sightings` precedes
+ *  `sources`: `_` (0x5F) sorts before `s` (0x73). */
 const EXPECTED_TABLES = [
   "analyses",
   "artifacts",
@@ -54,6 +65,8 @@ const EXPECTED_TABLES = [
   "observations",
   "scans",
   "settings",
+  "source_sightings",
+  "sources",
 ];
 
 /**
@@ -478,6 +491,70 @@ const COLUMN_ALLOWLIST: Record<string, string[]> = {
     "started_at",
     "updated_at",
     "finished_at",
+  ],
+  // D-05's IDENTITY MODEL, AND WHAT IS NOT HERE IS THE MITIGATION. `sources` is
+  // one row per distinct recovered source CONTENT — a digest, a size, a line
+  // count and a first-seen timestamp. THERE IS NO CONTENT COLUMN, in any
+  // encoding: D-07 keeps recovered source out of the database entirely and
+  // reloads it on demand, so a stolen copy of this file is a list of digests and
+  // byte counts rather than the target's source code. `body` would be refused by
+  // name below, which is a SECOND and independent reason the same property
+  // holds. `line_count` is stored rather than derived because deriving it under
+  // D-07 means a full bundle reload, and O-02's no-line-structure case has to be
+  // detectable without one.
+  sources: [
+    "project_id",
+    "source_sha256",
+    "byte_len",
+    "line_count",
+    "first_seen_at",
+  ],
+  // ONE ROW PER `(map, index)` SIGHTING — `observations` applied to a second
+  // entity class. `artifact_sha256` is not decoration: plan 07-06 re-verifies a
+  // reloaded body against it and FAILS CLOSED (D-24), so recording the digest
+  // here is what makes that control possible at all. `request_id` is Caido's own
+  // opaque identifier for a stored request, never a URL.
+  //
+  // `sources_verbatim` IS THE ONE TARGET-CONTROLLED COLUMN ON THIS TABLE, and
+  // the first target-controlled string at rest since `observations.url`. Its
+  // justification belongs in that column's register and here it is, including
+  // the part a reviewer will ask for and which must not be softened:
+  //
+  //   It is a DEVELOPER-AUTHORED PATH LABEL out of a sourcemap's `sources`
+  //   array — not a response body, not a credential-bearing URL. It carries no
+  //   query string, no userinfo and no header value, because a `sources` entry
+  //   is a build-time module path and nothing in the pipeline puts anything else
+  //   there. It is bounded twice: by `SOURCES_LABEL_MAX` in `store/sources.ts`,
+  //   which truncates at write exactly as `URL_MAX` does, and by the map's own
+  //   size, which `MAP_MAX_BYTES` already caps.
+  //
+  //   AND IT IS NOT REDACTED AT WRITE TIME, BECAUSE D-06 FORBIDS IT. The label
+  //   is EVIDENCE — `parse.ts` keeps it verbatim, unsanitised and unnormalised,
+  //   and D-06 puts sanitisation at DISPLAY time only. So this column's safety
+  //   rests ENTIRELY on R1/R2 at render and on the O-08 display normaliser. That
+  //   is a DISPLAY control and not a STORAGE control, and the distinction is the
+  //   whole reason this paragraph is written out rather than summarised: the
+  //   database holds bytes a hostile origin chose, and every surface that renders
+  //   them is doing the work. `observations.url` differs here and the difference
+  //   is deliberate — WR-07 redacts a URL's VALUES at write because they are
+  //   credentials; a module path is not a credential and redacting it would
+  //   destroy the evidence.
+  //
+  // `producibility` is the third closed vocabulary (D-22), declared in
+  // `contract.ts` as `SOURCE_PRODUCIBILITY_STATES` immediately after the second.
+  // NOT named `state` and NOT named `scan_state` — both are taken and both would
+  // have accepted a value from the wrong vocabulary silently.
+  source_sightings: [
+    "project_id",
+    "map_sha256",
+    "source_index",
+    "artifact_sha256",
+    "request_id",
+    "source_sha256",
+    "sources_verbatim",
+    "producibility",
+    "producibility_at",
+    "recovered_at",
   ],
 };
 
