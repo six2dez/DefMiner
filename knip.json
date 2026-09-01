@@ -82,6 +82,28 @@
       // entries above were: an ignore that has stopped being needed is an
       // ignore that starts hiding the next real one, and knip reports the
       // stale entry itself as a configuration hint.
+      //
+      // AND IT IS BACK, FOR EXACTLY ONE ENTRY AND FOR EXACTLY ONE WAVE — plan
+      // 07-03. D-16 relocates `@jridgewell/sourcemap-codec` from the root
+      // devDependencies into this workspace's `dependencies` so the VLQ decode
+      // runs in the operator's browser rather than on the proxy thread
+      // (SPIKE-06 measured vlq_decode at 167 ms on 8.3 MB against a 25 ms
+      // slice, and decode() consumes the whole mappings string so it cannot be
+      // chunked). The DECLARATION lands in 07-03 because
+      // packages/backend/src/codec-prohibition.spec.ts — the D-17 capability
+      // ban — has to be able to say where the codec legitimately lives; the
+      // IMPORT lands in plan 07-08, whose viewer decodes positions in the
+      // frontend. Between those two plans knip is correct that nothing imports
+      // it, and `pnpm knip` is a gate every downstream plan's verify step runs.
+      //
+      // REMOVE THIS ENTRY WHEN 07-08's VIEWER IMPORTS THE CODEC, in the same
+      // edit. That is the identical contract the three notes above carried and
+      // each of them was honoured, which is the only reason this one is
+      // credible. The root devDependency is NOT removed and must not be:
+      // tier1/parse/src/index.ts is the SPIKE-06 probe and knip treats
+      // `tier1/*/src/index.ts` as a root-workspace entry point, so removing it
+      // would make the probe unbuildable.
+      "ignoreDependencies": ["@jridgewell/sourcemap-codec"]
     }
   },
   // RESTORED TO `error` BY PLAN 01-03, as plan 01-02 asked for in this file.

@@ -11,6 +11,7 @@
     "@caido/primevue": "0.3.3",
     "@caido/tailwindcss": "0.1.0",
     "@defminer/engine": "workspace:*",
+    "@jridgewell/sourcemap-codec": "1.5.5",
     "@vueuse/core": "14.2.0",
     "pinia": "3.0.4",
     "postcss-prefixwrap": "1.57.2",
