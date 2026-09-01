@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 77
+open_count: 78
 waived_count: 0
-fixed_count: 28
-total_count: 105
-last_updated: 2026-09-01T09:22:36.762Z
+fixed_count: 30
+total_count: 108
+last_updated: 2026-09-01T10:01:49.987Z
 ---
 
 # Broken Windows Ledger
@@ -141,6 +141,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 103 | 6 | deviation | .planning/REQUIREMENTS.md |  | requirements.mark-complete reflowed the derived residual block again (4th firing of WINDOWS 85); three blank lines removed from the shipped block, comparison untouched | open |  | 2026-09-01T08:51:10.765Z |  |
 | 104 | 06 | deviation | packages/backend/src/scan/scans.ts |  | THE SCAN HISTORY DETAIL CANNOT SHOW THE COMPOSED FILTER, AND THAT IS A MISSING COLUMN RATHER THAN A MISSING SURFACE. 06-13's task 1 action asks the disclosure to render 'the composed filter the scan actually ran'. It does not, because the scans table HAS NO composed_filter COLUMN: LIST_SCANS_SQL projects operator_filter and nothing else, and ScanStatusPayload.composedFilter is COMPUTED for the live readout from today's SCAN_KIND_CLAUSE. Recomposing it for a historical scan would describe THIS VERSION'S DefMiner clause rather than the one that scan ran - and the asset clause ships with the plugin version, so that claim goes wrong silently at the first upgrade. WHAT 06-13 DID INSTEAD: rendered the operator's own clause at the panel cap and stated the absence in words (SCAN_HISTORY_COMPOSED_ABSENT_BODY), which is this page's own rule for a fact DefMiner does not have. OWNER: a plan that owns store/migrations.ts and scan/scans.ts, to add a composed_filter column written at scan creation - the same one-way migration ladder WINDOW 86's analysed needs, and worth pairing with it rather than paying the ladder twice. | open |  | 2026-09-01T09:22:36.683Z |  |
 | 105 | 06 | unrun-verify | packages/frontend/src/components/ScanHistoryList.vue |  | ScanHistoryList's failure-beside-rows BRANCH IS UNREACHABLE FROM THE SURFACE AND THEREFORE UNTESTED. showRows deliberately does not consult failed, so a read that fails while rows are already on screen renders the error ABOVE them rather than instead of them - which is the correct shape, because a failure that replaced the rows would take a suspended scan off the screen at the moment the operator went looking for it. BUT THE ONLY RE-READ IS THE RETRY BUTTON, AND RETRY ONLY EXISTS WHILE THE ERROR IS ON SCREEN, so the sequence rows-then-failure cannot be driven from the component and ScanHistoryList.spec.ts says so in place of asserting it. OWNER: whichever plan adds a Refresh control to the populated history, or a periodic re-read; the branch is built and commented for exactly that, and the case becomes writable the moment such a trigger exists. | open |  | 2026-09-01T09:22:36.762Z |  |
+| 106 | 06 | deviation | packages/backend/src/store/migrations.ts |  | CR-01 FIXED (08d623c): step v6's audit rebuild was five statements in ONE exec, and its JSDoc claimed a partial rebuild could not exist because of MULTISTATEMENT_EXEC_ATOMIC. THE ATOMICITY CLAIM WAS WRONG. SPIKE-09 measured that property on a batch CONTAINING an explicit BEGIN...COMMIT (00-GO-NO-GO.md:362); step v6 contained neither, so each statement committed in its own implicit transaction and a kill between DROP TABLE IF EXISTS audit and ALTER TABLE audit_v6 RENAME TO audit left no audit, an audit_v6 holding every row, and user_version at 5 - a state every later boot re-entered and failed in, blocking the ladder for ever while index.ts only logged MIGRATION INCOMPLETE. FIX: the rebuild is now TWO steps with a durable user_version between them (v6 creates and copies, v7 swaps), SCHEMA_VERSION is 7, and v7 re-creates BOTH names under IF NOT EXISTS and re-copies BEFORE it drops so it converges from all three states its own interruption can produce - including the post-rename one, where a naive DROP+RENAME would drop the renamed ledger itself. BEGIN...COMMIT was NOT used instead: a failing exec strands an open write transaction on an unreachable pooled connection and the boot path is the worst place for one. The JSDoc was CORRECTED rather than deleted - it now states what SPIKE-09 actually measured. Step v6 had not shipped (authored this phase in 2bc96cf, no release tag), verified from git history rather than assumed. ALSO FOUND: migrations.spec.ts defined applyThroughV5, seedAudit, readAudit and indexNames and CALLED NONE of them - the row-preservation gate the v6 JSDoc calls 'the only thing standing between a silent skip and a green run' was described but never written. Now written, plus the two interruption cases. | fixed |  | 2026-09-01T10:01:00.824Z | 2026-09-01T10:01:49.900Z |
+| 107 | 06 | deviation | .planning/phases/06-retroactive-scan-deployment-reality/06-REVIEW.md |  | TEN of the twelve 06-REVIEW.md findings REMAIN OPEN and 06-REVIEW.md is their record: HI-02 (driveScan never re-arms after a failed walk - the row stays running for ever and SCANS_OVER_AGE_SQL deletes it at 90 days), ME-01 (completed/discarded/suspended transitions emit no progress, so the panel keeps rendering running and then Not advancing), ME-02 (advanceScan returning changes===0 is treated as success, so counters go backwards on Refresh), ME-03 (filesystem-prohibition.spec.ts has no unanalysable-specifier rule, so an assembled module specifier passes silently), ME-04 (composedPreview is a second HTTPQL composer outside the gate that forbids one - the gate walks BACKEND_SRC only), ME-05 (the heldAtWatermark module flag is not cleared on the no-scan/epoch-changed/busy exits), LO-01 (retention.ts credits the suspended-row bound to idx_scans_one_running, which is ON scans(project_id) WHERE state='running' and bounds nothing suspended), LO-02 (the scans row cap silently reuses the artifact cap), LO-03 (readFinishedRequestIds truncates silently if a page exceeds SCAN_PAGE_SIZE), LO-04 (jq_get evaluates its second argument with Python eval). This pass fixed CR-01 (08d623c) and HI-01 (58d48ed) only, by instruction. NOTE ON SEVERITY: HI-01's fix does not touch ME-05, and the two interact - the module flag now has a second reader on the wire, so a stale true on an early-return path reaches the panel through getScanStatus exactly as before. ME-05 was NOT made worse and was not closed. | open |  | 2026-09-01T10:01:19.813Z |  |
+| 108 | 06 | deviation | packages/backend/src/scan/producer.ts |  | HI-01 FIXED (58d48ed): ScanProgressPayload.heldAtWatermark was structurally always false - the per-page emit is the field's only writer and runs only after the watermark gate resets the flag - and ScanPanel's live overlay layered that constant over the true value from getScanStatus, so the watermark hold could never reach the operator after the first page and the Not advancing marker fired on it instead. FIX: the watermark gate now emits one payload carrying the row's counters UNCHANGED and heldAtWatermark true, on every held re-entry (emitProgress swallows send failures on the grounds that the next page emits again, and a hold has no next page). ScanPanel.vue:485 deliberately UNCHANGED - layering progress over row is correct once the channel carries the hold, and switching to row would hide a hold that begins after mount. producer.spec.ts's toHaveLength(0) on the held path was the assertion that pinned the defect and is corrected; the toBe(false) on the walked-page case is KEPT because false is the right answer there and is only now falsifiable. | fixed |  | 2026-09-01T10:01:33.178Z | 2026-09-01T10:01:49.987Z |
 
 ````json
 [
@@ -1403,6 +1406,42 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "reason": "",
     "recorded_at": "2026-09-01T09:22:36.762Z",
     "resolved_at": null
+  },
+  {
+    "id": 106,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/store/migrations.ts",
+    "line": null,
+    "description": "CR-01 FIXED (08d623c): step v6's audit rebuild was five statements in ONE exec, and its JSDoc claimed a partial rebuild could not exist because of MULTISTATEMENT_EXEC_ATOMIC. THE ATOMICITY CLAIM WAS WRONG. SPIKE-09 measured that property on a batch CONTAINING an explicit BEGIN...COMMIT (00-GO-NO-GO.md:362); step v6 contained neither, so each statement committed in its own implicit transaction and a kill between DROP TABLE IF EXISTS audit and ALTER TABLE audit_v6 RENAME TO audit left no audit, an audit_v6 holding every row, and user_version at 5 - a state every later boot re-entered and failed in, blocking the ladder for ever while index.ts only logged MIGRATION INCOMPLETE. FIX: the rebuild is now TWO steps with a durable user_version between them (v6 creates and copies, v7 swaps), SCHEMA_VERSION is 7, and v7 re-creates BOTH names under IF NOT EXISTS and re-copies BEFORE it drops so it converges from all three states its own interruption can produce - including the post-rename one, where a naive DROP+RENAME would drop the renamed ledger itself. BEGIN...COMMIT was NOT used instead: a failing exec strands an open write transaction on an unreachable pooled connection and the boot path is the worst place for one. The JSDoc was CORRECTED rather than deleted - it now states what SPIKE-09 actually measured. Step v6 had not shipped (authored this phase in 2bc96cf, no release tag), verified from git history rather than assumed. ALSO FOUND: migrations.spec.ts defined applyThroughV5, seedAudit, readAudit and indexNames and CALLED NONE of them - the row-preservation gate the v6 JSDoc calls 'the only thing standing between a silent skip and a green run' was described but never written. Now written, plus the two interruption cases.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-01T10:01:00.824Z",
+    "resolved_at": "2026-09-01T10:01:49.900Z"
+  },
+  {
+    "id": 107,
+    "kind": "deviation",
+    "phase": "06",
+    "file": ".planning/phases/06-retroactive-scan-deployment-reality/06-REVIEW.md",
+    "line": null,
+    "description": "TEN of the twelve 06-REVIEW.md findings REMAIN OPEN and 06-REVIEW.md is their record: HI-02 (driveScan never re-arms after a failed walk - the row stays running for ever and SCANS_OVER_AGE_SQL deletes it at 90 days), ME-01 (completed/discarded/suspended transitions emit no progress, so the panel keeps rendering running and then Not advancing), ME-02 (advanceScan returning changes===0 is treated as success, so counters go backwards on Refresh), ME-03 (filesystem-prohibition.spec.ts has no unanalysable-specifier rule, so an assembled module specifier passes silently), ME-04 (composedPreview is a second HTTPQL composer outside the gate that forbids one - the gate walks BACKEND_SRC only), ME-05 (the heldAtWatermark module flag is not cleared on the no-scan/epoch-changed/busy exits), LO-01 (retention.ts credits the suspended-row bound to idx_scans_one_running, which is ON scans(project_id) WHERE state='running' and bounds nothing suspended), LO-02 (the scans row cap silently reuses the artifact cap), LO-03 (readFinishedRequestIds truncates silently if a page exceeds SCAN_PAGE_SIZE), LO-04 (jq_get evaluates its second argument with Python eval). This pass fixed CR-01 (08d623c) and HI-01 (58d48ed) only, by instruction. NOTE ON SEVERITY: HI-01's fix does not touch ME-05, and the two interact - the module flag now has a second reader on the wire, so a stale true on an early-return path reaches the panel through getScanStatus exactly as before. ME-05 was NOT made worse and was not closed.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-01T10:01:19.813Z",
+    "resolved_at": null
+  },
+  {
+    "id": 108,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "packages/backend/src/scan/producer.ts",
+    "line": null,
+    "description": "HI-01 FIXED (58d48ed): ScanProgressPayload.heldAtWatermark was structurally always false - the per-page emit is the field's only writer and runs only after the watermark gate resets the flag - and ScanPanel's live overlay layered that constant over the true value from getScanStatus, so the watermark hold could never reach the operator after the first page and the Not advancing marker fired on it instead. FIX: the watermark gate now emits one payload carrying the row's counters UNCHANGED and heldAtWatermark true, on every held re-entry (emitProgress swallows send failures on the grounds that the next page emits again, and a hold has no next page). ScanPanel.vue:485 deliberately UNCHANGED - layering progress over row is correct once the channel carries the hold, and switching to row would hide a hold that begins after mount. producer.spec.ts's toHaveLength(0) on the held path was the assertion that pinned the defect and is corrected; the toBe(false) on the walked-page case is KEPT because false is the right answer there and is only now falsifiable.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-09-01T10:01:33.178Z",
+    "resolved_at": "2026-09-01T10:01:49.987Z"
   }
 ]
 ````
