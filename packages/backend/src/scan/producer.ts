@@ -407,6 +407,12 @@ let walking = false;
  * cries wolf on the single most common healthy state of a long backfill. An
  * operator who learns to ignore a stall marker is worse off than one who never
  * had it (06-UI-SPEC.md § "The scan status payload — required fields").
+ *
+ * TWO READERS, AND BOTH ARE NEEDED. `getScanStatus` reads this flag on demand;
+ * the watermark gate ALSO emits the hold on the progress channel as it happens.
+ * The flag alone was not enough: the panel layers the progress payload over the
+ * status read, so a channel that never carried a `true` overwrote the flag's
+ * answer with `false` for the whole life of the hold.
  */
 let heldAtWatermark = false;
 
@@ -582,6 +588,56 @@ export async function runScanProducer(
           // the call open would turn a reportable state into an invisible one.
           // The caller re-enters and the walk resumes from exactly here — which
           // is what makes the hold a WAIT rather than a stop.
+          //
+          // --- THE HOLD IS EMITTED, AND IT IS THE ONLY PATH THAT CAN EMIT IT --
+          //
+          // WITHOUT THIS EMIT THE FIELD IS A COMPILE-TIME `false`. The per-page
+          // payload below is reachable only after the reset three lines down, so
+          // every payload on the channel carried `false` no matter what the
+          // producer was doing — and the panel layers the progress event over
+          // the status read, so ONE page was enough to overwrite the true value
+          // `getScanStatus` had read out of `isHeldAtWatermark()` and keep it
+          // overwritten, because a held producer emitted nothing that could
+          // correct it. The readout then fell through to the stall marker and
+          // told the operator that a healthy, self-recovering hold was a stalled
+          // backend, whose next invited control is Discard. That is the exact
+          // outcome this field was added to prevent.
+          //
+          // NO COUNTER MOVES HERE, which is what keeps the "a hold reports no
+          // progress" rule intact. The payload carries the ROW'S values
+          // unchanged — nothing was walked, so nothing is added — and reports
+          // only the STATE the reader cannot derive. The stall clock is
+          // fingerprinted over the counters, so a repeated hold payload does not
+          // reset it; `scanStatusWord` reads the hold ahead of the stall marker,
+          // so the operator sees "Waiting for the analysis queue" while it lasts
+          // and the marker stays reachable for a genuine stall.
+          //
+          // EMITTED ON EVERY HELD RE-ENTRY, not once per hold. The channel is
+          // lossy by design — `emitProgress` swallows a send failure on the
+          // grounds that "the next page emits again" — and a hold HAS no next
+          // page, so re-emitting is the only thing that makes the signal
+          // reliable. The re-entry period is the driver's 250 ms.
+          await emitProgress(deps, projectId, {
+            kind: SCAN_PROGRESS_KIND,
+            projectId,
+            scanId: scan.scan_id,
+            // `running` BY CONSTRUCTION: step 2 above refuses to walk a scan in
+            // any other state, and a hold does not change the row.
+            state: "running",
+            pagesWalked: scan.pages_walked,
+            seen: scan.seen,
+            admitted: scan.admitted,
+            skippedDone: scan.skipped_done,
+            rejected: scan.rejected,
+            queued: scan.queued,
+            // ABSENT, NEVER ZERO — the field's note on the contract applies
+            // here for the same reason it applies to the per-page emit.
+            analysed: null,
+            // THE ROW'S POSITION, not a clock and not a fresh read: the walk is
+            // holding, so the position is exactly where the last page left it.
+            lastCreatedAt: scan.last_created_at,
+            heldAtWatermark: true,
+          });
           return outcome("held", totals);
         }
         // It drained. Resume with no operator action, and stop reporting a hold
@@ -718,10 +774,17 @@ export async function runScanProducer(
 
       // --- THE PER-PAGE PROGRESS EMIT (FIND-04, D-15) ----------------------
       //
-      // AFTER THE ADVANCE AND ONLY ON A PAGE THAT WAS WALKED. A hold transfers
-      // no page and reports no progress: a readout that ticked while the
-      // producer was withholding would be reporting motion that did not happen,
-      // on the one surface whose entire subject is whether anything is moving.
+      // AFTER THE ADVANCE AND ONLY ON A PAGE THAT WAS WALKED. A readout that
+      // ticked while the producer was withholding would be reporting motion
+      // that did not happen, on the one surface whose entire subject is whether
+      // anything is moving.
+      //
+      // THE RULE IS "NO COUNTER MOVES ON A HOLD", NOT "A HOLD IS SILENT", and
+      // this comment used to say the latter. The watermark gate above emits a
+      // payload of its own carrying the row's counters UNCHANGED and
+      // `heldAtWatermark: true` — no motion is reported, and the one state the
+      // reader cannot derive is. A hold that stayed silent left this emit as
+      // the field's only writer, which made it a constant `false`.
       //
       // THE COUNTERS ARE THE ROW'S, CUMULATIVE — the values `scan` was read
       // with plus this page's own — and not `totals`, which describe THIS CALL.

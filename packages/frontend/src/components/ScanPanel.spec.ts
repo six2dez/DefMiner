@@ -488,6 +488,41 @@ describe("the progress readout", () => {
     expect(h.wrapper.find(STATUS).text()).toContain("resumes on its own");
   });
 
+  it("renders a hold that arrives as a PROGRESS EVENT, and keeps it past the stall deadline", async () => {
+    // THE CASE ABOVE DRIVES THE HOLD THROUGH THE STATUS READ ONLY, and that was
+    // the whole of the coverage. `live` layers the progress payload over the
+    // status read, so a hold the CHANNEL never carried could not reach the
+    // operator at all once a scan had emitted one page: the status read's true
+    // value was overwritten and stayed overwritten, because a held producer
+    // emits nothing that could correct it. This case drives the hold the way a
+    // running scan actually delivers it.
+    vi.useFakeTimers();
+    const h = harness({ scan: payload({ heldAtWatermark: false }) });
+    await flushPromises();
+    expect(h.wrapper.find(STATUS).text()).toContain(SCAN_STATUS_SCANNING);
+
+    // The producer reaches the watermark and reports it. NO COUNTER MOVES — a
+    // hold transfers no page, so the payload repeats the row's own values.
+    h.emitProgress({ heldAtWatermark: true });
+    await flushPromises();
+    expect(h.wrapper.find(STATUS).text()).toContain(
+      SCAN_STATUS_WAITING_FOR_QUEUE,
+    );
+
+    // AND IT IS STILL THE HOLD PAST THE DEADLINE. The counters are frozen for
+    // as long as the hold lasts, so the stall marker fires on every long hold
+    // unless the hold outranks it — which is the misfire the field exists to
+    // prevent, and the one the operator answers with Discard.
+    await vi.advanceTimersByTimeAsync(ARTIFACT_DEADLINE_MS + 2_000);
+    await flushPromises();
+    expect(h.wrapper.find(STATUS).text()).toContain(
+      SCAN_STATUS_WAITING_FOR_QUEUE,
+    );
+    expect(h.wrapper.find(STATUS).text()).not.toContain(
+      SCAN_STATUS_NOT_ADVANCING,
+    );
+  });
+
   it("marks a genuinely stopped scan, and only after the imported threshold", async () => {
     vi.useFakeTimers();
     const h = harness({ scan: payload() });

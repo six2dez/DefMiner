@@ -1119,11 +1119,15 @@ describe("producer.ts holds no local copy of a tunable number", () => {
 // 8. THE PER-PAGE PROGRESS EMIT (FIND-04, D-15)
 // ===========================================================================
 //
-// ONE PAYLOAD PER PAGE THAT WAS ACTUALLY WALKED, on the SHIPPED event, and
-// nothing else. The negative half is the half that matters: a hold transfers no
-// page, so a hold reports no progress — a readout that ticked while the walk
-// was withholding would be reporting motion that did not happen, on the one
-// surface whose entire subject is whether anything is moving.
+// ONE PAYLOAD PER PAGE THAT WAS ACTUALLY WALKED, on the SHIPPED event — plus
+// ONE PER HOLD, carrying no motion at all. The negative half is still the half
+// that matters, and it is about COUNTERS and not about silence: a readout that
+// ticked while the walk was withholding would be reporting motion that did not
+// happen, on the one surface whose entire subject is whether anything is
+// moving. A hold that emitted NOTHING was the defect — it left the per-page
+// emit as `heldAtWatermark`'s only writer, and that emit is reachable only
+// after the flag is reset, so the field was a compile-time `false` on every
+// payload the channel ever carried.
 
 /** Every progress payload the code under test handed to the event channel. */
 function progressEmits(sdk: {
@@ -1161,10 +1165,21 @@ describe("the producer reports every page it walked, and only those", () => {
     expect(progressEmits(sdk)).toHaveLength(4);
   });
 
-  it("emits NOTHING while it is holding at the watermark without walking a page", async () => {
+  it("emits EXACTLY ONE payload while holding at the watermark, carrying the hold and no motion", async () => {
+    // THIS CASE USED TO ASSERT ZERO EMITS, AND THAT ASSERTION PINNED A DEFECT.
+    // "A hold reports no progress" is a rule about COUNTERS; it was read as a
+    // rule about silence, and silence made `heldAtWatermark` unreachable —
+    // the per-page emit is the only other writer and it runs only after the
+    // flag has been reset, so the field was a constant `false` on the wire. The
+    // panel layers the progress payload over the status read, so one walked
+    // page was enough to overwrite the true value from `isHeldAtWatermark()`
+    // and keep it overwritten for the whole hold; the readout then rendered
+    // "Not advancing" over a healthy backpressure wait, which is the outcome
+    // this field exists to prevent. A test asserting the buggy value is worse
+    // than no test, because it reads as coverage.
+    //
     // Three depth reads, all at or above the watermark: the gate, the re-check
-    // after the yield, and one spare. No page is transferred, so no page is
-    // reported.
+    // after the yield, and one spare.
     const record = newRecord();
     const sdk = onePage([item("a-1")], true, record);
 
@@ -1182,8 +1197,64 @@ describe("the producer reports every page it walked, and only those", () => {
     });
 
     expect(outcome.stop).toBe("held");
+    // NO PAGE WAS TRANSFERRED. The hold's payload is a state report, not a walk.
     expect(record.executes).toBe(0);
-    expect(progressEmits(sdk)).toHaveLength(0);
+
+    const emits = progressEmits(sdk);
+    expect(emits).toHaveLength(1);
+    const payload = emits[0];
+
+    // THE FIELD THE READER CANNOT DERIVE, carried as `true` — the whole point.
+    expect(payload?.heldAtWatermark).toBe(true);
+    expect(payload?.scanId).toBe("s1");
+    // The row is untouched by a hold, so its state is still `running`.
+    expect(payload?.state).toBe("running");
+
+    // AND NOT ONE COUNTER MOVED. Compared against the row the producer read,
+    // field by field, because the stall clock is fingerprinted over exactly
+    // these: a hold payload that nudged any of them would reset the marker and
+    // make a genuine stall during a hold unreportable.
+    const row = await getActiveScan(fx.db, PROJECT);
+    expect(payload?.pagesWalked).toBe(row?.pages_walked);
+    expect(payload?.seen).toBe(row?.seen);
+    expect(payload?.admitted).toBe(row?.admitted);
+    expect(payload?.skippedDone).toBe(row?.skipped_done);
+    expect(payload?.rejected).toBe(row?.rejected);
+    expect(payload?.queued).toBe(row?.queued);
+    expect(payload?.lastCreatedAt).toBe(row?.last_created_at);
+    expect(payload?.analysed).toBeNull();
+  });
+
+  it("re-emits the hold on EVERY held re-entry — the channel is lossy and a hold has no next page", async () => {
+    // `emitProgress` swallows a send failure on the stated grounds that "the
+    // next page emits again". A hold HAS no next page, so a signal emitted once
+    // per hold would be lost for the whole hold if that one send failed. The
+    // driver re-enters every 250 ms and each re-entry re-reports.
+    const record = newRecord();
+    const sdk = onePage([item("a-1")], true, record);
+    const deps = {
+      sdk,
+      db: fx.db,
+      queue: fakeQueue([
+        SCAN_BACKPRESSURE_WATERMARK,
+        SCAN_BACKPRESSURE_WATERMARK,
+        SCAN_BACKPRESSURE_WATERMARK,
+        SCAN_BACKPRESSURE_WATERMARK,
+      ]),
+      getProjectId: () => Promise.resolve(PROJECT),
+      projectEpoch: () => 0,
+      nowMs: () => NOW,
+    };
+
+    expect((await runScanProducer(deps)).stop).toBe("held");
+    expect((await runScanProducer(deps)).stop).toBe("held");
+
+    const emits = progressEmits(sdk);
+    expect(emits).toHaveLength(2);
+    expect(emits.every((p) => p.heldAtWatermark)).toBe(true);
+    // Two reports, one position — the re-entry reports the same state, it does
+    // not manufacture motion.
+    expect(emits[0]?.pagesWalked).toBe(emits[1]?.pagesWalked);
   });
 
   it("carries the CUMULATIVE row counters, the scan id, the state and the position", async () => {
@@ -1237,6 +1308,11 @@ describe("the producer reports every page it walked, and only those", () => {
     // FROM THE ITEM'S CAPTURE TIME, never from the clock: `nowMs` above is NOW
     // and the position is the boundary item's `getCreatedAt()`.
     expect(payload.lastCreatedAt).toBe(CAPTURED_AT);
+    // `false` IS THE CORRECT ANSWER HERE, and this line is now worth reading:
+    // the queue is a real `BoundedQueue` well below the watermark, so this walk
+    // genuinely did not hold. It used to be unfalsifiable — the field was a
+    // compile-time constant `false` on every payload — and the pair to it is the
+    // held case above, which asserts `true` on a walk that did.
     expect(payload.heldAtWatermark).toBe(false);
 
     // The row the RPC would read agrees with the payload the event carried.
