@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 06
 current_phase_name: Retroactive Scan & Deployment Reality
 status: executing
-stopped_at: Completed 06-10-PLAN.md
-last_updated: "2026-08-31T22:43:55.624Z"
+stopped_at: Completed 06-11-PLAN.md
+last_updated: "2026-09-01T08:13:59.488Z"
 last_activity: 2026-08-31
 last_activity_desc: Phase 06 execution started
-state_head: ad1d052e686108dbdeeff43413df45e0072515f4
+state_head: 0d30fb4b5691f1a81d0617a74bd9c6d3d204304b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 75
-  completed_plans: 69
+  completed_plans: 70
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 06 (Retroactive Scan & Deployment Reality) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-08-31 — Phase 06 execution started
 
@@ -328,6 +328,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P08 | 25 min | 2 tasks | 13 files |
 | Phase 06 P09 | 35 min | 3 tasks | 17 files |
 | Phase 06 P10 | 42 min | 3 tasks | 26 files |
+| Phase 06 P11 | 47 min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -632,6 +633,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 06]: P6-D09-1: THE RETROACTIVE SCAN NOW ACTUALLY WALKS. `runScanProducer` shipped in 06-01 with no caller BY DESIGN, gained its watermark in 06-03 and its lifecycle in 06-05, and until plan 06-09 nothing called it — so every property its spec proves was true of a function no build ever entered, and ROADMAP success criterion 1's word "runs" was unmet. `index.ts` step 6c constructs `ScanProducerDeps` and drives the loop; `completeScan` gets its first production caller. — The driver is SCHEDULED, never inline: `startScan` must answer before a page is transferred, because on this runtime a page moves every matching response body. It is armed at exactly two places — `startScan` and `resumeScan` — and deliberately NOT at `init()`, because D-11's startup sweep suspends what a previous process left running and resumes nothing, and a boot kick would silently reverse that decision. It is not on a poll either. It hands over THE SHIPPED QUEUE or returns: a fallback `new BoundedQueue(QUEUE_CAP)` would make D-01's watermark gate on a depth the live hook never raises, which is the drop-oldest defect back with every producer test still green. `index.spec.ts` proves the real queue is the one handed over by asserting the CONSUMER re-reads exactly the ids the walk offered.
 - [Phase 06]: P6-D09-2: D-15's LITERAL WORDING IS DIVERGED FROM, IN WRITING. Scan progress rides the SAME event as a second payload VARIANT and is NOT a fourth `InvalidationCategory`. `INVALIDATION_CATEGORIES` stays byte-unchanged at three members, `contract.spec.ts`'s length assertion is untouched, and `stores/coalescer.ts` is byte-unchanged — asserted by `git diff --exit-code`. — Both of the coalescer's `triageLocked` early returns are checked BEFORE its debounce window, so a `scans` category added literally would accrue into the coalescing pill and never land while a row is selected — the exact opposite of D-15's own stated intent. 06-UI-SPEC.md's "Named Conflicts" settled the mechanism and this plan implemented it: the payload is discriminated at the client's ONE subscription site, progress never reaches `onSummary`, and a leading-throttled store applies it at the shipped 2/s cap with NO trailing debounce (P5-D60 measured a pure trailing debounce at zero reactions over a sustained stream). A progress strip has no rows and no cursor, so its correct relationship to the triage lock is not "exempt from it" but "never behind it". The store takes a project id and a subscribe function and nothing else — not passing the lock in IS the mechanism.
 - [Phase 06]: P6-D09-3: `ScanStatusPayload.analysed` DECLINED A SECOND TIME, WITH THE REASON AND A MEASURED OWNERSHIP GAP. Window 86 named plan 06-09 its owner; 06-09 re-assessed it against its own `files_modified` and declined, exactly as 06-06 declined it — never silently, and never as a lying `0`. — `analyses` rows carry NO scan attribution: the primary key is `(project_id, sha256, detector_set_hash)` and nothing on the row says which scan offered the work. An honest per-scan count needs EITHER a new `scans.analysed` column (another permanent step in a one-way migration ladder — `store/migrations.ts` + `scan/scans.ts`) OR provenance on the queue `Entry` (`engine/queue.ts` + `ingest/consumer.ts` + `telemetry.ts`). 06-09's `files_modified` names none of those five files, in its original form or in the operator's mid-execution scope addition. MEASURED AND NEWLY RECORDED: no plan in 06-10..06-13 names any of the five either, so this has NO owner left in the phase and needs a gap-closure plan. What 06-09 did do: declare the field on the new `ScanProgressPayload` as `number | null` emitted as `null`, so wiring it later is one edit in one place rather than a shape change on the wire, with both specs asserting it is null. WINDOWS 86 stays open; WINDOWS 94 records the re-assessment.
+- [Phase 06]: 06-11: SCAN_KIND_CLAUSE moved from the cont family to the like family — MEASURED, not read. Caido 0.58.2 evaluates cont CASE SENSITIVELY, contradicting docs.caido.io. The shipped clause missed /F02-UPPER.JS and Content-Type: TEXT/JAVASCRIPT, both of which isScriptish accepts — a strict subset of the admission gate, and an invisible one. Paired terms in one instance: req.path.cont:".js" and req.path.cont:".JS" returned DISJOINT sets; req.path.like:"%.js%" and "%.JS%" returned the IDENTICAL set. Evidence: results/pushdown-superset.json.
+- [Phase 06]: 06-11: the D-06 proof is split across two runtimes and joined by fixture identity — sdk.requests.matches() exists only inside the plugin and isScriptish is only trustworthy as the shipped module, so neither half can host the whole proof. The join is the load-bearing part and is asserted three ways rather than assumed: the recorded clause byte-identical to the imported constant, every manifest fixture id present exactly once, and no artifact entry the manifest does not name.
+- [Phase 06]: 06-11: non-vacuity is asserted BY FIXTURE NAME, never by count — A count-only assertion passes on an artifact where the single non-matching fixture is an accident. The manifest names markup-page-with-script-element and the gate requires THAT id to carry a false match flag, so a clause matching everything fails instead of passing trivially.
+- [Phase 06]: 06-11: 06-04's fail-CLOSED property is now EXECUTED against a real Caido parser — WINDOWS 72 named this plan. Two legs on the live build: the balanced composed clause did NOT throw and returned an item; DefMiner's clause followed by an operator clause ending in // THREW 'Error: Invalid filter'. The operator-clause-LAST ordering in scan/filter.ts is therefore a measured mitigation rather than a cited one. WINDOWS 72 marked fixed.
+- [Phase 06]: 06-11: state.update-progress WITHHELD the project-wide bar for the EIGHTH consecutive time — 'progress percent withheld by buildStateFrontmatter — STATE.md left unchanged'. Recorded so the run stays visible rather than being rediscovered. The prose Progress: line still describes phase 01 plan execution and is deliberately untouched.
+- [Phase 06]: 06-11: FIND-03 was NOT marked complete, and that is the gate working — requirements.ready-ids reported 0/1 ready: sibling plans in this phase also declare FIND-03 and have no SUMMARY yet. Marking it now would flip the ledger green while the work is still running. It becomes ready when the LAST declaring plan finishes.
 
 ### Known Risks Carried Forward
 
@@ -674,8 +681,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-08-31T22:43:55.530Z
-**Stopped at:** Completed 06-10-PLAN.md
+**Last session:** 2026-09-01T08:13:59.329Z
+**Stopped at:** Completed 06-11-PLAN.md
 **Resume file:** None
 
 ### Blockers
