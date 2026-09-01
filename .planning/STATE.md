@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-09-01T21:00:03.924Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-09-01T21:33:29.666Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 7ca7ce58c2d9bd6400de73fa081d52847e0bcfc7
+state_head: d53220aa9b002c5eec1ad10285a6be04aa6790c4
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 73
+  completed_plans: 74
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -332,6 +332,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P12 | 46 min | 3 tasks | 11 files |
 | Phase 06 P13 | 32 min | 3 tasks | 10 files |
 | Phase 07 P01 | 46 min | 3 tasks | 17 files |
+| Phase 07 P02 | 28 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -656,6 +657,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: corpus/ is gitignored in its entirety, so RESEARCH § O-03's corpus/maps/ instruction is NOT followed. The map corpus splits by SIZE across the two tracked homes 07-PATTERNS names. — Large real maps (megabyte scale, probe-only) go to scripts/phase7/fetch-maps.sh with committed SHA-256 hashes in the fetch-corpus.sh idiom — the script and hashes are the reproducible artifact, the ~37 MB of vendor JSON is not. Small hostile and structural fixtures (needed by CI on every commit, with no network) go to packages/engine/src/sourcemap/map-fixture.ts as string literals in the hostile.fixture.ts idiom. git check-ignore on the fixture module exits non-zero, which tests/corpus-maps.spec.ts asserts as a property of the path.
 - [Phase 07]: Phase 7's constants cite their derivation BY FILE PATH in POLICY_DERIVED_FROM — the first entries whose measured term is not an imported symbol. — Phase 7's measurement deliberately does not live in go-no-go.json: scripts/ci/gen-thresholds.mjs emits thresholds.generated.ts from that one artifact and thresholds.spec.ts gate 1 byte-compares the result, so a Phase 7 number there would mean either editing a generated file or reopening a Phase 0 aggregate whose whole value is that it describes 0.57.1. Naming the path keeps the derivation checkable anyway: grep -rn map-bytes.json reaches the measurement, its schema and its gate.
 - [Phase 07]: Open Question 1 (Caido request retention) is recorded as an OBSERVATION with status not_run and its reason, never as a retention policy. — The probe enumerated sdk.requests on Caido 0.58.0 and found query/matches/get/send/inScope and NO create, so no request could be stored and no survival curve exists. Recorded as not_run rather than a curve of zeros: zero survivors and zero attempts look identical in a chart and mean opposite things. The observation carries a not_a_policy paragraph and the schema REFUSES a pass-shaped observation status outright, so the row cannot later be cited as DefMiner's retention model. D-22's tombstone design does not depend on it.
+- [Phase 07]: 07-02: the A2 prefilter is TAKEN (announce_scan 3.80 ms/MB, the most expensive of the probe's five ops), shipped as one 16-byte lastIndexOf plus a bounded startsWith fast path, with the two full marker searches kept as the fallback and the fast path proven EQUIVALENT differentially
+- [Phase 07]: 07-02: MAP_MAX_BYTES is NOT raised on 07-01's ~75% projection — the ladder was taken against the two-full-scan implementation and thresholds.spec.ts asserts shipped <= measured, so the bound stays BINDING at 2,621,440 until scripts/phase7/map-bytes.sh is re-run inside Caido (WINDOW 111)
+- [Phase 07]: 07-02: base64 is VALIDATED before it is decoded — Buffer.from(x, 'base64') silently returns a SHORTER buffer, and without the check a two-file concatenation decodes to a valid empty map
+- [Phase 07]: 07-02: MAP-01/02/05 are NOT checked off — this is the SDK-free half; MAP-01's SourceMap response-header route and MAP-02's storage half belong to 07-03/07-04/07-05
 
 ### Known Risks Carried Forward
 
@@ -698,8 +703,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T20:59:34.259Z
-**Stopped at:** Completed 07-01-PLAN.md
+**Last session:** 2026-09-01T21:33:16.948Z
+**Stopped at:** Completed 07-02-PLAN.md
 **Resume file:** None
 
 ### Blockers
