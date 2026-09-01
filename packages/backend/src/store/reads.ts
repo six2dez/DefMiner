@@ -1693,3 +1693,225 @@ export async function countInventory(
     suppressionRuleCount: 0,
   };
 }
+
+// ---------------------------------------------------------------------------
+// PHASE 7 — THE RECOVERED-SOURCE READ THE DRILL-DOWN CONSUMES (MAP-06, MAP-07)
+// ---------------------------------------------------------------------------
+//
+// NOT ADDED TO THE STATEMENT MATRIX ABOVE, AND THE REASON IS THE READ'S OWN
+// CONTRACT RATHER THAN CONVENIENCE. That matrix exists because `artifacts` and
+// `observations` are SORTABLE and FILTERABLE: it enumerates one complete literal
+// per (sort key x direction x cursor position x filter column) so a request can
+// never reach a statement this file did not write. This read has none of those
+// axes. `07-UI-SPEC.md § "The source list read"` fixes the order as the map's own
+// `sources` declaration order — WHICH IS THE EVIDENCE — so the list is not
+// sortable, will not become sortable, and offers no filter. Two literals is the
+// complete matrix, and adding four unreachable slots to make it look like its
+// neighbours would be enumerating axes the contract forbids.
+//
+// WHAT IS COPIED IS THE PART THAT IS EASY TO GET WRONG: keyset and never OFFSET,
+// the deterministic tie-break, the shared `KEYSET_PAGE_ROWS` re-read rather than
+// restated, and the cursor-advance rule — a short page IS the end here, because
+// with no filter every row the statement scans is a row it returns.
+
+/**
+ * One recovered source, as the drill-down reads it.
+ *
+ * CARRIES NO CONTENT, WHICH IS WHAT MAKES THE EAGER LOAD AFFORDABLE. Under D-07
+ * the bytes are never stored, so a row is a label, two digests, three integers
+ * and a vocabulary word — small enough that `07-UI-SPEC.md`'s policy of drawing
+ * pages eagerly to a 2,000-row bound costs a bounded amount of metadata rather
+ * than an unbounded amount of source code.
+ *
+ * `source_sha256` and `sources_verbatim` are NULLABLE and the two nulls mean
+ * different things (07-RESEARCH.md § Pitfall 3): no content was shipped for that
+ * index, and the map declared the label as null. Neither is collapsed here.
+ *
+ * @internal
+ */
+export type RecoveredSourceRow = {
+  source_sha256: string | null;
+  sources_verbatim: string | null;
+  source_index: number;
+  map_sha256: string;
+  byte_len: number | null;
+  line_count: number | null;
+  producibility: string;
+  recovered_at: number;
+};
+
+// A LEFT JOIN, NOT AN INNER ONE. A sighting whose index carried no content has
+// no `sources` row to join to, and an inner join would silently drop exactly the
+// rows the tombstone path exists to render — the failure mode would be an
+// operator seeing a shorter list than the map declared with nothing saying so.
+// `byte_len` and `line_count` come back NULL for those rows, which is a
+// different fact from zero and is typed as such above.
+//
+// ORDER BY source_index ASC, TIE-BROKEN ON map_sha256 ASC. The index is the
+// map's own declaration order and is the evidence. The tie-break is needed
+// because one artifact can carry MORE THAN ONE map — a bundle plus its vendor
+// chunk — and `source_index` is only unique within a map; without it two rows at
+// the same index would order arbitrarily and the keyset cursor would skip or
+// repeat across a page boundary. `idx_source_sightings_artifact` is
+// `(project_id, artifact_sha256, source_index)`, which matches this scope and
+// this leading sort column exactly.
+const RECOVERED_SOURCES_FIRST = `
+SELECT sg.source_sha256, sg.sources_verbatim, sg.source_index, sg.map_sha256,
+       s.byte_len, s.line_count, sg.producibility, sg.recovered_at
+FROM source_sightings sg
+LEFT JOIN sources s
+  ON s.project_id = sg.project_id AND s.source_sha256 = sg.source_sha256
+WHERE sg.project_id = ? AND sg.artifact_sha256 = ?
+ORDER BY sg.source_index ASC, sg.map_sha256 ASC
+LIMIT ?
+`;
+
+// THE KEYSET, NEVER `OFFSET`. The half-open comparison is the standard
+// lexicographic form: strictly past the cursor's index, or at the same index and
+// strictly past its tie-break. `OFFSET` would re-scan every row already served,
+// and — worse for a list that is being written to while it is read — it would
+// shift under a concurrent insert and hand the operator a duplicate or a hole.
+const RECOVERED_SOURCES_NEXT = `
+SELECT sg.source_sha256, sg.sources_verbatim, sg.source_index, sg.map_sha256,
+       s.byte_len, s.line_count, sg.producibility, sg.recovered_at
+FROM source_sightings sg
+LEFT JOIN sources s
+  ON s.project_id = sg.project_id AND s.source_sha256 = sg.source_sha256
+WHERE sg.project_id = ? AND sg.artifact_sha256 = ?
+  AND (sg.source_index > ? OR (sg.source_index = ? AND sg.map_sha256 > ?))
+ORDER BY sg.source_index ASC, sg.map_sha256 ASC
+LIMIT ?
+`;
+
+// ZERO AND UNKNOWN ARE DIFFERENT ROWS, WHICH IS WHY THIS DOES NOT GROUP OVER
+// `source_sightings`. The obvious statement — `SELECT artifact_sha256, COUNT(*)
+// ... GROUP BY artifact_sha256` — can only ever emit artifacts that HAVE
+// sightings, so the resolved zero it is supposed to carry is exactly the row it
+// cannot produce. It would have looked correct, returned plausible numbers, and
+// silently collapsed "DefMiner looked and found none" into "DefMiner has not
+// looked".
+//
+// So the statement is driven from `artifacts` and admits a row on either of two
+// grounds, each an EXISTS scoped by `project_id`: the artifact has sightings (we
+// know the count), or it has a FINISHED analysis (we know the count is zero).
+// `done` and not the other terminal states, bound rather than written in:
+// `partial` and `failed` mean the walk stopped early, so the honest answer for
+// an artifact with neither sightings nor a completed analysis is UNKNOWN — no
+// entry — rather than a zero the operator would read as a finding about the
+// bundle.
+const COUNT_RECOVERED_SOURCES_BY_ARTIFACT = `
+SELECT ar.sha256 AS artifact_sha256,
+       (SELECT COUNT(*) FROM source_sightings sg
+        WHERE sg.project_id = ar.project_id AND sg.artifact_sha256 = ar.sha256) AS n
+FROM artifacts ar
+WHERE ar.project_id = ?
+  AND (EXISTS (SELECT 1 FROM source_sightings sx
+               WHERE sx.project_id = ar.project_id AND sx.artifact_sha256 = ar.sha256)
+       OR EXISTS (SELECT 1 FROM analyses an
+                  WHERE an.project_id = ar.project_id AND an.sha256 = ar.sha256
+                    AND an.scan_state = ?))
+`;
+
+/** The analysis state that makes a zero RESOLVED rather than unknown. Read from
+ *  the shipped vocabulary, never spelled out at the bind site. */
+const RESOLVED_ANALYSIS_STATE: ScanState = "done";
+
+/**
+ * One keyset page of an artifact's recovered sources, in the map's own order.
+ *
+ * SCOPED TO THE PARENT ARTIFACT, because that is what the drill-down is: the
+ * operator opened one bundle and is looking at what came out of it.
+ *
+ * NEVER SORTED BY LABEL, AND NOT SORTABLE. `source_index` is the position the map
+ * itself declared, so the order carries information — it is the evidence, not a
+ * presentation choice — and a sortable column here would let the operator destroy
+ * that information with one click and no way back. `07-UI-SPEC.md` fixes this.
+ *
+ * Does NOT try/catch, following this module's split: writes report their own
+ * outcome and list reads do not.
+ */
+export async function listRecoveredSourcesPage(
+  db: Database,
+  projectId: string,
+  artifactSha256: string,
+  cursor: PageCursor | null,
+  limit: number,
+): Promise<PageResponse<RecoveredSourceRow>> {
+  if (projectId === "") return emptyPage<RecoveredSourceRow>();
+
+  // RE-READ, NEVER RESTATED. `clampLimit` holds the page size at
+  // `KEYSET_PAGE_ROWS`, which the frontend's virtual scroller is sized against;
+  // a second literal at this call site is how the two come to disagree.
+  const bounded = clampLimit(limit);
+
+  const stmt = await db.prepare(
+    cursor === null ? RECOVERED_SOURCES_FIRST : RECOVERED_SOURCES_NEXT,
+  );
+  const rows =
+    cursor === null
+      ? await stmt.all<RecoveredSourceRow>(projectId, artifactSha256, bounded)
+      : await stmt.all<RecoveredSourceRow>(
+          projectId,
+          artifactSha256,
+          // SPREAD, never one array. `source_index` is bound TWICE because the
+          // half-open comparison names it twice and this driver has no named
+          // parameters to reuse it with.
+          cursor.sortValue,
+          cursor.sortValue,
+          cursor.tieBreak,
+          bounded,
+        );
+
+  const last = rows[rows.length - 1];
+  // NO CANDIDATE WINDOW, so a short page is genuinely the end. The
+  // filtered-read distinction between "the window ran out" and "the data ran
+  // out" does not arise here, because there is no filter that could have
+  // excluded a scanned row.
+  const exhausted = rows.length < bounded;
+  return {
+    rows,
+    nextCursor:
+      exhausted || last === undefined
+        ? null
+        : cursorOf(last.source_index, last.map_sha256),
+    scanned: rows.length,
+    exhausted,
+  };
+}
+
+/**
+ * How many recovered sources each artifact in this project has.
+ *
+ * ITS OWN STATEMENT, DELIBERATELY, AND THE REASON IS THE PRECEDENT RATHER THAN A
+ * PREFERENCE. `reads.ts`'s paged statements each select a FIXED column set, and
+ * joining a source count into them would mean editing that literal statement
+ * matrix — every sort key, every direction, every cursor position, every filter
+ * column — to add a column only one caller wants. `ArtifactsTable.vue` already
+ * met this exact situation and resolved it the same way: the shipped `analyses`
+ * prop is an optional lookup map built by its own read, not a column welded onto
+ * the page statement.
+ *
+ * THE MAP DISTINGUISHES ZERO FROM UNKNOWN, WHICH IS THE WHOLE POINT OF RETURNING
+ * A MAP RATHER THAN A NUMBER. An artifact whose map parsed and yielded nothing
+ * gets an entry with value 0 — a RESOLVED zero, meaning DefMiner looked and
+ * there was nothing. An artifact never analysed has NO ENTRY at all, meaning
+ * DefMiner has not looked. Collapsing the second into the first would tell the
+ * operator "no sources here" about a bundle nothing has read yet, which is the
+ * "nothing found versus analysis broke" confusion in its most expensive form.
+ *
+ * @internal
+ */
+export async function countRecoveredSourcesByArtifact(
+  db: Database,
+  projectId: string,
+): Promise<ReadonlyMap<string, number>> {
+  const out = new Map<string, number>();
+  if (projectId === "") return out;
+  const stmt = await db.prepare(COUNT_RECOVERED_SOURCES_BY_ARTIFACT);
+  const rows = await stmt.all<{ artifact_sha256: string; n: number }>(
+    projectId,
+    RESOLVED_ANALYSIS_STATE,
+  );
+  for (const row of rows) out.set(row.artifact_sha256, Number(row.n));
+  return out;
+}

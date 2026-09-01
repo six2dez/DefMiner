@@ -24,6 +24,7 @@
 // second of wall time and, worse, would make it flaky rather than exact.
 
 import type { InvalidationSummary } from "@defminer/engine/contract";
+import { INVALIDATION_CATEGORIES } from "@defminer/engine/contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computed, ref } from "vue";
 
@@ -146,6 +147,22 @@ afterEach(() => {
 // THE RATE CAP — no selection is touched anywhere in this block
 // ---------------------------------------------------------------------------
 
+/**
+ * The pending map with every category at zero, DERIVED rather than written out.
+ *
+ * `zeroed()` in the store builds its keys from `INVALIDATION_CATEGORIES`, so a
+ * hand-copied literal here is a second declaration of that list which goes stale
+ * the moment a phase appends the entity category its own new table needs — plan
+ * 07-04 appended two and reddened both assertions below, neither of which has any
+ * opinion about recovered source. Spreading this and overriding the categories a
+ * case is actually about keeps each expectation ABOUT that case.
+ */
+function pendingZeroed(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const category of INVALIDATION_CATEGORIES) out[category] = 0;
+  return out;
+}
+
 describe("the reaction rate cap", () => {
   it("reacts once, AFTER the trailing window and not before", async () => {
     const f = fixture();
@@ -223,6 +240,7 @@ describe("the reaction rate cap", () => {
     f.bus.emit(summary({ category: "analyses", changedCount: 5 }));
 
     expect(f.coalescer.pendingByCategory.value).toEqual({
+      ...pendingZeroed(),
       artifacts: 6,
       observations: 1,
       analyses: 5,
@@ -328,11 +346,7 @@ describe("suppression while the operator is mid-triage", () => {
     await f.coalescer.applyPending();
 
     expect(f.coalescer.pendingTotal.value).toBe(0);
-    expect(f.coalescer.pendingByCategory.value).toEqual({
-      artifacts: 0,
-      observations: 0,
-      analyses: 0,
-    });
+    expect(f.coalescer.pendingByCategory.value).toEqual(pendingZeroed());
     expect(f.gate.refreshes()).toBe(1);
   });
 });

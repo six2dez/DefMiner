@@ -55,11 +55,13 @@ import {
   type ArtifactSortKey,
   CANDIDATE_WINDOW_ROWS,
   countInventory,
+  countRecoveredSourcesByArtifact,
   INVENTORY_TABLES,
   type InventoryTable,
   KEYSET_PAGE_ROWS,
   listArtifactsPage,
   listObservationsPage,
+  listRecoveredSourcesPage,
   OBSERVATION_FILTER_COLUMN,
   OBSERVATION_FILTER_COLUMNS,
   OBSERVATION_SORT_KEYS,
@@ -1167,5 +1169,358 @@ describe("getLatestAnalysisForArtifact — the evidence panel's subject", () => 
     expect(
       await getLatestAnalysisForArtifact(fx.db, PROJECT, digest(0)),
     ).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PHASE 7 — THE RECOVERED-SOURCE READ (MAP-06, MAP-07)
+// ---------------------------------------------------------------------------
+//
+// The same class of property as the cases above, over a read with a NARROWER
+// contract: one order, no sort keys, no filters. That narrowness removes the
+// selectivity question entirely — there is no filter that could exclude a
+// scanned row — and leaves the cursor, which is exactly the part that fails
+// silently. Two maps inside one artifact are seeded on purpose, because
+// `source_index` is only unique WITHIN a map and the tie-break is what stops the
+// cursor skipping or repeating at that boundary.
+
+/**
+ * A 64-CHARACTER key, ordered as text like {@link digest}.
+ *
+ * The three Phase 7 digest columns each carry `CHECK (length(x) = 64)`, so this
+ * block cannot reuse the nine-character {@link digest} the artifact and
+ * observation fixtures use — and that is the constraint working: those columns
+ * hold sha256 hex and the schema says so. Padded on the RIGHT after a
+ * fixed-width numeric part, which leaves the text ordering the cursor depends on
+ * exactly as {@link digest} has it.
+ */
+function wide(prefix: string, n: number): string {
+  return (prefix + String(n).padStart(8, "0")).padEnd(64, "0");
+}
+
+/** One map's digest. */
+function mapDigest(n: number): string {
+  return wide("m", n);
+}
+
+/** One artifact's or source's digest, at the width the Phase 7 CHECKs demand. */
+function wideDigest(n: number): string {
+  return wide("d", n);
+}
+
+function insertSighting(
+  projectId: string,
+  mapSha256: string,
+  sourceIndex: number,
+  artifactSha256: string,
+  options: { sourceSha256?: string | null; label?: string | null } = {},
+): void {
+  fx.raw
+    .prepare(
+      `INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256,
+                                     request_id, source_sha256, sources_verbatim,
+                                     producibility, recovered_at)
+       VALUES (?, ?, ?, ?, 'req-1', ?, ?, 'producible', 2000)`,
+    )
+    .run(
+      projectId,
+      mapSha256,
+      sourceIndex,
+      artifactSha256,
+      options.sourceSha256 === undefined ? wideDigest(1) : options.sourceSha256,
+      options.label === undefined ? "src/app.js" : options.label,
+    );
+}
+
+function insertSource(projectId: string, sourceSha256: string): void {
+  fx.raw
+    .prepare(
+      "INSERT OR IGNORE INTO sources (project_id, source_sha256, byte_len, line_count, first_seen_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(projectId, sourceSha256, 900, 30, 1000);
+}
+
+describe("listRecoveredSourcesPage — the drill-down's keyset read", () => {
+  it("orders by source_index ASCENDING, which is the map's own declaration order", async () => {
+    // THE ORDER IS THE EVIDENCE. It is not a presentation default the operator
+    // may override — `07-UI-SPEC.md` fixes it and there is no sort key on this
+    // read to override it with.
+    insertSource(PROJECT, wideDigest(1));
+    for (const index of [4, 0, 2, 1, 3]) {
+      insertSighting(PROJECT, mapDigest(0), index, wideDigest(9));
+    }
+    const page = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(page.rows.map((r) => r.source_index)).toEqual([0, 1, 2, 3, 4]);
+    // STRICTLY ascending, asserted as the property rather than against a
+    // hand-written list, so a fixture change cannot quietly weaken it.
+    for (let i = 1; i < page.rows.length; i += 1) {
+      expect(page.rows[i].source_index).toBeGreaterThan(
+        page.rows[i - 1].source_index,
+      );
+    }
+  });
+
+  it("pages at exactly KEYSET_PAGE_ROWS with no duplicate and no gap", async () => {
+    // KEYSET_PAGE_ROWS + 1 rows: the boundary case. The union of the two pages
+    // is asserted EQUAL to the seeded set — not merely the right length, which
+    // a cursor that repeated one row and skipped another would also satisfy.
+    insertSource(PROJECT, wideDigest(1));
+    const seeded = KEYSET_PAGE_ROWS + 1;
+    for (let i = 0; i < seeded; i += 1) {
+      insertSighting(PROJECT, mapDigest(0), i, wideDigest(9));
+    }
+
+    const first = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(first.rows).toHaveLength(KEYSET_PAGE_ROWS);
+    expect(first.exhausted).toBe(false);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      first.nextCursor,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(second.rows).toHaveLength(1);
+    expect(second.exhausted).toBe(true);
+    expect(second.nextCursor).toBeNull();
+
+    const union = [...first.rows, ...second.rows].map((r) => r.source_index);
+    expect(new Set(union).size).toBe(seeded);
+    expect(union).toEqual(Array.from({ length: seeded }, (_, i) => i));
+  });
+
+  it("pages at exactly KEYSET_PAGE_ROWS rows — the page is full and the partition is done", async () => {
+    // The OTHER side of the boundary, which is the one a `<` versus `<=` slip
+    // gets wrong: a full page whose cursor leads to nothing. `exhausted` is
+    // false here and the second page is empty, which is a REFETCH and not an
+    // empty state — conflating them renders "no sources" for a bundle that has
+    // exactly 100.
+    insertSource(PROJECT, wideDigest(1));
+    for (let i = 0; i < KEYSET_PAGE_ROWS; i += 1) {
+      insertSighting(PROJECT, mapDigest(0), i, wideDigest(9));
+    }
+    const first = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(first.rows).toHaveLength(KEYSET_PAGE_ROWS);
+    expect(first.exhausted).toBe(false);
+    const second = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      first.nextCursor,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(second.rows).toEqual([]);
+    expect(second.exhausted).toBe(true);
+  });
+
+  it("breaks ties on map_sha256 when one artifact carries TWO maps", async () => {
+    // `source_index` is unique WITHIN a map, and a bundle plus its vendor chunk
+    // is two maps under one artifact — so index 0 exists twice. Without the
+    // tie-break the two rows order arbitrarily and the cursor either skips one
+    // or serves it twice. Paged at 3 across 6 tied-in-pairs rows so a boundary
+    // lands INSIDE a tie.
+    insertSource(PROJECT, wideDigest(1));
+    for (const map of [mapDigest(0), mapDigest(1)]) {
+      for (const index of [0, 1, 2]) {
+        insertSighting(PROJECT, map, index, wideDigest(9));
+      }
+    }
+    const collected: string[] = [];
+    let cursor = null as Awaited<
+      ReturnType<typeof listRecoveredSourcesPage>
+    >["nextCursor"];
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page: Awaited<ReturnType<typeof listRecoveredSourcesPage>> =
+        await listRecoveredSourcesPage(
+          fx.db,
+          PROJECT,
+          wideDigest(9),
+          cursor,
+          3,
+        );
+      for (const row of page.rows) {
+        collected.push(`${String(row.source_index)}:${row.map_sha256}`);
+      }
+      if (page.exhausted) break;
+      cursor = page.nextCursor;
+    }
+    expect(collected).toEqual([
+      `0:${mapDigest(0)}`,
+      `0:${mapDigest(1)}`,
+      `1:${mapDigest(0)}`,
+      `1:${mapDigest(1)}`,
+      `2:${mapDigest(0)}`,
+      `2:${mapDigest(1)}`,
+    ]);
+    expect(new Set(collected).size).toBe(collected.length);
+  });
+
+  it("returns a row whose source_sha256 is NULL — present, not absent", async () => {
+    // A tombstone-eligible index with no content is still a fact about the
+    // bundle. An INNER join would have dropped it and the operator would see a
+    // shorter list than the map declared with nothing saying so.
+    insertSource(PROJECT, wideDigest(1));
+    insertSighting(PROJECT, mapDigest(0), 0, wideDigest(9));
+    insertSighting(PROJECT, mapDigest(0), 1, wideDigest(9), {
+      sourceSha256: null,
+      label: "src/absent.js",
+    });
+
+    const page = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(page.rows).toHaveLength(2);
+    const orphan = page.rows[1];
+    // NULL, asserted as null rather than by its absence from the page.
+    expect(orphan.source_sha256).toBeNull();
+    expect(orphan.sources_verbatim).toBe("src/absent.js");
+    // And the joined columns are NULL rather than 0 — "no row to join to" is
+    // not "a zero-byte source".
+    expect(orphan.byte_len).toBeNull();
+    expect(orphan.line_count).toBeNull();
+    // The CONTROL: the row that DOES have content carries the joined values.
+    expect(page.rows[0].byte_len).toBe(900);
+    expect(page.rows[0].line_count).toBe(30);
+  });
+
+  it("is scoped to the project AND to the parent artifact", async () => {
+    insertSource(PROJECT, wideDigest(1));
+    insertSource(OTHER_PROJECT, wideDigest(1));
+    insertSighting(PROJECT, mapDigest(0), 0, wideDigest(9));
+    insertSighting(PROJECT, mapDigest(1), 0, wideDigest(8));
+    insertSighting(OTHER_PROJECT, mapDigest(0), 0, wideDigest(9));
+
+    const mine = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(mine.rows).toHaveLength(1);
+    expect(mine.rows[0].map_sha256).toBe(mapDigest(0));
+
+    const empty = await listRecoveredSourcesPage(
+      fx.db,
+      "",
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS,
+    );
+    expect(empty.rows).toEqual([]);
+    expect(empty.exhausted).toBe(true);
+  });
+
+  it("clamps the page size at KEYSET_PAGE_ROWS rather than honouring a wider request", async () => {
+    insertSource(PROJECT, wideDigest(1));
+    for (let i = 0; i < KEYSET_PAGE_ROWS + 5; i += 1) {
+      insertSighting(PROJECT, mapDigest(0), i, wideDigest(9));
+    }
+    const page = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      wideDigest(9),
+      null,
+      KEYSET_PAGE_ROWS * 10,
+    );
+    expect(page.rows).toHaveLength(KEYSET_PAGE_ROWS);
+  });
+});
+
+describe("countRecoveredSourcesByArtifact — zero and unknown are different observations", () => {
+  it("gives a RESOLVED zero for an analysed artifact that yielded nothing, and NO entry for one never analysed", async () => {
+    // THE DISTINCTION THE `Sources` COLUMN EXISTS TO CARRY, asserted as two
+    // different observations against one map rather than as one number. A
+    // resolved zero says "DefMiner looked and this bundle had no sourcemap";
+    // an absent entry says "DefMiner has not looked". Collapsing them tells the
+    // operator a bundle is clean when nothing has read it yet.
+    insertArtifact(PROJECT, wideDigest(1), 100, "js", 1000); // analysed, 2 sources
+    insertArtifact(PROJECT, wideDigest(2), 100, "js", 1000); // analysed, none found
+    insertArtifact(PROJECT, wideDigest(3), 100, "js", 1000); // never analysed
+    insertAnalysis(PROJECT, wideDigest(1), "done");
+    insertAnalysis(PROJECT, wideDigest(2), "done");
+
+    insertSource(PROJECT, wideDigest(1));
+    insertSighting(PROJECT, mapDigest(0), 0, wideDigest(1));
+    insertSighting(PROJECT, mapDigest(0), 1, wideDigest(1));
+
+    const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
+
+    expect(counts.get(wideDigest(1))).toBe(2);
+    // A RESOLVED ZERO — the entry EXISTS and its value is 0.
+    expect(counts.has(wideDigest(2))).toBe(true);
+    expect(counts.get(wideDigest(2))).toBe(0);
+    // UNKNOWN — no entry at all, which is a different fact from 0.
+    expect(counts.has(wideDigest(3))).toBe(false);
+    expect(counts.get(wideDigest(3))).toBeUndefined();
+  });
+
+  it("does not resolve a zero for an analysis that stopped early", async () => {
+    // `partial` and `failed` mean the walk did not finish, so the honest answer
+    // is UNKNOWN. A zero here would be a claim about the bundle that DefMiner
+    // is not in a position to make.
+    insertArtifact(PROJECT, wideDigest(1), 100, "js", 1000);
+    insertArtifact(PROJECT, wideDigest(2), 100, "js", 1000);
+    insertAnalysis(PROJECT, wideDigest(1), "partial");
+    insertAnalysis(PROJECT, wideDigest(2), "failed");
+
+    const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
+    expect(counts.has(wideDigest(1))).toBe(false);
+    expect(counts.has(wideDigest(2))).toBe(false);
+  });
+
+  it("still counts an artifact whose analysis stopped early but which HAS sightings", async () => {
+    // The other admission ground. What was recorded was recorded, and hiding a
+    // count we actually have because the walk was cut short would under-report
+    // evidence that exists.
+    insertArtifact(PROJECT, wideDigest(1), 100, "js", 1000);
+    insertAnalysis(PROJECT, wideDigest(1), "partial");
+    insertSource(PROJECT, wideDigest(1));
+    insertSighting(PROJECT, mapDigest(0), 0, wideDigest(1));
+
+    const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
+    expect(counts.get(wideDigest(1))).toBe(1);
+  });
+
+  it("is scoped by project_id", async () => {
+    insertArtifact(PROJECT, wideDigest(1), 100, "js", 1000);
+    insertArtifact(OTHER_PROJECT, wideDigest(1), 100, "js", 1000);
+    insertAnalysis(OTHER_PROJECT, wideDigest(1), "done");
+    insertSource(OTHER_PROJECT, wideDigest(1));
+    insertSighting(OTHER_PROJECT, mapDigest(0), 0, wideDigest(1));
+
+    expect((await countRecoveredSourcesByArtifact(fx.db, PROJECT)).size).toBe(
+      0,
+    );
+    expect(
+      (await countRecoveredSourcesByArtifact(fx.db, OTHER_PROJECT)).get(
+        wideDigest(1),
+      ),
+    ).toBe(1);
+    expect((await countRecoveredSourcesByArtifact(fx.db, "")).size).toBe(0);
   });
 });
