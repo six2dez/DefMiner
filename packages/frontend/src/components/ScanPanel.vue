@@ -82,6 +82,7 @@ import type {
   InvalidationSubscription,
   RpcResult,
   ScanCommandOutcome,
+  ScanHistoryRow,
   StartScanOutcome,
 } from "../api/client";
 import { forCellText } from "../safety/display";
@@ -147,12 +148,14 @@ import {
   scanStaleBody,
   scanStatusWord,
 } from "./scan-contract";
+import ScanHistoryList from "./ScanHistoryList.vue";
 import { FOCUS_RING_CLASS, groupThousands } from "./table-contract";
 
 const {
   defminerClause,
   discard,
   load,
+  loadHistory,
   pause,
   projectId,
   resume,
@@ -182,6 +185,10 @@ const {
   resume: (scanId: string) => Promise<RpcResult<ScanCommandOutcome>>;
   /** Throw the POSITION away. The artifacts and observations are untouched. */
   discard: (scanId: string) => Promise<RpcResult<ScanCommandOutcome>>;
+  /** Read this project's scan history, bounded at read. Answers a VALUE on
+   *  every path, like every other read on this panel — and the failure it
+   *  reports must never be rendered as an empty list. */
+  loadHistory: (limit: number) => Promise<RpcResult<readonly ScanHistoryRow[]>>;
   /** Subscribe to the progress half of the one backend event. */
   subscribe: (
     handler: (payload: ScanProgressPayload) => void,
@@ -1105,5 +1112,17 @@ const BUTTON_CLASS =
         <p class="text-surface-400">{{ SCAN_REJECT_OUT_OF_SCOPE_BODY }}</p>
       </div>
     </section>
+
+    <!-- THE SCAN HISTORY, LAST, AND IT RENDERS WHETHER OR NOT THERE IS AN
+         ACTIVE SCAN. Every block above is `v-if="showReadout"` or belongs to
+         the start form; this one belongs to neither, because the history is the
+         TAB'S OWN CONTENT rather than part of the live readout. A list that
+         appeared only while a scan was running would hide the suspended row an
+         operator opens this tab to find — and that row IS its cursor.
+
+         IT IS NOT A CONTRACT TABLE, for the mechanical reason the component's
+         own header states in full: `assertColumnContract` binds exactly one
+         target-controlled column and this list has zero. -->
+    <ScanHistoryList :load="loadHistory" @open-health="emit('open-health')" />
   </div>
 </template>

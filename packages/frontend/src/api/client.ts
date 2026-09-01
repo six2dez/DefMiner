@@ -622,6 +622,66 @@ export type ScanRef = {
   readonly scanId: string;
 };
 
+/**
+ * One scan as the HISTORY LIST renders it — a PROJECTION, never the row.
+ *
+ * MIRRORED FROM THE BACKEND'S `api/spec.ts` RATHER THAN IMPORTED, exactly as
+ * {@link StartScanOutcome} and {@link ScanCommandOutcome} above are and for the
+ * same reason: the two packages are built and bundled separately, and a frontend
+ * that reached into the backend's source for a type would compile against a file
+ * that is not in its own bundle.
+ *
+ * EVERY FIELD IS AN INTEGER, A CLOSED-VOCABULARY CODE, OR THE OPERATOR'S OWN
+ * CLAUSE. No response byte, no header, no URL and no target-authored string
+ * crosses on this shape (T-06-04). `operatorFilter` is the one unbounded string
+ * and it is the operator's own — 06-UI-SPEC.md's R2 routes it through
+ * `forCellText` in the row and `forPanel` in the detail, in its own `font-mono`
+ * element, and never into a sentence, a `title` or a `data-*`.
+ *
+ * `epoch`, `lastCursor` and `lastRequestId` are DELIBERATELY ABSENT. They are
+ * the backend's own bookkeeping and the surface has nothing to say about any of
+ * them; the registration site maps this shape field by field rather than
+ * spreading the row, so a column added to that table does not silently cross.
+ *
+ * `lastCreatedAt` is the capture time of the oldest request walked — from
+ * Caido's own `getCreatedAt()`, never from the clock — and it is what the row's
+ * "reached {date}" clause renders. `null` before the first page resolved and on
+ * a scan that never walked one: ABSENT, never the epoch and never a placeholder.
+ */
+export type ScanHistoryRow = {
+  readonly scanId: string;
+  readonly state: ScanLifecycleState;
+  /** `null` while the scan is not suspended. A code, never a sentence. */
+  readonly suspendReason: SuspendReason | null;
+  /** What the operator typed, or `""`. */
+  readonly operatorFilter: string;
+  readonly pagesWalked: number;
+  readonly seen: number;
+  readonly admitted: number;
+  readonly skippedDone: number;
+  readonly rejected: number;
+  readonly queued: number;
+  readonly lastCreatedAt: number | null;
+  readonly startedAt: number;
+  readonly finishedAt: number | null;
+};
+
+/**
+ * What the history read asks for.
+ *
+ * `limit` IS A CEILING THE CALLER MAY ONLY LOWER. The backend clamps it into
+ * `[1, SCAN_LIST_DEFAULT_LIMIT]`, so nothing crossing this boundary can widen
+ * the read — and `null` takes the backend's own default rather than being
+ * passed through as a zero, which SQLite would honour as "no rows".
+ *
+ * THE PROJECT IS NAMED BUT NOT TRUSTED, exactly as {@link ScanRef}'s is: the
+ * backend substitutes its own lifecycle-resolved id on this call too.
+ */
+export type ScanHistoryRequest = {
+  readonly projectId: string;
+  readonly limit: number | null;
+};
+
 /** The stop handle `onEvent` returns. Named because it is the thing that must
  *  be owned and called; research P-04 is entirely about it being dropped. */
 export type InvalidationSubscription = { readonly stop: () => void };
@@ -672,6 +732,9 @@ export type DefMinerBackendSdk = {
     pauseScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
     resumeScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
     discardScan: (request: ScanRef) => Promise<ScanCommandOutcome>;
+    listScans: (
+      request: ScanHistoryRequest,
+    ) => Promise<readonly ScanHistoryRow[]>;
     getCompat: () => Promise<CompatReport>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
@@ -746,6 +809,26 @@ export type BackendClient = {
    *  artifacts and observations it produced went through the same admission,
    *  digest and store path the live hook uses and are NOT touched. */
   discardScan: (request: ScanRef) => Promise<RpcResult<ScanCommandOutcome>>;
+  /**
+   * This project's scan history — BOUNDED AT READ, newest first, with every
+   * `suspended` scan pinned in regardless of age.
+   *
+   * THE BOUND IS SENT RATHER THAN MIRRORED. The surface names the number it
+   * wants (`SCAN_HISTORY_LIMIT`) and the backend clamps it down; a frontend
+   * copy of the backend's own ceiling would be two declarations of one bound,
+   * which is the drift shape this repo keeps catching. The surface therefore
+   * knows exactly which bound was applied — it asked for it — and can say so in
+   * words when the returned count reaches it.
+   *
+   * AN EMPTY ARRAY AND A FAILED READ ARE DIFFERENT ANSWERS and this shape keeps
+   * them apart: emptiness is a value inside `ok: true`, a failure is `ok: false`.
+   * The history list renders them as different screens, because an empty scan
+   * history means "you have never run a scan" and rendering a load failure that
+   * way tells the operator the opposite of the truth.
+   */
+  listScans: (
+    request: ScanHistoryRequest,
+  ) => Promise<RpcResult<readonly ScanHistoryRow[]>>;
   /** COMPAT-02's report. Reachable on a REFUSING build, where it is one of only
    *  two endpoints that exist. */
   getCompat: () => Promise<RpcResult<CompatReport>>;
@@ -925,6 +1008,13 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     pauseScan: (request) => guarded(() => sdk.backend.pauseScan(request)),
     resumeScan: (request) => guarded(() => sdk.backend.resumeScan(request)),
     discardScan: (request) => guarded(() => sdk.backend.discardScan(request)),
+
+    // GUARDED like every other read. A stale bundle misreading this shape would
+    // render a scan's lifecycle word, its counters or its position against the
+    // wrong fields — and the row it would misread is the one carrying a
+    // suspended scan's resumable cursor, which is the single thing this surface
+    // exists to keep findable.
+    listScans: (request) => guarded(() => sdk.backend.listScans(request)),
 
     // NOT GUARDED BY THE MISMATCH, AND THAT IS THE WHOLE POINT OF IT. A
     // contract-version mismatch is one of the things somebody opens the

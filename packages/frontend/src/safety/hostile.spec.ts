@@ -89,6 +89,7 @@ import { describe, expect, it } from "vitest";
 import type {
   RpcResult,
   ScanCommandOutcome,
+  ScanHistoryRow,
   StartScanOutcome,
 } from "../api/client";
 import { clauseRejectedLine } from "../components/scan-contract";
@@ -374,6 +375,14 @@ describe("hostile corpus rendered inert — scan start form (forCellText, 256)",
         pause: () => Promise.resolve(COMMAND_UNREACHED),
         resume: () => Promise.resolve(COMMAND_UNREACHED),
         discard: () => Promise.resolve(COMMAND_UNREACHED),
+        // AN EMPTY HISTORY, deliberately: the start-form state is a project
+        // that has never run a scan, and an empty list is what that genuinely
+        // is. The history's own hostile surfaces are driven below.
+        loadHistory: () =>
+          Promise.resolve<RpcResult<readonly ScanHistoryRow[]>>({
+            ok: true,
+            value: [],
+          }),
         subscribe: () => ({ stop: () => undefined }),
       },
     });

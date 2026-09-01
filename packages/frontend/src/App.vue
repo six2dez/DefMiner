@@ -38,6 +38,7 @@ import type {
   RetryOutcome,
   RpcResult,
   ScanCommandOutcome,
+  ScanHistoryRow,
   ScanRef,
   SettingRow,
   SettingWriteOutcome,
@@ -685,6 +686,28 @@ const resumeScan = scanCommand((request) => client!.resumeScan(request));
 const discardScan = scanCommand((request) => client!.discardScan(request));
 
 /**
+ * Read this project's scan history, bounded at read.
+ *
+ * THE BOUND IS THE SURFACE'S AND IT TRAVELS DOWN, not up: `ScanHistoryList`
+ * names the number it wants and the backend clamps it into its own ceiling, so
+ * a caller may only ever LOWER the read. That is one declaration of the bound
+ * rather than a frontend mirror of a backend constant, which is the drift shape
+ * this repo keeps catching.
+ */
+function loadScanHistory(
+  limit: number,
+): Promise<RpcResult<readonly ScanHistoryRow[]>> {
+  if (client === null) {
+    return Promise.resolve({
+      ok: false,
+      reason: "rpc-rejected",
+      versions: null,
+    });
+  }
+  return client.listScans({ projectId: SERVER_SCOPED_PROJECT, limit });
+}
+
+/**
  * The progress half of the one backend event, for the Scan tab.
  *
  * A SECOND SUBSCRIPTION TO THE SAME EVENT, NOT A SECOND EVENT. The client
@@ -888,6 +911,7 @@ async function loadCompat(): Promise<void> {
           :pause="pauseScan"
           :resume="resumeScan"
           :discard="discardScan"
+          :load-history="loadScanHistory"
           :subscribe="subscribeScanProgress"
           @open-health="activeTab = 'health'"
           @open-settings="activeTab = 'settings'"

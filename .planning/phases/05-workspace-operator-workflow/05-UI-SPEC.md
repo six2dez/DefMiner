@@ -337,6 +337,18 @@ regions, top to bottom:
 | Row click | Opens the evidence panel; does not navigate away | |
 | Column shape | Fixed: `[state/score] [target-controlled value, mono, truncated] [last seen] [triage state]` + entity-specific columns | The entity-specific columns are **not specified here** — see below |
 
+**Scope of this contract (amendment A4, Phase 6, plan 06-13).** This contract governs the
+virtualised, keyset-paginated **entity** tables. A bounded, non-target-controlled list — the
+suppressions list, the scan history — states its own bound instead; `assertColumnContract` cannot
+express a table with no target-controlled column and must not be forced to. The assertion throws
+unless *exactly one* column is marked, and its thrown message reads zero as "the column that carries
+the host's bytes is not being routed through `safety/display.ts` at all" — which is a false
+description of a list whose every column is DefMiner-authored or operator-authored. Marking a column
+`targetControlled: true` to satisfy the assertion would therefore be lying to a gate, and would make
+that gate's message false for the next person who read it. The shipped assertion already makes this
+true in code; it is written down here so the next author does not reach for it on the wrong kind of
+list.
+
 **The column lists for the entity tables are deliberately not fixed by this contract.** The entity
 schemas are defined by Phase 3 (detection engine) and Phase 4 (passive intelligence core), neither
 of which is planned. Inventing a column list now would be a guess that later contradicts the

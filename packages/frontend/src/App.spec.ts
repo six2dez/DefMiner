@@ -35,6 +35,7 @@ import type {
   PanelAnalysis,
   RetryOutcome,
   ScanCommandOutcome,
+  ScanHistoryRow,
   SettingRow,
   StartScanOutcome,
   StorageFootprint,
@@ -180,6 +181,8 @@ type StubOptions = {
   readonly scan?: ScanStatusPayload | null;
   /** Every startScan request the page issued, in order. */
   readonly starts?: { readonly operatorFilter: string }[];
+  /** The scan history the Scan tab's list reads. */
+  readonly history?: readonly ScanHistoryRow[];
 };
 
 /**
@@ -329,6 +332,13 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
               suspendReason: null,
               reason: null,
             }),
+      // FIND-04's SCAN HISTORY. An EMPTY ARRAY is the "no scans yet" screen and
+      // is a real state; a refusing build answers nothing at all, which the list
+      // renders as an explicit error rather than as emptiness.
+      listScans: () =>
+        refusing
+          ? refused<readonly ScanHistoryRow[]>()
+          : Promise.resolve<readonly ScanHistoryRow[]>(options.history ?? []),
       // ANSWERS EVEN WHEN NOTHING ELSE DOES. That is not a convenience of the
       // stub, it is the shape of a refusing build: `init()` registers only
       // `getStatus` and `getCompat` on all three refusal paths.

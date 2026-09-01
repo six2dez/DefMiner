@@ -57,6 +57,7 @@ import type {
   RpcFailure,
   RpcReason,
   RpcResult,
+  ScanHistoryRow,
   SettingRow,
   StorageFootprint,
 } from "./client";
@@ -189,6 +190,28 @@ const COMPAT: CompatReport = {
   surfaces: [],
 };
 
+/** One scan's history row. EVERY FIELD A DEFMINER-AUTHORED INTEGER, A
+ *  CLOSED-VOCABULARY CODE, OR THE OPERATOR'S OWN CLAUSE — the projection's whole
+ *  claim, and what makes it safe for a surface with no target-controlled
+ *  column. */
+const HISTORY: readonly ScanHistoryRow[] = [
+  {
+    scanId: "s1",
+    state: "suspended",
+    suspendReason: "operator_paused",
+    operatorFilter: "",
+    pagesWalked: 3,
+    seen: 60,
+    admitted: 12,
+    skippedDone: 4,
+    rejected: 44,
+    queued: 12,
+    lastCreatedAt: 1_755_000_000_000,
+    startedAt: 1_755_000_000_000,
+    finishedAt: null,
+  },
+];
+
 type Listener = (payload: InvalidationEventPayload) => void;
 
 type Stub = {
@@ -313,6 +336,7 @@ function makeStub(): Stub {
           suspendReason: null,
           reason: null,
         }),
+      listScans: () => answer("listScans", HISTORY),
       getCompat: () => answer("getCompat", COMPAT),
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);

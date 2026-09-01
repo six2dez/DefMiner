@@ -58,6 +58,7 @@ import type {
   InvalidationSubscription,
   RpcResult,
   ScanCommandOutcome,
+  ScanHistoryRow,
   StartScanOutcome,
 } from "../api/client";
 
@@ -137,6 +138,8 @@ type Harness = {
   /** Push one progress payload through the subscription the panel opened. */
   readonly emitProgress: (patch: Partial<ScanProgressPayload>) => void;
   readonly stopped: () => number;
+  /** Every limit the mounted history list asked for, in order. */
+  readonly historyLimits: () => number[];
 };
 
 type Options = {
@@ -154,6 +157,12 @@ type Options = {
    *  command whose in-flight label never reaches a paint — which would make the
    *  assertion pass on a component that has no in-flight label at all. */
   readonly hangCommands?: boolean;
+  /** The history rows the mounted list reads. Empty by default, which is the
+   *  "no scans yet" screen and the honest default for a fresh project. */
+  readonly history?: readonly ScanHistoryRow[];
+  /** Fail the history read at the RPC layer — a call that produced no value at
+   *  all, which the list must render as an ERROR and never as emptiness. */
+  readonly historyFails?: boolean;
 };
 
 const MOVED: ScanCommandOutcome = {
@@ -169,6 +178,7 @@ function harness(options: Options = {}): Harness {
   let stopCount = 0;
   const starts: { readonly operatorFilter: string }[] = [];
   const commands: string[] = [];
+  const historyLimits: number[] = [];
   let onProgress: ((p: ScanProgressPayload) => void) | null = null;
 
   const load = (): Promise<RpcResult<ScanStatusPayload | null>> => {
@@ -217,6 +227,20 @@ function harness(options: Options = {}): Harness {
       pause: command("pause"),
       resume: command("resume"),
       discard: command("discard"),
+      loadHistory: (limit: number) => {
+        historyLimits.push(limit);
+        if (options.historyFails === true) {
+          return Promise.resolve<RpcResult<readonly ScanHistoryRow[]>>({
+            ok: false,
+            reason: "rpc-rejected",
+            versions: null,
+          });
+        }
+        return Promise.resolve<RpcResult<readonly ScanHistoryRow[]>>({
+          ok: true,
+          value: options.history ?? [],
+        });
+      },
       subscribe: (
         handler: (p: ScanProgressPayload) => void,
       ): InvalidationSubscription => {
@@ -236,6 +260,7 @@ function harness(options: Options = {}): Harness {
     starts: () => starts,
     commands: () => commands,
     stopped: () => stopCount,
+    historyLimits: () => historyLimits,
     emitProgress: (patch) => {
       onProgress?.({
         kind: SCAN_PROGRESS_KIND,

@@ -60,7 +60,7 @@ import {
   RETENTION_SWEEP_EVERY_N,
 } from "@defminer/engine/thresholds";
 
-import type { StartScanOutcome } from "../api/client";
+import type { ScanHistoryRow, StartScanOutcome } from "../api/client";
 
 import { counted, groupThousands } from "./table-contract";
 
@@ -790,13 +790,11 @@ export function positionText(lastCreatedAt: number | null): string | null {
  * a tab come to disagree about the same scan, so `positionText` above is built
  * on this rather than beside it.
  *
- * `@internal` for exactly one wave. Plan 06-13 builds the toolbar indicator and
- * the history list — "reached {D MMM YYYY}" — and is the cross-module consumer
- * that lets the tag come off. It is exported now rather than later so that plan
- * consumes this formatter instead of writing a second one, which is the whole
- * point of declaring it here.
- *
- * @internal
+ * THE `@internal` TAG CAME OFF IN PLAN 06-13, which is the wave it was declared
+ * for. Both consumers it was exported for now exist — the history row's
+ * "reached {D MMM YYYY}" and the toolbar indicator's bounded date — and neither
+ * wrote a second formatter, which is the whole point of having declared it here
+ * one wave early.
  */
 export function dateOnlyText(at: number | null): string | null {
   if (at === null || !Number.isFinite(at)) return null;
@@ -1009,4 +1007,317 @@ export function counterFingerprint(payload: ScanStatusPayload): string {
     payload.queued,
     payload.analysed,
   ].join("|");
+}
+
+// ---------------------------------------------------------------------------
+// COPY — THE SCAN HISTORY LIST (D-13, U6-1)
+// ---------------------------------------------------------------------------
+//
+// ===========================================================================
+// THE BOUND IS A NUMBER THIS SURFACE SENDS, NOT A NUMBER IT MIRRORS
+// ===========================================================================
+// `SCAN_HISTORY_LIMIT` below is the limit the client PASSES to `listScans`, and
+// the backend clamps it into `[1, SCAN_LIST_DEFAULT_LIMIT]` — a ceiling a caller
+// may only lower. That is why there is no frontend copy of the backend's own
+// ceiling here: two declarations of one bound is the drift shape this repo keeps
+// catching, and a surface that asked for its own number knows exactly which
+// bound was applied and can say so in words.
+//
+// ===========================================================================
+// AND THE NUMBER IS AN ASSUMPTION. THE SHAPE IS WHAT IS BINDING.
+// ===========================================================================
+// `overflow / scan-history-list` is the one ⚠ UNRESOLVED row in
+// 06-UI-SPEC.md § "UI Considerations", and it is carried here as an explicit
+// assumption rather than quietly promoted to a decision. NO REQUIREMENT BOUNDS
+// THE EXPECTED SCAN COUNT and nothing in this phase measured one, so 50 is a
+// DEFENSIBLE PROPOSAL and not a measurement.
+//
+// WHAT IS BINDING IS THE SHAPE OF THE ANSWER, and it has four parts:
+//
+//   1. A STATED bound — the surface says how many rows it is showing.
+//   2. ENFORCED AT READ, in `LIST_SCANS_SQL`'s `LIMIT ?`, never at render. A
+//      surface that fetched everything and rendered a slice would have already
+//      paid the cost the bound exists to avoid.
+//   3. EVERY `suspended` SCAN PINNED IN regardless of age — the backend's
+//      leading `(state = 'suspended') DESC` term. This is the load-bearing half:
+//      a suspended scan's row IS its cursor, which is why D-26 exempts that
+//      state from the retention age bound, and hiding one below a display cap
+//      would hide an operator's unfinished work behind a number nobody chose
+//      deliberately.
+//   4. THE TRUNCATION SAID IN WORDS on the surface, never left as a silent cut.
+//
+// The NUMBER may move without re-opening any decision. The SHAPE may not. This
+// mirrors P5-D20 for the suppressions list exactly.
+
+/**
+ * How many scans the history asks for.
+ *
+ * AN ASSUMPTION, NOT A MEASUREMENT — see the block above for the four parts of
+ * the answer that ARE binding, and for why changing this number is safe while
+ * changing the shape is not.
+ */
+export const SCAN_HISTORY_LIMIT = 50;
+
+/** How many skeleton rows stand in while the first read is open. A small fixed
+ *  count: the list does not know how many rows are coming, and a skeleton whose
+ *  length claimed to know would be the fabricated number D-14 refused. */
+export const SCAN_HISTORY_SKELETON_ROWS = 3;
+
+export const SCAN_HISTORY_HEADING = "Scan history";
+
+export const SCAN_HISTORY_EMPTY_HEADING = "No scans yet";
+
+export const SCAN_HISTORY_EMPTY_BODY =
+  "DefMiner has not scanned this project's existing traffic. Start one above to cover everything captured before DefMiner was installed.";
+
+export const SCAN_HISTORY_LOADING_LABEL = "Loading scan history…";
+
+/**
+ * A FAILED LOAD, AND IT IS A DIFFERENT SCREEN FROM AN EMPTY ONE.
+ *
+ * THE SECOND SENTENCE IS THE WHOLE POINT OF THIS STRING. An empty scan history
+ * means "you have never run a scan"; rendering a load failure that way tells
+ * the operator the opposite of the truth — and a suspended scan they cannot see
+ * is a resumable cursor they will never resume. The suppressions-list argument,
+ * verbatim.
+ */
+export const SCAN_HISTORY_FAILED_BODY =
+  "Could not load scan history. This list is not empty — DefMiner could not read it. A suspended scan may still be holding its place. Retry, or open Health.";
+
+/**
+ * The truncation sentence, said in words rather than left as a silent cut.
+ *
+ * `counted` RATHER THAN AN INTERPOLATED INTEGER, so the noun agrees at one and
+ * at fifty and never renders a parenthesised plural suffix. The second sentence
+ * is not decoration: without it an operator who counts fifty rows has no way to
+ * know their suspended scan is not the fifty-first.
+ */
+export function scanHistoryTruncatedLine(shown: number): string {
+  return `Showing the ${counted(
+    shown,
+    "most recent scan",
+    "most recent scans",
+  )}. Every suspended scan is shown regardless of age.`;
+}
+
+/** The row's position clause. The word is the row's, the date is the shared
+ *  formatter's date-only entry point — one formatter, two precisions. */
+export const SCAN_HISTORY_REACHED_PREFIX = "reached";
+
+/** The counter noun in a row. Grouped, never a bare digit run. */
+export const SCAN_HISTORY_SEEN_SUFFIX = "seen";
+
+export const SCAN_HISTORY_SHOW_DETAIL_LABEL = "Show detail";
+
+export const SCAN_HISTORY_HIDE_DETAIL_LABEL = "Hide detail";
+
+/** A discarded row STATES that its position is gone rather than rendering an
+ *  absent date the operator has to interpret. The second half is the part that
+ *  stops a discard reading as a data loss it is not. */
+export const SCAN_HISTORY_DISCARDED_POSITION_BODY =
+  "This scan's walked position was thrown away. The artifacts and observations it produced went through the same admission gate live browsing uses and are untouched.";
+
+export const SCAN_HISTORY_DETAIL_HEADING = "What this scan did";
+
+export const SCAN_HISTORY_CLAUSE_LABEL = "Your filter for this scan";
+
+/** An absent clause is a COMPLETE state and not a missing one: the scan ran on
+ *  DefMiner's own clause alone, which is the common case. */
+export const SCAN_HISTORY_NO_CLAUSE_BODY =
+  "You added nothing to DefMiner's own filter, so this scan ran on that alone.";
+
+/**
+ * WHY THE COMPOSED FILTER IS NOT SHOWN FOR A HISTORICAL SCAN.
+ *
+ * `scans` STORES THE OPERATOR'S CLAUSE AND NOT THE COMPOSED STRING — there is
+ * no `composed_filter` column and `ScanStatusPayload.composedFilter` is computed
+ * for the LIVE readout. Recomposing it here would describe TODAY'S DefMiner
+ * clause rather than the one this scan actually ran, which on a plugin whose
+ * asset clause ships with its version is a claim that goes wrong silently at the
+ * first upgrade. A string DefMiner does not have is absent, which is this page's
+ * own rule for a number it does not have.
+ */
+export const SCAN_HISTORY_COMPOSED_ABSENT_BODY =
+  "DefMiner's own filter is not stored per scan, so only the part you typed is shown. Composing it again here would describe this version's filter rather than the one this scan ran.";
+
+/**
+ * Every counter a HISTORY ROW carries, and it is deliberately not
+ * {@link SCAN_STRIP_COUNTERS} plus {@link SCAN_DETAIL_COUNTERS}.
+ *
+ * `analysed` IS ABSENT BECAUSE THE ROW DOES NOT HAVE IT. The live payload
+ * carries it as `number | null`; the history projection does not carry it at
+ * all, because `analyses` rows have no scan attribution — the primary key says
+ * nothing about which scan offered the work. Rendering a zero, or an em dash
+ * from a field that is not on the shape, would both be claims about a number
+ * DefMiner does not have.
+ */
+export type ScanHistoryCounterField = Extract<
+  {
+    [K in keyof ScanHistoryRow]: ScanHistoryRow[K] extends number ? K : never;
+  }[keyof ScanHistoryRow],
+  "pagesWalked" | "seen" | "admitted" | "skippedDone" | "rejected" | "queued"
+>;
+
+export type ScanHistoryCounter = {
+  readonly id: ScanHistoryCounterField;
+  readonly label: string;
+};
+
+/**
+ * The label for one counter, LOOKED UP in the shipped lists rather than typed a
+ * second time.
+ *
+ * THROWS AT IMPORT rather than falling back. A counter renamed in the strip
+ * without being renamed here would otherwise render a blank label in the detail
+ * — the same argument `table-contract.ts`'s `ROW_HEIGHT_CLASS` makes about the
+ * row height, and the same remedy.
+ */
+function shippedCounterLabel(id: ScanHistoryCounterField): string {
+  const found = [...SCAN_STRIP_COUNTERS, ...SCAN_DETAIL_COUNTERS].find(
+    (counter) => counter.id === id,
+  );
+  if (found === undefined) {
+    throw new Error(
+      `scan-contract: no shipped counter is registered for \`${id}\`, so the ` +
+        `scan history detail would render a blank label. The counter lists and ` +
+        `this one have parted company — add the counter to SCAN_STRIP_COUNTERS ` +
+        `or SCAN_DETAIL_COUNTERS rather than restating its label here, because ` +
+        `two spellings of one label is how two surfaces come to disagree about ` +
+        `the same number.`,
+    );
+  }
+  return found.label;
+}
+
+/** The six counters, in the movement order the strip already establishes. */
+export const SCAN_HISTORY_COUNTERS: readonly ScanHistoryCounter[] =
+  Object.freeze(
+    (
+      [
+        "seen",
+        "admitted",
+        "queued",
+        "pagesWalked",
+        "skippedDone",
+        "rejected",
+      ] as const
+    ).map((id) => ({ id, label: shippedCounterLabel(id) })),
+  );
+
+/**
+ * A stable element id for one history row, its toggle and its disclosure.
+ *
+ * BUILT FROM THE ROW'S POSITION, NEVER FROM THE SCAN ID. The id is DefMiner's
+ * own bounded integer, so the attribute cannot carry a value from anywhere else
+ * even in principle — and an `id` rather than a bound `data-*` for the reason
+ * `settings-contract.ts`'s `groupId` states: the static rendering-safety gate
+ * reports ANY bound `data-*` binding categorically.
+ */
+export function scanHistoryRowId(index: number): string {
+  return `defminer-scan-history-row-${String(index)}`;
+}
+
+export function scanHistoryToggleId(index: number): string {
+  return `defminer-scan-history-toggle-${String(index)}`;
+}
+
+export function scanHistoryDetailId(index: number): string {
+  return `defminer-scan-history-detail-${String(index)}`;
+}
+
+// ---------------------------------------------------------------------------
+// COPY — THE TOOLBAR SCAN INDICATOR (D-13)
+// ---------------------------------------------------------------------------
+
+/** The indicator's element id. Fixed and DefMiner-authored, like every other
+ *  string in the 48px row. */
+export const SCAN_INDICATOR_ID = "defminer-scan-indicator";
+
+/** The position clause's prefix when the scan HAS reached a page. */
+export const SCAN_INDICATOR_POSITION_PREFIX = "from";
+
+/** And when it has NOT. Two prefixes rather than one ambiguous date: both dates
+ *  are facts DefMiner holds, and they mean different things. */
+export const SCAN_INDICATOR_STARTED_PREFIX = "started";
+
+/**
+ * What the toolbar indicator describes — the minimum a bounded slot needs.
+ *
+ * FOUR FIELDS AND NOT THE WHOLE PAYLOAD, so a later edit cannot reach a
+ * target-controlled string through this shape. There is no field here a
+ * composed filter, an operator clause or a hostname could arrive on.
+ */
+export type ScanIndicator = {
+  readonly state: ScanLifecycleState;
+  readonly seen: number;
+  readonly lastCreatedAt: number | null;
+  readonly startedAt: number;
+};
+
+/**
+ * WHEN THE INDICATOR RENDERS, as a function rather than as a template condition.
+ *
+ * `running` AND `suspended`, AND NOTHING ELSE. A terminal scan is history and
+ * the Scan tab holds it; a chip reading "no scan running" is chrome that says
+ * nothing and trains the operator to stop reading the slot, which is
+ * `App.vue`'s own argument for the coalescing pill applied one element over.
+ *
+ * `suspended` IS THE LOAD-BEARING CASE and it is why this is a function with a
+ * comment rather than a `v-if` somebody can shorten. Every non-operator route
+ * to suspension — an epoch change (D-04), a restart (D-11), a retention
+ * eviction (D-08) — produces a scan the operator did not stop and would
+ * otherwise never learn had stopped. A suspended scan invisible from four of
+ * five tabs is exactly the frozen-looking page D-13 exists to prevent, one
+ * level up.
+ *
+ * `null` IN, `false` OUT, and that is the FIRST-READ case rather than a
+ * degenerate one: until the first status read resolves DefMiner does not know
+ * whether a scan exists, and its absence during that window is
+ * indistinguishable from "no scan" — which is correct, because until DefMiner
+ * knows it claims nothing. No placeholder chip and no zero count.
+ */
+export function scanIndicatorVisible(
+  indicator: ScanIndicator | null,
+): indicator is ScanIndicator {
+  if (indicator === null) return false;
+  return indicator.state === "running" || indicator.state === "suspended";
+}
+
+/**
+ * The indicator's whole text: a state word, one grouped integer and a date.
+ *
+ * ALWAYS ALL THREE — never a bare word and never a bare number. A bare word
+ * says a scan exists and nothing about whether it is moving; a bare number says
+ * nothing about which scan it belongs to.
+ *
+ * THE LABEL IS PASSED IN RATHER THAN LOOKED UP, and that is a module-graph fact
+ * rather than a style choice: `scan-lifecycle-presentation.ts` imports THIS
+ * module for its labels, so reaching back into it here would close a cycle. The
+ * caller reads the word and the tone from the one map and hands the word here,
+ * which keeps a single spelling.
+ *
+ * THE DATE IS THE POSITION'S WHEN THERE IS ONE AND THE START'S WHEN THERE IS
+ * NOT, and the two carry DIFFERENT PREFIXES. Dropping the element on a scan
+ * that has walked nothing would leave a word and a number, which the content
+ * rule forbids outright; printing the start date under the position's prefix
+ * would be the more comfortable lie. Both dates are DefMiner's own facts and
+ * the prefix says which one is on screen.
+ *
+ * EVERY PIECE IS BOUNDED. A closed-set word, a grouped integer, one of two
+ * fixed prefixes, and a fixed-format date. There is no field on this shape a
+ * target-controlled string could arrive on, which is what keeps the 48px row
+ * honest without a truncation policy.
+ */
+export function scanIndicatorText(
+  label: string,
+  indicator: ScanIndicator,
+): string {
+  const reached = dateOnlyText(indicator.lastCreatedAt);
+  const when =
+    reached === null
+      ? `${SCAN_INDICATOR_STARTED_PREFIX} ${String(
+          dateOnlyText(indicator.startedAt) ?? "",
+        )}`
+      : `${SCAN_INDICATOR_POSITION_PREFIX} ${reached}`;
+  return `${label} · ${groupThousands(indicator.seen)} ${SCAN_HISTORY_SEEN_SUFFIX} · ${when}`;
 }
