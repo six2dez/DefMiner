@@ -488,9 +488,9 @@ Plans:
   5. Reconstructed sources are themselves analysed once per content hash, and the FP corpora are extended to include reconstructed source as an input class
   6. Reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest
 
-**Plans**: 9 plans in 8 waves
+**Plans**: 10 plans in 9 waves
 
-*The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-09 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
+*The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-10 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
 
 Plans:
 
@@ -498,13 +498,13 @@ Plans:
 
 - [ ] 07-01-PLAN.md — The measurement and the fixtures: the O-03 probe on a version-pinned Caido 0.58.0, `MAP_MAX_BYTES` and three derived constants, and one tracked fixture module three plans read (MAP-01, MAP-02, MAP-05)
 
-**Wave 2** *(blocked on Wave 1 — both consume its constants and its fixtures)*
+**Wave 2** *(blocked on Wave 1 — consumes its constants and its fixtures)*
 
 - [ ] 07-02-PLAN.md — The engine parser: bounded `lastIndexOf` announcement scan, base64 decode, `JSON.parse`, and the whole MAP-05 hostile matrix, SDK-free on Node (MAP-01, MAP-02, MAP-05)
+
+**Wave 3** *(blocked on Wave 2 — `07-03`'s two AST gates walk the tree `07-02` creates, and derive `SOURCES_BINDING_NAMES` from its `parse.ts`)*
+
 - [ ] 07-03-PLAN.md — The two capability bans: the D-16 codec relocation and D-17's package-level codec gate, plus D-12's `sources`-never-reaches-a-path-sink gate (MAP-03, MAP-04)
-
-**Wave 3** *(blocked on Wave 2)*
-
 - [ ] 07-04-PLAN.md — Store: migration `v: 8`, the `sources` / `source_sightings` tables behind a **blocking-human one-way checkpoint** on `EXPECTED_TABLES`, the third closed vocabulary, and the paged read (MAP-02, MAP-06)
 
 **Wave 4** *(blocked on Wave 3 — shares `consumer.ts` and `thresholds.ts`)*
@@ -521,11 +521,15 @@ Plans:
 
 **Wave 7** *(blocked on Wave 6)*
 
-- [ ] 07-08-PLAN.md — The viewer, the position strip and the drill-down: four body states that cannot be collapsed, O-02's no-line-structure case, R6's content-addressed download name, and O-07's replacement separation mechanism asserted in both directions (UI-05, MAP-03, MAP-04, MAP-07)
+- [ ] 07-08-PLAN.md — The reading surface: the viewer's four body states that cannot be collapsed, O-02's no-line-structure case, the two bounds, the position strip's seven states and its lazy decode, and R6's content-addressed download name closing MAP-04's last sink (UI-05, MAP-03, MAP-04)
 
-**Wave 8** *(blocked on Wave 7)*
+**Wave 8** *(blocked on Wave 7 — mounts `07-08`'s components for real, and O-07's replacement needs both regions on screen at once)*
 
-- [ ] 07-09-PLAN.md — Close-out: the scoped **Export source manifest** CTA resolving UI-SPEC Named Conflict 1, the D-03 counter surfaced, `05-UI-SPEC.md` amendments A5/A6/A7, and this roadmap entry plus `REQUIREMENTS.md` amended (MAP-07, UI-05)
+- [ ] 07-09-PLAN.md — The navigation surface: D-21's drill-down shell inside the Artifacts tab with the tab list byte-unchanged, the `Sources` column as its only entry point with a resolved zero and an unresolved count never the same pixel, and O-07's replacement separation mechanism asserted in both directions (UI-05, MAP-07)
+
+**Wave 9** *(blocked on Wave 8 — edits `SourceBrowser.vue`)*
+
+- [ ] 07-10-PLAN.md — Close-out: the scoped **Export source manifest** CTA resolving UI-SPEC Named Conflict 1, the D-03 counter surfaced, `05-UI-SPEC.md` amendments A5/A6/A7, and this roadmap entry plus `REQUIREMENTS.md` amended (MAP-07, UI-05)
 
 ### Phase 8: Active Retrieval & Crash Survivability
 

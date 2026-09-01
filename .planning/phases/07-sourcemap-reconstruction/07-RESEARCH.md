@@ -1501,7 +1501,7 @@ The RSS sampler *is* the standing example and it is the only memory measurement 
 
 ### Wave 0 gaps
 
-- [ ] `corpus/maps/` — real `.map` files + synthesised inline fixtures + the hostile set, sha256-gated (Pitfall 8). **Blocks the probe, MAP-05 and D-15 simultaneously; do it first.**
+- [ ] ~~`corpus/maps/`~~ **[SUPERSEDED — see PATTERNS debt 3 and plan `07-01`]** — real `.map` files + synthesised inline fixtures + the hostile set, sha256-gated (Pitfall 8). **Blocks the probe, MAP-05 and D-15 simultaneously; do it first.** The `corpus/maps/` PATH is not followed: `.gitignore:9` excludes `corpus/` entirely, so bytes written there do not survive a clean checkout. The fixtures take TWO TRACKED HOMES instead — `scripts/phase7/fetch-maps.sh` (fetcher plus committed SHA-256s) and `packages/engine/src/sourcemap/map-fixture.ts` (string literals). Everything else in this line stands.
 - [ ] `packages/engine/src/sourcemap/{announce,parse}.ts` + specs
 - [ ] `packages/backend/src/codec-prohibition.spec.ts` (D-17)
 - [ ] The retained-traversal gate (D-12)
@@ -1593,27 +1593,34 @@ Claims tagged `[ASSUMED]` in this document, and where a reasoned argument is sta
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-**1. How long does Caido keep a request retrievable by `sdk.requests.get`?**
+*All four are discharged in plan text. Each carries its resolution and the plan location that
+discharges it. None is left open into execution.*
+
+**1. How long does Caido keep a request retrievable by `sdk.requests.get`? — (RESOLVED: not blocking; measured opportunistically)**
 - *What we know:* the reload can already return `undefined` at two distinct points, milliseconds after admission, and both are counted [VERIFIED: consumer.ts:530-542, `reloadMissing` / `reloadNoResponse`]. SPIKE-11 measured that a browser-cache hit never reaches the plugin and a 304 arrives with a zero-length body [VERIFIED: SPIKE-11.json `verdict.answer`] — but that is about the **hook**, not about retention of an already-stored request.
 - *What is unclear:* whether Caido prunes stored requests by age, by count, or not at all; and what a project switch or delete does to them.
 - *Recommendation:* **do not block on it.** D-22/D-23's design is correct whatever the answer — lazy detection, sticky outcome, tombstone kept. If the probe instance is already up for O-03, a cheap opportunistic measurement is: store N requests, wait, re-`get` them, record the survival curve. Worth one paragraph in the probe, not its own plan.
+- **RESOLVED IN:** plan `07-01`, `must_haves.truths` — the opportunistic survival-curve measurement is recorded in `map-bytes.json` as an OBSERVATION with its own `status`, carried as a `verification: backstop` truth, and is never presented as a settled retention policy. Restated as assumption A5 in plan `07-05`: it informs the tombstone copy and does not gate the phase.
 
-**2. Does an operator actually encounter inline maps in the wild?**
+**2. Does an operator actually encounter inline maps in the wild? — (RESOLVED: does not reopen D-01; the D-03 counter is surfaced)**
 - *What we know:* zero of eight pinned production bundles carry one [VERIFIED this session]. Inline maps are overwhelmingly a *development* artifact; production bundlers default to external `.map`.
 - *What is unclear:* the hit rate on the traffic a bug-bounty operator actually proxies — which includes staging, misconfigured production and internal tools, where inline maps are much more common.
 - *Recommendation:* **this does not reopen D-01** — that is locked. But it materially raises the value of D-03's counter, which becomes the *measurement* of how much MAP-01 the phase is leaving on the table for Phase 8. The plan should surface that counter in the health/footprint surface rather than leaving it internal, and should say in `07-VERIFICATION.md` that a low recovered-source count on real traffic is an **expected** outcome, not a defect.
+- **RESOLVED IN:** plan `07-05`, "Assumptions and open questions carried forward" — the expected-outcome statement is owed to `07-VERIFICATION.md` there; and plan `07-10`, which surfaces the D-03 counter in the health surface rather than leaving it internal. D-01 is NOT reopened.
 
-**3. What is the aggregate source-count cap MAP-06 asks for?**
+**3. What is the aggregate source-count cap MAP-06 asks for? — (RESOLVED: derived from the probe's RSS curve as a ROW bound)**
 - *What we know:* MAP-06 says "with depth and aggregate limits". D-13 settles depth (1). CONTEXT.md leaves the aggregate to the planner via the D-09 row accounting. 781 sources is real and legitimate, not pathological.
 - *What is unclear:* the number.
 - *Recommendation:* derive it from the probe's RSS curve, not from a preference — the aggregate cap and `MAP_MAX_BYTES` are two views of the same measurement. Express it as a **row** bound so Pitfall 2's fix and MAP-06's aggregate limit are the same constant.
+- **RESOLVED IN:** plan `07-01`, "Artifacts this phase produces" — `SOURCE_ROWS_PER_MAP_MAX` is a new `thresholds.ts` constant with its own `POLICY_DERIVED_FROM` entry citing the probe artifact, so the aggregate cap and `MAP_MAX_BYTES` are two views of the same measurement. Consumed by plan `07-04`'s row accounting and plan `07-05`'s convergence inequality.
 
-**4. Does `CONTRACT_VERSION` bumping break a running frontend mid-upgrade?**
+**4. Does `CONTRACT_VERSION` bumping break a running frontend mid-upgrade? — (RESOLVED: bumped 5 → 6)**
 - *What we know:* it is 5 [VERIFIED: api/spec.ts:148] and exists precisely to prevent a stale frontend talking to a new backend.
 - *What is unclear:* nothing structural — this is a routine bump, noted so it is not forgotten.
 - *Recommendation:* bump it; the frontend's `client.ts` already handles the mismatch.
+- **RESOLVED IN:** plan `07-06`, task 2 — `CONTRACT_VERSION` is bumped from 5 to 6, with `packages/frontend/src/api/client.spec.ts` asserted green against it in the same task's acceptance criteria.
 
 ---
 

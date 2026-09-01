@@ -81,7 +81,9 @@ Task IDs are assigned by the planner; this map is keyed by requirement until pla
 
 **Do the corpus first.** No committed corpus bundle carries an inline map — all three announcing bundles announce external `.map` files and five announce nothing at all, so under D-01 the entire existing corpus yields zero recovered sources. This single gap blocks the probe, MAP-05 and D-15 simultaneously.
 
-- [ ] `corpus/maps/` — real `.map` files, synthesised inline-data-URI fixtures, and the hostile set, sha256-gated
+- [ ] The map fixture corpus, in its TWO TRACKED HOMES — `corpus/` is excluded outright by `.gitignore:9` and NOTHING is committed under it:
+  - [ ] `scripts/phase7/fetch-maps.sh` — the fetcher for real `.map` files, with their SHA-256 hashes committed IN THE SCRIPT. The script and its hashes are the reproducible artifact; the fetched bytes are not.
+  - [ ] `packages/engine/src/sourcemap/map-fixture.ts` — the synthesised inline-data-URI fixtures, the hostile set and the 23-member `sources`-label corpus, as STRING LITERALS exported from a tracked module (`HOSTILE_MAP_CASES`, `SOURCES_LABEL_CASES`, `SIZE_BOUNDARY_CASES` and their id arrays).
 - [ ] `packages/engine/src/sourcemap/announce.ts` + `announce.spec.ts`
 - [ ] `packages/engine/src/sourcemap/parse.ts` + `parse.spec.ts`
 - [ ] `packages/engine/src/decode.ts` + `decode.spec.ts` (base64-strict, D-04)
