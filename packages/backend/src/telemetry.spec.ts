@@ -17,6 +17,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { MAP_PARSE_REASONS } from "@defminer/engine/sourcemap/parse";
 import { MAX_SYNC_SLICE_MS } from "@defminer/engine/thresholds";
 import ts from "typescript";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -255,6 +256,137 @@ describe("counters.retro — retro attribution over the SAME closed vocabulary (
     // Declared here, incremented by plan 06-06 at the reload — where the byte
     // count is measured good and where the AUTHORITATIVE size gate lives.
     expect(counters.reloadOverSize).toBe(0);
+  });
+});
+
+// ===========================================================================
+// 2c. PHASE 7 — THE SOURCEMAP SUB-MAP, IN THE SAME ONE COUNTERS OBJECT
+// ===========================================================================
+//
+// The SECOND sub-map, and it is a sub-map for exactly the reasons 2b states.
+// The claim under test here is narrower and it is the one that goes wrong
+// silently: the refusal counters are DERIVED from `MAP_PARSE_REASONS` by the
+// SHIPPED helper, so a ninth parse reason added in the engine acquires its
+// counter in that one edit. A hand-listed map would leave the new reason
+// invisible — a rejection nobody can see — and a typo'd key reads zero for ever.
+
+describe("counters.sourcemap — Phase 7 attribution inside the ONE object", () => {
+  it("keys its refusal counters on EXACTLY the shipped parse vocabulary", () => {
+    expect(
+      Object.keys(counters.sourcemap.mapRefused).sort(),
+      "counters.sourcemap.mapRefused is not keyed on MAP_PARSE_REASONS. It must " +
+        "call the SHIPPED zeroedRejectCounters over the engine's frozen array, " +
+        "or a reason added to packages/engine/src/sourcemap/parse.ts has no " +
+        "counter and a refusal nobody can see.",
+    ).toEqual([...MAP_PARSE_REASONS].sort());
+    expect(Object.keys(counters.sourcemap.mapRefused).length).toBe(
+      MAP_PARSE_REASONS.length,
+    );
+  });
+
+  it("keys the refusal map on a DIFFERENT vocabulary from the admission map", () => {
+    // The two vocabularies SHARE the literal members `too_large` and `empty`,
+    // and that is correct — different subjects, and the sub-maps are what keep
+    // them apart. Asserting they are not the same key set is what would catch a
+    // copy-paste that pointed the Phase 7 map at REJECT_REASONS.
+    expect(Object.keys(counters.sourcemap.mapRefused).sort()).not.toEqual(
+      Object.keys(counters.rejected).sort(),
+    );
+    expect(counters.sourcemap.mapRefused.too_large).toBe(0);
+    expect(counters.rejected.too_large).toBe(0);
+  });
+
+  it("starts every sourcemap member at zero", () => {
+    for (const [name, value] of Object.entries(counters.sourcemap)) {
+      if (name === "mapRefused") continue;
+      expect(value, `counters.sourcemap.${name} did not start at 0`).toBe(0);
+    }
+    for (const reason of MAP_PARSE_REASONS) {
+      expect(counters.sourcemap.mapRefused[reason]).toBe(0);
+    }
+  });
+
+  it("moves independently of the live and retro counters", () => {
+    counters.sourcemap.announcedExternal += 1;
+    counters.sourcemap.mapRefused.too_large += 1;
+    expect(counters.rejected.too_large).toBe(0);
+    expect(counters.retro.rejected.too_large).toBe(0);
+    expect(counters.admitted).toBe(0);
+  });
+
+  it("is zeroed by resetTelemetryForTest() without that function naming a member", () => {
+    counters.sourcemap.announcedInline += 2;
+    counters.sourcemap.sourcesRecovered += 9;
+    counters.sourcemap.sightingsRecorded += 9;
+    counters.sourcemap.mapRefusedTooLarge += 1;
+    counters.sourcemap.mapMalformed += 3;
+    counters.sourcemap.mapRefused.malformed_json += 3;
+
+    resetTelemetryForTest();
+
+    expect(counters.sourcemap.announcedInline).toBe(0);
+    expect(counters.sourcemap.sourcesRecovered).toBe(0);
+    expect(counters.sourcemap.sightingsRecorded).toBe(0);
+    expect(counters.sourcemap.mapRefusedTooLarge).toBe(0);
+    expect(counters.sourcemap.mapMalformed).toBe(0);
+    expect(counters.sourcemap.mapRefused.malformed_json).toBe(0);
+  });
+});
+
+describe("slimStatus carries the sourcemap sub-map across the RPC", () => {
+  it("projects every sourcemap integer, deep-copied rather than aliased", () => {
+    counters.sourcemap.announcedExternal += 2;
+    counters.sourcemap.mapRefused.nested_sections += 4;
+
+    const projected = slimStatus().counters;
+    expect(projected.sourcemap.announcedExternal).toBe(2);
+    expect(projected.sourcemap.mapRefused.nested_sections).toBe(4);
+
+    counters.sourcemap.announcedExternal += 1;
+    counters.sourcemap.mapRefused.nested_sections += 1;
+    expect(projected.sourcemap.announcedExternal).toBe(2);
+    expect(projected.sourcemap.mapRefused.nested_sections).toBe(4);
+  });
+
+  it("deep-copies a sub-map NOBODY re-listed — the derivation, executed", () => {
+    // THE CLAIM THE REWRITE WAS FOR. The projection used to name each sub-map
+    // in a literal, so a fourth one added tomorrow would be handed to the RPC as
+    // an ALIAS into live module state — right numbers at the instant it was
+    // taken, then changing under the caller, with nothing failing anywhere.
+    //
+    // Run it: attach a sub-map this function has never heard of and check the
+    // projection copied it rather than aliased it.
+    const live = counters as unknown as Record<string, unknown>;
+    live.futureSubMap = { somethingNew: 1 };
+    try {
+      const projected = slimStatus().counters as unknown as Record<
+        string,
+        Record<string, number>
+      >;
+      expect(projected.futureSubMap.somethingNew).toBe(1);
+      (live.futureSubMap as Record<string, number>).somethingNew = 99;
+      expect(
+        projected.futureSubMap.somethingNew,
+        "the projection aliased a sub-map it was never told about. That is the " +
+          "hand-listed-literal defect: the RPC gets a live window into module " +
+          "state and nothing fails when it does.",
+      ).toBe(1);
+    } finally {
+      delete live.futureSubMap;
+    }
+  });
+
+  it("adds no new string field — every sourcemap value is an integer", () => {
+    counters.sourcemap.sourcesRecovered += 1;
+    const strings = walkValues(slimStatus()).filter(
+      (e) => typeof e.value === "string",
+    );
+    expect(
+      strings.map((e) => e.path),
+      "slimStatus() grew a string field. The sourcemap sub-map carries counts " +
+        "only — no label, no URL and no reason SENTENCE — so WR-03's redaction " +
+        "rules still have nothing on this path to run over.",
+    ).toEqual([]);
   });
 });
 

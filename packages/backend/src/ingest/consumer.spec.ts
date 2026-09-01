@@ -41,6 +41,7 @@ import { RETENTION_MAX_ROWS_KEY } from "@defminer/engine/contract";
 import { BoundedQueue } from "@defminer/engine/queue";
 import {
   ARTIFACT_DEADLINE_MS,
+  MAP_MAX_BYTES,
   PASSIVE_MAX_BYTES,
   QUEUE_CAP,
   RETENTION_SWEEP_EVERY_N,
@@ -77,6 +78,8 @@ import { counters, resetTelemetryForTest, slimStatus } from "../telemetry";
 
 import {
   type ConsumerDeps,
+  MAP_REFUSAL_CODE_PREFIX,
+  mapRefusalCode,
   resetConsumerForTest,
   startConsumer,
 } from "./consumer";
@@ -1589,5 +1592,549 @@ describe("the reload-side size gate — where the byte count is known good", () 
     // prove a comparison operator would be the slowest case in the suite and
     // would be testing the walk rather than the gate.
     expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(1);
+  });
+});
+
+// ===========================================================================
+// PHASE 7 — D-08's RECONSTRUCTION STAGE, THROUGH THE REAL CONSUMER
+// ===========================================================================
+//
+// THE TRACER'S CLAIM, and it is deliberately end-to-end rather than unit-shaped:
+// one admitted bundle carrying an inline map leaves `sources` and
+// `source_sightings` rows behind, written by the RUNNING consumer over the real
+// store modules and the real migration. Nothing about the parse, the store or
+// the schema is mocked here for the same reason the four Phase 1 claims are not:
+// a mocked `upsertRecoveredSource` would prove the consumer CALLS something,
+// which is not the claim.
+//
+// The fixtures below are built HERE rather than imported from
+// `map-fixture.ts`, and that is not a fork of the corpus. That module is the
+// HOSTILE and STRUCTURAL corpus — the shapes a target serves to break a parser —
+// and every case in it is imported by the specs that need it. What this section
+// needs is a WELL-FORMED map with a known source count, which the corpus does
+// not carry and should not: it is a control, not a hazard.
+
+/** A well-formed map document declaring `labels.length` sources with content. */
+function mapDocument(labels: readonly string[], contents: readonly string[]) {
+  return JSON.stringify({
+    version: 3,
+    file: "app.js",
+    sources: labels,
+    sourcesContent: contents,
+    names: [],
+    mappings: "AAAA",
+  });
+}
+
+/** A bundle that ANNOUNCES `doc` inline, in the spelling every real bundler emits.
+ *
+ *  `lead` is the code BEFORE the announcement, and it is a parameter rather than
+ *  a constant because it is load-bearing at the size boundary: the announcement
+ *  has to fall inside `SOURCEMAP_TAIL_WINDOW_BYTES`, and that window is derived
+ *  to be exactly wide enough for a map at `MAP_MAX_BYTES` plus
+ *  `ANNOUNCEMENT_PREFIX_MAX`. A one-over-the-ceiling case with a leading comment
+ *  would be missed by the SCAN rather than refused by the GATE — which would
+ *  pass a test that is asserting the wrong thing. */
+function bundleAnnouncingInline(
+  doc: string,
+  lead = "console.log(1);\n",
+): Uint8Array {
+  const payload = Buffer.from(doc, "utf8").toString("base64");
+  return Buffer.from(
+    lead +
+      "//# sourceMappingURL=data:application/json;base64," +
+      payload +
+      "\n",
+    "utf8",
+  );
+}
+
+/** A well-formed map document of EXACTLY `target` bytes, padded in its content. */
+function mapOfExactlyBytes(target: number): string {
+  const empty = mapDocument(["s"], [""]);
+  return mapDocument(
+    ["s"],
+    ["x".repeat(target - Buffer.byteLength(empty, "utf8"))],
+  );
+}
+
+/** A bundle announcing an EXTERNAL map — the D-03 case, never fetched. */
+function bundleAnnouncingExternal(url: string): Uint8Array {
+  return Buffer.from(
+    "console.log(1);\n//# sourceMappingURL=" + url + "\n",
+    "utf8",
+  );
+}
+
+async function countTable(table: string): Promise<number> {
+  const stmt = await fx.db.prepare(
+    "SELECT COUNT(*) AS n FROM " + table + " WHERE project_id = ?",
+  );
+  const row = await stmt.get<{ n: number }>(PROJECT);
+  return row?.n ?? 0;
+}
+
+describe("D-08's stage sits where `visit` cannot reach, and the placement is asserted", () => {
+  const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
+
+  it("calls reconstruct AFTER `await walk(` and BEFORE `finishAnalysis(`", () => {
+    // THE THREE OFFSETS, COMPARED. RESEARCH found the structural fact that
+    // makes D-08's literal reading impossible — `visit` is
+    // `(window: Window) => void`, synchronous, and every write in the stage is
+    // awaited — so the stage runs in `analyseAndFinish` between the walk and the
+    // finish. This assertion is what stops it drifting back: an edit that moved
+    // the call above the walk or below the finish turns it red.
+    const source = readFileSync(CONSUMER, "utf8");
+    const walkAt = source.indexOf("const result = await walk(");
+    const reconAt = source.indexOf("await reconstruct(projectId, got");
+    const finishAt = source.indexOf("await finishAnalysis(");
+    expect(walkAt, "consumer.ts no longer awaits walk()").toBeGreaterThan(-1);
+    expect(reconAt, "consumer.ts never calls reconstruct()").toBeGreaterThan(
+      -1,
+    );
+    expect(
+      finishAt,
+      "consumer.ts never calls finishAnalysis()",
+    ).toBeGreaterThan(-1);
+    expect(
+      reconAt,
+      "the reconstruction stage is not AFTER the walk. It must be: the walk owns " +
+        "the deadline and the artifact's first slice, and the announcement is at " +
+        "the tail of a payload the walk has already read.",
+    ).toBeGreaterThan(walkAt);
+    expect(
+      reconAt,
+      "the reconstruction stage is not BEFORE finishAnalysis. It must be: " +
+        "finishAnalysis is the statement that persists the scan_state, the error " +
+        "code and the max_slice_ms this stage decided.",
+    ).toBeLessThan(finishAt);
+  });
+
+  it("leaves the `visit` callback the Phase 3 no-op — the stage did not move into it", () => {
+    // The prohibition, executed. `visit` is synchronous and returns void, so a
+    // stage placed inside it could not await the store at all; the failure would
+    // be floating promises and rows that land after the analysis row says done.
+    const source = readFileSync(CONSUMER, "utf8");
+    const sf = ts.createSourceFile(
+      "consumer.ts",
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const bodies: string[] = [];
+    const collect = (n: ts.Node): void => {
+      if (
+        ts.isPropertyAssignment(n) &&
+        ts.isIdentifier(n.name) &&
+        n.name.text === "visit"
+      ) {
+        bodies.push(n.initializer.getText(sf));
+      }
+      ts.forEachChild(n, collect);
+    };
+    collect(sf);
+    expect(bodies.length, "consumer.ts declares no `visit` callback").toBe(1);
+    expect(
+      bodies[0].includes("reconstruct") ||
+        bodies[0].includes("await") ||
+        bodies[0].includes("upsertRecoveredSource"),
+      "the reconstruction stage moved into the `visit` callback. `visit` is " +
+        "`(window: Window) => void` — synchronous, returning void — so it cannot " +
+        "await the store, and a sourcemap is not a per-window object anyway: the " +
+        "announcement is at the tail and JSON.parse needs the whole map.",
+    ).toBe(false);
+  });
+});
+
+describe("one admitted bundle carrying an inline map produces source rows", () => {
+  const LABELS = ["src/a.ts", "src/b.ts", "src/c.ts"];
+  const CONTENTS = [
+    "export const a = 1;\n",
+    "export const b = 2;\n",
+    "let c;\n",
+  ];
+
+  it("writes exactly N sources and N sightings for a map declaring N sources", async () => {
+    const bytes = bundleAnnouncingInline(mapDocument(LABELS, CONTENTS));
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(
+      await countTable("sources"),
+      "no sources rows. THIS is the assertion that fails if the reconstruction " +
+        "stage is removed — it does not pass with fewer rows.",
+    ).toBe(LABELS.length);
+    expect(await countTable("source_sightings")).toBe(LABELS.length);
+    expect(counters.sourcemap.announcedInline).toBe(1);
+    expect(counters.sourcemap.announcedExternal).toBe(0);
+    expect(counters.sourcemap.sourcesRecovered).toBe(LABELS.length);
+    expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length);
+  });
+
+  it("finishes `done` with a NULL error — a recovered map is not a degradation", async () => {
+    const bytes = bundleAnnouncingInline(mapDocument(LABELS, CONTENTS));
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+  });
+
+  it("stores the label VERBATIM and never the content — D-07 from the outside", async () => {
+    const bytes = bundleAnnouncingInline(mapDocument(LABELS, CONTENTS));
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const stmt = await fx.db.prepare(
+      "SELECT sources_verbatim, source_index FROM source_sightings WHERE project_id = ? ORDER BY source_index",
+    );
+    const rows = await stmt.all<{
+      sources_verbatim: string;
+      source_index: number;
+    }>(PROJECT);
+    expect(rows.map((r) => r.sources_verbatim)).toEqual(LABELS);
+    // The CONTENT is nowhere. Asserted by searching every column of the row
+    // rather than by reading the schema: `store/schema.spec.ts` polices the
+    // column set, and this polices the values that actually landed.
+    const all = await (
+      await fx.db.prepare("SELECT * FROM sources WHERE project_id = ?")
+    ).all<Record<string, unknown>>(PROJECT);
+    for (const source of all) {
+      for (const value of Object.values(source)) {
+        expect(
+          typeof value === "string" && value.includes("export const a"),
+          "a recovered source's CONTENT reached a column. D-07 keeps a digest, a " +
+            "size and a line count — never the bytes.",
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("counts a source seen through two bundles ONCE in `sources` and TWICE in sightings", async () => {
+    // MAP-06's once-per-content-hash guarantee, and it falls out of the primary
+    // keys rather than out of a new mechanism. Two different maps carrying the
+    // same module: one `sources` row, two sightings.
+    const shared = ["export const shared = 1;\n"];
+    const a = bundleAnnouncingInline(mapDocument(["a/x.ts"], shared));
+    const b = bundleAnnouncingInline(mapDocument(["b/x.ts"], shared));
+    const p = plan([
+      { id: "r1", url: "https://x.test/one.js", bytes: a },
+      { id: "r2", url: "https://x.test/two.js", bytes: b },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(await countTable("sources")).toBe(1);
+    expect(await countTable("source_sightings")).toBe(2);
+  });
+});
+
+describe("D-03 — an external announcement is a counter and nothing else", () => {
+  it("writes ZERO rows, finishes `done`, and increments announcedExternal once", async () => {
+    const bytes = bundleAnnouncingExternal("https://cdn.evil.test/app.js.map");
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.sourcemap.announcedExternal).toBe(1);
+    expect(counters.sourcemap.announcedInline).toBe(0);
+    expect(await countTable("sources")).toBe(0);
+    expect(await countTable("source_sightings")).toBe(0);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    // NOT an error and NOT a degradation. D-01 refuses the fetch by design, so
+    // the artifact analysed exactly as far as this phase goes.
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+  });
+
+  it("issues no outbound request — the fake SDK has no surface that could", async () => {
+    // The structural half of D-01: `outbound-prohibition.spec.ts` walks this
+    // consumer for a forbidden specifier. What THIS asserts is behavioural — the
+    // announced URL is never even read back out of the announcement, so there is
+    // nothing at rest for a later phase to accidentally fetch.
+    const bytes = bundleAnnouncingExternal("https://cdn.evil.test/app.js.map");
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const stmt = await fx.db.prepare(
+      "SELECT url FROM observations WHERE project_id = ?",
+    );
+    const rows = await stmt.all<{ url: string }>(PROJECT);
+    for (const row of rows) {
+      expect(row.url.includes("cdn.evil.test")).toBe(false);
+    }
+  });
+});
+
+describe("MAP-06's three EMPTY outcomes stay distinguishable", () => {
+  it("no announcement — no rows, no error, `done`", async () => {
+    const p = plan([
+      { id: "r1", url: "https://x.test/plain.js", bytes: body("plain") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(await countTable("sources")).toBe(0);
+    expect(counters.sourcemap.announcedInline).toBe(0);
+    expect(counters.sourcemap.announcedExternal).toBe(0);
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+  });
+
+  it("a map that parsed and carried NO sourcesContent — no rows, `done`, no error", async () => {
+    // Pitfall 3 / UI-09. `sourcesContent` is OPTIONAL in ECMA-426, so a map that
+    // parses and yields nothing has done everything it can. Telling the operator
+    // "nothing there" is not the same as telling them something failed.
+    const doc = JSON.stringify({
+      version: 3,
+      file: "app.js",
+      sources: ["src/a.ts"],
+      names: [],
+      mappings: "AAAA",
+    });
+    const p = plan([
+      {
+        id: "r1",
+        url: "https://x.test/app.js",
+        bytes: bundleAnnouncingInline(doc),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(await countTable("sources")).toBe(0);
+    expect(counters.sourcemap.announcedInline).toBe(1);
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+  });
+
+  it("a REFUSED map — no rows, `partial`, and a namespaced reason CODE", async () => {
+    // D-11, and Phase 7 is the FIRST writer of a non-null `analyses.error` from
+    // this path. The code is DefMiner's word end to end: a fixed prefix and a
+    // member of a frozen array. Nothing a driver or a parser said is in it.
+    const p = plan([
+      {
+        id: "r1",
+        url: "https://x.test/app.js",
+        bytes: bundleAnnouncingInline("{not json at all"),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(await countTable("sources")).toBe(0);
+    expect(counters.sourcemap.mapMalformed).toBe(1);
+    expect(counters.sourcemap.mapRefused.malformed_json).toBe(1);
+    expect(counters.sourcemap.mapRefusedTooLarge).toBe(0);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("partial");
+    expect(row?.error).toBe(mapRefusalCode("malformed_json"));
+    expect(row?.error?.startsWith(MAP_REFUSAL_CODE_PREFIX)).toBe(true);
+  });
+
+  it("a map over MAP_MAX_BYTES is REFUSED, never truncated and never partly parsed", async () => {
+    // REFUSE, NEVER TRUNCATE. A truncated map decodes to WRONG POSITIONS rather
+    // than to an error, which is the quiet-wrongness class every gate here
+    // exists to prevent.
+    // ONE QUANTUM OVER, not a megabyte over, and the tightness is the point: the
+    // gate compares the ENCODED length against `encodedCeiling(MAP_MAX_BYTES)`
+    // BEFORE anything is allocated, so the case has to sit just past that
+    // boundary to prove the comparison rather than the allocator. No leading
+    // code, so the announcement still falls inside the derived tail window.
+    const huge = mapOfExactlyBytes(MAP_MAX_BYTES + 5);
+    const p = plan([
+      {
+        id: "r1",
+        url: "https://x.test/app.js",
+        bytes: bundleAnnouncingInline(huge, ""),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.sourcemap.mapRefusedTooLarge).toBe(1);
+    expect(counters.sourcemap.mapRefused.too_large).toBe(1);
+    expect(counters.sourcemap.mapMalformed).toBe(0);
+    expect(await countTable("sources")).toBe(0);
+    expect(await countTable("source_sightings")).toBe(0);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("partial");
+    expect(row?.error).toBe(mapRefusalCode("too_large"));
+  });
+});
+
+describe("CORE-10 — max_slice_ms is the maximum over BOTH stages", () => {
+  it("the column and the in-memory maximum take the SAME number", async () => {
+    // ASSERTED AS AN EQUALITY, not as two independent expectations. Two
+    // expectations both pass when the two numbers are wrong in the same way; an
+    // equality is what fails when `finishAnalysis` is handed the walk's number
+    // alone while `recordSlice` gets the maximum.
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["src/a.ts"], ["export const a = 1;\n"]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(
+      row?.max_slice_ms,
+      "analyses.max_slice_ms disagrees with the in-memory maximum getStatus() " +
+        "reports. They are taken one statement apart from the SAME expression " +
+        "precisely so they cannot drift.",
+    ).toBe(slimStatus().maxSliceMs);
+  });
+
+  it("reports the RECONSTRUCTION stretch when it dominates the walk's", async () => {
+    // THE NUMBER CORE-10 EXISTS FOR. Reconstruction runs AFTER the walk returns,
+    // so its synchronous stretch is not in `result.maxSliceMs` at all — a
+    // consumer that passed the walk's number alone would report 1 ms while the
+    // thread sat blocked in a JSON.parse.
+    //
+    // DRIVEN DETERMINISTICALLY rather than raced against a real parse: the
+    // injected clock steps by 1 until the first sighting lands, then by 500. The
+    // walk is long over by then, so the only stretch that can carry the large
+    // step is the SECOND source's — which is inside the stage.
+    let step = 1;
+    let t = 0;
+    const clock = (): number => {
+      t += step;
+      return t;
+    };
+    const db = {
+      exec: fx.db.exec.bind(fx.db),
+      prepare: async (sql: string) => {
+        const stmt = await fx.db.prepare(sql);
+        if (!sql.includes("INSERT INTO source_sightings")) return stmt;
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: async (...args: unknown[]) => {
+            step = 500;
+            return stmt.run(...(args as never[]));
+          },
+        };
+      },
+    };
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["a.ts", "b.ts"], ["const a = 1;\n", "const b = 2;\n"]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides, { now: clock, db });
+
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(
+      row?.max_slice_ms ?? 0,
+      "max_slice_ms carries the WALK's number alone. Reconstruction runs after " +
+        "the walk returns, so its stretch is invisible in that number — and " +
+        "CORE-10's whole claim is that this column is the TRUE maximum.",
+    ).toBeGreaterThanOrEqual(500);
+    expect(row?.max_slice_ms).toBe(slimStatus().maxSliceMs);
+  });
+});
+
+describe("MAP-01 — a project change mid-stage abandons the remaining writes", () => {
+  it("leaves no partial source set attributed to the new project", async () => {
+    // T-07-09, executed rather than described. The epoch callback changes
+    // BETWEEN two source writes, which is the window `stillCurrent()` closes;
+    // `epochAtEntry` is captured before the reload because the entry was
+    // admitted under whatever project was active when the queue took it.
+    const bytes = bundleAnnouncingInline(
+      mapDocument(
+        ["a.ts", "b.ts", "c.ts"],
+        ["const a = 1;\n", "const b = 2;\n", "const c = 3;\n"],
+      ),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+
+    let epoch = 0;
+    let sightings = 0;
+    const db = {
+      exec: fx.db.exec.bind(fx.db),
+      prepare: async (sql: string) => {
+        const stmt = await fx.db.prepare(sql);
+        if (!sql.includes("INSERT INTO source_sightings")) return stmt;
+        return {
+          get: stmt.get.bind(stmt),
+          all: stmt.all.bind(stmt),
+          run: async (...args: unknown[]) => {
+            sightings += 1;
+            // The project changes after the FIRST sighting lands.
+            if (sightings === 1) epoch = 1;
+            return stmt.run(...(args as never[]));
+          },
+        };
+      },
+    };
+    await runOnce(p.overrides, { db, projectEpoch: () => epoch });
+
+    expect(
+      sightings,
+      "the stage kept writing after the project changed. Every new write must " +
+        "be immediately preceded by stillCurrent().",
+    ).toBe(1);
+    expect(counters.abandonedOnProjectChange).toBeGreaterThan(0);
+    expect(await countTable("source_sightings")).toBe(1);
   });
 });

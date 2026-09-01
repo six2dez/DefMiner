@@ -46,6 +46,7 @@ import {
   INVALIDATION_EVENT,
   TERMINAL_SCAN_STATES,
 } from "@defminer/engine/contract";
+import { decodeUtf8 } from "@defminer/engine/decode";
 import { sha256Hex } from "@defminer/engine/digest";
 import {
   type AbortLike,
@@ -53,9 +54,18 @@ import {
   walk,
 } from "@defminer/engine/pipeline";
 import type { BoundedQueue, Entry } from "@defminer/engine/queue";
+import { findAnnouncement } from "@defminer/engine/sourcemap/announce";
 import {
+  decodeInlineMap,
+  type MapParseReason,
+  parseSourceMap,
+} from "@defminer/engine/sourcemap/parse";
+import {
+  MAP_MAX_BYTES,
   PASSIVE_MAX_BYTES,
   RETENTION_SWEEP_EVERY_N,
+  SOURCE_ROWS_PER_MAP_MAX,
+  SOURCEMAP_TAIL_WINDOW_BYTES,
 } from "@defminer/engine/thresholds";
 import { yieldToLoop } from "@defminer/engine/yield";
 import type { Database } from "sqlite";
@@ -79,6 +89,7 @@ import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
 import { sweepRetention } from "../store/retention";
 import { getRetentionBounds } from "../store/settings";
+import { recordSighting, upsertRecoveredSource } from "../store/sources";
 // THE counter object, and `recordSlice` — the two halves of CORE-10's wiring.
 // Imported rather than injected: there is exactly one counter object in this
 // plugin (plan 01-05), and a dependency-injected one would be a second.
@@ -231,6 +242,48 @@ function extract(rr: {
     contentType: contentTypeOf(rr.response.getHeaders()),
     bytes: raw,
   };
+}
+
+/**
+ * The prefix that makes a map refusal TELLABLE APART in `analyses.error`.
+ *
+ * D-11 writes reconstruction refusals into a column Phase 1 shipped, and Phase 7
+ * is its first non-null writer from this path. Two closed vocabularies reach it —
+ * `MAP_PARSE_REASONS` here and plan 07-05's `DERIVED_REJECT_REASONS` for the
+ * derived-artifact path — and `too_large` and `empty` are literal members of
+ * BOTH. `contract.ts:88-120` keeps two colliding vocabularies apart with four
+ * mechanisms, and the FIRST of them, a distinct column name, is not available
+ * here: there is one `error` column and both vocabularies land in it. So the
+ * codes are NAMESPACED at the point of writing, which is the same separation
+ * bought a different way.
+ *
+ * A CODE, NEVER A MESSAGE (T-07-10). Every character of the written value is
+ * DefMiner's word: a fixed prefix and a member of a frozen array declared in
+ * this repository. Nothing a driver, a parser or an exception said is
+ * interpolated, so `describeError` — the right function for a DIAGNOSTIC — is
+ * deliberately not on this path. Plan 07-08's viewer maps these codes to
+ * operator copy.
+ */
+export const MAP_REFUSAL_CODE_PREFIX = "map:";
+
+/** The `analyses.error` discriminator for one map-level refusal. */
+export function mapRefusalCode(reason: MapParseReason): string {
+  return MAP_REFUSAL_CODE_PREFIX + reason;
+}
+
+/** Lines in a recovered source, for `sources.line_count`.
+ *
+ *  Computed HERE, at recovery time, because D-07 discards the content: nothing
+ *  downstream can re-derive it without a full bundle reload, which is why it is a
+ *  column rather than read-time work. A file with no trailing newline still has a
+ *  last line, so the count is separators + 1; the empty string is one empty line
+ *  and `admitDerived` refuses it before this is reached anyway. */
+function countLines(content: string): number {
+  let lines = 1;
+  for (let i = 0; i < content.length; i += 1) {
+    if (content.charCodeAt(i) === 0x0a) lines += 1;
+  }
+  return lines;
 }
 
 /** Has this analysis reached a state that means "do not analyse again"?
@@ -755,6 +808,215 @@ export function startConsumer(
   }
 
   /**
+   * What one reconstruction stage did, for the three statements that consume it.
+   *
+   * `sliceMs` feeds `recordSlice` AND `finishAnalysis`; `reason` becomes
+   * `analyses.error` and turns `scan_state` to `partial`; `rowsInserted` advances
+   * STORE-06's interval (Pitfall 2).
+   */
+  type Reconstruction = {
+    /** The stage's own longest UNINTERRUPTED synchronous stretch, in float ms. */
+    sliceMs: number;
+    /** A DefMiner-authored reason CODE, or null when nothing was refused. */
+    reason: string | null;
+    /** Rows this stage actually inserted. */
+    rowsInserted: number;
+  };
+
+  /** Both refusal counters from ONE site, so the roll-up cannot drift from the
+   *  per-reason map it rolls up. */
+  function noteMapRefusal(reason: MapParseReason): void {
+    counters.sourcemap.mapRefused[reason]++;
+    if (reason === "too_large") counters.sourcemap.mapRefusedTooLarge++;
+    else counters.sourcemap.mapMalformed++;
+  }
+
+  /**
+   * D-08's stage — reconstruct the original sources an admitted bundle carries.
+   *
+   * =====================================================================
+   * WHY THIS IS NOT INSIDE `visit`, WHICH IS WHERE D-08 LITERALLY SAID
+   * =====================================================================
+   * READ THIS BEFORE MOVING IT. D-08 places reconstruction "where `visit` is a
+   * no-op today", and RESEARCH found the structural fact that makes a literal
+   * reading impossible: `visit` is `(window: Window) => void` — SYNCHRONOUS,
+   * returning void, called once per window in ascending offset order — so it
+   * CANNOT `await` the store, and every write below is awaited. It is also the
+   * wrong SHAPE: a sourcemap is not a per-window object. The announcement is at
+   * the TAIL, the base64 decode needs the WHOLE payload, and `JSON.parse` needs
+   * the WHOLE map, so a stage running per window would either re-run the whole
+   * reconstruction 64 KiB at a time or accumulate the body a second time beside
+   * the walk that is already reading it.
+   *
+   * D-08's INTENT IS PRESERVED IN FULL and only the insertion point differs: one
+   * artifact at a time, the same slice budget, the same `setTimeout(0)` yield
+   * primitive, the same epoch discipline, the same `partial` / `failed` states
+   * and the same retention cadence. The stage runs inside `analyseAndFinish`,
+   * AFTER `await walk(...)` returns and BEFORE `finishAnalysis(...)` — after,
+   * because the walk owns the deadline and the artifact's first slice; before,
+   * because `finishAnalysis` is the statement that persists what this stage
+   * decided.
+   *
+   * ALWAYS ON, NO TOGGLE, NO SECOND LIFECYCLE. It inherits the queue, the
+   * deadline, the size ceiling, the project epoch and the retention sweep from
+   * the pipeline that already exists, which is the whole of D-08's argument.
+   *
+   * NO OUTBOUND REQUEST IS EVER ISSUED. An external announcement increments a
+   * counter and returns (D-01/D-03); `outbound-prohibition.spec.ts` already walks
+   * this file and would fail if that changed.
+   */
+  async function reconstruct(
+    projectId: string,
+    got: Extracted,
+    stillCurrent: () => boolean,
+  ): Promise<Reconstruction> {
+    const sm = counters.sourcemap;
+    let sliceMs = 0;
+    let rowsInserted = 0;
+    /** Fold one synchronous stretch into this stage's maximum. */
+    const mark = (from: number): void => {
+      const elapsed = clock() - from;
+      if (elapsed > sliceMs) sliceMs = elapsed;
+    };
+    const done = (reason: string | null): Reconstruction => ({
+      sliceMs,
+      reason,
+      rowsInserted,
+    });
+
+    // --- the whole-payload stretch: decode, scan, decode, parse -------------
+    // ONE uninterrupted synchronous run, and it is measured as one because that
+    // is what it is on the thread. The D-10 probe put the three inline-path
+    // operations at 8.87 ms/MB combined, which is what `MAP_MAX_BYTES` was
+    // derived against.
+    let sliceStart = clock();
+
+    // `crossCheck: false`, and the asymmetry with the display path is DELIBERATE.
+    // The cross-check is a second FULL decode of a multi-megabyte
+    // target-controlled body, on the proxy thread, inside the 25 ms slice this
+    // stage shares with the walk — and it THROWS on divergence, which would turn
+    // a malformed body into a caught consumer error instead of a named refusal.
+    // Nothing derived from this string is persisted as an offset or a digest:
+    // ENC-01's rule is untouched because the map's own digest below is taken over
+    // the DECODED JSON's bytes and the artifact digest came from `toRaw()`.
+    const text = decodeUtf8(got.bytes, { crossCheck: false });
+    const announcement = findAnnouncement(text, SOURCEMAP_TAIL_WINDOW_BYTES);
+    if (announcement === null) {
+      // THE COMMON CASE, and it costs one backwards scan. The artifact finishes
+      // exactly as it did before this stage existed: no counter, no row, no
+      // error. "No announcement" and "an announcement we refused" are different
+      // outcomes and MAP-06 requires them to stay distinguishable.
+      mark(sliceStart);
+      return done(null);
+    }
+
+    const inline = decodeInlineMap(announcement.url, MAP_MAX_BYTES);
+    if (inline.kind === "external") {
+      // D-03, and the SourceMap: response header folds in here rather than
+      // becoming a third code path — that header always names an external URL,
+      // so under D-01 it is the same fact reached by another route. No table, no
+      // row, no target-controlled URL at rest.
+      sm.announcedExternal++;
+      mark(sliceStart);
+      log(
+        "external sourcemap announced by " +
+          got.sha256.slice(0, 12) +
+          "; not fetched (D-01)",
+      );
+      return done(null);
+    }
+    if (inline.kind === "refused") {
+      noteMapRefusal(inline.reason);
+      mark(sliceStart);
+      log("sourcemap refused: " + mapRefusalCode(inline.reason));
+      return done(mapRefusalCode(inline.reason));
+    }
+
+    sm.announcedInline++;
+    const parsed = parseSourceMap(inline.json, {
+      maxSourceRows: SOURCE_ROWS_PER_MAP_MAX,
+    });
+    if (!parsed.ok) {
+      noteMapRefusal(parsed.reason);
+      mark(sliceStart);
+      log("sourcemap refused: " + mapRefusalCode(parsed.reason));
+      return done(mapRefusalCode(parsed.reason));
+    }
+    // The map's identity, over the DECODED JSON's bytes — the same content
+    // addressing `artifacts` uses, so the same map delivered inside two different
+    // bundles is one `map_sha256` with two sets of sightings.
+    const mapSha256 = sha256Hex(Buffer.from(inline.json, "utf8"));
+    mark(sliceStart);
+
+    // --- the per-source stretches -------------------------------------------
+    // A MAP THAT PARSED AND CARRIED NO `sourcesContent` IS A SUCCESS. It writes
+    // no rows, records no error and finishes `done` — ECMA-426 makes the field
+    // optional, and telling the operator "nothing there" is not the same as
+    // telling them something failed (Pitfall 3, UI-09).
+    const now = Date.now();
+    for (const source of parsed.recovered) {
+      sliceStart = clock();
+      const bytes = Buffer.from(source.content, "utf8");
+      const sourceSha256 = sha256Hex(bytes);
+      const lineCount = countLines(source.content);
+      mark(sliceStart);
+
+      // MAP-01/T-07-09: IMMEDIATELY before the write, in the idiom the five
+      // shipped re-check sites use. A project change mid-stage abandons the
+      // remaining writes and leaves no partial source set attributed to the new
+      // project.
+      if (!stillCurrent()) {
+        counters.abandonedOnProjectChange++;
+        log("project changed mid-reconstruction; not writing the source row");
+        return done(null);
+      }
+      const up = await upsertRecoveredSource(
+        deps.db,
+        projectId,
+        sourceSha256,
+        bytes.length,
+        lineCount,
+        now,
+      );
+      if (!up.ok) {
+        counters.storeErrors++;
+        log("SOURCE_WRITE_FAILED " + up.error);
+      } else {
+        sm.sourcesRecovered++;
+        rowsInserted += 1;
+        noteChange("sources", projectId, sourceSha256);
+      }
+
+      if (!stillCurrent()) {
+        counters.abandonedOnProjectChange++;
+        log("project changed mid-reconstruction; not writing the sighting");
+        return done(null);
+      }
+      const sighting = await recordSighting(
+        deps.db,
+        projectId,
+        mapSha256,
+        source.sourcesIndex,
+        got.sha256,
+        got.requestId,
+        sourceSha256,
+        source.sourcesVerbatim,
+        now,
+      );
+      if (!sighting.ok) {
+        counters.storeErrors++;
+        log("SIGHTING_WRITE_FAILED " + sighting.error);
+      } else {
+        sm.sightingsRecorded++;
+        rowsInserted += 1;
+        noteChange("source_sightings", projectId, mapSha256);
+      }
+    }
+
+    return done(null);
+  }
+
+  /**
    * The Phase 1 "work", and it is not a placeholder.
    *
    * `walk` is the sole source of three persisted facts, so they are passed
@@ -789,26 +1051,46 @@ export function startConsumer(
       log("project changed during the walk; not finishing the analysis row");
       return;
     }
+
+    // --- D-08's STAGE, AND THIS IS WHERE IT GOES ----------------------------
+    // AFTER `await walk(...)` returned, BEFORE `finishAnalysis(...)`. The long
+    // argument for why this is not the `visit` seam is on {@link reconstruct}
+    // itself; the short version is that `visit` is synchronous and every write
+    // below it is awaited. `consumer.spec.ts` asserts these three offsets against
+    // this file's own text so the placement cannot drift back.
+    const recon = await reconstruct(projectId, got, stillCurrent);
+
     // --- CORE-10's WIRE -----------------------------------------------------
     // The in-memory maximum `getStatus()` reports and the per-artifact
-    // `analyses.max_slice_ms` column take the SAME number from the SAME walk
-    // result, one statement apart, so the two cannot drift into disagreeing.
+    // `analyses.max_slice_ms` column take the SAME number from the SAME pair of
+    // stages, one statement apart, so the two cannot drift into disagreeing.
     // PAIRED with the write rather than merely near it: an iteration that does
     // not persist the column must not raise the in-memory maximum either, or
     // `getStatus().maxSliceMs` starts describing work no `analyses` row records.
     // Delete this line and `consumer.spec.ts` fails — that negative
     // demonstration was RUN, not described.
-    recordSlice(result.maxSliceMs);
+    //
+    // THE MAXIMUM IS NOW OVER TWO STAGES, and taking it is not bookkeeping.
+    // Reconstruction runs AFTER the walk returns, so its synchronous stretch is
+    // not in `result.maxSliceMs` at all: reporting the walk's number alone would
+    // say 25 ms while the thread sat blocked for 300 ms inside a `JSON.parse`,
+    // and CORE-10's entire claim is that this number is the TRUE maximum.
+    const maxSliceMs = Math.max(result.maxSliceMs, recon.sliceMs);
+    recordSlice(maxSliceMs);
     const finished = await finishAnalysis(
       deps.db,
       projectId,
       got.sha256,
       detectorHash,
-      result.partial ? "partial" : "done",
+      // D-11. `partial` had exactly ONE producer before this line — deadline
+      // expiry — and reconstruction gives it more. The `error` column is the
+      // discriminator: null for a deadline expiry, a namespaced reason CODE for
+      // a refused map. Both are `partial`, and an operator can tell them apart.
+      result.partial || recon.reason !== null ? "partial" : "done",
       Date.now(),
-      result.maxSliceMs,
+      maxSliceMs,
       result.bytesWalked,
-      null,
+      recon.reason,
     );
     if (!finished.ok) {
       counters.storeErrors++;

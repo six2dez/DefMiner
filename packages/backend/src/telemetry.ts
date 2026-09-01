@@ -65,6 +65,11 @@
 // not have to retrofit them through code that has already been reviewed. The
 // seam is left open, not filled.
 
+import {
+  MAP_PARSE_REASONS,
+  type MapParseReason,
+} from "@defminer/engine/sourcemap/parse";
+
 import { REJECT_REASONS, type RejectReason } from "./hooks/admit";
 
 /**
@@ -201,6 +206,73 @@ export type Counters = {
    * into the next.
    */
   retro: RetroCounters;
+  /**
+   * What sourcemap reconstruction did (Phase 7, MAP-01/MAP-02/MAP-06).
+   *
+   * A SUB-MAP OF THIS OBJECT, exactly as {@link retro} is, and for exactly the
+   * two reasons stated above it: the AST scan in `telemetry.spec.ts` fails on a
+   * second counters object anywhere in this package, and
+   * `resetTelemetryForTest()` mutates THIS object in place, so a map built
+   * beside it would survive a reset and leak one spec's counts into the next.
+   */
+  sourcemap: SourcemapCounters;
+};
+
+/**
+ * What the reconstruction stage in `ingest/consumer.ts` counts.
+ *
+ * D-03 IS THE FIRST MEMBER AND IT IS THE MEASUREMENT, NOT AN ERROR TALLY.
+ * `announcedExternal` counts the announcements this phase deliberately does not
+ * follow — D-01 refuses every outbound fetch, so an external `.map` costs a
+ * counter increment and nothing else: no table, no row, no target-controlled URL
+ * at rest for a phase that will not use it. A `SourceMap:` response header
+ * always names an external URL, so it folds into this same counter rather than
+ * becoming a third code path. The number is how much of MAP-01 this phase leaves
+ * on the table for Phase 8, and plan 07-10 surfaces it rather than leaving it
+ * internal.
+ *
+ * @internal
+ */
+export type SourcemapCounters = {
+  /** Announcements naming a URL this phase does not fetch (D-03). */
+  announcedExternal: number;
+  /** Announcements carrying a `data:application/json;base64,` payload (D-01). */
+  announcedInline: number;
+  /**
+   * Inline maps refused because the payload exceeded `MAP_MAX_BYTES`.
+   *
+   * A NAMED ROLL-UP OF `mapRefused.too_large`, and the pairing is deliberate
+   * rather than duplication: plan 07-05's contract names this counter, and plan
+   * 07-08's viewer keys its copy on the same word. Both are incremented from ONE
+   * site in `ingest/consumer.ts`, so the roll-up cannot drift from the map it
+   * rolls up.
+   */
+  mapRefusedTooLarge: number;
+  /**
+   * Inline maps refused for ANY reason that is not size.
+   *
+   * The complement of {@link mapRefusedTooLarge} over the same closed
+   * vocabulary. `malformed` is the operator's word for "the bytes announced a
+   * map and were not one"; {@link mapRefused} carries which of the seven
+   * non-size reasons it actually was.
+   */
+  mapMalformed: number;
+  /**
+   * Refusals by REASON, over `MAP_PARSE_REASONS`.
+   *
+   * DERIVED FROM THE VOCABULARY by the SHIPPED {@link zeroedRejectCounters},
+   * never hand-listed — the same argument `rejected` makes: a ninth parse reason
+   * added to `packages/engine/src/sourcemap/parse.ts` acquires its counter in
+   * that one edit, and a counter keyed on a typo'd reason is invisible because
+   * it just reads zero forever. Without this map every reason except `too_large`
+   * would collapse into {@link mapMalformed} and the operator could not tell a
+   * nesting bomb from a truncated payload.
+   */
+  mapRefused: Record<MapParseReason, number>;
+  /** Recovered sources written to `sources` (one row per distinct content). */
+  sourcesRecovered: number;
+  /** `(map, index)` sightings written to `source_sightings`. */
+  sightingsRecorded: number;
 };
 
 /**
@@ -280,6 +352,25 @@ function createCounters(): Counters {
       // never the reason set, so a seventh reject reason acquires both counters
       // in one edit to `admit.ts`.
       rejected: zeroedRejectCounters(REJECT_REASONS),
+    },
+    // THE SECOND SUB-MAP, BUILT IN THE SAME FACTORY FOR THE SAME TWO REASONS.
+    // Neither of them is stylistic: a `sourcemapCounters` declared beside
+    // `counters` fails the AST scan, and one created outside this factory would
+    // survive `resetTelemetryForTest()` and carry one spec's counts into the
+    // next.
+    sourcemap: {
+      announcedExternal: 0,
+      announcedInline: 0,
+      mapRefusedTooLarge: 0,
+      mapMalformed: 0,
+      // THE SHIPPED HELPER OVER THE SHIPPED ARRAY, called a third time — over a
+      // DIFFERENT vocabulary this time, which is the point. `zeroedRejectCounters`
+      // takes `readonly string[]` rather than `readonly RejectReason[]` precisely
+      // so a second closed vocabulary can reuse the derivation without either
+      // list learning about the other.
+      mapRefused: zeroedRejectCounters(MAP_PARSE_REASONS),
+      sourcesRecovered: 0,
+      sightingsRecorded: 0,
     },
   };
 }
@@ -700,6 +791,44 @@ export type SlimStatus = {
 };
 
 /**
+ * A DEEP COPY of the one counters object, derived rather than hand-listed.
+ *
+ * ===========================================================================
+ * WHY A RECURSION AND NOT THREE SPREADS
+ * ===========================================================================
+ * It was three spreads — `{ ...counters, rejected: {...}, retro: {...},
+ * sourcemap: {...} }` — and every sub-map added had to be re-listed there or it
+ * would be handed to the RPC AS AN ALIAS into live module state, silently: the
+ * outer spread is shallow, so a forgotten sub-map still appears in the
+ * projection, still reads the right numbers at the instant it is taken, and then
+ * keeps changing under the caller. Nothing fails. That is the same
+ * hand-maintained-parallel-list defect `zeroedRejectCounters` exists to refuse,
+ * and the answer is the same one: derive it.
+ *
+ * TOTAL OVER WHATEVER THE OBJECT HOLDS. A fourth sub-map is deep-copied for
+ * free, with no edit here — which is what makes this the counterpart of
+ * `resetTelemetryForTest()`, whose totality comes from `createCounters()` for
+ * exactly the same reason.
+ *
+ * PLAIN DATA ONLY, and that is not an assumption — it is a property this module
+ * enforces from the other side. Every value in `counters` is a
+ * DefMiner-authored integer or a `Record<string, number>`; `telemetry.spec.ts`
+ * walks the projection recursively and fails on ANY string, so a member that
+ * this copy would not reach honestly is one the suite refuses first.
+ */
+function snapshotCounters(): Counters {
+  const copy = (value: unknown): unknown => {
+    if (value === null || typeof value !== "object") return value;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = copy(v);
+    }
+    return out;
+  };
+  return copy(counters) as Counters;
+}
+
+/**
  * The projection `getStatus` returns.
  *
  * STRIPS EVERYTHING THAT IS NOT A COUNT. No URL, no header value, no body
@@ -708,23 +837,15 @@ export type SlimStatus = {
  * (T-01-26), and `telemetry.spec.ts` walks the returned object recursively
  * rather than trusting a reading of this function.
  *
- * Spread rather than hand-listed, deliberately: a hand-listed projection silently
- * stops carrying a counter somebody adds later, and a counter nobody can see is
- * the same as no counter.
+ * DERIVED rather than hand-listed, deliberately: a hand-listed projection
+ * silently stops carrying a counter somebody adds later, and a counter nobody
+ * can see is the same as no counter. See {@link snapshotCounters} for the
+ * stronger half of that argument — a sub-map re-listed by hand is handed to the
+ * RPC as a live alias rather than a snapshot, and nothing fails when it is.
  */
 export function slimStatus(): SlimStatus {
   return {
-    counters: {
-      ...counters,
-      rejected: { ...counters.rejected },
-      // A SNAPSHOT, for the same reason `rejected` is copied above: the spread
-      // is shallow, so without this the RPC hands its caller a live reference
-      // into module state that keeps changing after the projection was taken.
-      // Every value inside is a DefMiner-authored integer, so this adds no
-      // string to the projection and the WR-03 redaction rules still have
-      // nothing on this path to run over.
-      retro: { ...counters.retro, rejected: { ...counters.retro.rejected } },
-    },
+    counters: snapshotCounters(),
     maxSliceMs,
     lastError,
   };
