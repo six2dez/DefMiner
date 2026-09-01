@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-09-01T22:02:33.588Z"
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-09-01T23:37:37.127Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 2d70c6de4ed64f1df8a763d4d297148fa04cd425
+state_head: 3f3ed9ad1a5d6e4e20b485fe022d9c8c08b197cb
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 75
+  completed_plans: 76
 ---
 
 # Project State
@@ -28,11 +28,37 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-04: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
+> `state.advance-plan` was invoked EXACTLY ONCE and moved the prose position
+> 4 -> 5 of 10, correct against the files on disk (10 PLAN files, 4 SUMMARY files
+> in this phase). `roadmap.update-plan-progress 07` reports 4/10, In Progress.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the EIGHTH consecutive occurrence across phases 05, 06 and 07, recorded so
+> the run stays visible rather than being rediscovered. The `Progress:` line
+> above still describes PHASE 01 plan execution and is deliberately untouched.
+>
+> MAP-02 AND MAP-06 WERE NOT MARKED COMPLETE, AND THAT IS THE GATE WORKING.
+> `requirements.ready-ids` reported `0/2 ready`: sibling plans in this phase also
+> declare both IDs and have no SUMMARY yet, so marking them now would flip the
+> ledger green while the work is still running. They become ready when the LAST
+> declaring plan finishes. Same shape as phase 06's FIND-04.
+>
+> ONE PROHIBITED COMMAND WAS RUN BY ACCIDENT AND IMMEDIATELY REVERTED. A
+> compound Bash call during task 2 included `git stash`, which stashed the
+> uncommitted work; it was detected in the same turn and restored with
+> `git stash pop`, `git stash list` is empty and the tree was byte-identical
+> afterwards. Recorded rather than quietly fixed, because `git stash` is
+> prohibited for executors — the stash list is shared across worktrees. This run
+> was on the main working tree with no siblings and the push/pop were within one
+> second, so the failure mode the prohibition guards could not have occurred.
 
 > PHASE 06 PLAN 06-06: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
 > `state.advance-plan` was invoked EXACTLY ONCE — the lesson wave 4 of phase 05
@@ -334,6 +360,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P01 | 46 min | 3 tasks | 17 files |
 | Phase 07 P02 | 28 min | 3 tasks | 6 files |
 | Phase 07 P03 | 35m | 3 tasks | 5 files |
+| Phase 07 P04 | 20 min | 4 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -667,6 +694,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-03: derive a ban's axis from the banned thing itself — the codec specifier list is read out of the package's own exports map; SOURCES_BINDING_NAMES out of parse.ts's RecoveredSource fields — then PIN the members so a rename is loud rather than silently followed
 - [Phase 07]: 07-03: parse and format are held out of PATH_LIKE_SINKS on a NAME COLLISION with JSON.parse/Intl format, never on the capability, with a staleness assertion on each exclusion
 - [Phase 07]: 07-03: knip.json carries ONE ignoreDependencies entry for the frontend codec, in that file's own idiom, removed by plan 07-08 in the same edit as the import
+- [Phase 07]: Plan 07-04: option A approved as specified (2026-09-02) — the FOURTH one-way EXPECTED_TABLES approval. Migration v8 adds `sources` and `source_sightings` with no content column in any encoding; the approval event is named in that array's own doc comment beside 01-01, 05-06 and 06-01. — The one-way half was put to the operator before the migration was written: reversing D-07 means adding a content column, which fires schema.spec.ts by design and re-opens D-24. The D-09 retention cost — one row per recovered source, no exemption, eviction met sooner here than on any other table — was stated as part of the approval and written into the code, not only into the summary.
+- [Phase 07]: SOURCES_LABEL_MAX = 4096 is the ONE place phase 7 bounds evidence. D-06's 'verbatim' means unsanitised and unnormalised, not unbounded; sources_verbatim is NOT redacted at write time, so its safety rests entirely on R1/R2 at render and on the O-08 display normaliser — a DISPLAY control, not a STORAGE control. — Declared in store/sources.ts with its own justification rather than inherited from URL_MAX. Above both 1,024-grapheme display caps so the truncation the operator sees is the display one, and exactly the size of map-fixture.ts's four-kilobyte-label case so the boundary is exercised by an existing fixture from both sides.
+- [Phase 07]: THE COUNT MAP CANNOT BE A GROUP BY. countRecoveredSourcesByArtifact is driven from `artifacts` and admits on two EXISTS grounds, because a GROUP BY over source_sightings can only emit artifacts that HAVE sightings — the resolved zero it exists to carry is precisely the row it cannot produce. — Caught during task 4 before the statement shipped. It would have returned plausible numbers while silently collapsing 'DefMiner looked and found none' into 'DefMiner has not looked' — the zero-versus-unknown distinction the Sources column exists for, inverted. `partial` and `failed` deliberately do not resolve a zero.
 
 ### Known Risks Carried Forward
 
@@ -709,8 +739,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T22:02:33.463Z
-**Stopped at:** Completed 07-03-PLAN.md
+**Last session:** 2026-09-01T23:37:37.006Z
+**Stopped at:** Completed 07-04-PLAN.md
 **Resume file:** None
 
 ### Blockers

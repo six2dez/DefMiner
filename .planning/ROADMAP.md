@@ -488,7 +488,7 @@ Plans:
   5. Reconstructed sources are themselves analysed once per content hash, and the FP corpora are extended to include reconstructed source as an input class
   6. Reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest
 
-**Plans**: 3/10 plans executed in 9 waves
+**Plans**: 4/10 plans executed in 9 waves
 
 *The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-10 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
 
@@ -505,7 +505,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 — `07-03`'s two AST gates walk the tree `07-02` creates, and derive `SOURCES_BINDING_NAMES` from its `parse.ts`)*
 
 - [x] 07-03-PLAN.md — The two capability bans: the D-16 codec relocation and D-17's package-level codec gate, plus D-12's `sources`-never-reaches-a-path-sink gate (MAP-03, MAP-04)
-- [ ] 07-04-PLAN.md — Store: migration `v: 8`, the `sources` / `source_sightings` tables behind a **blocking-human one-way checkpoint** on `EXPECTED_TABLES`, the third closed vocabulary, and the paged read (MAP-02, MAP-06)
+- [x] 07-04-PLAN.md — Store: migration `v: 8`, the `sources` / `source_sightings` tables behind a **blocking-human one-way checkpoint** on `EXPECTED_TABLES`, the third closed vocabulary, and the paged read (MAP-02, MAP-06)
 
 **Wave 4** *(blocked on Wave 3 — shares `consumer.ts` and `thresholds.ts`)*
 
