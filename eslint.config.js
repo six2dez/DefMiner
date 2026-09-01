@@ -316,9 +316,10 @@ export default [
   },
 
   {
-    // The CI gates are plain Node ESM scripts, run outside any bundler and
-    // outside QuickJS. `no-undef` does not know that.
-    files: ["scripts/ci/**/*.mjs"],
+    // The CI gates and the Phase 6 corpus generators are plain Node ESM
+    // scripts, run outside any bundler and outside QuickJS. `no-undef` does not
+    // know that.
+    files: ["scripts/ci/**/*.mjs", "scripts/phase6/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

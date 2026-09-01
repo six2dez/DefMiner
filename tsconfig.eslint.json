@@ -36,6 +36,11 @@
     "scripts/ci/**/*.ts",
     "scripts/ci/**/*.mjs",
     "scripts/ci/**/*.mts",
+    // Phase 6's own generators. `scripts/spike/**` is deliberately absent — it
+    // is Phase 0 evidence eslint.config.js ignores wholesale — but
+    // `scripts/phase6/**` is code THIS milestone authors, so it is linted like
+    // everything else and therefore needs a program to be placed in.
+    "scripts/phase6/**/*.mjs",
     "*.ts",
     "*.js",
     "*.mjs"
