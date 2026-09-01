@@ -86,8 +86,22 @@ fi
 # admit() refuses any body over PASSIVE_MAX_BYTES. Measuring above that would be
 # pricing a case that cannot reach this code.
 #
+# The four points match SPIKE-06's ladder SHAPE — 0.5 / 1.5 / 3 / (its 8 MB
+# becomes) 6.29 MB — so the two measurements can be read side by side. The
+# sources differ deliberately: monaco (781 sources, 12.66 MB), babel (1,007) and
+# tfjs (1,744) have materially different source-count-to-byte ratios, and
+# `sources_materialise` is the operation that ratio drives.
+#
 # `<label> <source-map> <decoded-bytes> <port>`
-LADDER="${LADDER:-p1500k monaco-0.52.2.js.map 1572864 8941}"
+LADDER="${LADDER:-p0500k monaco-0.52.2.js.map 524288 8941
+p1500k monaco-0.52.2.js.map 1572864 8942
+p3000k babel-7.26.4.js.map 3145728 8943
+p6291k tfjs-4.22.0.js.map 6291456 8944}"
+
+# The Open-Question-1 retention observation. N requests, a wait, and a re-get.
+RETENTION_COUNT="${RETENTION_COUNT:-8}"
+RETENTION_WAIT_MS="${RETENTION_WAIT_MS:-5000}"
+OBSERVATIONS="$OUT/map-bytes-observations.json"
 
 jargs() {
   python3 -c 'import json,sys; print(json.dumps([json.dumps(a) for a in sys.argv[1:]]))' "$@"
@@ -189,6 +203,22 @@ run_point() {
     > "$LAST_OUT" 2> "$rundir/raw/$label.err"
   LAST_CALL_RC=$?
 
+  # --- OPEN QUESTION 1, opportunistically -----------------------------------
+  # Only on the point named by RETENTION_ON, and only while an instance is
+  # already up. It is an OBSERVATION and never a policy: RESEARCH says do not
+  # block on the retention question, so a failure here does not fail the point —
+  # it is recorded with its own status and its own reason. Traffic is LOOPBACK
+  # ONLY, to the listener this run started; nothing leaves the machine.
+  if [ "$label" = "$RETENTION_ON" ]; then
+    RETENTION_RAW="$rundir/raw/retention.json"
+    python3 -c 'import json,sys; print(json.dumps([sys.argv[1], sys.argv[2], sys.argv[3]]))' \
+      "$port" "$RETENTION_COUNT" "$RETENTION_WAIT_MS" > "$rundir/raw/retention-args.json"
+    probe_call retention_probe "$(cat "$rundir/raw/retention-args.json")" 120 \
+      > "$RETENTION_RAW" 2> "$rundir/raw/retention.err" || true
+    RETENTION_RUN_ID="$rid"
+    echo "  retention observation: rc=$? run=$rid" >&2
+  fi
+
   # Did the host survive? A probe that drove the runtime into a C-level abort
   # never reaches the structured log — the exit code and stderr are the whole
   # evidence.
@@ -256,6 +286,12 @@ PY
 # THE LADDER
 # ===========================================================================
 echo "=== map-bytes ladder (fresh instance per point, ports 8941-8945) ===" >&2
+# The retention observation runs on the SMALLEST point, so the wait it costs
+# lands on the cheapest instance and the operation set of the expensive points
+# is measured on an instance that did nothing else.
+RETENTION_ON="${RETENTION_ON:-p0500k}"
+RETENTION_RAW=""
+RETENTION_RUN_ID=""
 while read -r label src decoded port; do
   [ -z "$label" ] && continue
   fixture="$MAPS/inline-$label.js"
@@ -269,8 +305,16 @@ done <<< "$LADDER"
 # ===========================================================================
 # THE ARTIFACT
 # ===========================================================================
+python3 scripts/phase7/build-observations.py \
+  --out "$OBSERVATIONS" \
+  --raw "${RETENTION_RAW:-}" \
+  --run-id "${RETENTION_RUN_ID:-}" \
+  --count "$RETENTION_COUNT" \
+  --wait-ms "$RETENTION_WAIT_MS" || exit 1
+
 python3 scripts/phase7/assemble.py \
   --points "$POINTS" \
+  --observations "$OBSERVATIONS" \
   --out "$RESULT" \
   --expected-version "$MAP_PROBE_EXPECTED_VERSION" \
   --binary "$CAIDO_BIN_REL" \

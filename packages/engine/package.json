@@ -15,6 +15,7 @@
     "./pipeline": "./src/pipeline.ts",
     "./queue": "./src/queue.ts",
     "./sanitise": "./src/sanitise.ts",
+    "./sourcemap/map-fixture": "./src/sourcemap/map-fixture.ts",
     "./thresholds": "./src/thresholds.ts",
     "./yield": "./src/yield.ts"
   },

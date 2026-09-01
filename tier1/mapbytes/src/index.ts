@@ -267,9 +267,25 @@ export async function map_bytes(sdk: any, path: string, windowChars?: number) {
     } as Announcement);
   const payload = payloadOf(source, a);
 
-  // 2. b64_decode_buffer — D-04's decode, primitive 2, and the CORRECT one for
-  //    non-ASCII: it does the base64 and the UTF-8 in one step. RESEARCH
-  //    § Pitfall 4 is why both primitives are measured rather than one chosen.
+  // 2. b64_decode_atob — D-04's decode, primitive 1. `atob` IS a global on this
+  //    build (measured: capabilities.json reports typeof "function", and the
+  //    `buffer` module exports it too), but it decodes to a LATIN1 "binary
+  //    string" — one UTF-16 code unit per BYTE. A UTF-8 multi-byte sequence
+  //    becomes two or three separate characters, and `JSON.parse` may still
+  //    SUCCEED because the corruption is inside string values rather than in
+  //    the JSON structure. Nothing throws and the operator reads wrong source.
+  //    Measured here so the choice between the two primitives is RECORDED AS
+  //    MEASURED rather than reasoned (RESEARCH § Pitfall 4).
+  const atobMark = measured(sdk, "b64_decode_atob", () => {
+    const g = globalThis as any;
+    if (typeof g.atob !== "function") throw new Error("atob is not a function on this build");
+    return g.atob(payload) as string;
+  });
+  ops.push(slim(atobMark));
+  const atobJson: string = (atobMark.out as unknown as string) ?? "";
+
+  // 3. b64_decode_buffer — D-04's decode, primitive 2, and the CORRECT one for
+  //    non-ASCII: it does the base64 and the UTF-8 in one step.
   const bufferMark = measured(
     sdk,
     "b64_decode_buffer",
@@ -278,26 +294,83 @@ export async function map_bytes(sdk: any, path: string, windowChars?: number) {
   ops.push(slim(bufferMark));
   const mapJson: string = (bufferMark.out as unknown as string) ?? "";
 
-  // 3. json_parse — THE OPERATION THIS WHOLE PROBE EXISTS FOR. D-08 puts it on
+  // 4. json_parse — THE OPERATION THIS WHOLE PROBE EXISTS FOR. D-08 puts it on
   //    the proxy thread against a 25 ms slice. A deep-nesting hostile map fails
   //    here as a CATCHABLE RangeError (SPIKE-06 measured that the host survived
   //    all 18 probes), so it is caught and recorded rather than allowed to take
   //    the instance down (threat T-07-03).
+  //
+  //    The parsed object is deliberately still REACHABLE when this marker
+  //    closes, and stays reachable through `sources_materialise` below: RSS
+  //    never falls here, so releasing it would not show up anyway, and holding
+  //    it is what keeps the peak attributable to the operation that caused it.
   let mapShape: Record<string, unknown> | null = null;
+  let parsedMap: any = null;
   const parseMark = measured(sdk, "json_parse", () => {
-    const parsed: any = JSON.parse(mapJson);
+    parsedMap = JSON.parse(mapJson);
     mapShape = {
-      version: parsed?.version ?? null,
-      sources: Array.isArray(parsed?.sources) ? parsed.sources.length : null,
-      sources_content: Array.isArray(parsed?.sourcesContent)
-        ? parsed.sourcesContent.length
+      version: parsedMap?.version ?? null,
+      sources: Array.isArray(parsedMap?.sources) ? parsedMap.sources.length : null,
+      sources_content: Array.isArray(parsedMap?.sourcesContent)
+        ? parsedMap.sourcesContent.length
         : null,
-      mappings_chars: typeof parsed?.mappings === "string" ? parsed.mappings.length : null,
-      has_sections: Object.prototype.hasOwnProperty.call(parsed ?? {}, "sections"),
+      mappings_chars:
+        typeof parsedMap?.mappings === "string" ? parsedMap.mappings.length : null,
+      has_sections: Object.prototype.hasOwnProperty.call(parsedMap ?? {}, "sections"),
     };
     return mapShape;
   });
   ops.push(slim(parseMark));
+
+  // 5. sources_materialise — D-05's cost, and THE STEP WHERE PEAK RSS ACTUALLY
+  //    LANDS. `JSON.parse` alone does not tell you what holding 781 source
+  //    strings costs: the parse allocates them, and this is the first thing
+  //    that TOUCHES every one of them. Hashed with the NATIVE createHash
+  //    because that is the primitive D-05 would use — a per-character JS loop
+  //    would measure the loop, and SPIKE-06 already priced that gap.
+  //
+  //    HEAVIEST LAST, and it is last for that reason. Sparse, null and absent
+  //    `sourcesContent` are all legal (RESEARCH § Pitfall 3), so the guard is
+  //    the shipped shape rather than defensive padding: iterate `sources` and
+  //    condition on the content array's length, never the reverse.
+  let materialised: Record<string, unknown> | null = null;
+  const materialiseMark = measured(sdk, "sources_materialise", () => {
+    const sources: unknown[] = Array.isArray(parsedMap?.sources) ? parsedMap.sources : [];
+    const contents: unknown[] = Array.isArray(parsedMap?.sourcesContent)
+      ? parsedMap.sourcesContent
+      : [];
+    const digests: string[] = [];
+    let chars = 0;
+    let skippedNull = 0;
+    let skippedMissing = 0;
+    for (let i = 0; i < sources.length; i++) {
+      if (i >= contents.length) {
+        skippedMissing++;
+        continue;
+      }
+      const entry = contents[i];
+      if (typeof entry !== "string") {
+        skippedNull++;
+        continue;
+      }
+      chars += entry.length;
+      digests.push(createHash("sha256").update(entry).digest("hex"));
+    }
+    materialised = {
+      sources_declared: sources.length,
+      content_entries: contents.length,
+      hashed: digests.length,
+      skipped_null: skippedNull,
+      skipped_missing: skippedMissing,
+      content_chars: chars,
+      // The digests are DROPPED rather than returned: 781 hex strings crossing
+      // the REST boundary is 50 KB of payload that says nothing the counts do
+      // not. The first one is kept as proof the loop ran.
+      first_digest: digests.length > 0 ? digests[0] : null,
+    };
+    return materialised;
+  });
+  ops.push(slim(materialiseMark));
 
   sdk.console.log(`MAPBYTES_END path=${label} date=${Date.now()}`);
 
@@ -314,8 +387,140 @@ export async function map_bytes(sdk: any, path: string, windowChars?: number) {
     decoded_bytes: mapJson.length,
     payload_chars: payload.length,
     map: mapShape,
+    materialise: materialised,
+    // THE PITFALL 4 EVIDENCE, as a comparison rather than as prose. Two digests
+    // over the two decodes: equal means the payload was pure ASCII and the
+    // choice does not matter for THIS fixture; different means `atob` produced
+    // a different string from the same bytes, which is the corruption, caught
+    // by measurement instead of asserted from documentation.
+    decode_agreement: {
+      atob_chars: atobJson.length,
+      buffer_chars: mapJson.length,
+      atob_sha256: atobMark.ok ? createHash("sha256").update(atobJson).digest("hex") : null,
+      buffer_sha256: bufferMark.ok ? createHash("sha256").update(mapJson).digest("hex") : null,
+      identical: atobMark.ok && bufferMark.ok ? atobJson === mapJson : null,
+    },
     ops,
   };
+}
+
+/**
+ * OPEN QUESTION 1, measured opportunistically while an instance is already up.
+ *
+ * The question: how long does Caido keep a request retrievable by
+ * `sdk.requests.get`? D-22's tombstone design is correct whatever the answer —
+ * lazy detection, sticky outcome, tombstone kept — so RESEARCH says do NOT
+ * block on it and record it as an observation. This function is that paragraph.
+ *
+ * IT IS AN OBSERVATION AND NEVER A POLICY. It reports what it could and could
+ * not do, with its own status, and the artifact schema REFUSES a `pass`-shaped
+ * status on an observation for exactly this reason: a row that reads like a
+ * gate result is a row that gets cited as a settled retention policy.
+ *
+ * Traffic is LOOPBACK ONLY, to the listener this very run started. Nothing
+ * leaves the machine.
+ */
+export async function retention_probe(sdk: any, port: number, count: number, waitMs: number) {
+  const surface = {
+    requests_keys: [] as string[],
+    has_send: false,
+    has_get: false,
+    has_create: false,
+  };
+  try {
+    const r = sdk.requests ?? {};
+    surface.requests_keys = Object.keys(r).concat(
+      Object.getOwnPropertyNames(Object.getPrototypeOf(r) ?? {}),
+    );
+    surface.has_send = typeof r.send === "function";
+    surface.has_get = typeof r.get === "function";
+    surface.has_create = typeof r.create === "function";
+  } catch (e: any) {
+    return {
+      status: "not_run",
+      reason: "sdk.requests could not be enumerated: " + String(e).slice(0, 200),
+      surface,
+    };
+  }
+
+  if (!surface.has_send || !surface.has_get || !surface.has_create) {
+    return {
+      status: "not_run",
+      reason:
+        "this build's sdk.requests does not expose the create/send/get trio the measurement " +
+        "needs (create=" +
+        surface.has_create +
+        ", send=" +
+        surface.has_send +
+        ", get=" +
+        surface.has_get +
+        "). Recorded as NOT RUN rather than as a retention finding.",
+      surface,
+    };
+  }
+
+  const stored: string[] = [];
+  const sendErrors: string[] = [];
+  for (let i = 0; i < count; i++) {
+    try {
+      const spec = sdk.requests.create();
+      spec.setHost("127.0.0.1");
+      spec.setPort(port);
+      spec.setTls(false);
+      spec.setMethod("GET");
+      spec.setPath("/defminer-retention-probe/" + String(i));
+      const sent = await sdk.requests.send(spec);
+      const id = sent?.request?.getId?.();
+      if (typeof id === "string") stored.push(id);
+    } catch (e: any) {
+      sendErrors.push(String(e).slice(0, 200));
+    }
+  }
+
+  if (stored.length === 0) {
+    return {
+      status: "not_run",
+      reason:
+        "no request could be stored (" +
+        String(sendErrors.length) +
+        " send error(s); first: " +
+        (sendErrors[0] ?? "none") +
+        "). Recorded as NOT RUN rather than as evidence of eviction — a request that was " +
+        "never stored says nothing about retention.",
+      surface,
+    };
+  }
+
+  const immediate = await countSurvivors(sdk, stored);
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  const delayed = await countSurvivors(sdk, stored);
+
+  return {
+    status: "observed",
+    surface,
+    stored: stored.length,
+    send_errors: sendErrors.length,
+    wait_ms: waitMs,
+    survival_curve: [
+      { at_ms: 0, retrievable: immediate },
+      { at_ms: waitMs, retrievable: delayed },
+    ],
+    reason: null,
+  };
+}
+
+async function countSurvivors(sdk: any, ids: string[]): Promise<number> {
+  let n = 0;
+  for (const id of ids) {
+    try {
+      const got = await sdk.requests.get(id);
+      if (got) n++;
+    } catch {
+      // A throw is a miss, and a miss is the datum. Swallowing it here is not
+      // hiding an error — the count IS the measurement.
+    }
+  }
+  return n;
 }
 
 /**
@@ -346,5 +551,6 @@ export function init(sdk: any) {
   sdk.console.log("[tier1-mapbytes] init");
   sdk.api.register("map_bytes", map_bytes);
   sdk.api.register("mapbytes_info", mapbytes_info);
+  sdk.api.register("retention_probe", retention_probe);
   sdk.console.log("[tier1-mapbytes] ready");
 }

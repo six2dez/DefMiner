@@ -1,8 +1,8 @@
 {
   "$schema": "./map-bytes.schema.json",
   "spike": "MAP-BYTES",
-  "status": "inconclusive",
-  "recorded_at": "2026-09-01T20:36:55Z",
+  "status": "pass",
+  "recorded_at": "2026-09-01T20:48:43Z",
   "binary": {
     "path": ".caido-bin/0.58.0/caido-cli",
     "expected_version": "0.58.0",
@@ -17,9 +17,48 @@
   },
   "instances": [
     {
-      "run_id": "20260901T203653Z-1943",
+      "run_id": "20260901T204820Z-10566",
       "listen": "127.0.0.1:8941",
-      "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+      "data_path": "/tmp/defminer-probe-20260901T204820Z-10566",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    },
+    {
+      "run_id": "20260901T204823Z-27685",
+      "listen": "127.0.0.1:8942",
+      "data_path": "/tmp/defminer-probe-20260901T204823Z-27685",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    },
+    {
+      "run_id": "20260901T204829Z-23167",
+      "listen": "127.0.0.1:8943",
+      "data_path": "/tmp/defminer-probe-20260901T204829Z-23167",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    },
+    {
+      "run_id": "20260901T204841Z-24486",
+      "listen": "127.0.0.1:8944",
+      "data_path": "/tmp/defminer-probe-20260901T204841Z-24486",
       "fresh": true,
       "flags": [
         "--no-open",
@@ -35,40 +74,260 @@
     {
       "name": "announce_scan",
       "primitive": "announce_scan",
-      "variant": "p1500k",
-      "value": 6.464,
+      "variant": "p0500k",
+      "value": 1.827,
       "unit": "ms",
       "stat": "point",
       "n": 1,
       "valid": true,
-      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+      "notes": "decoded_bytes=524288 run_id=20260901T204820Z-10566"
+    },
+    {
+      "name": "b64_decode_atob",
+      "primitive": "b64_decode_atob",
+      "variant": "p0500k",
+      "value": 1.122,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=524288 run_id=20260901T204820Z-10566"
+    },
+    {
+      "name": "b64_decode_buffer",
+      "primitive": "b64_decode_buffer",
+      "variant": "p0500k",
+      "value": 1.001,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=524288 run_id=20260901T204820Z-10566"
+    },
+    {
+      "name": "json_parse",
+      "primitive": "json_parse",
+      "variant": "p0500k",
+      "value": 1.301,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=524288 run_id=20260901T204820Z-10566"
+    },
+    {
+      "name": "sources_materialise",
+      "primitive": "sources_materialise",
+      "variant": "p0500k",
+      "value": 0.768,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=524288 run_id=20260901T204820Z-10566"
+    },
+    {
+      "name": "rss_step_json_parse",
+      "primitive": "rss_step",
+      "variant": "p0500k",
+      "value": 0,
+      "unit": "bytes",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "delta from the mark-start sample"
+    },
+    {
+      "name": "announce_scan",
+      "primitive": "announce_scan",
+      "variant": "p1500k",
+      "value": 6.653,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T204823Z-27685"
+    },
+    {
+      "name": "b64_decode_atob",
+      "primitive": "b64_decode_atob",
+      "variant": "p1500k",
+      "value": 4.093,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T204823Z-27685"
     },
     {
       "name": "b64_decode_buffer",
       "primitive": "b64_decode_buffer",
       "variant": "p1500k",
-      "value": 3.985,
+      "value": 3.706,
       "unit": "ms",
       "stat": "point",
       "n": 1,
       "valid": true,
-      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+      "notes": "decoded_bytes=1572864 run_id=20260901T204823Z-27685"
     },
     {
       "name": "json_parse",
       "primitive": "json_parse",
       "variant": "p1500k",
-      "value": 4.655,
+      "value": 4.681,
       "unit": "ms",
       "stat": "point",
       "n": 1,
       "valid": true,
-      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+      "notes": "decoded_bytes=1572864 run_id=20260901T204823Z-27685"
+    },
+    {
+      "name": "sources_materialise",
+      "primitive": "sources_materialise",
+      "variant": "p1500k",
+      "value": 2.421,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T204823Z-27685"
     },
     {
       "name": "rss_step_json_parse",
       "primitive": "rss_step",
       "variant": "p1500k",
+      "value": 21626880,
+      "unit": "bytes",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "delta from the mark-start sample"
+    },
+    {
+      "name": "announce_scan",
+      "primitive": "announce_scan",
+      "variant": "p3000k",
+      "value": 11.839,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=3145728 run_id=20260901T204829Z-23167"
+    },
+    {
+      "name": "b64_decode_atob",
+      "primitive": "b64_decode_atob",
+      "variant": "p3000k",
+      "value": 7.533,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=3145728 run_id=20260901T204829Z-23167"
+    },
+    {
+      "name": "b64_decode_buffer",
+      "primitive": "b64_decode_buffer",
+      "variant": "p3000k",
+      "value": 7.17,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=3145728 run_id=20260901T204829Z-23167"
+    },
+    {
+      "name": "json_parse",
+      "primitive": "json_parse",
+      "variant": "p3000k",
+      "value": 7.927,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=3145728 run_id=20260901T204829Z-23167"
+    },
+    {
+      "name": "sources_materialise",
+      "primitive": "sources_materialise",
+      "variant": "p3000k",
+      "value": 7.35,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=3145728 run_id=20260901T204829Z-23167"
+    },
+    {
+      "name": "rss_step_json_parse",
+      "primitive": "rss_step",
+      "variant": "p3000k",
+      "value": 0,
+      "unit": "bytes",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "delta from the mark-start sample"
+    },
+    {
+      "name": "announce_scan",
+      "primitive": "announce_scan",
+      "variant": "p6291k",
+      "value": 22.371,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=6291456 run_id=20260901T204841Z-24486"
+    },
+    {
+      "name": "b64_decode_atob",
+      "primitive": "b64_decode_atob",
+      "variant": "p6291k",
+      "value": 15.311,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=6291456 run_id=20260901T204841Z-24486"
+    },
+    {
+      "name": "b64_decode_buffer",
+      "primitive": "b64_decode_buffer",
+      "variant": "p6291k",
+      "value": 12.504,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=6291456 run_id=20260901T204841Z-24486"
+    },
+    {
+      "name": "json_parse",
+      "primitive": "json_parse",
+      "variant": "p6291k",
+      "value": 17.797,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=6291456 run_id=20260901T204841Z-24486"
+    },
+    {
+      "name": "sources_materialise",
+      "primitive": "sources_materialise",
+      "variant": "p6291k",
+      "value": 14.636,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=6291456 run_id=20260901T204841Z-24486"
+    },
+    {
+      "name": "rss_step_json_parse",
+      "primitive": "rss_step",
+      "variant": "p6291k",
       "value": 0,
       "unit": "bytes",
       "stat": "point",
@@ -79,8 +338,125 @@
   ],
   "points": [
     {
+      "label": "p0500k",
+      "run_id": "20260901T204820Z-10566",
+      "fixture": ".spike/maps/inline-p0500k.js",
+      "decoded_bytes": 524288,
+      "decoded_bytes_observed": 523633,
+      "payload_chars": 699052,
+      "file_bytes": 699431,
+      "fixture_sha256": "7bd5d77403958de8717715f5903698d6ab450d5be1d53956f907ff6bb9b0de2c",
+      "announcement": {
+        "found": true,
+        "spelling": "//# sourceMappingURL=",
+        "marker_index": 327,
+        "bytes_from_eof": 699102,
+        "inline": true,
+        "payload_chars": 699052,
+        "window_chars": 8392704,
+        "sliced": false
+      },
+      "map": {
+        "version": 3,
+        "sources": 43,
+        "sources_content": 43,
+        "mappings_chars": 144590,
+        "has_sections": false
+      },
+      "materialise": {
+        "sources_declared": 43,
+        "content_entries": 43,
+        "hashed": 43,
+        "skipped_null": 0,
+        "skipped_missing": 0,
+        "content_chars": 344325,
+        "first_digest": "b5c5288671c346b0e66fbc2d2f55ea3310d832749156c1e930b46e616a38ac7e"
+      },
+      "decode_agreement": {
+        "atob_chars": 524288,
+        "buffer_chars": 523633,
+        "atob_sha256": "2fc25fb7d4637591341ece1a584ab8b2e6b577ec42f613cc3c2f3020cdb11307",
+        "buffer_sha256": "69a6dfdd62888fb9bf48816d789cc16ff67c31177eb2c10e3066f6bb40ef261b",
+        "identical": false
+      },
+      "op_cost": {
+        "announce_scan": 1.827,
+        "b64_decode_atob": 1.122,
+        "b64_decode_buffer": 1.001,
+        "json_parse": 1.301,
+        "sources_materialise": 0.768
+      },
+      "op_ok": {
+        "announce_scan": true,
+        "b64_decode_atob": true,
+        "b64_decode_buffer": true,
+        "json_parse": true,
+        "sources_materialise": true
+      },
+      "op_err": {
+        "announce_scan": null,
+        "b64_decode_atob": null,
+        "b64_decode_buffer": null,
+        "json_parse": null,
+        "sources_materialise": null
+      },
+      "rss_step": {
+        "announce_scan": {
+          "bytes": 0,
+          "rss_before_bytes": 115048448,
+          "rss_peak_bytes": 115048448,
+          "reason": null
+        },
+        "b64_decode_atob": {
+          "bytes": 0,
+          "rss_before_bytes": 115048448,
+          "rss_peak_bytes": 115048448,
+          "reason": null
+        },
+        "b64_decode_buffer": {
+          "bytes": 0,
+          "rss_before_bytes": 115048448,
+          "rss_peak_bytes": 115048448,
+          "reason": null
+        },
+        "json_parse": {
+          "bytes": 0,
+          "rss_before_bytes": 115048448,
+          "rss_peak_bytes": 115048448,
+          "reason": null
+        },
+        "sources_materialise": {
+          "bytes": 0,
+          "rss_before_bytes": 115048448,
+          "rss_peak_bytes": 115048448,
+          "reason": null
+        }
+      },
+      "rss_samples": 11,
+      "rss_baseline_bytes": 104054784,
+      "rss_peak_bytes": 119767040,
+      "call_rc": 0,
+      "host_alive_after": true,
+      "exit_code": 137,
+      "listen": "127.0.0.1:8941",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "data_path": "/tmp/defminer-probe-20260901T204820Z-10566",
+      "binary": {
+        "path": ".caido-bin/0.58.0/caido-cli",
+        "expected_version": "0.58.0",
+        "reported_version": "0.58.0",
+        "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+      }
+    },
+    {
       "label": "p1500k",
-      "run_id": "20260901T203653Z-1943",
+      "run_id": "20260901T204823Z-27685",
       "fixture": ".spike/maps/inline-p1500k.js",
       "decoded_bytes": 1572864,
       "decoded_bytes_observed": 1572196,
@@ -104,48 +480,82 @@
         "mappings_chars": 422319,
         "has_sections": false
       },
+      "materialise": {
+        "sources_declared": 140,
+        "content_entries": 140,
+        "hashed": 140,
+        "skipped_null": 0,
+        "skipped_missing": 0,
+        "content_chars": 1053175,
+        "first_digest": "b5c5288671c346b0e66fbc2d2f55ea3310d832749156c1e930b46e616a38ac7e"
+      },
+      "decode_agreement": {
+        "atob_chars": 1572864,
+        "buffer_chars": 1572196,
+        "atob_sha256": "4573290983b95e31c693232737f3439d0f2f48551374f6b697c20fb48b67e9b3",
+        "buffer_sha256": "5d6613e541b6f05b5f75e6d2381962831f22edb6c8dca2d0c87c9f15d1e362e1",
+        "identical": false
+      },
       "op_cost": {
-        "announce_scan": 6.464,
-        "b64_decode_buffer": 3.985,
-        "json_parse": 4.655
+        "announce_scan": 6.653,
+        "b64_decode_atob": 4.093,
+        "b64_decode_buffer": 3.706,
+        "json_parse": 4.681,
+        "sources_materialise": 2.421
       },
       "op_ok": {
         "announce_scan": true,
+        "b64_decode_atob": true,
         "b64_decode_buffer": true,
-        "json_parse": true
+        "json_parse": true,
+        "sources_materialise": true
       },
       "op_err": {
         "announce_scan": null,
+        "b64_decode_atob": null,
         "b64_decode_buffer": null,
-        "json_parse": null
+        "json_parse": null,
+        "sources_materialise": null
       },
       "rss_step": {
         "announce_scan": {
           "bytes": 0,
-          "rss_before_bytes": 114245632,
-          "rss_peak_bytes": 114245632,
+          "rss_before_bytes": 114737152,
+          "rss_peak_bytes": 114737152,
+          "reason": null
+        },
+        "b64_decode_atob": {
+          "bytes": 0,
+          "rss_before_bytes": 114737152,
+          "rss_peak_bytes": 114737152,
           "reason": null
         },
         "b64_decode_buffer": {
-          "bytes": 16236544,
-          "rss_before_bytes": 114245632,
-          "rss_peak_bytes": 130482176,
+          "bytes": 0,
+          "rss_before_bytes": 114737152,
+          "rss_peak_bytes": 114737152,
           "reason": null
         },
         "json_parse": {
+          "bytes": 21626880,
+          "rss_before_bytes": 114737152,
+          "rss_peak_bytes": 136364032,
+          "reason": null
+        },
+        "sources_materialise": {
           "bytes": 0,
-          "rss_before_bytes": 130482176,
-          "rss_peak_bytes": 130482176,
+          "rss_before_bytes": 136364032,
+          "rss_peak_bytes": 136364032,
           "reason": null
         }
       },
       "rss_samples": 10,
-      "rss_baseline_bytes": 103038976,
-      "rss_peak_bytes": 132841472,
+      "rss_baseline_bytes": 103497728,
+      "rss_peak_bytes": 140066816,
       "call_rc": 0,
       "host_alive_after": true,
       "exit_code": 137,
-      "listen": "127.0.0.1:8941",
+      "listen": "127.0.0.1:8942",
       "fresh": true,
       "flags": [
         "--no-open",
@@ -153,7 +563,241 @@
         "--no-sync",
         "--debug"
       ],
-      "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+      "data_path": "/tmp/defminer-probe-20260901T204823Z-27685",
+      "binary": {
+        "path": ".caido-bin/0.58.0/caido-cli",
+        "expected_version": "0.58.0",
+        "reported_version": "0.58.0",
+        "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+      }
+    },
+    {
+      "label": "p3000k",
+      "run_id": "20260901T204829Z-23167",
+      "fixture": ".spike/maps/inline-p3000k.js",
+      "decoded_bytes": 3145728,
+      "decoded_bytes_observed": 3145591,
+      "payload_chars": 4194304,
+      "file_bytes": 4194685,
+      "fixture_sha256": "a2b2d88be0b5dcdb069770e69f2467ddba5ad97296d0bf87984c8d5728100cd5",
+      "announcement": {
+        "found": true,
+        "spelling": "//# sourceMappingURL=",
+        "marker_index": 329,
+        "bytes_from_eof": 4194354,
+        "inline": true,
+        "payload_chars": 4194304,
+        "window_chars": 8392704,
+        "sliced": false
+      },
+      "map": {
+        "version": 3,
+        "sources": 406,
+        "sources_content": 406,
+        "mappings_chars": 0,
+        "has_sections": false
+      },
+      "materialise": {
+        "sources_declared": 406,
+        "content_entries": 406,
+        "hashed": 406,
+        "skipped_null": 0,
+        "skipped_missing": 0,
+        "content_chars": 2990154,
+        "first_digest": "8fcfeade248c2db0d29c967805f6a6d70ddc13a81f867fb2ba1cdfeedba2ad7d"
+      },
+      "decode_agreement": {
+        "atob_chars": 3145728,
+        "buffer_chars": 3145591,
+        "atob_sha256": "73d62e188af07c2709a00176ea06f6d1333a37b1f09e1d6e10e625c4fe5043c9",
+        "buffer_sha256": "63e3862450fc886ae4d79d9104dc519b975ecae61f1f4e963cc642d92cc6970f",
+        "identical": false
+      },
+      "op_cost": {
+        "announce_scan": 11.839,
+        "b64_decode_atob": 7.533,
+        "b64_decode_buffer": 7.17,
+        "json_parse": 7.927,
+        "sources_materialise": 7.35
+      },
+      "op_ok": {
+        "announce_scan": true,
+        "b64_decode_atob": true,
+        "b64_decode_buffer": true,
+        "json_parse": true,
+        "sources_materialise": true
+      },
+      "op_err": {
+        "announce_scan": null,
+        "b64_decode_atob": null,
+        "b64_decode_buffer": null,
+        "json_parse": null,
+        "sources_materialise": null
+      },
+      "rss_step": {
+        "announce_scan": {
+          "bytes": 16613376,
+          "rss_before_bytes": 114065408,
+          "rss_peak_bytes": 130678784,
+          "reason": null
+        },
+        "b64_decode_atob": {
+          "bytes": 0,
+          "rss_before_bytes": 130678784,
+          "rss_peak_bytes": 130678784,
+          "reason": null
+        },
+        "b64_decode_buffer": {
+          "bytes": 0,
+          "rss_before_bytes": 130678784,
+          "rss_peak_bytes": 130678784,
+          "reason": null
+        },
+        "json_parse": {
+          "bytes": 0,
+          "rss_before_bytes": 130678784,
+          "rss_peak_bytes": 130678784,
+          "reason": null
+        },
+        "sources_materialise": {
+          "bytes": 0,
+          "rss_before_bytes": 130678784,
+          "rss_peak_bytes": 130678784,
+          "reason": null
+        }
+      },
+      "rss_samples": 11,
+      "rss_baseline_bytes": 102187008,
+      "rss_peak_bytes": 153632768,
+      "call_rc": 0,
+      "host_alive_after": true,
+      "exit_code": 137,
+      "listen": "127.0.0.1:8943",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "data_path": "/tmp/defminer-probe-20260901T204829Z-23167",
+      "binary": {
+        "path": ".caido-bin/0.58.0/caido-cli",
+        "expected_version": "0.58.0",
+        "reported_version": "0.58.0",
+        "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+      }
+    },
+    {
+      "label": "p6291k",
+      "run_id": "20260901T204841Z-24486",
+      "fixture": ".spike/maps/inline-p6291k.js",
+      "decoded_bytes": 6291456,
+      "decoded_bytes_observed": 6291441,
+      "payload_chars": 8388608,
+      "file_bytes": 8388988,
+      "fixture_sha256": "cb7f5c5a9e6b7c7ec88ca9a309b60c1c02dcae630d64c490ff501d031ec72110",
+      "announcement": {
+        "found": true,
+        "spelling": "//# sourceMappingURL=",
+        "marker_index": 328,
+        "bytes_from_eof": 8388658,
+        "inline": true,
+        "payload_chars": 8388608,
+        "window_chars": 8392704,
+        "sliced": false
+      },
+      "map": {
+        "version": 3,
+        "sources": 1131,
+        "sources_content": 1131,
+        "mappings_chars": 16,
+        "has_sections": false
+      },
+      "materialise": {
+        "sources_declared": 1131,
+        "content_entries": 1131,
+        "hashed": 1131,
+        "skipped_null": 0,
+        "skipped_missing": 0,
+        "content_chars": 6154262,
+        "first_digest": "e9eae0915ecc381bfebed5852ed78c7ca8beed394baf548b17f1ddb0131c00c4"
+      },
+      "decode_agreement": {
+        "atob_chars": 6291456,
+        "buffer_chars": 6291441,
+        "atob_sha256": "e2a8c57de6e63c4cf4049bd5efafba8fcf5946c7de1e4b9dbff85e061f76921c",
+        "buffer_sha256": "32d6b328aaa4c5e8ca0c366404b9edf95a497f3ffc58e285b9aca826426def25",
+        "identical": false
+      },
+      "op_cost": {
+        "announce_scan": 22.371,
+        "b64_decode_atob": 15.311,
+        "b64_decode_buffer": 12.504,
+        "json_parse": 17.797,
+        "sources_materialise": 14.636
+      },
+      "op_ok": {
+        "announce_scan": true,
+        "b64_decode_atob": true,
+        "b64_decode_buffer": true,
+        "json_parse": true,
+        "sources_materialise": true
+      },
+      "op_err": {
+        "announce_scan": null,
+        "b64_decode_atob": null,
+        "b64_decode_buffer": null,
+        "json_parse": null,
+        "sources_materialise": null
+      },
+      "rss_step": {
+        "announce_scan": {
+          "bytes": 33718272,
+          "rss_before_bytes": 115933184,
+          "rss_peak_bytes": 149651456,
+          "reason": null
+        },
+        "b64_decode_atob": {
+          "bytes": 0,
+          "rss_before_bytes": 149651456,
+          "rss_peak_bytes": 149651456,
+          "reason": null
+        },
+        "b64_decode_buffer": {
+          "bytes": 0,
+          "rss_before_bytes": 149651456,
+          "rss_peak_bytes": 149651456,
+          "reason": null
+        },
+        "json_parse": {
+          "bytes": 0,
+          "rss_before_bytes": 149651456,
+          "rss_peak_bytes": 149651456,
+          "reason": null
+        },
+        "sources_materialise": {
+          "bytes": 46071808,
+          "rss_before_bytes": 149651456,
+          "rss_peak_bytes": 195723264,
+          "reason": null
+        }
+      },
+      "rss_samples": 12,
+      "rss_baseline_bytes": 104103936,
+      "rss_peak_bytes": 195854336,
+      "call_rc": 0,
+      "host_alive_after": true,
+      "exit_code": 137,
+      "listen": "127.0.0.1:8944",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "data_path": "/tmp/defminer-probe-20260901T204841Z-24486",
       "binary": {
         "path": ".caido-bin/0.58.0/caido-cli",
         "expected_version": "0.58.0",
@@ -168,34 +812,70 @@
       "b64_decode_buffer",
       "json_parse"
     ],
-    "inline_path_ms_per_mb": null,
-    "op_ms_per_mb": {},
-    "worst_point_inline_ms": 15.104,
+    "inline_path_ms_per_mb": 8.8729,
+    "op_ms_per_mb": {
+      "announce_scan": 3.8029,
+      "b64_decode_atob": 2.5509,
+      "b64_decode_buffer": 2.1599,
+      "json_parse": 2.9102,
+      "sources_materialise": 2.3975
+    },
+    "worst_point_inline_ms": 52.672,
     "max_sync_slice_ms": 25,
     "passive_max_bytes": 8388608,
     "structural_ceiling_bytes": 6291456,
     "structural_ceiling_rule": "floor(PASSIVE_MAX_BYTES * 3 / 4) \u2014 base64 expands 4:3, so an inline map's decoded JSON cannot exceed this and the ladder tops out AT it rather than above it",
-    "measured_stall_bound_bytes": null,
-    "measured_stall_bound_reason": "fewer than two ladder points carry the full inline-path operation set, so no rate can be fitted. Re-run the full ladder.",
-    "measured_rss_bound_bytes": null,
-    "measured_rss_bound_reason": "the external RSS sampler recorded no positive step it could attribute to a measured operation at two or more points. At the sampler's 50 ms default an operation shorter than one interval leaves no sample inside its window; that is a real outcome and is recorded as unmeasured rather than as zero growth.",
-    "rss_bytes_per_decoded_byte": null,
+    "measured_stall_bound_bytes": 2954422,
+    "measured_stall_bound_reason": null,
+    "measured_rss_bound_bytes": 94824930,
+    "measured_rss_bound_reason": null,
+    "rss_bytes_per_decoded_byte": 11.3234,
     "rss_ceiling_bytes": 1073741824,
-    "binding_term": "structural_ceiling",
-    "ladder_points": 1,
-    "ladder_complete": false
+    "binding_term": "measured_stall_bound",
+    "ladder_points": 4,
+    "ladder_complete": true
   },
   "verdict": {
-    "answer": "MAP_MAX_BYTES = 6291456 bytes \u2014 the STRUCTURAL CEILING, floor(PASSIVE_MAX_BYTES * 3/4). MEASURED TO BE NON-BINDING, which is a legitimate outcome and is NOT 'not measured': the inline path (announce_scan + b64_decode_buffer + json_parse) was measured at un-fitted ms/MB across 1 ladder point(s) topping out at 1572864 decoded bytes, the worst single point cost 15.104 ms against MAX_SYNC_SLICE_MS = 25, and the implied stall bound is unfitted (fewer than two ladder points carry the full inline-path operation set, so no rate can be fitted. Re-run the full ladder.) \u2014 at or above the ceiling. The RSS bound is unmeasured (the external RSS sampler recorded no positive step it could attribute to a measured operation at two or more points. At the sampler's 50 ms default an operation shorter than one interval leaves no sample inside its window; that is a real outcome and is recorded as unmeasured rather than as zero growth.).",
-    "confidence": "LOW",
+    "answer": "MAP_MAX_BYTES = 2954422 bytes, and the bound is BINDING: it is the measured stall bound, below the structural ceiling of 6291456 = floor(PASSIVE_MAX_BYTES * 3/4). The inline path (announce_scan + b64_decode_buffer + json_parse) was measured at 8.873 ms/MB across 4 ladder point(s) topping out at 6291456 decoded bytes; the worst single point cost 52.672 ms against MAX_SYNC_SLICE_MS = 25.",
+    "confidence": "HIGH",
     "if_wrong": "RESEARCH \u00a7 O-03's two outcomes, and both are shippable. IF MAP_MAX_BYTES LANDS FAR BELOW the 6,291,456-byte structural ceiling: D-08's always-on placement is still correct, but the phase recovers source from a MINORITY of inline maps and the UI must SAY SO rather than appear to have found nothing \u2014 a silent floor reads to the operator as an empty result. IF IT LANDS AT THE CEILING: the bound is non-binding and the D-02 tail window is the full base64 span, which is what SOURCEMAP_TAIL_WINDOW_BYTES's ceil-4/3 derivation already produces. The outcome that is not shippable is not measuring: reusing AST_MAX_BYTES (a meriyah stall at 785.8 ms/MB, a different cost curve and a different allocator profile) or RSS_BYTES_PER_INPUT_BYTE (scoped verbatim to 'the parse operation', at MEDIUM confidence) is the 'reasoned, not measured' move D-10 forbids.",
-    "map_max_bytes": 6291456,
-    "binding": false,
+    "map_max_bytes": 2954422,
+    "binding": true,
     "o_04_map02_parenthetical": "MAP-02's parenthetical \u2014 781 sources from a 12.66 MB map in 21 ms \u2014 is REAL but was NOT measured in Caido. .planning/research/STACK.md:546 names the harness: standalone quickjs-ng 0.16.1 (Homebrew, arm64) via `qjs --stack-size 65536 --memory-limit 4194304`. That is a materially different runtime from Caido's embedded QuickJS \u2014 the one operation measured both ways, meriyah parse, ran ~1.27x slower inside Caido (620 ms/MB standalone vs 785.8 ms/MB measured) \u2014 and that ratio is a single-operation observation which must NOT be used to project JSON.parse. SEPARATELY, THE CASE CANNOT ARISE ON THE INLINE PATH AT ALL: 12.66 MB of map JSON base64-encodes to roughly 16.9 MB, which admit() refuses as too_large against PASSIVE_MAX_BYTES = 8,388,608 by more than 2x. Monaco's map is in any case announced EXTERNALLY, 67 bytes from EOF, which under D-01 is a D-03 counter increment and nothing else."
   },
   "requirements_affected": [
     "MAP-01",
     "MAP-02",
     "MAP-05"
+  ],
+  "observations": [
+    {
+      "id": "OQ-1-request-retention",
+      "status": "not_run",
+      "question": "How long does Caido keep a request retrievable by sdk.requests.get? The reload path can already return undefined at two distinct points milliseconds after admission (consumer.ts:530-542, reloadMissing / reloadNoResponse), and both are counted \u2014 but nothing measures whether Caido prunes STORED requests by age, by count, or not at all.",
+      "finding": "No survival curve was produced. Reason as recorded by the probe: this build's sdk.requests does not expose the create/send/get trio the measurement needs (create=false, send=true, get=true). Recorded as NOT RUN rather than as a retention finding.",
+      "not_a_policy": "THIS IS AN OBSERVATION AND NOT A RETENTION POLICY. It is a single opportunistic reading, taken on one machine, on one build, against a loopback listener this run started, over seconds rather than the hours or days a real project spans. D-22's tombstone design does not depend on it and this phase does not gate on it. Do not cite this row as DefMiner's retention model; if a decision needs one, measure it properly first.",
+      "data": {
+        "requested_count": 8,
+        "requested_wait_ms": 5000,
+        "stored": null,
+        "send_errors": null,
+        "survival_curve": [],
+        "sdk_surface": {
+          "requests_keys": [
+            "query",
+            "matches",
+            "get",
+            "send",
+            "inScope"
+          ],
+          "has_send": true,
+          "has_get": true,
+          "has_create": false
+        },
+        "probe_reason": "this build's sdk.requests does not expose the create/send/get trio the measurement needs (create=false, send=true, get=true). Recorded as NOT RUN rather than as a retention finding."
+      },
+      "run_id": "20260901T204820Z-10566"
+    }
   ]
 }

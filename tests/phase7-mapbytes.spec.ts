@@ -67,14 +67,39 @@ const REMEASURE = "re-run `bash scripts/phase7/map-bytes.sh`";
 const STATUSES = ["pass", "fail", "inconclusive", "not_run"];
 
 /**
- * The operations the tracer declares, in the FIXED order the probe runs them.
+ * The five operations the probe declares, in the FIXED order it runs them,
+ * HEAVIEST LAST.
+ *
+ * These are the five RESEARCH § O-03 specifies and SPIKE-06 does not have.
+ * SPIKE-06's set is `read, decode, hash, hash_js_loop, vlq_decode, tokenize,
+ * parse`; its `decode` is `Buffer.toString("utf8")`, not a base64 decode, and
+ * there is no `JSON.parse` measurement anywhere in Phase 0.
  *
  * ORDER IS ASSERTED, not merely membership. RSS never falls in this runtime and
  * there is no `gc()`, so each step delta is only meaningful as an increment on
  * what came before — an operation that moved makes every reading after it a
  * different quantity, and a set comparison cannot see that.
  */
-const DECLARED_OPS = ["announce_scan", "b64_decode_buffer", "json_parse"];
+const DECLARED_OPS = [
+  "announce_scan",
+  "b64_decode_atob",
+  "b64_decode_buffer",
+  "json_parse",
+  "sources_materialise",
+];
+
+/**
+ * The subset D-08 places on the PROXY THREAD, against MAX_SYNC_SLICE_MS.
+ *
+ * `b64_decode_atob` is measured but excluded — it is the primitive the phase
+ * does NOT use (Pitfall 4), and counting both decodes would price a path
+ * nothing takes. `sources_materialise` is excluded because D-05 materialises
+ * derived sources on the CONSUMER path, not in the hook.
+ */
+const INLINE_PATH_OPS = ["announce_scan", "b64_decode_buffer", "json_parse"];
+
+/** The vocabulary an observation may use. `pass` is deliberately not in it. */
+const OBSERVATION_STATUSES = ["observed", "inconclusive", "not_run"];
 
 /** The structural ceiling, restated so the gate can check the artifact's copy. */
 const PASSIVE_MAX_BYTES = 8_388_608;
@@ -403,6 +428,18 @@ describe("the map-bytes artifact", () => {
     ).toContain(`.caido-bin/${MAP_PROBE_EXPECTED_VERSION}/`);
   });
 
+  it("declares which operations make up the inline path", () => {
+    expect(
+      d?.derivation?.inline_path_ops,
+      `${RESULT}: derivation.inline_path_ops is ` +
+        `${JSON.stringify(d?.derivation?.inline_path_ops)}, not ` +
+        `${JSON.stringify(INLINE_PATH_OPS)}. The stall bound is fitted from the SUM of ` +
+        `those operations, so which ones they are IS the definition of the number — ` +
+        `counting b64_decode_atob as well would price a path the phase does not take, ` +
+        `and counting sources_materialise would move a consumer-path cost onto the hook.`,
+    ).toEqual(INLINE_PATH_OPS);
+  });
+
   it("carries no home-directory path anywhere — the machine it ran on does not ship", () => {
     const leaks = strings(d).filter((s) => HOME_PATH.test(s.value));
     expect(
@@ -636,5 +673,112 @@ describe("the derivation is written down, not asserted", () => {
       `${RESULT}: derivation.ladder_complete is not a boolean. It is what stops a ` +
         `partial run being read as the full measurement.`,
     ).toBe("boolean");
+  });
+});
+
+describe("Pitfall 4 — the two base64 primitives, compared by measurement", () => {
+  it("every point records both decodes and says whether they AGREED", () => {
+    for (const p of d?.points ?? []) {
+      const cmp = p?.decode_agreement;
+      expect(
+        cmp,
+        `${RESULT}: point "${p?.label}" carries no decode_agreement. Measuring both ` +
+          `primitives and not comparing them leaves the choice between them reasoned ` +
+          `rather than measured, which is the move D-10 forbids everywhere else.`,
+      ).toBeTruthy();
+      expect(
+        typeof cmp?.identical,
+        `${RESULT}: point "${p?.label}" does not record whether the two decodes produced ` +
+          `the same string.`,
+      ).toBe("boolean");
+    }
+  });
+
+  it("the fixtures carry non-ASCII, so the comparison is capable of DISAGREEING", () => {
+    // The non-vacuity half, and it is the important one. On a pure-ASCII payload
+    // `atob` and `Buffer.from(…, "base64")` agree, and a corpus of ASCII fixtures
+    // would report `identical: true` everywhere and be read as "the primitive
+    // does not matter" — the exact wrong conclusion. Pitfall 4's corruption only
+    // appears on multi-byte UTF-8.
+    const points = d?.points ?? [];
+    if (points.length === 0) return;
+    const disagreed = points.filter(
+      (p: any) => p?.decode_agreement?.identical === false,
+    );
+    expect(
+      disagreed.length,
+      `${RESULT}: NO ladder point saw the two base64 primitives disagree. Either the ` +
+        `synthesised fixtures are pure ASCII — in which case the comparison proves ` +
+        `nothing and the fixtures need a non-ASCII source map — or \`atob\` on this ` +
+        `build no longer returns a latin1 binary string, which would be a finding worth ` +
+        `recording rather than passing over. ${REMEASURE}.`,
+    ).toBeGreaterThan(0);
+  });
+
+  it("records the char-count gap that IS the corruption", () => {
+    for (const p of d?.points ?? []) {
+      const cmp = p?.decode_agreement;
+      if (cmp?.identical !== false) continue;
+      expect(
+        cmp?.atob_chars,
+        `${RESULT}: point "${p?.label}" reports the two decodes as different while ` +
+          `\`atob\` produced no MORE characters than Buffer. latin1 decoding splits each ` +
+          `multi-byte UTF-8 sequence into one code unit per BYTE, so the atob string is ` +
+          `strictly longer whenever the payload carries non-ASCII — a difference in the ` +
+          `other direction means something else is going on and should not be filed ` +
+          `under Pitfall 4.`,
+      ).toBeGreaterThan(cmp?.buffer_chars);
+    }
+  });
+});
+
+describe("the opportunistic observation stays an observation", () => {
+  it("is present — Open Question 1 is recorded rather than skipped", () => {
+    expect(
+      Array.isArray(d?.observations) ? d.observations.length : 0,
+      `${RESULT}: no observations member. RESEARCH Open Question 1 says do NOT block on ` +
+        `the request-retention question and to record it opportunistically while an ` +
+        `instance is up. Absent, there is no way to tell "measured and inconclusive" ` +
+        `from "nobody looked". ${REMEASURE}.`,
+    ).toBeGreaterThan(0);
+  });
+
+  it("carries the retention question with its OWN status", () => {
+    const oq = (d?.observations ?? []).find(
+      (o: any) => o?.id === "OQ-1-request-retention",
+    );
+    expect(
+      oq,
+      `${RESULT}: no OQ-1-request-retention observation. ${REMEASURE}.`,
+    ).toBeTruthy();
+    expect(
+      OBSERVATION_STATUSES,
+      `${RESULT}: the retention observation's status is ${JSON.stringify(oq?.status)}, ` +
+        `which is not one of ${OBSERVATION_STATUSES.join(", ")}.`,
+    ).toContain(oq?.status);
+  });
+
+  it("is NEVER presented as a settled retention policy", () => {
+    for (const o of d?.observations ?? []) {
+      expect(
+        o?.status,
+        `${RESULT}: observation "${o?.id}" has status "pass". An observation is not a ` +
+          `gate result. A pass-shaped status is exactly how a two-point survival curve, ` +
+          `taken once on one machine against a loopback listener, comes to be cited as ` +
+          `DefMiner's retention model.`,
+      ).not.toBe("pass");
+      expect(
+        String(o?.not_a_policy ?? "").length,
+        `${RESULT}: observation "${o?.id}" carries no \`not_a_policy\` disclaimer. The ` +
+          `failure mode here is not a wrong number — it is a later reader treating this ` +
+          `row as a decision.`,
+      ).toBeGreaterThan(0);
+      expect(
+        String(o?.finding ?? "").length,
+        `${RESULT}: observation "${o?.id}" has an empty finding. A not_run observation ` +
+          `still has to say WHY: zero survivors and zero attempts look identical in a ` +
+          `chart and mean opposite things.`,
+      ).toBeGreaterThan(0);
+    }
   });
 });

@@ -1,0 +1,117 @@
+{
+  "label": "p6291k",
+  "run_id": "20260901T204841Z-24486",
+  "fixture": ".spike/maps/inline-p6291k.js",
+  "decoded_bytes": 6291456,
+  "decoded_bytes_observed": 6291441,
+  "payload_chars": 8388608,
+  "file_bytes": 8388988,
+  "fixture_sha256": "cb7f5c5a9e6b7c7ec88ca9a309b60c1c02dcae630d64c490ff501d031ec72110",
+  "announcement": {
+    "found": true,
+    "spelling": "//# sourceMappingURL=",
+    "marker_index": 328,
+    "bytes_from_eof": 8388658,
+    "inline": true,
+    "payload_chars": 8388608,
+    "window_chars": 8392704,
+    "sliced": false
+  },
+  "map": {
+    "version": 3,
+    "sources": 1131,
+    "sources_content": 1131,
+    "mappings_chars": 16,
+    "has_sections": false
+  },
+  "materialise": {
+    "sources_declared": 1131,
+    "content_entries": 1131,
+    "hashed": 1131,
+    "skipped_null": 0,
+    "skipped_missing": 0,
+    "content_chars": 6154262,
+    "first_digest": "e9eae0915ecc381bfebed5852ed78c7ca8beed394baf548b17f1ddb0131c00c4"
+  },
+  "decode_agreement": {
+    "atob_chars": 6291456,
+    "buffer_chars": 6291441,
+    "atob_sha256": "e2a8c57de6e63c4cf4049bd5efafba8fcf5946c7de1e4b9dbff85e061f76921c",
+    "buffer_sha256": "32d6b328aaa4c5e8ca0c366404b9edf95a497f3ffc58e285b9aca826426def25",
+    "identical": false
+  },
+  "op_cost": {
+    "announce_scan": 22.371,
+    "b64_decode_atob": 15.311,
+    "b64_decode_buffer": 12.504,
+    "json_parse": 17.797,
+    "sources_materialise": 14.636
+  },
+  "op_ok": {
+    "announce_scan": true,
+    "b64_decode_atob": true,
+    "b64_decode_buffer": true,
+    "json_parse": true,
+    "sources_materialise": true
+  },
+  "op_err": {
+    "announce_scan": null,
+    "b64_decode_atob": null,
+    "b64_decode_buffer": null,
+    "json_parse": null,
+    "sources_materialise": null
+  },
+  "rss_step": {
+    "announce_scan": {
+      "bytes": 33718272,
+      "rss_before_bytes": 115933184,
+      "rss_peak_bytes": 149651456,
+      "reason": null
+    },
+    "b64_decode_atob": {
+      "bytes": 0,
+      "rss_before_bytes": 149651456,
+      "rss_peak_bytes": 149651456,
+      "reason": null
+    },
+    "b64_decode_buffer": {
+      "bytes": 0,
+      "rss_before_bytes": 149651456,
+      "rss_peak_bytes": 149651456,
+      "reason": null
+    },
+    "json_parse": {
+      "bytes": 0,
+      "rss_before_bytes": 149651456,
+      "rss_peak_bytes": 149651456,
+      "reason": null
+    },
+    "sources_materialise": {
+      "bytes": 46071808,
+      "rss_before_bytes": 149651456,
+      "rss_peak_bytes": 195723264,
+      "reason": null
+    }
+  },
+  "rss_samples": 12,
+  "rss_baseline_bytes": 104103936,
+  "rss_peak_bytes": 195854336,
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8944",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260901T204841Z-24486",
+  "binary": {
+    "path": ".caido-bin/0.58.0/caido-cli",
+    "expected_version": "0.58.0",
+    "reported_version": "0.58.0",
+    "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+  }
+}

@@ -222,6 +222,18 @@
         "fixture_sha256": { "type": ["string", "null"] },
         "announcement": { "type": ["object", "null"] },
         "map": { "type": ["object", "null"] },
+        "materialise": { "type": ["object", "null"] },
+        "decode_agreement": {
+          "type": ["object", "null"],
+          "description": "The Pitfall 4 evidence, as a COMPARISON rather than as prose. `atob` decodes base64 to a latin1 binary string — one UTF-16 code unit per BYTE — so a multi-byte UTF-8 sequence becomes two or three separate characters, `JSON.parse` still SUCCEEDS because the corruption is inside string values, nothing throws, and the operator reads wrong source. `identical: false` on a non-ASCII payload IS that corruption, caught by measurement instead of asserted from documentation.",
+          "properties": {
+            "atob_chars": { "type": ["integer", "null"] },
+            "buffer_chars": { "type": ["integer", "null"] },
+            "atob_sha256": { "type": ["string", "null"] },
+            "buffer_sha256": { "type": ["string", "null"] },
+            "identical": { "type": ["boolean", "null"] }
+          }
+        },
         "op_cost": {
           "type": "object",
           "minProperties": 1,

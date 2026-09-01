@@ -1,0 +1,1 @@
+{"status": "not_run", "reason": "this build's sdk.requests does not expose the create/send/get trio the measurement needs (create=false, send=true, get=true). Recorded as NOT RUN rather than as a retention finding.", "surface": {"requests_keys": ["query", "matches", "get", "send", "inScope"], "has_send": true, "has_get": true, "has_create": false}}

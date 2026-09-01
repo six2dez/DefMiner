@@ -1,9 +1,9 @@
 {
-  "run_id": "20260901T203653Z-1943",
-  "pid": 64855,
-  "port": 8941,
-  "listen": "127.0.0.1:8941",
-  "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+  "run_id": "20260901T204823Z-27685",
+  "pid": 66456,
+  "port": 8942,
+  "listen": "127.0.0.1:8942",
+  "data_path": "/tmp/defminer-probe-20260901T204823Z-27685",
   "fresh": true,
   "binary": {
     "path": ".caido-bin/0.58.0/caido-cli",
@@ -17,7 +17,7 @@
     "--no-sync",
     "--debug"
   ],
-  "started_at": "2026-09-01T20:36:55Z",
+  "started_at": "2026-09-01T20:48:25Z",
   "exit_code": 137,
-  "stopped_at": "2026-09-01T20:36:55Z"
+  "stopped_at": "2026-09-01T20:48:25Z"
 }

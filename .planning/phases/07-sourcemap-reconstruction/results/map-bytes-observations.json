@@ -1,0 +1,30 @@
+[
+  {
+    "id": "OQ-1-request-retention",
+    "status": "not_run",
+    "question": "How long does Caido keep a request retrievable by sdk.requests.get? The reload path can already return undefined at two distinct points milliseconds after admission (consumer.ts:530-542, reloadMissing / reloadNoResponse), and both are counted \u2014 but nothing measures whether Caido prunes STORED requests by age, by count, or not at all.",
+    "finding": "No survival curve was produced. Reason as recorded by the probe: this build's sdk.requests does not expose the create/send/get trio the measurement needs (create=false, send=true, get=true). Recorded as NOT RUN rather than as a retention finding.",
+    "not_a_policy": "THIS IS AN OBSERVATION AND NOT A RETENTION POLICY. It is a single opportunistic reading, taken on one machine, on one build, against a loopback listener this run started, over seconds rather than the hours or days a real project spans. D-22's tombstone design does not depend on it and this phase does not gate on it. Do not cite this row as DefMiner's retention model; if a decision needs one, measure it properly first.",
+    "data": {
+      "requested_count": 8,
+      "requested_wait_ms": 5000,
+      "stored": null,
+      "send_errors": null,
+      "survival_curve": [],
+      "sdk_surface": {
+        "requests_keys": [
+          "query",
+          "matches",
+          "get",
+          "send",
+          "inScope"
+        ],
+        "has_send": true,
+        "has_get": true,
+        "has_create": false
+      },
+      "probe_reason": "this build's sdk.requests does not expose the create/send/get trio the measurement needs (create=false, send=true, get=true). Recorded as NOT RUN rather than as a retention finding."
+    },
+    "run_id": "20260901T204820Z-10566"
+  }
+]

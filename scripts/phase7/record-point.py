@@ -175,6 +175,11 @@ def main():
         "fixture_sha256": (payload or {}).get("input", {}).get("sha256"),
         "announcement": (payload or {}).get("announcement"),
         "map": (payload or {}).get("map"),
+        "materialise": (payload or {}).get("materialise"),
+        # THE PITFALL 4 EVIDENCE, promoted out of raw/ into the artifact itself.
+        # Plans 07-02 and 07-03 cite the atob-vs-Buffer choice; a comparison that
+        # lives only in a per-run raw file is a comparison nobody reads.
+        "decode_agreement": (payload or {}).get("decode_agreement"),
         "op_cost": op_cost,
         "op_ok": {
             name: bool(marks[name].get("ok")) for name in DECLARED_OPS if name in marks
