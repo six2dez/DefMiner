@@ -130,6 +130,32 @@ ON CONFLICT (project_id, map_sha256, source_index) DO UPDATE SET
 // D-23 exists to guarantee and which `markProducibility` below makes a property
 // of the STATEMENT rather than of a caller's discipline.
 
+const MARK_PRODUCIBILITY_SQL = `
+UPDATE source_sightings
+SET producibility = ?, producibility_at = ?
+WHERE project_id = ? AND map_sha256 = ? AND source_index = ?
+  AND producibility = ?
+`;
+
+// D-23's WRITE ON A READ PATH, in `retry.ts:RETRY_ANALYSIS_SQL`'s shape — one
+// statement, positional `?` only, `project_id` first in the `WHERE`, values
+// spread into `run`, no `RETURNING`, no `last_insert_rowid()`.
+//
+// THE TRAILING `AND producibility = ?` IS THE WHOLE MECHANISM. Bound to the
+// FIRST vocabulary member, it makes the write idempotent and makes D-23's
+// stickiness a property of the statement: the first attempt changes one row, a
+// second attempt matches nothing and changes zero, and no sequence of calls can
+// move a sighting back out of a tombstone. A caller-side "read it, check it,
+// write it" would be two operations with no transaction primitive to join them.
+//
+// O-06's VERDICT, RECORDED WHERE THE STATEMENT IS. `sql-discipline.spec.ts`
+// models statement TEXT and has no concept of which RPC issues a statement, so
+// "a write on a read path" is not a category it can express — asking it to
+// express one would mean teaching a static gate about call graphs. The shipped,
+// green precedent for exactly this shape is `RETRY_ANALYSIS_SQL`, and the reason
+// the shape is safe is visible in the statement itself rather than in the
+// caller: it is guarded, single-row and idempotent.
+
 const COUNT_SOURCES_FOR_MAP_SQL = `
 SELECT COUNT(*) AS n
 FROM source_sightings
@@ -212,6 +238,43 @@ export async function recordSighting(
         : sourcesVerbatim.slice(0, SOURCES_LABEL_MAX),
       INITIAL_PRODUCIBILITY,
       recoveredAt,
+    );
+    return { ok: true, changes: res.changes };
+  } catch (e) {
+    return { ok: false, error: describeError(e).slice(0, 200) };
+  }
+}
+
+/**
+ * Move one sighting out of `producible`, once and for good (D-23).
+ *
+ * Returns `changes: 1` the first time and `changes: 0` for every attempt after
+ * it, including an attempt to write a DIFFERENT outcome. That is not a failure
+ * and the caller must not treat it as one: a tombstone is the record that
+ * DefMiner could not produce these bytes at a moment it tried, and a later
+ * attempt that also fails has nothing new to say.
+ */
+export async function markProducibility(
+  db: Database,
+  projectId: string,
+  mapSha256: string,
+  sourceIndex: number,
+  next: SourceProducibility,
+  at: number,
+): Promise<StoreWriteResult> {
+  try {
+    const stmt = await db.prepare(MARK_PRODUCIBILITY_SQL);
+    const res = await stmt.run(
+      next,
+      at,
+      projectId,
+      mapSha256,
+      sourceIndex,
+      // SPREAD, never passed as one array: an array handed to a bind position is
+      // silently ignored on this driver and produced rows with every column NULL
+      // in Phase 0. This is the guard value — the state the row must still be in
+      // for the write to land.
+      INITIAL_PRODUCIBILITY,
     );
     return { ok: true, changes: res.changes };
   } catch (e) {
