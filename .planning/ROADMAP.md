@@ -18,7 +18,7 @@ The differentiators come after that foundation exists, because each is only as g
 - [ ] **Phase 3: Detection Engine & FP Harness** - Two-tier gate, data-driven detectors, measured false-positive rate in CI
 - [ ] **Phase 4: Passive Intelligence Core** - Secrets, hosts, JWTs, endpoints — no outbound traffic
 - [ ] **Phase 5: Workspace & Operator Workflow** - The tool becomes usable, triageable, and safe to render
-- [ ] **Phase 6: Retroactive Scan & Deployment Reality** - Scan existing traffic; work correctly on remote and Docker Caido
+- [x] **Phase 6: Retroactive Scan & Deployment Reality** - Scan existing traffic; work correctly on remote and Docker Caido
 - [ ] **Phase 7: Sourcemap Reconstruction** - Recover developer-readable source, safely
 - [ ] **Phase 8: Active Retrieval & Crash Survivability** - Go active, and survive the known host-abort bug
 - [ ] **Phase 9: AST Substrate & Syntax Intelligence** - Replayable requests and GraphQL, not URL strings
