@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defminer.local/schemas/pushdown-superset.schema.json",
+  "title": "Phase 6 D-06 push-down superset probe result",
+  "description": "A SIBLING of spike-result.schema.json and of o07-body-length.schema.json, never a reuse of either. Phase 0's schema is shaped around a `spike` id, a `thresholds_set` enum closed over Phase 0's own threshold names, and a `measurements` ARRAY of name/value/unit triples; O-07's is shaped around four named encodings and one verdict per read path. This artifact is a TRANSCRIPT: one row per captured fixture carrying Caido's own boolean, plus the exact clause those booleans were produced against. Folding it into either sibling would have meant widening a closed enum measured on another build — the one edit Pitfall 7 and D-21 both exist to prevent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "probe",
+    "status",
+    "recorded_at",
+    "binary",
+    "host",
+    "method",
+    "clause",
+    "fixtures",
+    "verdict"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "probe": {
+      "type": "string",
+      "description": "The Phase 6 DECISION this artifact discharges. D-06 is the only one that writes into this schema today; the pattern admits a sibling rather than hard-coding one literal.",
+      "pattern": "^D-[0-9]{2}$"
+    },
+    "status": {
+      "description": "`not_run` is a FIRST-CLASS terminal state, not a failure dressed up. D-23: a leg that could not run is recorded with its reason and never as a pass. `pass` here means only that the capture completed and the transcript is whole — the SUPERSET RELATION is decided by tests/phase6-pushdown.spec.ts against the shipped classifier, never by this file.",
+      "enum": ["pass", "fail", "inconclusive", "not_run"]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "REQUIRED when status is `not_run`. What made the capture unreachable, in words a later reader can act on."
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "duration_s": { "type": ["number", "null"] },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "expected_version", "reported_version", "sha256"],
+      "description": "The build this transcript describes. T-06-09: an artifact that does not name the binary it was produced by cannot be checked against the two-caido-cli hazard at all.",
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "expected_version": { "type": "string", "minLength": 1 },
+        "reported_version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+      }
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string" },
+        "release": { "type": "string" },
+        "arch": { "type": "string" },
+        "cores": { "type": ["integer", "null"] }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run_id", "listen"],
+        "properties": {
+          "run_id": { "type": "string" },
+          "listen": { "type": "string" },
+          "probe_zip_sha256": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "method": { "type": "string", "minLength": 1 },
+    "clause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "route"],
+      "description": "The EXACT bytes evaluated, and how they were obtained. tests/phase6-pushdown.spec.ts asserts `value` byte-identical to the shipped SCAN_KIND_CLAUSE — which is the only thing tying answers produced in a runtime this repo's test process cannot reach to the constant that ships. The route is an engineering convenience; that assertion is the guarantee.",
+      "properties": {
+        "value": { "type": "string", "minLength": 1 },
+        "route": {
+          "enum": ["node-type-stripping", "built-backend-bundle"],
+          "description": "`node-type-stripping` reads the exported constant by importing the TypeScript source directly on a Node that strips types. `built-backend-bundle` falls back to reading it out of the build output when that is unavailable."
+        },
+        "echoed_by_probe": {
+          "type": ["string", "null"],
+          "description": "What the probe handed BACK. Recorded separately from `value` so that a probe that silently normalised the clause is visible rather than assumed away."
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "description": "One entry per manifest fixture that reached the traffic table. EMPTY when status is `not_run` — a recorded verdict on a run that did not happen is the shape D-23 forbids.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fixture_id",
+          "request_path",
+          "request_url",
+          "response_status",
+          "response_content_type",
+          "clause_matched"
+        ],
+        "properties": {
+          "fixture_id": { "type": "string", "minLength": 1 },
+          "request_path": { "type": "string", "minLength": 1 },
+          "request_url": { "type": "string", "minLength": 1 },
+          "request_id": { "type": ["string", "null"] },
+          "response_status": { "type": ["integer", "null"] },
+          "response_content_type": { "type": ["string", "null"] },
+          "clause_matched": { "type": ["boolean", "null"] },
+          "expected": { "enum": ["accepted", "rejected"] },
+          "media_type_exercised": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "unmatched": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records_without_manifest_entry", "manifest_entries_without_record"],
+      "description": "The two directions the join can fail. A fixture that never reached the traffic table must be VISIBLE here rather than silently dropping out of the proof, and a stored pair the manifest does not name must not be quietly folded in.",
+      "properties": {
+        "records_without_manifest_entry": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "manifest_entries_without_record": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixtures_captured", "fixtures_matched", "fixtures_not_matched", "answer"],
+      "properties": {
+        "fixtures_captured": { "type": ["integer", "null"] },
+        "fixtures_matched": { "type": ["integer", "null"] },
+        "fixtures_not_matched": { "type": ["integer", "null"] },
+        "manifest_fixture_count": { "type": ["integer", "null"] },
+        "answer": { "type": "string", "minLength": 1 }
+      }
+    },
+    "requirements_affected": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "not_run" } }, "required": ["status"] },
+      "then": {
+        "required": ["reason"],
+        "properties": { "fixtures": { "maxItems": 0 } }
+      }
+    }
+  ]
+}

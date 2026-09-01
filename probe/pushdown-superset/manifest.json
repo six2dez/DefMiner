@@ -1,0 +1,15 @@
+{
+  "id": "defminer-pushdown-superset",
+  "name": "DefMiner Push-down Superset Oracle",
+  "version": "0.0.1",
+  "description": "Phase 6 plan 06-11 probe: records Caido's own HTTPQL verdict, via sdk.requests.matches(), for one clause against every stored request/response pair. Records; never decides.",
+  "plugins": [
+    {
+      "kind": "backend",
+      "id": "pushdown-superset-backend",
+      "name": "Pushdown Superset Backend",
+      "runtime": "javascript",
+      "entrypoint": "backend/script.js"
+    }
+  ]
+}
