@@ -146,7 +146,7 @@ violation.**
 | Dominant (60%) | `bg-surface-900` → `--c-surface-900` | Page background, table body, evidence panel body, dialog body |
 | Secondary (30%) | `surface-800` / `surface-700`, borders `surface-600` | Page toolbar, tab strip, table header row, panel and dialog chrome, row separators, selected-row background |
 | Accent (10%) | `primary-500` (hover `primary-400`, active `primary-600`) → `--c-primary-*` | The five elements listed below and nothing else |
-| Destructive | `danger-500` (hover `danger-400`) → `--c-danger-*` | The four elements listed below and nothing else |
+| Destructive | `danger-500` (hover `danger-400`) → `--c-danger-*` | The five elements listed below and nothing else |
 
 **Accent (`primary-*`) reserved for exactly these five:**
 
@@ -161,12 +161,22 @@ filter chips, sort indicators, triage buttons, the export button, tab hover, tab
 any state that merely means "interactive". If it is a link or a button and it is not in the list
 of five, it is `surface`-toned with an underline or a border.
 
-**Destructive (`danger-*`) reserved for exactly these four:**
+**Destructive (`danger-*`) reserved for exactly these five:**
 
 1. The confirm button in the **Create Caido Findings** dialog — because it is irreversible (FIND-01)
 2. The confirm button in the **Export with raw values** dialog — because the file leaves the tool in cleartext (UI-06)
 3. The `failed` scan-state badge, and analysis error text in the evidence panel (ERR-04)
 4. The count in the partial-view banner when it includes failed artifacts
+5. The confirm button in the **Discard scan** dialog — because it destroys a walked position that cannot be cheaply redone (D-10, D-16, D-26)
+
+> **Amendment A1, applied by plan 06-12 in the same commit as the code it describes.** The count moves
+> from four to five. Discard is irreversible and is one of only two things a scan writes to the
+> age-exempt `audit` ledger; expressing it in `surface` would make this list a historical accident
+> rather than a rule. **And the corollary that matters more than the addition: Pause is NOT
+> destructive.** D-10's whole point is that cancel means pause, so a mis-clicked cancel on a
+> multi-hour backfill costs nothing — Pause and Resume are `surface`-toned with a border, and Discard
+> is separated from them by the `sm` gap plus its own confirmation ceremony. `06-UI-SPEC.md § Color`
+> carries the full argument.
 
 **Two semantic colours, declared as semantics rather than as a second accent:**
 

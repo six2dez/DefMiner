@@ -149,6 +149,11 @@ type Options = {
   readonly hang?: boolean;
   readonly startOutcome?: StartScanOutcome;
   readonly commandOutcome?: ScanCommandOutcome;
+  /** Hold every lifecycle command open, so the IN-FLIGHT state can be observed.
+   *  A command that resolves in the same microtask batch as the click is a
+   *  command whose in-flight label never reaches a paint — which would make the
+   *  assertion pass on a component that has no in-flight label at all. */
+  readonly hangCommands?: boolean;
 };
 
 const MOVED: ScanCommandOutcome = {
@@ -169,10 +174,7 @@ function harness(options: Options = {}): Harness {
   const load = (): Promise<RpcResult<ScanStatusPayload | null>> => {
     readCount += 1;
     if (options.hang === true) return new Promise(() => undefined);
-    if (
-      options.failsAfter !== undefined &&
-      readCount > options.failsAfter
-    ) {
+    if (options.failsAfter !== undefined && readCount > options.failsAfter) {
       return Promise.resolve({
         ok: false,
         reason: "rpc-timeout",
@@ -186,15 +188,15 @@ function harness(options: Options = {}): Harness {
     return Promise.resolve({ ok: true, value });
   };
 
-  const command = (name: string) => (): Promise<
-    RpcResult<ScanCommandOutcome>
-  > => {
-    commands.push(name);
-    return Promise.resolve({
-      ok: true,
-      value: options.commandOutcome ?? MOVED,
-    });
-  };
+  const command =
+    (name: string) => (): Promise<RpcResult<ScanCommandOutcome>> => {
+      commands.push(name);
+      if (options.hangCommands === true) return new Promise(() => undefined);
+      return Promise.resolve({
+        ok: true,
+        value: options.commandOutcome ?? MOVED,
+      });
+    };
 
   const wrapper = mount(ScanPanel, {
     attachTo: document.body,
@@ -354,9 +356,9 @@ describe("the start form", () => {
     const h = harness({ scan: null });
     await flushPromises();
 
-    expect(h.wrapper.find("[data-defminer-scan-composed]").text()).not.toContain(
-      "()",
-    );
+    expect(
+      h.wrapper.find("[data-defminer-scan-composed]").text(),
+    ).not.toContain("()");
 
     await h.wrapper.find("#defminer-scan-start").trigger("click");
     await flushPromises();
@@ -393,14 +395,15 @@ describe("the start form", () => {
 
     const alert = h.wrapper.find('[role="alert"]');
     expect(alert.exists()).toBe(true);
-    expect(alert.text()).toContain(
-      clauseRejectedLine("unbalanced_parentheses"),
-    );
+    expect(alert.text()).toBe(clauseRejectedLine("unbalanced_parentheses"));
 
-    // THE CLAUSE IS ECHOED IN ITS OWN ELEMENT, never inside the sentence.
+    // THE CLAUSE IS ECHOED IN ITS OWN ELEMENT, never inside the sentence — and
+    // never inside the LIVE REGION either. A live region is read aloud the
+    // moment it changes, and this string came off a target's page.
     const echo = h.wrapper.find(CLAUSE_ECHO);
     expect(echo.exists()).toBe(true);
     expect(echo.classes().join(" ")).toContain("font-mono");
+    expect(echo.attributes("role")).toBeUndefined();
     expect(alert.text()).not.toContain(typed);
 
     // A FAILED SUBMIT NEVER DISCARDS WHAT THEY TYPED, and nothing started.
@@ -570,7 +573,7 @@ describe("a status read that did not answer", () => {
     const h = harness({ failsAfter: 0 });
     await flushPromises();
 
-    expect(h.wrapper.find('[data-defminer-scan-failed]').exists()).toBe(true);
+    expect(h.wrapper.find("[data-defminer-scan-failed]").exists()).toBe(true);
     expect(h.wrapper.find(STRIP).exists()).toBe(false);
     // AND THE START FORM IS NOT OFFERED. A call that did not answer is not
     // evidence that there is no scan.
@@ -584,7 +587,7 @@ describe("a status read that did not answer", () => {
 
 describe("pause, resume and discard", () => {
   it("takes its own in-flight label and never a spinner", async () => {
-    const h = harness({ scan: payload() });
+    const h = harness({ scan: payload(), hangCommands: true });
     await flushPromises();
 
     const pause = h.wrapper.find("#defminer-scan-pause");
@@ -594,15 +597,16 @@ describe("pause, resume and discard", () => {
     expect(h.wrapper.text()).not.toContain("Cancel");
 
     await pause.trigger("click");
+    await flushPromises();
+    expect(h.commands()).toEqual(["pause"]);
+    // ITS OWN LABEL, not a spinner beside the old one, and disabled so the
+    // guard is visible as well as held at the handler.
     expect(h.wrapper.find("#defminer-scan-pause").text()).toBe(
       SCAN_PAUSING_LABEL,
     );
     expect(
       h.wrapper.find("#defminer-scan-pause").attributes("disabled"),
     ).toBeDefined();
-
-    await flushPromises();
-    expect(h.commands()).toEqual(["pause"]);
   });
 
   it("renders nothing indeterminate anywhere on the surface", async () => {
@@ -674,7 +678,25 @@ describe("pause, resume and discard", () => {
     expect(h.wrapper.find(SUSPENSION).exists()).toBe(true);
   });
 
-  it("calls discard, in its own in-flight label, when confirmed", async () => {
+  it("holds the confirm button in its own in-flight label", async () => {
+    const h = harness({
+      scan: payload({ state: "suspended", suspendReason: "operator_paused" }),
+      hangCommands: true,
+    });
+    await flushPromises();
+    await h.wrapper.find("#defminer-scan-discard").trigger("click");
+    await flushPromises();
+
+    await h.wrapper.find("#defminer-scan-discard-confirm").trigger("click");
+    await flushPromises();
+
+    expect(h.commands()).toEqual(["discard"]);
+    expect(h.wrapper.find("#defminer-scan-discard-confirm").text()).toBe(
+      SCAN_DISCARDING_LABEL,
+    );
+  });
+
+  it("re-reads after a discard rather than fabricating the next state", async () => {
     const h = harness({
       scan: payload({ state: "suspended", suspendReason: "operator_paused" }),
       commandOutcome: {
@@ -690,16 +712,18 @@ describe("pause, resume and discard", () => {
     await h.wrapper.find("#defminer-scan-discard").trigger("click");
     await flushPromises();
 
+    const readsBefore = h.reads();
     await h.wrapper.find("#defminer-scan-discard-confirm").trigger("click");
-    expect(h.wrapper.find("#defminer-scan-discard-confirm").text()).toBe(
-      SCAN_DISCARDING_LABEL,
-    );
-
     await flushPromises();
+
     expect(h.commands()).toEqual(["discard"]);
-    // AND THE SURFACE RE-READS rather than fabricating the next state: the row
-    // the backend actually wrote is the only thing worth rendering.
-    expect(h.reads()).toBeGreaterThan(1);
+    // THE ROW THE BACKEND ACTUALLY WROTE is the only thing worth rendering; a
+    // locally-assembled one would be a second construction of a shape whose
+    // whole value is that both sides agree about it.
+    expect(h.reads()).toBeGreaterThan(readsBefore);
+    // The scan is gone, so the surface is back to its other state.
+    expect(h.wrapper.find(CONFIRM).exists()).toBe(false);
+    expect(h.wrapper.find(FORM).exists()).toBe(true);
   });
 
   it("offers resume and not pause on a suspended scan, and the reverse", async () => {
@@ -743,7 +767,7 @@ describe("the rendering-safety absolutes", () => {
     for (const node of [root, ...root.querySelectorAll("*")]) {
       expect(node.hasAttribute("title")).toBe(false);
       for (const attribute of [...node.attributes]) {
-        if (!attribute.name.startsWith("data-")) continue;
+        if (!String(attribute.name).startsWith("data-")) continue;
         // Static markers only. A `data-*` that CARRIES a value is R2's other
         // absolute; per-cell hooks are `id`s.
         expect(attribute.value).toBe("");

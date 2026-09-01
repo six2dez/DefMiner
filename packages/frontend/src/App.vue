@@ -14,6 +14,7 @@
 
 import type {
   PageRequest,
+  ScanProgressPayload,
   ScanState,
   ScanStatusPayload,
 } from "@defminer/engine/contract";
@@ -30,11 +31,14 @@ import type {
   ExportChunkOutcome,
   ExportChunkRequest,
   HealthOutcome,
+  InvalidationSubscription,
   InventoryTable,
   ObservationRow,
   PanelAnalysis,
   RetryOutcome,
   RpcResult,
+  ScanCommandOutcome,
+  ScanRef,
   SettingRow,
   SettingWriteOutcome,
   SettingWriteRequest,
@@ -650,6 +654,58 @@ function startScan(request: {
   return client.startScan(request);
 }
 
+/**
+ * The three lifecycle commands (D-10), each its own closure over its own
+ * endpoint.
+ *
+ * THREE AND NOT ONE WITH A MODE FLAG, mirrored all the way up from the RPC
+ * contract. Pause keeps the walked position and discard destroys it; a mode
+ * flag is precisely how a mis-click becomes a data loss, and the NAMES are what
+ * make the destructive one unreachable by mis-clicking the safe one.
+ *
+ * The project id is passed and NOT trusted — the backend substitutes its own
+ * lifecycle-resolved id on every one of these calls, so a scan the operator
+ * switched away from is simply not in the partition the command reads.
+ */
+function scanCommand(
+  call: (request: ScanRef) => Promise<RpcResult<ScanCommandOutcome>>,
+): (scanId: string) => Promise<RpcResult<ScanCommandOutcome>> {
+  return (scanId) =>
+    client === null
+      ? Promise.resolve({
+          ok: false,
+          reason: "rpc-rejected",
+          versions: null,
+        })
+      : call({ projectId: SERVER_SCOPED_PROJECT, scanId });
+}
+
+const pauseScan = scanCommand((request) => client!.pauseScan(request));
+const resumeScan = scanCommand((request) => client!.resumeScan(request));
+const discardScan = scanCommand((request) => client!.discardScan(request));
+
+/**
+ * The progress half of the one backend event, for the Scan tab.
+ *
+ * A SECOND SUBSCRIPTION TO THE SAME EVENT, NOT A SECOND EVENT. The client
+ * discriminates the union at its single subscription site, so this handle
+ * receives ONLY progress payloads and the coalescer's handle receives only
+ * invalidation summaries — which is what leaves both of the coalescer's
+ * triage-lock early returns literally unmodified. The summary handler here is a
+ * deliberate no-op: the coalescer already owns that half, and routing summaries
+ * twice would double-count the pill.
+ *
+ * THE HANDLE IS RETURNED AND THE PANEL OWNS IT. Research P-04's leak is a
+ * subscription nobody stops; `ScanPanel` stops this one on unmount, which is
+ * the same ownership rule the coalescer's handle follows here.
+ */
+function subscribeScanProgress(
+  handler: (payload: ScanProgressPayload) => void,
+): InvalidationSubscription {
+  if (client === null) return { stop: () => undefined };
+  return client.subscribeInvalidation(() => undefined, handler);
+}
+
 // ---------------------------------------------------------------------------
 // COMPAT-01 — THE VISIBLE REFUSAL SURFACE
 // ---------------------------------------------------------------------------
@@ -825,9 +881,16 @@ async function loadCompat(): Promise<void> {
              renders Health under a tab labelled Scan. -->
         <ScanPanel
           v-else-if="activeTab === 'scan'"
+          :project-id="SERVER_SCOPED_PROJECT"
           :defminer-clause="SCAN_KIND_CLAUSE"
           :load="loadScan"
           :start="startScan"
+          :pause="pauseScan"
+          :resume="resumeScan"
+          :discard="discardScan"
+          :subscribe="subscribeScanProgress"
+          @open-health="activeTab = 'health'"
+          @open-settings="activeTab = 'settings'"
         />
 
         <!-- UI-08's SETTINGS BODY, replacing the tracer's placeholder. -->
