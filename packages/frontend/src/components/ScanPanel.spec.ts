@@ -68,6 +68,10 @@ import {
   SCAN_DISCARD_HEADING,
   SCAN_DISCARD_KEEP_LABEL,
   SCAN_DISCARDING_LABEL,
+  SCAN_HISTORY_EMPTY_HEADING,
+  SCAN_HISTORY_FAILED_BODY,
+  SCAN_HISTORY_HEADING,
+  SCAN_HISTORY_LIMIT,
   SCAN_LOADING_LABEL,
   SCAN_NO_DENOMINATOR_NOTE,
   SCAN_ONE_AT_A_TIME_RUNNING,
@@ -813,5 +817,62 @@ describe("the rendering-safety absolutes", () => {
     const composed = h.wrapper.find("[data-defminer-scan-composed]");
     expect(composed.classes().join(" ")).toContain("font-mono");
     expect(composed.text()).toContain("req.host.eq:evil");
+  });
+});
+
+describe("ScanPanel — the scan history is the tab's LAST block", () => {
+  const HISTORY_ROW: ScanHistoryRow = {
+    scanId: "h1",
+    state: "suspended",
+    suspendReason: "process_restarted",
+    operatorFilter: "",
+    pagesWalked: 2,
+    seen: 40,
+    admitted: 8,
+    skippedDone: 1,
+    rejected: 31,
+    queued: 8,
+    lastCreatedAt: AUG_14,
+    startedAt: AUG_14,
+    finishedAt: AUG_14,
+  };
+
+  it("mounts the list and asks for the declared bound with NO active scan", async () => {
+    const h = harness({ scan: null, history: [HISTORY_ROW] });
+    await flushPromises();
+
+    expect(h.wrapper.find("[data-defminer-scan-history]").exists()).toBe(true);
+    expect(h.historyLimits()).toEqual([SCAN_HISTORY_LIMIT]);
+    expect(h.wrapper.text()).toContain(SCAN_HISTORY_HEADING);
+  });
+
+  it("mounts it just the same WITH an active scan", async () => {
+    // THE HISTORY IS THE TAB'S OWN CONTENT and does not belong to the live
+    // readout. A list that appeared only while a scan was running would hide the
+    // suspended row an operator opens this tab to find — and that row IS its
+    // resumable cursor.
+    const h = harness({ scan: payload(), history: [HISTORY_ROW] });
+    await flushPromises();
+
+    expect(h.wrapper.find("[data-defminer-scan-history]").exists()).toBe(true);
+    expect(h.wrapper.text()).toContain(SCAN_HISTORY_HEADING);
+  });
+
+  it("renders it LAST, after the reject breakdown", async () => {
+    const h = harness({ scan: payload(), history: [HISTORY_ROW] });
+    await flushPromises();
+
+    const root = h.wrapper.get("[data-defminer-scan]").element;
+    const children = [...root.children];
+    const last = children[children.length - 1];
+    expect(last?.hasAttribute("data-defminer-scan-history")).toBe(true);
+  });
+
+  it("renders the ERROR screen and never an empty list when the history read fails", async () => {
+    const h = harness({ scan: null, historyFails: true });
+    await flushPromises();
+
+    expect(h.wrapper.text()).toContain(SCAN_HISTORY_FAILED_BODY);
+    expect(h.wrapper.text()).not.toContain(SCAN_HISTORY_EMPTY_HEADING);
   });
 });

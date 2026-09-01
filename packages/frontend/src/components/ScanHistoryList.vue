@@ -166,9 +166,11 @@ async function read(): Promise<void> {
   settled.value = true;
 
   if (!result.ok) {
-    // THE ROWS ARE NOT CLEARED. A failed retry after a successful read must not
-    // replace what is on screen with an empty list — see the failure copy: this
-    // list is not empty, DefMiner could not read it.
+    // THE ROWS ARE NOT CLEARED, and the template keeps rendering them beneath
+    // the failure. A failed retry after a successful read must not replace what
+    // is on screen with an empty list — see the failure copy: this list is not
+    // empty, DefMiner could not read it, and a suspended scan may still be
+    // holding its place.
     failed.value = true;
     return;
   }
@@ -194,8 +196,20 @@ function toggle(index: number): void {
 // DERIVED
 // ---------------------------------------------------------------------------
 
+/**
+ * THE ROWS RENDER WHENEVER THERE ARE ROWS — INCLUDING BESIDE A FAILED READ.
+ *
+ * A failure that REPLACED the rows would take a suspended scan off the screen
+ * at the moment the operator went looking for it, which is the harm the failure
+ * copy is written about. So a failed read after a successful one puts the error
+ * ABOVE the rows rather than instead of them: DefMiner says what it could not
+ * do and keeps showing what it already knows.
+ *
+ * The empty screen stays exclusive, because that is the pair that must never be
+ * confused: an empty list means "you have never run a scan".
+ */
 const showRows = computed<boolean>(
-  () => settled.value && !failed.value && rows.value.length > 0,
+  () => settled.value && rows.value.length > 0,
 );
 
 const showEmpty = computed<boolean>(
@@ -317,7 +331,7 @@ const BUTTON_CLASS =
          are distinguishable by their text alone, which is what a spec can hold
          and what an operator actually reads. -->
     <div
-      v-else-if="failed"
+      v-if="settled && failed"
       class="flex flex-col gap-2 border border-danger-500 px-2 py-1 text-danger-500"
       role="alert"
       data-defminer-scan-history-failed
@@ -347,7 +361,7 @@ const BUTTON_CLASS =
     <!-- NO SCANS YET — the operator has never run one, and the body says what
          a retroactive scan is for rather than leaving a blank region. -->
     <div
-      v-else-if="showEmpty"
+      v-if="showEmpty"
       class="flex flex-col gap-1 border border-surface-600 px-2 py-1"
       role="status"
       data-defminer-scan-history-empty
@@ -361,7 +375,7 @@ const BUTTON_CLASS =
          breaks every tie deterministically, and a second ordering here would be
          a second answer to a question with one authority. -->
     <div
-      v-else-if="showRows"
+      v-if="showRows"
       class="flex flex-col gap-2"
       data-defminer-scan-history-rows
     >
