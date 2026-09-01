@@ -16,9 +16,14 @@
 //   the QuickJS thread with NO interrupt and that SIGKILL — which takes the
 //   operator's real project with it — was the only teardown that worked.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { SOURCEMAP_TAIL_WINDOW_BYTES } from "../thresholds";
+
 import type { Announcement } from "./announce";
 import { findAnnouncement, MARKERS } from "./announce";
 
@@ -79,5 +84,109 @@ describe("the tracer — one announcement, found", () => {
       result = findAnnouncement("var a = 1;\n", SOURCEMAP_TAIL_WINDOW_BYTES);
     }).not.toThrow();
     expect(result).toBeNull();
+  });
+});
+
+// ===========================================================================
+// THE NO-PATTERN PROPERTY, PROVEN STRUCTURALLY (D-02, T-07-04)
+// ===========================================================================
+// AN AST WALK AND NOT A SUBSTRING SCAN, for the reason
+// `filesystem-prohibition.spec.ts` gives at length: a gate a comment can trip is
+// a gate that gets WEAKENED rather than obeyed. Both modules under audit talk
+// about patterns in their headers — at length, because the reasoning is worth
+// more than the characters it costs — so a text scan would fail on its own
+// documentation and the only way to make it pass would be deleting the
+// reasoning. Precisely backwards.
+//
+// AND A NON-VACUITY ASSERTION, because a gate that quietly scans nothing is the
+// same defect as a gate that quietly matches nothing. This one has been WATCHED
+// FAILING: a scratch edit planting a pattern literal in `announce.ts` turned it
+// red, and it went green again on revert. Both observations are recorded in
+// 07-02-SUMMARY.md.
+
+type PatternAudit = {
+  regexLiterals: number;
+  regExpConstructions: number;
+  nodes: number;
+  calls: number;
+};
+
+/** The audited modules, by the same relative resolution `decode.spec.ts` uses. */
+const AUDITED = ["./announce.ts"] as const;
+
+function auditPatterns(relative: string): PatternAudit {
+  const path = fileURLToPath(new URL(relative, import.meta.url));
+  const source = ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const audit: PatternAudit = {
+    regexLiterals: 0,
+    regExpConstructions: 0,
+    nodes: 0,
+    calls: 0,
+  };
+  const visit = (node: ts.Node): void => {
+    audit.nodes += 1;
+    if (node.kind === ts.SyntaxKind.RegularExpressionLiteral) {
+      audit.regexLiterals += 1;
+    }
+    if (ts.isCallExpression(node)) audit.calls += 1;
+    // `new RegExp(...)` in every receiver-free spelling. A `new` whose callee is
+    // an identifier naming the built-in pattern constructor, however it was
+    // imported or aliased at the point of construction.
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "RegExp"
+    ) {
+      audit.regExpConstructions += 1;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return audit;
+}
+
+describe.each(AUDITED)("%s contains no pattern, structurally", (relative) => {
+  const audit = auditPatterns(relative);
+
+  it("has ZERO regular-expression literals", () => {
+    expect(
+      audit.regexLiterals,
+      `${relative} now contains ${audit.regexLiterals} pattern literal(s). ` +
+        "REDOS_INTERRUPTIBLE is false and REDOS_RECOVERY is `kill`: SPIKE-01 measured " +
+        "that a catastrophic pattern hangs the QuickJS thread with NO interrupt and " +
+        "that SIGKILL — which takes caido-cli down with the operator's real project " +
+        "data — was the only teardown that worked. The input here is a multi-megabyte " +
+        "body a target chose. Use lastIndexOf / indexOf / startsWith.",
+    ).toBe(0);
+  });
+
+  it("has ZERO `new RegExp` constructions", () => {
+    expect(
+      audit.regExpConstructions,
+      `${relative} now constructs a pattern at runtime. A pattern assembled from ` +
+        "target-influenced pieces is the same hazard as a literal one and is harder " +
+        "to see.",
+    ).toBe(0);
+  });
+
+  it("the walk actually VISITED the file — the two counts above are not vacuous", () => {
+    // Without this, a resolution slip that read an empty string would report zero
+    // patterns and zero constructions and pass, forever.
+    expect(
+      audit.nodes,
+      `the walk over ${relative} visited ${audit.nodes} nodes, which is too few for ` +
+        "a real module — the file was probably not read.",
+    ).toBeGreaterThan(50);
+    expect(
+      audit.calls,
+      `the walk over ${relative} found no call expression at all, so it is not ` +
+        "looking at the module it claims to audit.",
+    ).toBeGreaterThan(0);
   });
 });

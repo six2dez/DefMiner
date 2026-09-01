@@ -57,6 +57,46 @@ export function decodeViaStringDecoder(bytes: Uint8Array): string {
   return new StringDecoder("utf8").end(Buffer.from(bytes));
 }
 
+/**
+ * Base64 to text, in ONE correct step — `Buffer.from(payload, "base64")` and
+ * then `toString("utf8")`.
+ *
+ * ===========================================================================
+ * THE OTHER PRIMITIVE IS SILENTLY WRONG, AND THAT IS WHY THIS FUNCTION EXISTS
+ * ===========================================================================
+ * `atob` is present on this runtime — Phase 0's capability probe found it — and
+ * it is the obvious reach for a base64 decode. It returns a LATIN-1 BINARY
+ * STRING: one UTF-16 code unit per BYTE. Every multi-byte UTF-8 sequence in the
+ * payload comes back split into its constituent bytes, so a comment in Spanish,
+ * an em dash, or a CJK identifier in a recovered source file is mojibake.
+ *
+ * NOTHING THROWS WHEN THAT HAPPENS. The corruption lands inside JSON string
+ * values, so `JSON.parse` still succeeds, every downstream type is satisfied, no
+ * gate fires, and the operator reads wrong source with no indication that
+ * anything went wrong. It is the quiet-wrongness class this codebase's gates
+ * exist to prevent, and it is the reason the choice is MEASURED rather than
+ * reasoned: the D-10 probe ran both primitives at all four ladder points and
+ * they produced DIFFERENT STRINGS at every one, `atob` strictly longer —
+ * 524,288 vs 523,633 characters at the smallest point. `Buffer` was also
+ * marginally faster (2.16 vs 2.55 ms/MB), so the correct primitive costs
+ * nothing to choose. `decode.spec.ts` DEMONSTRATES the divergence, computing
+ * both results, rather than asserting the right one away.
+ *
+ * NO CROSS-CHECK HERE, deliberately, and the asymmetry with {@link decodeUtf8}
+ * is the point: there the two paths SHOULD agree and a divergence would be a
+ * finding. Here the second primitive is KNOWN WRONG on exactly the inputs that
+ * matter, so running it would not be a check — it would be a second, corrupt
+ * answer with no way to prefer between them.
+ *
+ * VALIDATION IS THE CALLER'S. `Buffer.from(x, "base64")` is LENIENT: it skips
+ * characters outside the alphabet and returns a SHORTER buffer rather than
+ * failing. `packages/engine/src/sourcemap/parse.ts` therefore checks the
+ * alphabet and the padding before calling this, and refuses with a named reason.
+ */
+export function decodeBase64(payload: string): string {
+  return Buffer.from(payload, "base64").toString("utf8");
+}
+
 export type DecodeOptions = {
   /** Run both decoders and assert they agree. Defaults to `true`. */
   crossCheck?: boolean;

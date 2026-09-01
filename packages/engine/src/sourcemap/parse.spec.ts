@@ -10,8 +10,16 @@ import { describe, expect, it } from "vitest";
 
 import { sha256Hex } from "../digest";
 import { MAP_MAX_BYTES, SOURCE_ROWS_PER_MAP_MAX } from "../thresholds";
+
 import { HOSTILE_MAP_CASES } from "./map-fixture";
-import type { MapParseReason, RecoveredSource } from "./parse";
+import type {
+  InlineMapResult,
+  MapParseReason,
+  MapParseResult,
+  ParseLimits,
+  RecoveredSource,
+  SkippedSource,
+} from "./parse";
 import {
   B64_PREFIXES,
   decodeInlineMap,
@@ -20,7 +28,43 @@ import {
   parseSourceMap,
 } from "./parse";
 
-const LIMITS = { maxSourceRows: SOURCE_ROWS_PER_MAP_MAX };
+// ANNOTATED, NOT INFERRED. Naming the published types here is what makes a
+// change to any of them a compile error in this file rather than a silently
+// re-inferred shape — and it is what keeps `pnpm knip` honest about which of
+// this module's exports are actually spoken for.
+const LIMITS: ParseLimits = { maxSourceRows: SOURCE_ROWS_PER_MAP_MAX };
+
+/** The decode, with the published result type named at the call site. */
+function decode(url: string, maxBytes = MAP_MAX_BYTES): InlineMapResult {
+  return decodeInlineMap(url, maxBytes);
+}
+
+/** The parse, likewise. */
+function parse(json: string, limits: ParseLimits = LIMITS): MapParseResult {
+  return parseSourceMap(json, limits);
+}
+
+/** The recovered rows of a result that must have succeeded, or a THROW. */
+function recoveredOf(result: MapParseResult): readonly RecoveredSource[] {
+  if (!result.ok) {
+    throw new Error(
+      `expected a successful parse, got refusal "${result.reason}". A refusal ` +
+        "where a success was expected is the UI-09 failure this suite exists to " +
+        "catch: an operator told a map is broken when it merely carries nothing.",
+    );
+  }
+  return result.recovered;
+}
+
+/** The skipped rows of a result that must have succeeded, or a THROW. */
+function skippedOf(result: MapParseResult): readonly SkippedSource[] {
+  if (!result.ok) {
+    throw new Error(
+      `expected a successful parse, got refusal "${result.reason}".`,
+    );
+  }
+  return result.skipped;
+}
 
 /** One fixture, by id, or a THROW naming the id — never `undefined` flowing on. */
 function fixture(id: string): string {
