@@ -44,6 +44,18 @@ tier1/*/dist/
 .planning/phases/06-retroactive-scan-deployment-reality/results/runs/*/*.log
 .planning/phases/06-retroactive-scan-deployment-reality/results/runs/*/raw/*.log
 
+# The SAME control for Phase 7 (threats T-00-14, T-07-19). scripts/phase7/map-bytes.sh
+# sources the SAME instance.sh into a FOURTH results root, and every rule above is
+# path-specific — so without these lines a run that died before teardown could commit a
+# live guest bearer token (instance.sh mints one under `umask 077`, chmod 600, and
+# deletes it at teardown — but only if teardown runs), and every run would commit host
+# logs. Everything a result legitimately needs from a log is extracted into
+# map-bytes.json by scripts/phase7/record-point.py; the raw log never ships. rss.csv and
+# raw/*.json ARE committed — they are the evidence.
+.planning/phases/07-sourcemap-reconstruction/results/runs/*/token
+.planning/phases/07-sourcemap-reconstruction/results/runs/*/*.log
+.planning/phases/07-sourcemap-reconstruction/results/runs/*/raw/*.log
+
 # Per-operation stderr captures copied into runs/*/raw/ by scripts/spike/ladder.sh.
 # The rule above only covers runs/*/*.log, one level up. These are the channel a
 # C-level QuickJS abort would land in, so they are CHECKED — the scan result is

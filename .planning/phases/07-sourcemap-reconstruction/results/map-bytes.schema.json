@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://defminer.local/schemas/map-bytes.schema.json",
+  "title": "Phase 7 map-bytes probe result (D-10 / MAP-01, MAP-02)",
+  "description": "A SIBLING of matrix-result.schema.json and of spike-result.schema.json, not a reuse. It requires the Phase 0 key set — spike, status, recorded_at, binary, host, instances, method, measurements, verdict, requirements_affected — so a reader who knows one artifact knows this one, and it adds `points`, the per-ladder-point record carrying run_id, decoded_bytes, op_cost and rss_step. AND IT REFUSES A `SPIKE-NN` IDENTIFIER OUTRIGHT: Phase 0's results directory holds the threshold artifacts every later phase budgets against, tests/spike-results.spec.ts globs /^SPIKE-\\d\\d[a-z]?\\.json$/ there while pinning 0.57.1, and an artifact that could be mistaken for one of those is an artifact that gets read as one (Pitfall 7, T-06-53).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spike",
+    "status",
+    "recorded_at",
+    "binary",
+    "host",
+    "instances",
+    "method",
+    "measurements",
+    "points",
+    "verdict",
+    "requirements_affected"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "spike": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The probe identifier. NOT a Phase 0 spike id — see the title. The `not` below is the mechanical form of that rule.",
+      "not": { "pattern": "^SPIKE-[0-9]{2}[a-z]?$" }
+    },
+    "status": { "$ref": "#/$defs/status" },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "REQUIRED when status is not_run. A probe that could not run at all is recorded with why, never as a weak pass."
+    },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "duration_s": { "type": ["number", "null"] },
+    "binary": { "$ref": "#/$defs/binary" },
+    "host": {
+      "type": "object",
+      "required": ["os", "arch"],
+      "properties": {
+        "os": { "type": "string" },
+        "release": { "type": "string" },
+        "arch": { "type": "string" },
+        "cores": { "type": ["integer", "null"] }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/instance" },
+      "description": "One entry PER LADDER POINT. One fresh instance per size point is non-negotiable: RSS is a high-water mark that never falls, the allocator does not return pages to the OS, and there is no gc(), so reusing an instance makes every point after the first meaningless (scripts/spike/ladder.sh:12-19)."
+    },
+    "method": { "type": "string", "minLength": 1 },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "unit"],
+        "properties": {
+          "name": { "type": "string" },
+          "primitive": { "type": "string" },
+          "variant": { "type": "string" },
+          "value": { "type": ["number", "string", "boolean", "null"] },
+          "unit": { "type": "string" },
+          "stat": {
+            "enum": ["point", "median", "mean", "p95", "p99", "max", "min", "sum", "count", "ratio"]
+          },
+          "n": { "type": ["integer", "null"] },
+          "valid": { "type": "boolean" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "points": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/point" }
+    },
+    "derivation": {
+      "type": "object",
+      "description": "How the verdict's number was COMPUTED from the points above. Every field here is derived; a field the points do not support is null with a *_reason beside it, never a plausible figure.",
+      "properties": {
+        "inline_path_ops": { "type": "array", "items": { "type": "string" } },
+        "inline_path_ms_per_mb": { "type": ["number", "null"] },
+        "op_ms_per_mb": { "type": "object" },
+        "worst_point_inline_ms": { "type": ["number", "null"] },
+        "max_sync_slice_ms": { "type": "number" },
+        "passive_max_bytes": { "type": "integer" },
+        "structural_ceiling_bytes": { "type": "integer" },
+        "structural_ceiling_rule": { "type": "string" },
+        "measured_stall_bound_bytes": { "type": ["integer", "null"] },
+        "measured_stall_bound_reason": { "type": ["string", "null"] },
+        "measured_rss_bound_bytes": { "type": ["integer", "null"] },
+        "measured_rss_bound_reason": { "type": ["string", "null"] },
+        "rss_bytes_per_decoded_byte": { "type": ["number", "null"] },
+        "rss_ceiling_bytes": { "type": "integer" },
+        "binding_term": { "type": "string" },
+        "ladder_points": { "type": "integer" },
+        "ladder_complete": { "type": "boolean" }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "description": "OPPORTUNISTIC findings taken while an instance was up, each with its OWN status. RESEARCH Open Question 1 says do not block on the request-retention question; recording it here as an observation is what keeps it from being presented as a settled retention policy.",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "question", "finding"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "status": {
+            "enum": ["observed", "inconclusive", "not_run"],
+            "description": "NEVER `pass`. An observation is not a gate result and must not read as one."
+          },
+          "question": { "type": "string", "minLength": 1 },
+          "finding": { "type": "string", "minLength": 1 },
+          "not_a_policy": {
+            "type": "string",
+            "description": "The explicit disclaimer. Present so a later reader cannot cite this row as a decision."
+          },
+          "run_id": { "type": "string" },
+          "data": { "type": "object" }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer", "if_wrong"],
+      "properties": {
+        "answer": { "type": "string", "minLength": 1 },
+        "confidence": {
+          "enum": ["HIGH", "MEDIUM", "LOW", "PENDING", "pessimistic-default"],
+          "description": "pessimistic-default is NOT a weak measurement — it is the absence of one. Folding it into LOW would erase exactly the distinction a later reader needs."
+        },
+        "if_wrong": { "type": "string", "minLength": 1 },
+        "map_max_bytes": { "type": ["integer", "null"] },
+        "binding": {
+          "type": "boolean",
+          "description": "false means the measured bounds sit AT OR ABOVE the structural ceiling, so the ceiling is what MAP_MAX_BYTES takes. That is MEASURED TO BE NON-BINDING — a legitimate outcome — and must never be read as `not measured`."
+        },
+        "o_04_map02_parenthetical": {
+          "type": "string",
+          "description": "REQUIRED BY O-04. MAP-02's `781 sources / 12.66 MB / 21 ms` figure was taken in standalone quickjs-ng 0.16.1, not in Caido, and the case cannot arise on the inline path because 12.66 MB base64-encodes to ~16.9 MB against PASSIVE_MAX_BYTES = 8,388,608."
+        }
+      }
+    },
+    "requirements_affected": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "not_run" } },
+        "required": ["status"]
+      },
+      "then": {
+        "required": ["reason"],
+        "properties": { "reason": { "type": "string", "minLength": 1 } }
+      }
+    }
+  ],
+  "$defs": {
+    "status": {
+      "enum": ["pass", "fail", "inconclusive", "not_run"],
+      "description": "`inconclusive` is the honest state for a partial ladder: a rate fitted through fewer points than the ladder declares is a rate with an unstated error bar. It is not a weak pass."
+    },
+    "binary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "expected_version", "reported_version"],
+      "description": "THE PROBE'S OWN PINNED BUILD (D-21, applied a second time). `expected_version` is this probe's constant — neither Phase 1's 0.57.1 tripwire nor Phase 6's 0.58.2 — and the gate asserts reported == expected == the constant declared in tests/phase7-mapbytes.spec.ts itself.",
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "expected_version": { "type": "string", "minLength": 1 },
+        "reported_version": { "type": "string", "minLength": 1 },
+        "sha256": { "type": ["string", "null"], "pattern": "^([0-9a-f]{64})?$" }
+      }
+    },
+    "instance": {
+      "type": "object",
+      "required": ["run_id", "listen", "fresh"],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "listen": { "type": "string" },
+        "data_path": { "type": ["string", "null"] },
+        "fresh": { "type": "boolean" },
+        "flags": { "type": "array", "items": { "type": "string" } },
+        "exit_code": { "type": ["integer", "null"] }
+      }
+    },
+    "rssStep": {
+      "type": "object",
+      "required": ["bytes"],
+      "description": "A DELTA FROM A MARKER, never an absolute: the sampler reads the instance PID's RSS, which is Caido's plus the plugin's. `bytes` is null with a `reason` when no sample landed inside the mark window — at the sampler's 50 ms default that is a real outcome for a sub-interval operation, and recording it as null rather than 0 is the difference between `unmeasured` and `measured, no growth`.",
+      "properties": {
+        "bytes": { "type": ["integer", "null"] },
+        "reason": { "type": ["string", "null"] },
+        "rss_before_bytes": { "type": ["integer", "null"] },
+        "rss_peak_bytes": { "type": ["integer", "null"] }
+      }
+    },
+    "point": {
+      "type": "object",
+      "required": ["label", "run_id", "decoded_bytes", "op_cost", "rss_step", "host_alive_after"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "run_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "UNIQUE across points, asserted by the gate. `fresh: true` alone is not enough — a prose-only version of that rule passed review twice while the contamination it forbids stayed possible (scripts/spike/ladder.sh:12-19)."
+        },
+        "fixture": { "type": "string" },
+        "decoded_bytes": { "type": "integer", "minimum": 1 },
+        "decoded_bytes_observed": { "type": ["integer", "null"] },
+        "payload_chars": { "type": ["integer", "null"] },
+        "file_bytes": { "type": ["integer", "null"] },
+        "fixture_sha256": { "type": ["string", "null"] },
+        "announcement": { "type": ["object", "null"] },
+        "map": { "type": ["object", "null"] },
+        "op_cost": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "number" },
+          "description": "Milliseconds per declared operation, from performance.now(). The gate asserts the full declared operation set is present and names which one is missing."
+        },
+        "op_ok": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "op_err": { "type": "object" },
+        "rss_step": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/rssStep" }
+        },
+        "rss_samples": { "type": ["integer", "null"] },
+        "rss_baseline_bytes": { "type": ["integer", "null"] },
+        "rss_peak_bytes": { "type": ["integer", "null"] },
+        "call_rc": { "type": "integer" },
+        "host_alive_after": { "type": "boolean" },
+        "exit_code": { "type": ["integer", "null"] },
+        "listen": { "type": ["string", "null"] },
+        "fresh": { "type": "boolean" },
+        "flags": { "type": "array", "items": { "type": "string" } },
+        "data_path": { "type": ["string", "null"] },
+        "binary": { "type": ["object", "null"] }
+      }
+    }
+  }
+}

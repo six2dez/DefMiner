@@ -1,0 +1,83 @@
+{
+  "label": "p1500k",
+  "run_id": "20260901T203653Z-1943",
+  "fixture": ".spike/maps/inline-p1500k.js",
+  "decoded_bytes": 1572864,
+  "decoded_bytes_observed": 1572196,
+  "payload_chars": 2097152,
+  "file_bytes": 2097534,
+  "fixture_sha256": "888a7f9ee2e7a4d04bd745852c3b507d86bf8376bd29dbfaf3acefaa8db52ca0",
+  "announcement": {
+    "found": true,
+    "spelling": "//# sourceMappingURL=",
+    "marker_index": 330,
+    "bytes_from_eof": 2097202,
+    "inline": true,
+    "payload_chars": 2097152,
+    "window_chars": 8392704,
+    "sliced": false
+  },
+  "map": {
+    "version": 3,
+    "sources": 140,
+    "sources_content": 140,
+    "mappings_chars": 422319,
+    "has_sections": false
+  },
+  "op_cost": {
+    "announce_scan": 6.464,
+    "b64_decode_buffer": 3.985,
+    "json_parse": 4.655
+  },
+  "op_ok": {
+    "announce_scan": true,
+    "b64_decode_buffer": true,
+    "json_parse": true
+  },
+  "op_err": {
+    "announce_scan": null,
+    "b64_decode_buffer": null,
+    "json_parse": null
+  },
+  "rss_step": {
+    "announce_scan": {
+      "bytes": 0,
+      "rss_before_bytes": 114245632,
+      "rss_peak_bytes": 114245632,
+      "reason": null
+    },
+    "b64_decode_buffer": {
+      "bytes": 16236544,
+      "rss_before_bytes": 114245632,
+      "rss_peak_bytes": 130482176,
+      "reason": null
+    },
+    "json_parse": {
+      "bytes": 0,
+      "rss_before_bytes": 130482176,
+      "rss_peak_bytes": 130482176,
+      "reason": null
+    }
+  },
+  "rss_samples": 10,
+  "rss_baseline_bytes": 103038976,
+  "rss_peak_bytes": 132841472,
+  "call_rc": 0,
+  "host_alive_after": true,
+  "exit_code": 137,
+  "listen": "127.0.0.1:8941",
+  "fresh": true,
+  "flags": [
+    "--no-open",
+    "--allow-guests",
+    "--no-sync",
+    "--debug"
+  ],
+  "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+  "binary": {
+    "path": ".caido-bin/0.58.0/caido-cli",
+    "expected_version": "0.58.0",
+    "reported_version": "0.58.0",
+    "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+  }
+}

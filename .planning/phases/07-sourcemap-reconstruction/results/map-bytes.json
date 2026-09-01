@@ -1,0 +1,201 @@
+{
+  "$schema": "./map-bytes.schema.json",
+  "spike": "MAP-BYTES",
+  "status": "inconclusive",
+  "recorded_at": "2026-09-01T20:36:55Z",
+  "binary": {
+    "path": ".caido-bin/0.58.0/caido-cli",
+    "expected_version": "0.58.0",
+    "reported_version": "0.58.0",
+    "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+  },
+  "host": {
+    "os": "darwin",
+    "release": "25.6.0",
+    "arch": "arm64",
+    "cores": 14
+  },
+  "instances": [
+    {
+      "run_id": "20260901T203653Z-1943",
+      "listen": "127.0.0.1:8941",
+      "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "exit_code": 137
+    }
+  ],
+  "method": "Reproduces SPIKE-06's method clause by clause, with the operation set Phase 7 needs and Phase 0 does not have. One FRESH version-asserted Caido 0.58.0 instance PER SIZE POINT, launched from the in-repo sha512-verified .caido-bin binary on a port from the free 8941-8945 block with 8080 refused unconditionally. scripts/spike/rss-sampler.sh attached UNMODIFIED at its 0.05 default to that instance's PID, emitting unix-millisecond timestamps correlated against the probe's own Date.now() MARK_START/MARK_END lines. Operation order is FIXED and heaviest last, because RSS never falls in this runtime and each step delta is only meaningful as an increment on what came before. Input is read from DISK, not through the proxy, so proxy variance does not enter a parse-cost measurement. Each fixture is a REAL vendor sourcemap (SHA-256-pinned in scripts/phase7/fetch-maps.sh) wrapped as an inline-map JS body sized to EXACTLY the ladder point's decoded byte count \u2014 real rather than generated because JSON.parse cost depends on the string-vs-structure ratio and a map is ~90% long string literals in sourcesContent.",
+  "measurements": [
+    {
+      "name": "announce_scan",
+      "primitive": "announce_scan",
+      "variant": "p1500k",
+      "value": 6.464,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+    },
+    {
+      "name": "b64_decode_buffer",
+      "primitive": "b64_decode_buffer",
+      "variant": "p1500k",
+      "value": 3.985,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+    },
+    {
+      "name": "json_parse",
+      "primitive": "json_parse",
+      "variant": "p1500k",
+      "value": 4.655,
+      "unit": "ms",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "decoded_bytes=1572864 run_id=20260901T203653Z-1943"
+    },
+    {
+      "name": "rss_step_json_parse",
+      "primitive": "rss_step",
+      "variant": "p1500k",
+      "value": 0,
+      "unit": "bytes",
+      "stat": "point",
+      "n": 1,
+      "valid": true,
+      "notes": "delta from the mark-start sample"
+    }
+  ],
+  "points": [
+    {
+      "label": "p1500k",
+      "run_id": "20260901T203653Z-1943",
+      "fixture": ".spike/maps/inline-p1500k.js",
+      "decoded_bytes": 1572864,
+      "decoded_bytes_observed": 1572196,
+      "payload_chars": 2097152,
+      "file_bytes": 2097534,
+      "fixture_sha256": "888a7f9ee2e7a4d04bd745852c3b507d86bf8376bd29dbfaf3acefaa8db52ca0",
+      "announcement": {
+        "found": true,
+        "spelling": "//# sourceMappingURL=",
+        "marker_index": 330,
+        "bytes_from_eof": 2097202,
+        "inline": true,
+        "payload_chars": 2097152,
+        "window_chars": 8392704,
+        "sliced": false
+      },
+      "map": {
+        "version": 3,
+        "sources": 140,
+        "sources_content": 140,
+        "mappings_chars": 422319,
+        "has_sections": false
+      },
+      "op_cost": {
+        "announce_scan": 6.464,
+        "b64_decode_buffer": 3.985,
+        "json_parse": 4.655
+      },
+      "op_ok": {
+        "announce_scan": true,
+        "b64_decode_buffer": true,
+        "json_parse": true
+      },
+      "op_err": {
+        "announce_scan": null,
+        "b64_decode_buffer": null,
+        "json_parse": null
+      },
+      "rss_step": {
+        "announce_scan": {
+          "bytes": 0,
+          "rss_before_bytes": 114245632,
+          "rss_peak_bytes": 114245632,
+          "reason": null
+        },
+        "b64_decode_buffer": {
+          "bytes": 16236544,
+          "rss_before_bytes": 114245632,
+          "rss_peak_bytes": 130482176,
+          "reason": null
+        },
+        "json_parse": {
+          "bytes": 0,
+          "rss_before_bytes": 130482176,
+          "rss_peak_bytes": 130482176,
+          "reason": null
+        }
+      },
+      "rss_samples": 10,
+      "rss_baseline_bytes": 103038976,
+      "rss_peak_bytes": 132841472,
+      "call_rc": 0,
+      "host_alive_after": true,
+      "exit_code": 137,
+      "listen": "127.0.0.1:8941",
+      "fresh": true,
+      "flags": [
+        "--no-open",
+        "--allow-guests",
+        "--no-sync",
+        "--debug"
+      ],
+      "data_path": "/tmp/defminer-probe-20260901T203653Z-1943",
+      "binary": {
+        "path": ".caido-bin/0.58.0/caido-cli",
+        "expected_version": "0.58.0",
+        "reported_version": "0.58.0",
+        "sha256": "1d8f27552d3ac3f01eff9a9cbf671dbc02390504076b455942c6708b31b35d36"
+      }
+    }
+  ],
+  "derivation": {
+    "inline_path_ops": [
+      "announce_scan",
+      "b64_decode_buffer",
+      "json_parse"
+    ],
+    "inline_path_ms_per_mb": null,
+    "op_ms_per_mb": {},
+    "worst_point_inline_ms": 15.104,
+    "max_sync_slice_ms": 25,
+    "passive_max_bytes": 8388608,
+    "structural_ceiling_bytes": 6291456,
+    "structural_ceiling_rule": "floor(PASSIVE_MAX_BYTES * 3 / 4) \u2014 base64 expands 4:3, so an inline map's decoded JSON cannot exceed this and the ladder tops out AT it rather than above it",
+    "measured_stall_bound_bytes": null,
+    "measured_stall_bound_reason": "fewer than two ladder points carry the full inline-path operation set, so no rate can be fitted. Re-run the full ladder.",
+    "measured_rss_bound_bytes": null,
+    "measured_rss_bound_reason": "the external RSS sampler recorded no positive step it could attribute to a measured operation at two or more points. At the sampler's 50 ms default an operation shorter than one interval leaves no sample inside its window; that is a real outcome and is recorded as unmeasured rather than as zero growth.",
+    "rss_bytes_per_decoded_byte": null,
+    "rss_ceiling_bytes": 1073741824,
+    "binding_term": "structural_ceiling",
+    "ladder_points": 1,
+    "ladder_complete": false
+  },
+  "verdict": {
+    "answer": "MAP_MAX_BYTES = 6291456 bytes \u2014 the STRUCTURAL CEILING, floor(PASSIVE_MAX_BYTES * 3/4). MEASURED TO BE NON-BINDING, which is a legitimate outcome and is NOT 'not measured': the inline path (announce_scan + b64_decode_buffer + json_parse) was measured at un-fitted ms/MB across 1 ladder point(s) topping out at 1572864 decoded bytes, the worst single point cost 15.104 ms against MAX_SYNC_SLICE_MS = 25, and the implied stall bound is unfitted (fewer than two ladder points carry the full inline-path operation set, so no rate can be fitted. Re-run the full ladder.) \u2014 at or above the ceiling. The RSS bound is unmeasured (the external RSS sampler recorded no positive step it could attribute to a measured operation at two or more points. At the sampler's 50 ms default an operation shorter than one interval leaves no sample inside its window; that is a real outcome and is recorded as unmeasured rather than as zero growth.).",
+    "confidence": "LOW",
+    "if_wrong": "RESEARCH \u00a7 O-03's two outcomes, and both are shippable. IF MAP_MAX_BYTES LANDS FAR BELOW the 6,291,456-byte structural ceiling: D-08's always-on placement is still correct, but the phase recovers source from a MINORITY of inline maps and the UI must SAY SO rather than appear to have found nothing \u2014 a silent floor reads to the operator as an empty result. IF IT LANDS AT THE CEILING: the bound is non-binding and the D-02 tail window is the full base64 span, which is what SOURCEMAP_TAIL_WINDOW_BYTES's ceil-4/3 derivation already produces. The outcome that is not shippable is not measuring: reusing AST_MAX_BYTES (a meriyah stall at 785.8 ms/MB, a different cost curve and a different allocator profile) or RSS_BYTES_PER_INPUT_BYTE (scoped verbatim to 'the parse operation', at MEDIUM confidence) is the 'reasoned, not measured' move D-10 forbids.",
+    "map_max_bytes": 6291456,
+    "binding": false,
+    "o_04_map02_parenthetical": "MAP-02's parenthetical \u2014 781 sources from a 12.66 MB map in 21 ms \u2014 is REAL but was NOT measured in Caido. .planning/research/STACK.md:546 names the harness: standalone quickjs-ng 0.16.1 (Homebrew, arm64) via `qjs --stack-size 65536 --memory-limit 4194304`. That is a materially different runtime from Caido's embedded QuickJS \u2014 the one operation measured both ways, meriyah parse, ran ~1.27x slower inside Caido (620 ms/MB standalone vs 785.8 ms/MB measured) \u2014 and that ratio is a single-operation observation which must NOT be used to project JSON.parse. SEPARATELY, THE CASE CANNOT ARISE ON THE INLINE PATH AT ALL: 12.66 MB of map JSON base64-encodes to roughly 16.9 MB, which admit() refuses as too_large against PASSIVE_MAX_BYTES = 8,388,608 by more than 2x. Monaco's map is in any case announced EXTERNALLY, 67 bytes from EOF, which under D-01 is a D-03 counter increment and nothing else."
+  },
+  "requirements_affected": [
+    "MAP-01",
+    "MAP-02",
+    "MAP-05"
+  ]
+}

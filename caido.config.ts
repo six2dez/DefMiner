@@ -37,5 +37,18 @@ export default defineConfig({
     // working during the hang" question is answered with `probe/tier0-core`, a
     // separate package with its own executor.
     { kind: "backend", id: "redos-probe", name: "ReDoS Probe", root: "tier1/redos" },
+    // Plan 07-01's D-10 probe (MAP-01/MAP-02). Tier 1 for the third time and
+    // for the same reason: the number it produces — `MAP_MAX_BYTES` — has to be
+    // measured INSIDE Caido, through the build pipeline that actually ships,
+    // and no Phase 0 constant substitutes (SPIKE-06 measures no `JSON.parse`
+    // at all).
+    //
+    // APPENDED, NEVER INSERTED. `scripts/spike/probe-run.sh` resolves
+    // `backends[0]` from the install response, so `parse-probe` must stay at
+    // index 0 or a re-run of scripts/spike/ladder.sh would silently call
+    // `measure` on the wrong backend. probe-run.sh is Phase 0's and is not
+    // modified; scripts/phase7/map-bytes.sh resolves ITS backend explicitly by
+    // calling `mapbytes_info` against each installed id.
+    { kind: "backend", id: "mapbytes-probe", name: "Map Bytes Probe", root: "tier1/mapbytes" },
   ],
 });
