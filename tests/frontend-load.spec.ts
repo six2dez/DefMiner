@@ -3,8 +3,9 @@
 // ===========================================================================
 // WHAT THIS FILE IS, IN THE CONTRACT'S OWN TERMS
 // ===========================================================================
-// `05-UI-SPEC.md § "UI Considerations"` carries six 🧪 backstop rows. This file
-// is the executed evidence for exactly two of them:
+// `05-UI-SPEC.md § "UI Considerations"` carries six 🧪 backstop rows and
+// `06-UI-SPEC.md` adds three more. This file is the executed evidence for
+// exactly three of them:
 //
 //   `overflow / findings-table`  — "10,000 rows must stay responsive and scroll
 //       smoothly... Verified by a load test at 10,000 rows asserting a bounded
@@ -16,8 +17,22 @@
 //       value — asserting truncation, no grapheme split, NO LAYOUT BREAK, no
 //       renderer freeze."
 //
-// The third `findings-table`-adjacent backstop, `long-text / export-dialog`, is
-// PLAN 05-11's and is not covered here. `long-text / evidence-panel` is 05-10's.
+//   `long-text / scan-start-form` (06-UI-SPEC.md) — ADDED BY PLAN 06-12, AND
+//       ONLY ITS LAYOUT HALF. The operator's HTTPQL clause is the one unbounded
+//       string on the Scan tab and it is routinely pasted from a target's own
+//       page. The sanitisation, the inertness against an explicit allowed-tag
+//       set, the absence of any `title` or `data-*` carrying it, and the
+//       grapheme safety at the cap are the jsdom half and live in
+//       `packages/frontend/src/safety/hostile.spec.ts`. WHAT LIVES HERE IS THE
+//       ONE THING THAT FILE CANNOT SAY: that a multi-kilobyte clause leaves the
+//       fixed-height counter strip at exactly the height it has with an empty
+//       one, and that the panel's own column is what scrolls rather than the
+//       strip growing or the panel widening.
+//
+// The remaining `findings-table`-adjacent backstop, `long-text / export-dialog`,
+// is PLAN 05-11's and is not covered here. `long-text / evidence-panel` is
+// 05-10's. The other two 06-UI-SPEC rows — the history list's and the scan
+// detail's — are PLAN 06-13's.
 //
 // A BACKSTOP ROW WITH NO EXECUTED EVIDENCE RESOLVES TO NEEDING A HUMAN, NEVER TO
 // A SILENT PASS (`05-VALIDATION.md § "Manual-Only Verifications"`). Which is why
@@ -129,9 +144,32 @@ const HOSTILE_EVERY = 250;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "..");
 const FRONTEND = path.join(REPO, "packages", "frontend");
-const HARNESS_DIR = path.join(FRONTEND, ".load-harness");
-const HARNESS_ENTRY = path.join(HARNESS_DIR, "entry.ts");
-const HARNESS_OUT = path.join(HARNESS_DIR, "dist");
+/**
+ * One built harness: where its generated entry goes and where vite puts the
+ * bundle.
+ *
+ * TWO OF THEM AS OF PLAN 06-12, in two DIRECTORIES rather than two entries in
+ * one, so a crashed run of either cannot leave a stale bundle the other then
+ * measures — `buildHarness` clears the directory it is given, and a shared
+ * directory would make that clear the sibling's output too.
+ */
+type HarnessPaths = {
+  readonly dir: string;
+  readonly entry: string;
+  readonly out: string;
+};
+
+function harnessPaths(name: string): HarnessPaths {
+  const dir = path.join(FRONTEND, name);
+  return {
+    dir,
+    entry: path.join(dir, "entry.ts"),
+    out: path.join(dir, "dist"),
+  };
+}
+
+const TABLE_HARNESS = harnessPaths(".load-harness");
+const SCAN_HARNESS = harnessPaths(".scan-harness");
 
 const MISSING_BROWSER =
   "MISSING CAPABILITY: playwright could not start a Chromium browser. " +
@@ -346,14 +384,14 @@ type HarnessBrowser = {
 
 let browser: HarnessBrowser | null = null;
 
-function buildHarness(): void {
-  rmSync(HARNESS_DIR, { recursive: true, force: true });
-  mkdirSync(HARNESS_DIR, { recursive: true });
-  writeFileSync(HARNESS_ENTRY, harnessSource(), "utf8");
+function buildHarness(paths: HarnessPaths, source: string): void {
+  rmSync(paths.dir, { recursive: true, force: true });
+  mkdirSync(paths.dir, { recursive: true });
+  writeFileSync(paths.entry, source, "utf8");
   // AFTER the mkdir, never before: `buildHarness` clears the directory first so
   // a crashed previous run cannot leave a stale bundle that this one then
   // measures.
-  writeViteConfig();
+  writeViteConfig(paths);
 
   // A CHILD PROCESS, not vite's Node API. Vite's `build()` mutates
   // `process.env.NODE_ENV` and installs its own error handlers in the process
@@ -367,7 +405,7 @@ function buildHarness(): void {
       "vite",
       "build",
       "--config",
-      path.join(HARNESS_DIR, "vite.config.mjs"),
+      path.join(paths.dir, "vite.config.mjs"),
       "--logLevel",
       "warn",
     ],
@@ -381,13 +419,13 @@ function buildHarness(): void {
   }
 }
 
-function writeViteConfig(): void {
+function writeViteConfig(paths: HarnessPaths): void {
   // `external: []` — vue IS bundled here, deliberately and only here. The
   // shipped build externalises it because Caido's renderer provides it (threat
   // T-05-03, a second reactivity runtime in the host page); a standalone page
   // has no host to provide it.
   writeFileSync(
-    path.join(HARNESS_DIR, "vite.config.mjs"),
+    path.join(paths.dir, "vite.config.mjs"),
     `import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
@@ -407,11 +445,11 @@ export default defineConfig({
     __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
   },
   build: {
-    outDir: ${JSON.stringify(HARNESS_OUT)},
+    outDir: ${JSON.stringify(paths.out)},
     emptyOutDir: true,
     minify: false,
     lib: {
-      entry: ${JSON.stringify(HARNESS_ENTRY)},
+      entry: ${JSON.stringify(paths.entry)},
       formats: ["es"],
       fileName: () => "harness.js",
       cssFileName: "harness",
@@ -424,10 +462,13 @@ export default defineConfig({
   );
 }
 
-function startServer(): Promise<string> {
+function startServer(
+  paths: HarnessPaths,
+  onServer: (created: Server) => void,
+): Promise<string> {
   const html = HARNESS_HTML;
-  const js = readFileSync(path.join(HARNESS_OUT, "harness.js"), "utf8");
-  const css = readFileSync(path.join(HARNESS_OUT, "harness.css"), "utf8");
+  const js = readFileSync(path.join(paths.out, "harness.js"), "utf8");
+  const css = readFileSync(path.join(paths.out, "harness.css"), "utf8");
 
   return new Promise((resolve, reject) => {
     const created = createServer((request, response) => {
@@ -447,7 +488,7 @@ function startServer(): Promise<string> {
     });
     created.on("error", reject);
     created.listen(0, "127.0.0.1", () => {
-      server = created;
+      onServer(created);
       const address = created.address();
       if (address === null || typeof address === "string") {
         reject(new Error("could not bind the harness server"));
@@ -461,7 +502,7 @@ function startServer(): Promise<string> {
 describe("the 10,000-row browser backstop", () => {
   beforeAll(async () => {
     try {
-      buildHarness();
+      buildHarness(TABLE_HARNESS, harnessSource());
     } catch (error) {
       startupFailure = (error as Error).message;
       return;
@@ -469,7 +510,9 @@ describe("the 10,000-row browser backstop", () => {
 
     let url: string;
     try {
-      url = await startServer();
+      url = await startServer(TABLE_HARNESS, (created) => {
+        server = created;
+      });
     } catch (error) {
       startupFailure = `MISSING CAPABILITY: could not serve the harness — ${(error as Error).message}`;
       return;
@@ -599,7 +642,7 @@ describe("the 10,000-row browser backstop", () => {
   afterAll(async () => {
     if (browser !== null) await browser.close();
     if (server !== null) server.close();
-    rmSync(HARNESS_DIR, { recursive: true, force: true });
+    rmSync(TABLE_HARNESS.dir, { recursive: true, force: true });
   });
 
   /** Every assertion goes through here, so a startup failure FAILS with the
@@ -684,5 +727,363 @@ describe("the 10,000-row browser backstop", () => {
   it("asked for a hundred rows per page, as the contract fixes", () => {
     const m = measured();
     expect(m.rowsPagedThrough % KEYSET_PAGE_ROWS).toBe(0);
+  });
+});
+
+// ===========================================================================
+// THE SCAN SURFACE'S LAYOUT BACKSTOP (PLAN 06-12)
+// ===========================================================================
+// THE HALF `hostile.spec.ts` CANNOT CARRY, and the reason is the same measured
+// one this file's header gives: jsdom performs no layout, so "the fixed-height
+// strip did not grow under a multi-kilobyte clause" is an assertion about a
+// number nothing computed. It is asserted here, in a real browser, against the
+// stylesheet the shipped Tailwind/PostCSS pipeline emits from the real
+// component sources — so the 48px the browser measures is the one `h-12`
+// produced, not one this spec wrote.
+//
+// THE CLAUSE IS THE ONE UNBOUNDED STRING ON THE SCAN TAB and it reaches the
+// readout through `composedFilter`, echoed back by the backend. That is the
+// state that has a counter strip in it, so that is the state measured: the same
+// panel rendered twice, once with an empty operator clause and once with the
+// shared corpus's multi-megabyte single-line case, with the strip measured
+// both times.
+//
+// IT DOES NOT SKIP, for the reason the block above does not: a backstop row
+// with no executed evidence resolves to needing a human, never to a silent
+// pass. A driver that cannot start fails every case here with the missing
+// capability named.
+
+const MISSING_SCAN_BROWSER =
+  "MISSING CAPABILITY: playwright could not start a Chromium browser. " +
+  "This block is the EXECUTED EVIDENCE for the LAYOUT half of 06-UI-SPEC.md's " +
+  "`long-text / scan-start-form` backstop row; the jsdom half is in " +
+  "packages/frontend/src/safety/hostile.spec.ts and cannot express a measured " +
+  "height. A backstop row with no executed evidence resolves to needing a " +
+  "human, never to a silent pass. Remedy: `pnpm exec playwright install chromium`.";
+
+/** The strip's fixed height, in pixels — the `2xl` step, and what `h-12`
+ *  resolves to. Asserted as a VALUE and not only as an equality between the two
+ *  renders, because two renders that were both wrong would agree. */
+const SCAN_STRIP_HEIGHT_PX = 48;
+
+type ScanMeasurements = {
+  readonly emptyClauseStripHeight: number;
+  readonly hostileClauseStripHeight: number;
+  readonly panelScrollHeight: number;
+  readonly panelClientHeight: number;
+  readonly panelScrollWidth: number;
+  readonly panelClientWidth: number;
+  readonly composedRenderedChars: number;
+  readonly hostileClauseChars: number;
+  readonly stripCells: number;
+  readonly formStripHeights: number[];
+};
+
+function scanHarnessSource(): string {
+  return `// GENERATED by tests/frontend-load.spec.ts. Deleted at the end of the run.
+import { HOSTILE_CASES } from "@defminer/engine/hostile.fixture";
+import { SCAN_KIND_CLAUSE } from "@defminer/engine/contract";
+import { createApp, h, ref } from "vue";
+
+import ScanPanel from "../src/components/ScanPanel.vue";
+import "../src/styles/index.css";
+
+// THE SHARED CORPUS, BY ID. Extending it extends this run, and a case renamed
+// there fails here loudly rather than silently measuring nothing.
+const HOSTILE_ID = "multi-megabyte-single-line";
+const found = HOSTILE_CASES.find((c) => c.id === HOSTILE_ID);
+if (found === undefined) {
+  throw new Error(
+    "hostile fixture no longer carries " + HOSTILE_ID + " — the backstop names it by id",
+  );
+}
+const HOSTILE = found.value;
+
+const clause = ref("");
+
+const row = () => ({
+  scanId: "s1",
+  state: "running",
+  suspendReason: null,
+  operatorFilter: clause.value,
+  composedFilter:
+    clause.value === ""
+      ? "(" + SCAN_KIND_CLAUSE + ")"
+      : "(" + SCAN_KIND_CLAUSE + ") AND (" + clause.value + ")",
+  pagesWalked: 3,
+  seen: 9876543,
+  admitted: 1234567,
+  skippedDone: 4321,
+  rejected: 87654,
+  queued: 1234,
+  analysed: null,
+  lastCreatedAt: Date.now(),
+  startedAt: Date.now(),
+  updatedAt: Date.now(),
+  finishedAt: null,
+  heldAtWatermark: false,
+});
+
+// A null status puts the form state on screen and a payload puts the readout
+// there. Which one is mounted is driven from the spec, so both are measured in
+// one page load.
+const showScan = ref(true);
+
+const mount = document.getElementById("plugin--defminer");
+if (mount === null) throw new Error("mount element missing");
+
+createApp({
+  render: () =>
+    h(ScanPanel, {
+      projectId: "load",
+      defminerClause: SCAN_KIND_CLAUSE,
+      load: () =>
+        Promise.resolve({ ok: true, value: showScan.value ? row() : null }),
+      // TWO OUTCOMES, DRIVEN BY THE SAME REF THE READ IS. A rejection keeps
+      // the form on screen with the clause echoed back — which is the state
+      // whose layout is measured — and a start moves the surface to the
+      // readout, which is how the real component gets there.
+      start: () =>
+        Promise.resolve(
+          showScan.value
+            ? { ok: true, value: { outcome: "started", scanId: "s1" } }
+            : {
+                ok: true,
+                value: {
+                  outcome: "clause-rejected",
+                  reason: "comment_construct",
+                },
+              },
+        ),
+      pause: () => Promise.resolve({ ok: true, value: { ok: true, changed: false, state: "running", suspendReason: null, reason: "guard-declined" } }),
+      resume: () => Promise.resolve({ ok: true, value: { ok: true, changed: false, state: "running", suspendReason: null, reason: "guard-declined" } }),
+      discard: () => Promise.resolve({ ok: true, value: { ok: true, changed: false, state: "running", suspendReason: null, reason: "guard-declined" } }),
+      subscribe: () => ({ stop: () => undefined }),
+    }),
+}).mount(mount);
+
+(globalThis as unknown as { __defminerScan: unknown }).__defminerScan = {
+  hostile: HOSTILE,
+  setClause: (value: string) => {
+    clause.value = value;
+  },
+  setShowScan: (value: boolean) => {
+    showScan.value = value;
+  },
+  panel: () => document.querySelector("[data-defminer-scan]"),
+  strip: () => document.querySelector("[data-defminer-scan-strip]"),
+  input: () => document.getElementById("defminer-scan-clause"),
+  startButton: () => document.getElementById("defminer-scan-start"),
+  refreshButton: () => document.getElementById("defminer-scan-refresh"),
+  composed: () => document.querySelector("[data-defminer-scan-composed]"),
+};
+`;
+}
+
+let scanMeasurements: ScanMeasurements | null = null;
+let scanStartupFailure: string | null = null;
+let scanServer: Server | null = null;
+let scanBrowser: HarnessBrowser | null = null;
+
+describe("the scan surface's layout backstop", () => {
+  beforeAll(async () => {
+    try {
+      buildHarness(SCAN_HARNESS, scanHarnessSource());
+    } catch (error) {
+      scanStartupFailure = (error as Error).message;
+      return;
+    }
+
+    let url: string;
+    try {
+      url = await startServer(SCAN_HARNESS, (created) => {
+        scanServer = created;
+      });
+    } catch (error) {
+      scanStartupFailure = `MISSING CAPABILITY: could not serve the scan harness — ${(error as Error).message}`;
+      return;
+    }
+
+    let driven: HarnessPage;
+    try {
+      const { chromium } = await import("playwright");
+      scanBrowser = await chromium.launch();
+      driven = await scanBrowser.newPage({
+        viewport: { width: 1280, height: 800 },
+      });
+    } catch (error) {
+      scanStartupFailure = `${MISSING_SCAN_BROWSER}\n--- driver error ---\n${(error as Error).message}`;
+      return;
+    }
+
+    await driven.goto(url);
+    await driven.waitForFunction(
+      "globalThis.__defminerScan !== undefined && document.querySelector('[data-defminer-scan-strip]') !== null",
+    );
+
+    scanMeasurements = await driven.evaluate(
+      `(async () => {
+        const h = globalThis.__defminerScan;
+        const settle = () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+
+        // The panel is given a bounded height by the harness page, exactly as
+        // the real workspace column gives it one. Without that, "the panel
+        // scrolls" is not a question the browser can answer.
+        const panel = h.panel();
+        panel.style.height = "600px";
+        await settle();
+
+        // 1. THE READOUT WITH AN EMPTY OPERATOR CLAUSE.
+        h.setShowScan(true);
+        h.setClause("");
+        await settle();
+        const emptyClauseStripHeight = h.strip().getBoundingClientRect().height;
+        const stripCells = h.strip().children.length;
+
+        // 2. THE SAME READOUT WITH THE MULTI-MEGABYTE CLAUSE ECHOED BACK IN THE
+        //    COMPOSED FILTER. The strip must not have moved a pixel.
+        h.setClause(h.hostile);
+        await settle();
+        const hostileClauseStripHeight = h.strip().getBoundingClientRect().height;
+        const composedRenderedChars = (h.composed().textContent ?? "").length;
+
+        const panelScrollHeight = panel.scrollHeight;
+        const panelClientHeight = panel.clientHeight;
+        const panelScrollWidth = panel.scrollWidth;
+        const panelClientWidth = panel.clientWidth;
+
+        // 3. THE START FORM, driven through its own input with the same value,
+        //    then rejected — so the echo element renders too. Measured after,
+        //    to confirm returning to the readout leaves the strip unchanged.
+        //
+        //    THE PANEL IS MADE TO RE-READ RATHER THAN RE-MOUNTED. Toggling the
+        //    harness ref only changes what the next read ANSWERS; the panel
+        //    holds the payload it last received, which is the whole point of
+        //    its three-state model. Pressing its own Refresh control is how the
+        //    real surface moves between these states, so it is how this run
+        //    does too.
+        h.setShowScan(false);
+        h.setClause("");
+        h.refreshButton().click();
+        await settle();
+        await settle();
+        const input = h.input();
+        input.value = h.hostile;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await settle();
+        h.startButton().click();
+        await settle();
+        const formPanelScrollWidth = panel.scrollWidth;
+
+        h.setShowScan(true);
+        h.setClause(h.hostile);
+        // Back to the readout the same way: the form has no Refresh control, so
+        // the start action is what moves it, and the harness answers a payload
+        // on the read that follows.
+        h.startButton().click();
+        await settle();
+        await settle();
+        const formStripHeights = [h.strip().getBoundingClientRect().height];
+
+        return {
+          emptyClauseStripHeight,
+          hostileClauseStripHeight,
+          panelScrollHeight,
+          panelClientHeight,
+          panelScrollWidth: Math.max(panelScrollWidth, formPanelScrollWidth),
+          panelClientWidth,
+          composedRenderedChars,
+          hostileClauseChars: h.hostile.length,
+          stripCells,
+          formStripHeights,
+        };
+      })()`,
+    );
+
+    const m = scanMeasurements;
+    console.log(
+      [
+        "",
+        "  SCAN SURFACE LAYOUT BACKSTOP — MEASURED, NOT INSPECTED",
+        `    strip height, empty clause .... ${m.emptyClauseStripHeight.toFixed(2)} px`,
+        `    strip height, hostile clause .. ${m.hostileClauseStripHeight.toFixed(2)} px`,
+        `    strip cells ................... ${String(m.stripCells)}`,
+        `    clause length ................. ${String(m.hostileClauseChars)} chars`,
+        `    composed rendered ............. ${String(m.composedRenderedChars)} chars`,
+        `    panel scroll / client height .. ${String(m.panelScrollHeight)} / ${String(m.panelClientHeight)}`,
+        `    panel scroll / client width ... ${String(m.panelScrollWidth)} / ${String(m.panelClientWidth)}`,
+        "",
+      ].join("\n"),
+    );
+  }, 300_000);
+
+  afterAll(async () => {
+    if (scanBrowser !== null) await scanBrowser.close();
+    if (scanServer !== null) scanServer.close();
+    rmSync(SCAN_HARNESS.dir, { recursive: true, force: true });
+  });
+
+  /** Every assertion goes through here, so a startup failure FAILS with the
+   *  capability named rather than skipping or throwing `undefined`. */
+  function scanMeasured(): ScanMeasurements {
+    if (scanStartupFailure !== null) throw new Error(scanStartupFailure);
+    if (scanMeasurements === null) {
+      throw new Error(
+        "the scan browser run produced no measurements — see the startup " +
+          "output. This block never skips: a backstop row with no executed " +
+          "evidence resolves to needing a human, never to a silent pass.",
+      );
+    }
+    return scanMeasurements;
+  }
+
+  it("actually rendered the strip and the clause — non-vacuity first", () => {
+    const m = scanMeasured();
+    // A run that rendered an empty panel would satisfy every bound below.
+    expect(m.stripCells).toBe(4);
+    expect(m.emptyClauseStripHeight).toBeGreaterThan(0);
+    expect(m.hostileClauseChars).toBeGreaterThan(1_000_000);
+    expect(m.composedRenderedChars).toBeGreaterThan(0);
+  });
+
+  it("renders the strip at exactly the same height under a multi-megabyte clause", () => {
+    // THE ASSERTION jsdom CANNOT MAKE, and the one the backstop row asks for.
+    // A strip whose height is decided by its content is a strip that reflows
+    // everything below it the first time a counter passes a million — and this
+    // one is on screen for hours.
+    const m = scanMeasured();
+    expect(m.hostileClauseStripHeight).toBe(m.emptyClauseStripHeight);
+    expect(m.emptyClauseStripHeight).toBe(SCAN_STRIP_HEIGHT_PX);
+    // And returning from the form state does not change it either.
+    expect([...new Set(m.formStripHeights)]).toEqual([SCAN_STRIP_HEIGHT_PX]);
+  });
+
+  it("makes the PANEL'S OWN COLUMN scroll rather than growing the strip", () => {
+    const m = scanMeasured();
+    // The clause is capped at the cell cap and wraps inside its own `break-all`
+    // element, so the content is taller than the column — which is exactly what
+    // `overflow-y-auto` on the panel is for.
+    expect(m.panelScrollHeight).toBeGreaterThan(m.panelClientHeight);
+  });
+
+  it("never widens the panel — the clause wraps inside its own element", () => {
+    // A HORIZONTAL scrollbar would mean the clause pushed the column wider,
+    // which is the layout break the `break-all` class exists to prevent. One
+    // pixel of tolerance for sub-pixel rounding; anything real is thousands.
+    const m = scanMeasured();
+    expect(m.panelScrollWidth).toBeLessThanOrEqual(m.panelClientWidth + 1);
+  });
+
+  it("truncates the composed filter at the shipped cell cap", () => {
+    // GRAPHEMES on the engine side, characters here — the browser is counting
+    // what is actually in the DOM. The bound is generous by one order of
+    // magnitude against the cap because a grapheme may be several characters;
+    // what it rules out is the whole four megabytes reaching the page.
+    const m = scanMeasured();
+    expect(m.composedRenderedChars).toBeLessThan(TABLE_CELL_MAX_GRAPHEMES * 10);
+    expect(m.composedRenderedChars).toBeLessThan(m.hostileClauseChars);
   });
 });
