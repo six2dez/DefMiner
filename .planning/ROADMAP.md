@@ -488,14 +488,44 @@ Plans:
   5. Reconstructed sources are themselves analysed once per content hash, and the FP corpora are extended to include reconstructed source as an input class
   6. Reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest
 
-**Plans**: 4 plans
+**Plans**: 9 plans in 8 waves
+
+*The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-09 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
 
 Plans:
 
-- [ ] 07-01: Map discovery — `sourceMappingURL`, data URIs, `SourceMap` headers, relative resolution
-- [ ] 07-02: `sourcesContent` reconstruction and content-addressed safe writing
-- [ ] 07-03: Hostile-map fixture suite across three platforms
-- [ ] 07-04: Recursive analysis of reconstructed sources, corpus extension, source viewer, manifest export
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — The measurement and the fixtures: the O-03 probe on a version-pinned Caido 0.58.0, `MAP_MAX_BYTES` and three derived constants, and one tracked fixture module three plans read (MAP-01, MAP-02, MAP-05)
+
+**Wave 2** *(blocked on Wave 1 — both consume its constants and its fixtures)*
+
+- [ ] 07-02-PLAN.md — The engine parser: bounded `lastIndexOf` announcement scan, base64 decode, `JSON.parse`, and the whole MAP-05 hostile matrix, SDK-free on Node (MAP-01, MAP-02, MAP-05)
+- [ ] 07-03-PLAN.md — The two capability bans: the D-16 codec relocation and D-17's package-level codec gate, plus D-12's `sources`-never-reaches-a-path-sink gate (MAP-03, MAP-04)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 07-04-PLAN.md — Store: migration `v: 8`, the `sources` / `source_sightings` tables behind a **blocking-human one-way checkpoint** on `EXPECTED_TABLES`, the third closed vocabulary, and the paged read (MAP-02, MAP-06)
+
+**Wave 4** *(blocked on Wave 3 — shares `consumer.ts` and `thresholds.ts`)*
+
+- [ ] 07-05-PLAN.md — The consumer stage: D-08 inside `analyseAndFinish` (not `visit`, which cannot await), D-03's counters, O-05's sibling refusal vocabulary, D-13's depth-1 bound, and Pitfall 2's retention-convergence fix (MAP-01, MAP-02, MAP-06)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 07-06-PLAN.md — The RPCs: `deriveSource` with D-24's fail-closed re-verify and D-23's sticky tombstone write, the lazy `mappings` read, and the manifest's third `EXPORT_COLUMNS` entry (MAP-07, UI-05)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 07-07-PLAN.md — Frontend safety primitives: `SOURCE_LINE_MAX_GRAPHEMES`, `forSourceLine()`, the O-08 display-tree normaliser, the third presentation map, and the tree column (UI-05, MAP-04)
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 07-08-PLAN.md — The viewer, the position strip and the drill-down: four body states that cannot be collapsed, O-02's no-line-structure case, R6's content-addressed download name, and O-07's replacement separation mechanism asserted in both directions (UI-05, MAP-03, MAP-04, MAP-07)
+
+**Wave 8** *(blocked on Wave 7)*
+
+- [ ] 07-09-PLAN.md — Close-out: the scoped **Export source manifest** CTA resolving UI-SPEC Named Conflict 1, the D-03 counter surfaced, `05-UI-SPEC.md` amendments A5/A6/A7, and this roadmap entry plus `REQUIREMENTS.md` amended (MAP-07, UI-05)
 
 ### Phase 8: Active Retrieval & Crash Survivability
 
