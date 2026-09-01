@@ -61,10 +61,18 @@ import {
 } from "./components/health-contract";
 import { EVIDENCE_PANEL_HEIGHT_CLASS } from "./components/panel-contract";
 import {
+  dateOnlyText,
   SCAN_HEADING,
+  SCAN_INDICATOR_ID,
+  SCAN_INDICATOR_POSITION_PREFIX,
+  SCAN_INDICATOR_STARTED_PREFIX,
   SCAN_NO_DENOMINATOR_NOTE,
   SCAN_START_CTA,
+  SCAN_STATUS_SCANNING,
+  SCAN_STATUS_SUSPENDED,
 } from "./components/scan-contract";
+import { SCAN_LIFECYCLE_PRESENTATION } from "./components/scan-lifecycle-presentation";
+import { FOCUS_RING_CLASS } from "./components/table-contract";
 
 /**
  * Two rows with DELIBERATELY LOOKALIKE digests.
@@ -183,6 +191,16 @@ type StubOptions = {
   readonly starts?: { readonly operatorFilter: string }[];
   /** The scan history the Scan tab's list reads. */
   readonly history?: readonly ScanHistoryRow[];
+  /**
+   * Fail `getScanStatus` from the Nth call onward.
+   *
+   * THE ONE OPTION THE INDICATOR'S HARDEST CASE NEEDS. A read that fails on the
+   * FIRST call proves nothing — the indicator was never on screen. What must be
+   * asserted is that a read that fails AFTER a success does not remove it,
+   * because removing it is a positive claim that no scan is running and a call
+   * that did not answer is not evidence of that.
+   */
+  readonly scanFailsAfter?: number;
 };
 
 /**
@@ -192,6 +210,33 @@ type StubOptions = {
  * a stub that has to be cast is a stub that stops failing when that surface
  * changes.
  */
+/** One fixed instant, so every date assertion below is a literal a spec can
+ *  pin rather than a value that moves with the clock. */
+const AUG_14 = new Date(2026, 7, 14, 9, 41, 0, 0).getTime();
+
+function scanPayload(over: Partial<ScanStatusPayload> = {}): ScanStatusPayload {
+  return {
+    scanId: "s1",
+    state: "running",
+    suspendReason: null,
+    operatorFilter: "",
+    composedFilter: '(resp.raw.like:"%javascript%")',
+    pagesWalked: 3,
+    seen: 60,
+    admitted: 12,
+    skippedDone: 4,
+    rejected: 44,
+    queued: 12,
+    analysed: null,
+    lastCreatedAt: AUG_14,
+    startedAt: AUG_14,
+    updatedAt: AUG_14,
+    finishedAt: null,
+    heldAtWatermark: false,
+    ...over,
+  };
+}
+
 function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
   const rows = options.artifacts ?? [];
   /**
@@ -208,6 +253,9 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
   const refused = <TValue>(): Promise<TValue> =>
     Promise.reject(new Error("backend refused to run"));
   const refusing = options.onlyCompatAnswers === true;
+  /** How many times the status endpoint has been asked, so a case can fail it
+   *  from the Nth call onward. */
+  let scanReads = 0;
 
   const page = <TRow>(items: readonly TRow[]): Promise<PageResponse<TRow>> =>
     options.reject === true || refusing
@@ -296,10 +344,17 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
               scanId: "s-stub",
             });
       },
-      getScanStatus: () =>
-        refusing
-          ? refused<ScanStatusPayload | null>()
-          : Promise.resolve(options.scan ?? null),
+      getScanStatus: () => {
+        scanReads += 1;
+        if (refusing) return refused<ScanStatusPayload | null>();
+        if (
+          options.scanFailsAfter !== undefined &&
+          scanReads > options.scanFailsAfter
+        ) {
+          return Promise.reject(new Error("backend exploded"));
+        }
+        return Promise.resolve(options.scan ?? null);
+      },
       // The three lifecycle commands. `refused` on a refusing build, exactly
       // like every other endpoint that does not exist there.
       pauseScan: () =>
@@ -1278,5 +1333,196 @@ describe("App — the Scan tab", () => {
 
     expect(wrapper.find("[data-defminer-scan]").exists()).toBe(true);
     expect(wrapper.text()).not.toContain("backend refused to run");
+  });
+
+  // =========================================================================
+  // D-13 — THE TOOLBAR SCAN INDICATOR
+  // =========================================================================
+  //
+  // THE ABSENCE CASES ARE THE ONES A LATER EDIT IS MOST LIKELY TO BREAK, and
+  // they come first for that reason. A `v-if` widened by one state is a chip
+  // that says "no scan running", which is chrome that says nothing and trains
+  // the operator to stop reading the slot — the shipped pill's own argument,
+  // applied one element over.
+
+  it("renders NO indicator for a project with no scan", async () => {
+    const wrapper = mountWith(stubSdk({ scan: null }));
+    await settle(wrapper);
+
+    expect(wrapper.find(`#${SCAN_INDICATOR_ID}`).exists()).toBe(false);
+  });
+
+  it("renders NO indicator before the first status read resolves", () => {
+    // SYNCHRONOUSLY, with no `settle` anywhere above. Its absence during the
+    // first read is indistinguishable from "no scan", which is CORRECT: until
+    // DefMiner knows, it claims nothing. No placeholder chip and no zero count.
+    const wrapper = mountWith(stubSdk({ scan: scanPayload() }));
+
+    expect(wrapper.find(`#${SCAN_INDICATOR_ID}`).exists()).toBe(false);
+    // AND THE SLOT IS NOT HOLDING A PLACEHOLDER. The header carries the title
+    // and the export CTA and nothing else — no chip, no zero count.
+    expect(wrapper.get("header").text()).toBe(`DefMiner${EXPORT_CTA}`);
+  });
+
+  for (const state of ["completed", "discarded"] as const) {
+    it(`renders NO indicator for a ${state} scan`, async () => {
+      const wrapper = mountWith(stubSdk({ scan: scanPayload({ state }) }));
+      await settle(wrapper);
+
+      expect(wrapper.find(`#${SCAN_INDICATOR_ID}`).exists()).toBe(false);
+    });
+  }
+
+  it("renders the indicator for a running scan, with all three parts", async () => {
+    const wrapper = mountWith(stubSdk({ scan: scanPayload({ seen: 8412 }) }));
+    await settle(wrapper);
+
+    const indicator = wrapper.get(`#${SCAN_INDICATOR_ID}`);
+    // A STATE WORD, ONE GROUPED INTEGER AND A DATE — always all three, never a
+    // bare word and never a bare number.
+    expect(indicator.text()).toBe(
+      `${SCAN_STATUS_SCANNING} · 8,412 seen · ${SCAN_INDICATOR_POSITION_PREFIX} ${String(
+        dateOnlyText(AUG_14),
+      )}`,
+    );
+    expect(indicator.attributes("type")).toBe("button");
+  });
+
+  it("renders the indicator for a SUSPENDED scan, in the suspended tone", async () => {
+    // THE LOAD-BEARING CASE. Every non-operator route to suspension produces a
+    // scan the operator did not stop and would otherwise never learn had
+    // stopped.
+    const wrapper = mountWith(
+      stubSdk({
+        scan: scanPayload({
+          state: "suspended",
+          suspendReason: "process_restarted",
+        }),
+      }),
+    );
+    await settle(wrapper);
+
+    const indicator = wrapper.get(`#${SCAN_INDICATOR_ID}`);
+    expect(indicator.text()).toContain(SCAN_STATUS_SUSPENDED);
+    expect(indicator.classes()).toContain(
+      SCAN_LIFECYCLE_PRESENTATION.suspended.toneClass,
+    );
+  });
+
+  it("names the START date, with its own prefix, when the scan has reached no page", async () => {
+    // A SCAN THAT HAS WALKED NOTHING STILL CARRIES THREE THINGS. Dropping the
+    // date would leave a word and a number, which the content rule forbids
+    // outright; printing the start date under the position's prefix would be
+    // the more comfortable lie. Both dates are DefMiner's own facts and the
+    // prefix says which one is on screen.
+    const wrapper = mountWith(
+      stubSdk({ scan: scanPayload({ lastCreatedAt: null }) }),
+    );
+    await settle(wrapper);
+
+    const text = wrapper.get(`#${SCAN_INDICATOR_ID}`).text();
+    expect(text).toContain(
+      `${SCAN_INDICATOR_STARTED_PREFIX} ${String(dateOnlyText(AUG_14))}`,
+    );
+    expect(text).not.toContain(SCAN_INDICATOR_POSITION_PREFIX);
+  });
+
+  it("HOLDS the indicator when a status read fails after a success", async () => {
+    // Removing it is a POSITIVE CLAIM that no scan is running, and a call that
+    // did not answer is not evidence of that — the shipped `loadCompat` rule,
+    // applied to a second surface. The first read succeeds and paints it; every
+    // read after that rejects, and the element must still be there.
+    const wrapper = mountWith(
+      stubSdk({ scan: scanPayload(), scanFailsAfter: 1 }),
+    );
+    await settle(wrapper);
+    expect(wrapper.find(`#${SCAN_INDICATOR_ID}`).exists()).toBe(true);
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Health")[0]
+      .trigger("click");
+    await settle(wrapper);
+
+    expect(wrapper.find(`#${SCAN_INDICATOR_ID}`).exists()).toBe(true);
+    expect(wrapper.get(`#${SCAN_INDICATOR_ID}`).text()).toContain(
+      SCAN_STATUS_SCANNING,
+    );
+  });
+
+  it("switches the active tab to Scan when the indicator is activated", async () => {
+    const wrapper = mountWith(stubSdk({ scan: scanPayload() }));
+    await settle(wrapper);
+
+    await wrapper.get(`#${SCAN_INDICATOR_ID}`).trigger("click");
+    await settle(wrapper);
+
+    // THE BODY ARM FOLLOWED, not only the strip. A tab entry with no arm falls
+    // through to the bare `v-else` and renders Health under a tab labelled
+    // Scan, which the strip alone would not catch.
+    expect(wrapper.find("[data-defminer-scan]").exists()).toBe(true);
+    expect(wrapper.text()).toContain(SCAN_HEADING);
+    const scanTab = wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0];
+    expect(scanTab.attributes("aria-selected")).toBe("true");
+  });
+
+  it("gives the indicator the shipped focus ring and no animation class", async () => {
+    const wrapper = mountWith(stubSdk({ scan: scanPayload() }));
+    await settle(wrapper);
+
+    const classes = wrapper.get(`#${SCAN_INDICATOR_ID}`).classes().join(" ");
+    for (const utility of FOCUS_RING_CLASS.split(" ")) {
+      expect(classes).toContain(utility);
+    }
+    expect(classes).not.toContain("animate-");
+    expect(classes).not.toContain("transition");
+    expect(classes).toContain("whitespace-pre");
+    expect(classes).toContain("shrink-0");
+  });
+
+  it("keeps the export CTA in its shipped slot when a scan starts", async () => {
+    // THE ORDER IS FOUR AND THE EXPORT CTA DOES NOT MOVE. It is the primary
+    // action; an element that displaced it when a scan started would move the
+    // operator's target under them for the duration of a multi-hour backfill.
+    const wrapper = mountWith(stubSdk({ scan: scanPayload() }));
+    await settle(wrapper);
+
+    const header = wrapper.get("header");
+    const ids = header.findAll("button").map((b) => b.attributes("id"));
+    expect(ids).toEqual(["defminer-export-open", SCAN_INDICATOR_ID]);
+    expect(header.get("h1").text()).toBe("DefMiner");
+  });
+
+  it("puts no unbounded and no target-controlled string in the toolbar", async () => {
+    // THE INVARIANT, ASSERTED RATHER THAN WRITTEN DOWN ONLY. The header's whole
+    // text must be reconstructible from DefMiner-authored constants plus the
+    // indicator's own bounded composition — so a future element bound to a
+    // hostname, a clause or a composed filter fails here.
+    const clause = 'req.host.cont:"' + "x".repeat(4096) + '"';
+    const wrapper = mountWith(
+      stubSdk({
+        scan: scanPayload({ operatorFilter: clause, composedFilter: clause }),
+      }),
+    );
+    await settle(wrapper);
+
+    const header = wrapper.get("header");
+    expect(header.text()).not.toContain("xxxxxxxx");
+    expect(header.text()).toBe(
+      `DefMiner${EXPORT_CTA}${wrapper.get(`#${SCAN_INDICATOR_ID}`).text()}`,
+    );
+    // AND NO ATTRIBUTE SINK ANYWHERE IN THE ROW.
+    for (const node of [
+      header.element,
+      ...header.element.querySelectorAll("*"),
+    ]) {
+      expect(node.hasAttribute("title")).toBe(false);
+      for (const attribute of [...node.attributes]) {
+        if (!String(attribute.name).startsWith("data-")) continue;
+        expect(String(attribute.value)).not.toContain("xxxx");
+      }
+    }
   });
 });

@@ -56,8 +56,17 @@ import { EXPORT_CTA } from "./components/export-contract";
 import ExportDialog from "./components/ExportDialog.vue";
 import HealthPanel from "./components/HealthPanel.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
+import type { ScanIndicator } from "./components/scan-contract";
+import {
+  SCAN_INDICATOR_ID,
+  scanIndicatorText,
+  scanIndicatorVisible,
+} from "./components/scan-contract";
+import type { ScanLifecyclePresentation } from "./components/scan-lifecycle-presentation";
+import { SCAN_LIFECYCLE_PRESENTATION } from "./components/scan-lifecycle-presentation";
 import ScanPanel from "./components/ScanPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import { FOCUS_RING_CLASS } from "./components/table-contract";
 import type { InvalidationCoalescer } from "./stores/coalescer";
 import { createCoalescer } from "./stores/coalescer";
 import type {
@@ -730,6 +739,125 @@ function subscribeScanProgress(
 }
 
 // ---------------------------------------------------------------------------
+// FIND-04 / D-13 — THE TOOLBAR SCAN INDICATOR
+// ---------------------------------------------------------------------------
+//
+// ===========================================================================
+// THE TOOLBAR'S FIRST STATEFUL ELEMENT, AND ITS LOAD-BEARING CASE IS
+// `suspended` RATHER THAN `running`
+// ===========================================================================
+// A running scan is a job the operator started and is watching. A SUSPENDED one
+// is the case this element exists for: every non-operator route to suspension —
+// an epoch change (D-04), a restart (D-11), a retention eviction (D-08) —
+// produces a scan the operator DID NOT STOP and would otherwise never learn had
+// stopped. A suspended scan invisible from four of five tabs is exactly the
+// frozen-looking page D-13 exists to prevent, one level up, and its row in the
+// history IS its resumable cursor.
+//
+// ===========================================================================
+// WHY THIS LIVES HERE AND NOT IN `ScanPanel`
+// ===========================================================================
+// `ScanPanel` is mounted only while the Scan tab is active, so a readout it
+// owned would be invisible from the four tabs the indicator exists to be
+// visible from. This component owns the toolbar, so it owns this read.
+//
+// IT IS READ ON MOUNT AND AGAIN ON EVERY TAB CHANGE, and refreshed in between
+// by the progress channel. Moving between tabs is exactly when the operator
+// asks the toolbar a question, so it is the honest moment to have asked the
+// backend one. There is no timer: a poll on a surface with no denominator is
+// the fabricated-motion shape D-14 refused, one level down.
+
+const scanIndicator = ref<ScanIndicator | null>(null);
+
+/**
+ * Read the indicator's state.
+ *
+ * ON A FAILED READ IT RETURNS WITHOUT TOUCHING THE STATE, AND THAT IS THE WHOLE
+ * RULE. Removing the indicator would be a POSITIVE CLAIM that no scan is
+ * running, and a call that did not answer is not evidence of that — the rule
+ * {@link loadCompat} already states in its own comment one function below, and
+ * the shipped `05` behaviour applied to a second surface. The failure is stated
+ * IN WORDS on the Scan tab, which is where there is room to say it.
+ *
+ * A SUCCESSFUL READ OF `null` DOES clear it, because that IS evidence: the
+ * backend answered, and its answer is that this project has no active scan.
+ */
+async function readScanIndicator(): Promise<void> {
+  const result = await loadScan();
+  if (!result.ok) return;
+  const payload = result.value;
+  scanIndicator.value =
+    payload === null
+      ? null
+      : {
+          state: payload.state,
+          seen: payload.seen,
+          lastCreatedAt: payload.lastCreatedAt,
+          startedAt: payload.startedAt,
+        };
+}
+
+/**
+ * The tab strip's click handler.
+ *
+ * IT DOES TWO THINGS AND THE SECOND ONE IS NOT INCIDENTAL. Switching tabs is
+ * the moment the operator's attention crosses the toolbar, so it is the moment
+ * the toolbar's one stateful element should have been asked. Written as a
+ * function rather than left as an inline assignment so that "what happens on a
+ * tab change" has one answer a spec can drive.
+ */
+function selectTab(tab: TabId): void {
+  activeTab.value = tab;
+  void readScanIndicator();
+}
+
+/**
+ * THE INDICATOR DOES NOT SUBSCRIBE TO THE PROGRESS CHANNEL, AND THE REASON IS
+ * WORTH THE PARAGRAPH.
+ *
+ * A second `onEvent` subscription owned by the shell would be research P-04's
+ * leak shape opened one more time, for an element that RENDERS NO MOTION: the
+ * indicator's job is that a running or suspended scan is VISIBLE AND REACHABLE
+ * from every tab, not that its counter ticks in a slot nobody is watching.
+ * Nothing here animates, so a live feed would buy a number that changes where
+ * no eye is, and the Scan tab — one click away, through this very element — is
+ * the live surface.
+ *
+ * WHAT IT DOES INSTEAD is re-read on mount and on every tab change, which is
+ * the moment the operator's attention actually crosses the toolbar. There is no
+ * timer: a poll on a surface with no denominator is the fabricated-motion shape
+ * D-14 refused, one level down.
+ */
+onMounted(() => {
+  void readScanIndicator();
+});
+
+/** Whether the indicator is on screen at all. The rule is the contract
+ *  module's, not a `v-if` somebody can shorten — see `scanIndicatorVisible`. */
+const showScanIndicator = computed<boolean>(() =>
+  scanIndicatorVisible(scanIndicator.value),
+);
+
+/** The word and its tone, from the ONE lifecycle map. Both ride the SAME
+ *  element in the template, so the colour and the word cannot diverge. */
+const scanIndicatorPresentation = computed<ScanLifecyclePresentation | null>(
+  () =>
+    scanIndicator.value === null
+      ? null
+      : SCAN_LIFECYCLE_PRESENTATION[scanIndicator.value.state],
+);
+
+/** A state word, one grouped integer and a date — always all three. */
+const scanIndicatorLabel = computed<string>(() =>
+  scanIndicator.value === null || scanIndicatorPresentation.value === null
+    ? ""
+    : scanIndicatorText(
+        scanIndicatorPresentation.value.label,
+        scanIndicator.value,
+      ),
+);
+
+// ---------------------------------------------------------------------------
 // COMPAT-01 — THE VISIBLE REFUSAL SURFACE
 // ---------------------------------------------------------------------------
 //
@@ -790,6 +918,56 @@ async function loadCompat(): Promise<void> {
         {{ EXPORT_CTA }}
       </button>
 
+      <!-- D-13's SCAN INDICATOR — THE TOOLBAR'S FIRST STATEFUL ELEMENT, and
+           the FOURTH of four. Export keeps its shipped slot above: it is the
+           primary CTA and must not move when a scan starts. The pill stays
+           below because it is the most transient.
+
+           ===============================================================
+           THE TOOLBAR INVARIANT, WRITTEN HERE BECAUSE THIS ROW IS WHERE IT
+           COULD BE BROKEN
+           ===============================================================
+           NO UNBOUNDED STRING AND NO TARGET-CONTROLLED STRING MAY EVER BE
+           ADDED TO THIS ROW, IN ANY ELEMENT. That is a RENDERING-SAFETY
+           invariant and not a layout preference. This header is a single
+           non-wrapping row at a fixed 48px: it does not wrap, it does not
+           scroll, and it cannot truncate without hiding an element whose
+           whole job is to be seen. So the bound is enforced by THE SHAPE OF
+           WHAT IS IN IT rather than by a truncation policy — a fixed title,
+           a fixed CTA label, a fixed pill sentence with a grouped integer,
+           and this indicator: a state word from a four-member closed set,
+           one grouped integer, and a fixed-format date. There is no field
+           on `ScanIndicator` a hostname, a clause or a composed filter
+           could arrive on, which is what makes the invariant checkable
+           rather than remembered.
+
+           IT CONTRIBUTES NO HEIGHT. The class signature is the export
+           button's and the pill's, so the 48px comes entirely from the
+           header's own `h-12`. `whitespace-pre` and `shrink-0`: it never
+           wraps and never shrinks.
+
+           NOTHING ANIMATES. No pulse, no spinner, no transition. This
+           element may be on screen for hours and motion that carries no
+           information is the fabricated-progress shape D-14 refused. No
+           icon either, per the no-icon rule and the absent icon library.
+
+           IT IS A REAL BUTTON AND IT SWITCHES TABS, through the same
+           mechanism the shipped Health route uses. A readout the operator
+           cannot act on ends the sentence one word early. -->
+      <button
+        v-if="showScanIndicator && scanIndicatorPresentation !== null"
+        :id="SCAN_INDICATOR_ID"
+        type="button"
+        :class="[
+          FOCUS_RING_CLASS,
+          scanIndicatorPresentation.toneClass,
+          'ml-4 shrink-0 whitespace-pre border border-surface-600 px-2 py-1 text-xs font-semibold',
+        ]"
+        @click="selectTab('scan')"
+      >
+        {{ scanIndicatorLabel }}
+      </button>
+
       <!-- The coalescing pill slot. It renders ONLY when there is something
            pending: a pill reading "0 new" is chrome that says nothing and
            trains the operator to stop reading it. -->
@@ -827,7 +1005,7 @@ async function loadCompat(): Promise<void> {
             ? 'border-primary-500 text-primary-500'
             : 'border-surface-600 text-surface-400'
         "
-        @click="activeTab = tab.id"
+        @click="selectTab(tab.id)"
       >
         {{ tab.label }}
       </button>
