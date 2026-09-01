@@ -336,13 +336,18 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v6 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v7 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
-    // the literal 6 rather than against `MIGRATIONS.length`: a step number that
+    // the literal 7 rather than against `MIGRATIONS.length`: a step number that
     // silently skipped or repeated would satisfy a length comparison.
-    expect(SCHEMA_VERSION).toBe(6);
-    for (const v of [3, 4, 5, 6]) {
+    //
+    // WAS 6. The `audit` rebuild is now TWO steps — v6 creates and copies, v7
+    // swaps — because a `BEGIN`-less multi-statement `exec` is a sequence and
+    // not an atomic unit, so the drop had to move behind a durable
+    // `user_version` boundary from the copy.
+    expect(SCHEMA_VERSION).toBe(7);
+    for (const v of [3, 4, 5, 6, 7]) {
       expect(
         MIGRATIONS.find((m) => m.v === v),
         `step v${String(v)} is missing`,
@@ -370,6 +375,182 @@ describe("forward-only migration ladder (STORE-05)", () => {
       "CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed'))",
     );
     expect(v3).not.toContain("scan_discarded");
+  });
+
+  // =========================================================================
+  // THE `audit` REBUILD, AND THE THREE STATES IT MUST SURVIVE
+  // =========================================================================
+  //
+  // The rebuild is TWO steps — one creates and copies, one swaps — because a
+  // `BEGIN`-less multi-statement `exec` is a SEQUENCE and not an atomic unit.
+  // SPIKE-09 measured atomicity on a batch that CONTAINED an explicit
+  // `BEGIN … COMMIT`; neither half here contains one, so each statement commits
+  // on its own and the ladder's only durable boundary is `user_version`.
+  //
+  // These three cases are the whole safety argument, executed rather than
+  // asserted in prose: the rows survive the ordinary path, the swap recovers
+  // from an interruption BEFORE the rename, and the swap survives a re-entry
+  // AFTER the rename. The step that finds the swap is located by its SQL rather
+  // than by a literal version, so splitting or renumbering the rebuild again
+  // does not quietly stop testing it.
+
+  /** The step that drops `audit` — the destructive half of the rebuild. */
+  function swapStep() {
+    const swap = MIGRATIONS.find((m) =>
+      /DROP\s+TABLE\s+IF\s+EXISTS\s+audit\b/i.test(m.sql),
+    );
+    expect(
+      swap,
+      "no step drops `audit` — the rebuild's swap half is missing",
+    ).toBeDefined();
+    return swap as (typeof MIGRATIONS)[number];
+  }
+
+  it("the rebuild carries EVERY audit row across, in every project, with every column intact", async () => {
+    // `INSERT OR IGNORE`'s failure mode is a SKIPPED ROW, not an error: a copy
+    // that dropped rows would migrate cleanly, report `ok`, and leave a shorter
+    // ledger than it found — in the one table whose whole value is that nothing
+    // is ever removed from it. This is the assertion step v6's JSDoc calls "the
+    // only thing standing between a silent skip and a green run", and until now
+    // it was described but never written: `seedAudit`, `readAudit`,
+    // `applyThroughV5` and `indexNames` were all defined and none was called.
+    const fx = createFixtureDb();
+    try {
+      applyThroughV5(fx);
+      seedAudit(fx);
+      const before = readAudit(fx);
+      // Two projects × seven shipped kinds. Non-vacuity: a seed that inserted
+      // nothing would make every comparison below trivially true.
+      expect(before).toHaveLength(SHIPPED_AUDIT_KINDS.length * 2);
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+
+      // EVERY COLUMN OF EVERY ROW, compared whole — including the NULL `detail`
+      // one row per project carries, which a defaulted NULL would imitate.
+      expect(readAudit(fx)).toEqual(before);
+      expect(listTables(fx.raw)).toContain("audit");
+      // The scaffolding name is GONE, not left beside the table it replaced.
+      expect(listTables(fx.raw)).not.toContain("audit_v6");
+      // SQLite drops a table's indexes with the table, so step v3's index went
+      // with the drop and the swap has to put it back.
+      expect(indexNames(fx)).toContain("idx_audit_at");
+
+      // The vocabulary is WIDENED and still CLOSED — the point of the rebuild,
+      // asserted against the database rather than against the DDL text.
+      const insert = fx.raw.prepare(
+        `INSERT INTO audit (project_id, event_id, at, kind, subject, detail)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      expect(() =>
+        insert.run(
+          "proj-alpha",
+          "evt-new",
+          1_700_000_100_000,
+          "scan_discarded",
+          "s1",
+          null,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        insert.run(
+          "proj-alpha",
+          "evt-bad",
+          1_700_000_100_001,
+          "not_a_kind",
+          "s1",
+          null,
+        ),
+      ).toThrow();
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("the SWAP step recovers a database interrupted AFTER the drop — the ladder still advances", async () => {
+    // THE FAILURE THIS TEST EXISTS FOR. Killed between `DROP TABLE IF EXISTS
+    // audit` and `ALTER TABLE audit_v6 RENAME TO audit`, a database holds no
+    // `audit`, an `audit_v6` with every row, and a `user_version` below the
+    // step. With the rebuild as ONE step there is no such state to construct —
+    // the copy and the drop are in the same blob, so the pre-state assertions
+    // below cannot be met — and re-running that blob fails at
+    // `... SELECT ... FROM audit` with `no such table: audit`, which stops the
+    // ladder at this step FOR EVERY SUBSEQUENT BOOT. `index.ts` only logs
+    // `MIGRATION INCOMPLETE`, so the plugin then runs on for ever against a
+    // database with no audit table.
+    const swap = swapStep();
+    const fx = createFixtureDb();
+    try {
+      applyThroughV5(fx);
+      seedAudit(fx);
+      const before = readAudit(fx);
+
+      // Every step BELOW the swap, applied by hand — the copy has run.
+      for (const m of MIGRATIONS) {
+        if (m.v <= 5 || m.v >= swap.v) continue;
+        fx.raw.exec(m.sql);
+      }
+      fx.raw.exec(`PRAGMA user_version = ${String(swap.v - 1)}`);
+
+      // THE INTERRUPTION. Bare `DROP TABLE`, deliberately: this is the crash
+      // being simulated, not a statement the ladder runs.
+      fx.raw.exec("DROP TABLE audit");
+      expect(
+        listTables(fx.raw),
+        "the copy target must hold the rows before the drop is simulated — " +
+          "a rebuild whose copy and drop share one step cannot reach this state",
+      ).toContain("audit_v6");
+      expect(listTables(fx.raw)).not.toContain("audit");
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(report.version).toBe(SCHEMA_VERSION);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+
+      // Not one row lost to the interruption.
+      expect(readAudit(fx)).toEqual(before);
+      expect(listTables(fx.raw)).not.toContain("audit_v6");
+      expect(indexNames(fx)).toContain("idx_audit_at");
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("the SWAP step is re-runnable AFTER it fully applied — a re-entry must not drop the ledger", async () => {
+    // The other side of the same boundary: the swap's `exec` succeeded and the
+    // `PRAGMA user_version` `exec` did not, so the next boot re-runs a step that
+    // is already done. `audit` is the NEW table holding every row and `audit_v6`
+    // is gone.
+    //
+    // A SWAP WRITTEN AS DROP + RENAME ALONE WOULD DESTROY THE LEDGER HERE: the
+    // drop would take the renamed `audit`, and the rename would then fail on a
+    // source that no longer exists. The step survives only because it re-creates
+    // `audit_v6` and copies BACK into it before dropping anything — which is
+    // easy to "simplify" away, and this case is what stops that.
+    const swap = swapStep();
+    const fx = createFixtureDb();
+    try {
+      applyThroughV5(fx);
+      seedAudit(fx);
+      const before = readAudit(fx);
+
+      const first = await migrate(fx.db);
+      expect(first.ok, JSON.stringify(first.steps)).toBe(true);
+      expect(listTables(fx.raw)).not.toContain("audit_v6");
+
+      // Rewind ONLY the version. The schema is fully swapped; the bump was lost.
+      fx.raw.exec(`PRAGMA user_version = ${String(swap.v - 1)}`);
+
+      const again = await migrate(fx.db);
+      expect(again.ok, JSON.stringify(again.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+      expect(readAudit(fx)).toEqual(before);
+      expect(listTables(fx.raw)).not.toContain("audit_v6");
+      expect(indexNames(fx)).toContain("idx_audit_at");
+    } finally {
+      fx.close();
+    }
   });
 
   it("step v5's DDL is a COMPLETE LITERAL — no column arrives by computation", () => {

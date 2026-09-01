@@ -18,12 +18,17 @@
 // ordinary index and one PARTIAL UNIQUE index that makes the one-scan-per-project
 // invariant a driver-level failure rather than a read-then-write this pool cannot
 // make atomic.
-// Step v6 (plan 06-06) REBUILDS `audit` to widen its closed `kind` CHECK by two
-// members, approved at that plan's blocking-human checkpoint (2026-08-31).
+// Steps v6 and v7 (plan 06-06) REBUILD `audit` to widen its closed `kind` CHECK
+// by two members, approved at that plan's blocking-human checkpoint (2026-08-31).
 // SQLite has no `ALTER TABLE ... DROP CONSTRAINT`, so a closed CHECK can only be
 // changed by replacing the table that carries it — step v3 is NOT edited, and the
-// approved table set does not grow: the replacement is renamed onto `audit`
-// inside the step.
+// approved table set does not grow: the replacement is renamed onto `audit`.
+// THE REBUILD IS TWO STEPS AND NOT ONE. v6 creates the replacement and copies
+// into it; v7 swaps the names. A `BEGIN`-less multi-statement `exec` is a
+// SEQUENCE and not an atomic unit — the correction is argued at length on step
+// v6's JSDoc — so the drop is put behind a durable `user_version` boundary from
+// the copy, and each half is re-runnable from every state its own interruption
+// can leave behind.
 
 import type { Database } from "sqlite";
 
@@ -422,6 +427,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
    * Step v6 — plan 06-06. `audit`'s closed `kind` CHECK, widened by REBUILDING
    * the table, so a scan can record the two things it does that cannot be undone.
    *
+   * THE CREATE-AND-COPY HALF. The swap that finishes the rebuild is step v7, and
+   * the reason the rebuild is two steps rather than one blob is argued below
+   * under "WHY THE REBUILD IS TWO STEPS". This JSDoc carries the DESIGN argument
+   * for the whole rebuild; v7's carries the per-state recovery argument for the
+   * half that drops and renames.
+   *
    * APPROVED AT A BLOCKING-HUMAN CHECKPOINT (approve-as-specified with the gate
    * blind spot recorded, 2026-08-31). One-way, and accepted as one-way: rows
    * already written cannot be re-kinded, and a member added to the vocabulary
@@ -456,22 +467,76 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
    * writes the first and `suspendForRetentionEviction` writes the second.
    *
    * -------------------------------------------------------------------------
-   * WHY EACH OF THE FIVE STATEMENTS CANNOT FAIL
+   * WHY THE REBUILD IS TWO STEPS, AND WHAT SPIKE-09 ACTUALLY MEASURED
+   * -------------------------------------------------------------------------
+   * THIS SECTION IS A CORRECTION, AND THE CLAIM IT REPLACES IS WRITTEN OUT SO
+   * THE NEXT READER CAN SEE WHICH ARGUMENT WAS WRONG. It used to read: "what
+   * keeps a PARTIAL rebuild from existing at all — `audit` dropped, `audit_v6`
+   * still holding the rows, nothing to copy from on the next boot — is
+   * MULTISTATEMENT_EXEC_ATOMIC: a single `exec` string is one atomic unit, so
+   * the five statements land together or not at all." That overstated its
+   * evidence, and the overstatement is what let five statements be written as
+   * one blob.
+   *
+   * WHAT SPIKE-09 MEASURED (`00-GO-NO-GO.md:362`) is narrower than the name
+   * MULTISTATEMENT_EXEC_ATOMIC suggests: a single `exec` containing an EXPLICIT
+   * `BEGIN`, three good inserts, a UNIQUE-violating insert and a `COMMIT` left
+   * ZERO rows when counted from a fresh connection pool after a plugin restart.
+   * What that establishes is that an explicit transaction INSIDE one `exec` is
+   * honoured — not that a `BEGIN`-less batch is one unit. A batch with no
+   * transaction runs each statement in its own implicit one, and SQLite's
+   * journal spans a statement, not a batch. So a `BEGIN`-less five-statement
+   * rebuild is a SEQUENCE, and a process killed between `DROP TABLE IF EXISTS
+   * audit` and `ALTER TABLE audit_v6 RENAME TO audit` leaves exactly the state
+   * the old paragraph called impossible: no `audit`, an `audit_v6` holding every
+   * row, and `user_version` still below the step. Every later boot then re-runs
+   * the step, fails at `... SELECT ... FROM audit` with `no such table: audit`,
+   * and the ladder never advances again.
+   *
+   * ADDING `BEGIN … COMMIT` IS NOT THE FIX TAKEN, and not for taste: the file
+   * header's Pitfall 1 note records that a failing `exec` strands an open write
+   * transaction on a pooled connection nothing in the plugin API can reach, and
+   * putting a poisonable write transaction on the BOOT path is the one place
+   * that is least recoverable. This project's standing rule is also that `BEGIN`
+   * does not span `exec` calls and fails silently on this driver.
+   *
+   * WHAT MAKES THE REBUILD SAFE IS THE SPLIT. The rebuild is two steps, and
+   * `user_version` — which SPIKE-09 DID measure as surviving across `exec` calls
+   * and a connection switch — is the only durable thing between them. Each step
+   * is re-runnable from EVERY state its own interruption can leave behind, which
+   * is the property that replaces the atomicity claim:
+   *
+   *   step v6 — CREATE `audit_v6`, COPY into it. It never drops anything, so
+   *     `audit` is still there on every re-entry and the copy always has its
+   *     source. An interruption costs a repeated `INSERT OR IGNORE`.
+   *   step v7 — SWAP. It re-creates BOTH names under `IF NOT EXISTS` and copies
+   *     again BEFORE it drops, so it converges from the two states its own
+   *     interruption can produce as well as from the normal one. The per-state
+   *     argument is on step v7's own JSDoc, beside the SQL it describes.
+   *
+   * The per-statement "cannot fail" argument below is UNCHANGED and still
+   * required — it is what keeps a failure from stranding that open write
+   * transaction. It was never the half that ruled out a partial rebuild, and the
+   * old paragraph's mistake was to think a second half had been supplied.
+   *
+   * -------------------------------------------------------------------------
+   * WHY EACH STATEMENT IN EITHER STEP CANNOT FAIL
    * -------------------------------------------------------------------------
    * The header above states the property a batched `exec` depends on: not that
    * every statement says `IF NOT EXISTS`, but that no statement in it can fail.
    * `IF NOT EXISTS` is the usual way of getting that; here the argument is made
-   * one statement at a time, because three of the five have no such guard.
+   * one statement at a time, because the copy has no such guard.
    *
    *   1. `CREATE TABLE IF NOT EXISTS audit_v6 (...)` — the guard makes a second
    *      application a no-op.
    *   2. `INSERT OR IGNORE INTO audit_v6 (...) SELECT ... FROM audit` — the
-   *      source exists, because step v3 creates it and the ladder is ordered; the
-   *      destination exists, because statement 1 just created it; and every row
-   *      satisfies the destination's constraints, because the widened CHECK is a
-   *      strict SUPERSET of the shipped one and no other column constraint moved.
-   *      `OR IGNORE` turns any conflict into a skipped row, so a re-run over rows
-   *      already copied writes nothing and raises nothing.
+   *      source exists, because step v3 creates it and the ladder is ordered (and
+   *      in step v7, because that step re-creates the name under `IF NOT EXISTS`
+   *      first); the destination exists, because statement 1 just created it; and
+   *      every row satisfies the destination's constraints, because the widened
+   *      CHECK is a strict SUPERSET of the shipped one and no other column
+   *      constraint moved. `OR IGNORE` turns any conflict into a skipped row, so
+   *      a re-run over rows already copied writes nothing and raises nothing.
    *   3. `DROP TABLE IF EXISTS audit` — the guard makes an absent target a no-op.
    *   4. `ALTER TABLE audit_v6 RENAME TO audit` — cannot fail ONLY because
    *      statement 3 just freed the name. This is the one statement whose safety
@@ -483,16 +548,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
    *      a table's indexes with the table, so step v3's index went with statement
    *      3 and `listAudit`'s `ORDER BY at DESC, event_id DESC` would silently lose
    *      the index its leading column matches.
-   *
-   * AND THE SECOND HALF, WHICH THE FIVE ARGUMENTS ABOVE DO NOT SUPPLY.
-   * Per-statement "cannot fail" is what keeps a failure from stranding an open
-   * write transaction on an unreachable pooled connection. What keeps a PARTIAL
-   * rebuild from existing at all — `audit` dropped, `audit_v6` still holding the
-   * rows, nothing to copy from on the next boot — is MULTISTATEMENT_EXEC_ATOMIC:
-   * a single `exec` string is one atomic unit, so the five statements land
-   * together or not at all, and a process killed mid-`exec` is rolled back by
-   * SQLite's own journal. Both halves are needed. Only one of them used to be
-   * written down.
    *
    * -------------------------------------------------------------------------
    * WHY STEP v2's REBUILD OBJECTION DOES NOT REACH THIS CASE
@@ -534,8 +589,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
    *     `(project_id, event_id)` is carried by every row being copied, so
    *     `OR IGNORE` is genuinely idempotent: re-copying a row that is already
    *     there is a skip, not a duplicate and not an error.
-   *   - "no transaction to undo a partial write" — MULTISTATEMENT_EXEC_ATOMIC,
-   *     argued above.
+   *   - "no transaction to undo a partial write" — TRUE, and CONCEDED rather
+   *     than answered. There is no transaction here, and this ground used to be
+   *     waved off with MULTISTATEMENT_EXEC_ATOMIC, which does not cover a
+   *     `BEGIN`-less batch. What answers it instead is that no partial write of
+   *     this copy needs undoing: `INSERT OR IGNORE` into a table keyed on the
+   *     same natural key is convergent, so a half-finished copy is completed by
+   *     re-running it, and the DROP that would make the copy unrepeatable lives
+   *     in a LATER step that re-copies before it drops. Recovery by re-run,
+   *     not by rollback.
    *
    * AND THE ABSENT `project_id` PREDICATE IS THE POINT, not the leak the scoping
    * rule normally catches. `sdk.meta.db()` is ONE database for every project
@@ -568,6 +630,90 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scans_one_running
     v: 6,
     sql: `
 CREATE TABLE IF NOT EXISTS audit_v6 (
+  project_id TEXT    NOT NULL CHECK (length(project_id) > 0),
+  event_id   TEXT    NOT NULL CHECK (length(event_id) > 0),
+  at         INTEGER NOT NULL,
+  kind       TEXT    NOT NULL CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed', 'scan_discarded', 'scan_suspended_by_retention')),
+  subject    TEXT    NOT NULL,
+  detail     TEXT,
+  PRIMARY KEY (project_id, event_id)
+);
+INSERT OR IGNORE INTO audit_v6 (project_id, event_id, at, kind, subject, detail)
+  SELECT project_id, event_id, at, kind, subject, detail FROM audit;
+`,
+  },
+  /**
+   * Step v7 — the SWAP half of plan 06-06's `audit` rebuild.
+   *
+   * -------------------------------------------------------------------------
+   * WHY THIS IS A SEPARATE STEP AT ALL
+   * -------------------------------------------------------------------------
+   * Because a `BEGIN`-less `exec` is a SEQUENCE, not a unit — argued in full on
+   * step v6's JSDoc, under "WHY THE REBUILD IS TWO STEPS". The five statements
+   * used to be one blob whose safety rested on a reading of
+   * MULTISTATEMENT_EXEC_ATOMIC that SPIKE-09's measurement does not support.
+   * Splitting them puts a durable `user_version` between the copy and the drop,
+   * and turns "this cannot be interrupted" into "every interruption converges".
+   *
+   * THIS SPLIT IS NOT AN EDIT TO A SHIPPED STEP. Step v6 was authored in THIS
+   * PHASE (commit `2bc96cf`, plan 06-06) and DefMiner has no release tag — no
+   * database anywhere has run the five-statement form, so v6 could be narrowed
+   * rather than only appended to. Verified from the git history rather than
+   * assumed. Had v6 shipped, the drop-and-rename would have had to arrive as v7
+   * with v6 left byte-identical, which is very nearly this same shape.
+   *
+   * -------------------------------------------------------------------------
+   * THE THREE STATES THIS STEP MUST CONVERGE FROM
+   * -------------------------------------------------------------------------
+   * `user_version` is bumped in a SEPARATE `exec`, so this step is re-entered
+   * from any point its own interruption can reach, INCLUDING from full success.
+   * There are exactly three reachable states, and the statement order below is
+   * chosen so that all three land in the same place with every row intact:
+   *
+   *   (a) NORMAL — `audit` (old shape, rows) and `audit_v6` (the copy) both
+   *       present. Statements 1 and 2 are no-ops, the copy re-copies nothing,
+   *       the drop frees the name, the rename lands.
+   *   (b) INTERRUPTED AFTER THE DROP — no `audit`, `audit_v6` holding every row.
+   *       This is the state the old blob could not recover from, and statement 2
+   *       is what makes it recoverable: it re-creates an EMPTY `audit` purely so
+   *       statement 3 has a source. That table is transient — created, copied
+   *       from (nothing), and dropped two statements later — which is why it is
+   *       declared with the WIDENED shape rather than step v3's: it is never
+   *       read, and duplicating the shipped CHECK here would invite someone to
+   *       "keep the two in sync".
+   *   (c) INTERRUPTED AFTER THE RENAME — `audit` is already the NEW table with
+   *       every row, `audit_v6` is gone. Statement 1 re-creates an empty
+   *       `audit_v6`, statement 3 copies the rows back into it, and the swap
+   *       runs again. This is why the copy is repeated HERE and not left in v6:
+   *       a v7 that were only DROP + RENAME would, on this re-entry, drop the
+   *       renamed `audit` — the ledger itself — and then fail on a rename whose
+   *       source no longer exists. The naive split destroys the table it is
+   *       meant to protect, and `migrations.spec.ts` holds a case for it.
+   *
+   * THE DROP IS NEVER THE FIRST DESTRUCTIVE THING TO HAPPEN. In every one of the
+   * three states, `audit_v6` durably holds every row BEFORE `DROP TABLE IF
+   * EXISTS audit` runs, because the copy commits in its own implicit transaction
+   * one statement earlier. That ordering — not a transaction — is what makes the
+   * ledger safe.
+   *
+   * `idx_audit_at` is re-created here rather than in v6 because SQLite drops a
+   * table's indexes with the table: step v3's index goes with the drop below,
+   * and `listAudit`'s `ORDER BY at DESC, event_id DESC` would silently lose the
+   * index its leading column matches.
+   */
+  {
+    v: 7,
+    sql: `
+CREATE TABLE IF NOT EXISTS audit_v6 (
+  project_id TEXT    NOT NULL CHECK (length(project_id) > 0),
+  event_id   TEXT    NOT NULL CHECK (length(event_id) > 0),
+  at         INTEGER NOT NULL,
+  kind       TEXT    NOT NULL CHECK (kind IN ('triage_set', 'suppression_create', 'suppression_remove', 'finding_projected', 'export_raw', 'export_redacted', 'value_revealed', 'scan_discarded', 'scan_suspended_by_retention')),
+  subject    TEXT    NOT NULL,
+  detail     TEXT,
+  PRIMARY KEY (project_id, event_id)
+);
+CREATE TABLE IF NOT EXISTS audit (
   project_id TEXT    NOT NULL CHECK (length(project_id) > 0),
   event_id   TEXT    NOT NULL CHECK (length(event_id) > 0),
   at         INTEGER NOT NULL,
