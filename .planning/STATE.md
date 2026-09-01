@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-09-01T21:33:29.666Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-09-01T22:02:33.588Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: d53220aa9b002c5eec1ad10285a6be04aa6790c4
+state_head: 2d70c6de4ed64f1df8a763d4d297148fa04cd425
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 74
+  completed_plans: 75
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -333,6 +333,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 06 P13 | 32 min | 3 tasks | 10 files |
 | Phase 07 P01 | 46 min | 3 tasks | 17 files |
 | Phase 07 P02 | 28 min | 3 tasks | 6 files |
+| Phase 07 P03 | 35m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -661,6 +662,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-02: MAP_MAX_BYTES is NOT raised on 07-01's ~75% projection — the ladder was taken against the two-full-scan implementation and thresholds.spec.ts asserts shipped <= measured, so the bound stays BINDING at 2,621,440 until scripts/phase7/map-bytes.sh is re-run inside Caido (WINDOW 111)
 - [Phase 07]: 07-02: base64 is VALIDATED before it is decoded — Buffer.from(x, 'base64') silently returns a SHORTER buffer, and without the check a two-file concatenation decodes to a valid empty map
 - [Phase 07]: 07-02: MAP-01/02/05 are NOT checked off — this is the SDK-free half; MAP-01's SourceMap response-header route and MAP-02's storage half belong to 07-03/07-04/07-05
+- [Phase 07]: 07-03: the codec is RELOCATED, never installed — pnpm install --offline skipped the resolution step, so T-07-SC is discharged with no registry contact and no checkpoint
+- [Phase 07]: 07-03: a cross-product assertion is SELF-REFERENTIAL and cannot catch a deletion — length === specifiers x shapes stays true when a shape is removed. The axis must also be pinned from outside itself (REQUIRED_IMPORT_SHAPES)
+- [Phase 07]: 07-03: derive a ban's axis from the banned thing itself — the codec specifier list is read out of the package's own exports map; SOURCES_BINDING_NAMES out of parse.ts's RecoveredSource fields — then PIN the members so a rename is loud rather than silently followed
+- [Phase 07]: 07-03: parse and format are held out of PATH_LIKE_SINKS on a NAME COLLISION with JSON.parse/Intl format, never on the capability, with a staleness assertion on each exclusion
+- [Phase 07]: 07-03: knip.json carries ONE ignoreDependencies entry for the frontend codec, in that file's own idiom, removed by plan 07-08 in the same edit as the import
 
 ### Known Risks Carried Forward
 
@@ -703,8 +709,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T21:33:16.948Z
-**Stopped at:** Completed 07-02-PLAN.md
+**Last session:** 2026-09-01T22:02:33.463Z
+**Stopped at:** Completed 07-03-PLAN.md
 **Resume file:** None
 
 ### Blockers
