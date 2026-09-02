@@ -71,6 +71,10 @@ import {
 } from "@defminer/engine/sourcemap/parse";
 
 import { REJECT_REASONS, type RejectReason } from "./hooks/admit";
+import {
+  DERIVED_REJECT_REASONS,
+  type DerivedRejectReason,
+} from "./sourcemap/derive";
 
 /**
  * Words that may never appear in a counter name, an RPC field name or a string
@@ -273,6 +277,21 @@ export type SourcemapCounters = {
   sourcesRecovered: number;
   /** `(map, index)` sightings written to `source_sightings`. */
   sightingsRecorded: number;
+  /**
+   * Refusals on the DERIVED-ARTIFACT path, by reason.
+   *
+   * ITS OWN SUB-MAP AND NOT A WIDENING OF {@link Counters.rejected}, which is
+   * the fourth of the four mechanisms `sourcemap/derive.ts` names for keeping
+   * two vocabularies apart when they share a word. `too_large` and `empty` are
+   * literal members of BOTH `REJECT_REASONS` and `DERIVED_REJECT_REASONS`, and
+   * they describe different subjects: one is a response the hook turned away,
+   * the other a source a map declared. Folded into one map an operator could not
+   * tell which had happened.
+   *
+   * DERIVED from the frozen array by the SHIPPED helper, for the reason
+   * {@link mapRefused} states.
+   */
+  derivedRejected: Record<DerivedRejectReason, number>;
 };
 
 /**
@@ -371,6 +390,7 @@ function createCounters(): Counters {
       mapRefused: zeroedRejectCounters(MAP_PARSE_REASONS),
       sourcesRecovered: 0,
       sightingsRecorded: 0,
+      derivedRejected: zeroedRejectCounters(DERIVED_REJECT_REASONS),
     },
   };
 }

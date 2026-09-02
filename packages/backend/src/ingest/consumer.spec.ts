@@ -1677,51 +1677,107 @@ async function countTable(table: string): Promise<number> {
 describe("D-08's stage sits where `visit` cannot reach, and the placement is asserted", () => {
   const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
 
-  it("calls reconstruct AFTER `await walk(` and BEFORE `finishAnalysis(`", () => {
-    // THE THREE OFFSETS, COMPARED. RESEARCH found the structural fact that
-    // makes D-08's literal reading impossible — `visit` is
+  /** The parsed consumer, so both cases below reason over structure rather than
+   *  over text. A TEXT search is not available for the placement question: the
+   *  file now contains TWO `reconstruct(` call sites — the depth-0 one in
+   *  `analyseAndFinish` and the depth-1 recursion inside `reconstruct` itself —
+   *  and the recursion appears FIRST in the file, so an `indexOf` would compare
+   *  the wrong offsets and pass or fail for the wrong reason. */
+  function parsed(): { sf: ts.SourceFile; source: string } {
+    const source = readFileSync(CONSUMER, "utf8");
+    return {
+      source,
+      sf: ts.createSourceFile(
+        "consumer.ts",
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TS,
+      ),
+    };
+  }
+
+  /** The body of the named function declaration, or undefined. */
+  function bodyOf(sf: ts.SourceFile, name: string): ts.Node | undefined {
+    let found: ts.Node | undefined;
+    const visit = (n: ts.Node): void => {
+      if (
+        ts.isFunctionDeclaration(n) &&
+        n.name !== undefined &&
+        n.name.text === name
+      ) {
+        found = n.body;
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return found;
+  }
+
+  /** Where each named call happens INSIDE `scope`, in file order. */
+  function callOffsets(
+    sf: ts.SourceFile,
+    scope: ts.Node,
+    callee: string,
+  ): number[] {
+    const out: number[] = [];
+    const visit = (n: ts.Node): void => {
+      if (
+        ts.isCallExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === callee
+      ) {
+        out.push(n.getStart(sf));
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(scope);
+    return out;
+  }
+
+  it("calls reconstruct AFTER `walk(` and BEFORE `finishAnalysis(`, inside analyseAndFinish", () => {
+    // THE THREE OFFSETS, COMPARED, AND SCOPED TO ONE FUNCTION. RESEARCH found the
+    // structural fact that makes D-08's literal reading impossible — `visit` is
     // `(window: Window) => void`, synchronous, and every write in the stage is
     // awaited — so the stage runs in `analyseAndFinish` between the walk and the
-    // finish. This assertion is what stops it drifting back: an edit that moved
-    // the call above the walk or below the finish turns it red.
-    const source = readFileSync(CONSUMER, "utf8");
-    const walkAt = source.indexOf("const result = await walk(");
-    const reconAt = source.indexOf("await reconstruct(projectId, got");
-    const finishAt = source.indexOf("await finishAnalysis(");
-    expect(walkAt, "consumer.ts no longer awaits walk()").toBeGreaterThan(-1);
-    expect(reconAt, "consumer.ts never calls reconstruct()").toBeGreaterThan(
-      -1,
-    );
+    // finish. This is what stops it drifting back: an edit that moved the call
+    // above the walk or below the finish turns it red.
+    const { sf } = parsed();
+    const scope = bodyOf(sf, "analyseAndFinish");
+    expect(scope, "consumer.ts declares no analyseAndFinish").toBeDefined();
+    if (scope === undefined) return;
+
+    const walks = callOffsets(sf, scope, "walk");
+    const recons = callOffsets(sf, scope, "reconstruct");
+    const finishes = callOffsets(sf, scope, "finishAnalysis");
+    expect(walks.length, "analyseAndFinish no longer walks").toBe(1);
     expect(
-      finishAt,
-      "consumer.ts never calls finishAnalysis()",
-    ).toBeGreaterThan(-1);
+      recons.length,
+      "analyseAndFinish does not call reconstruct exactly once",
+    ).toBe(1);
+    expect(finishes.length).toBe(1);
     expect(
-      reconAt,
+      recons[0],
       "the reconstruction stage is not AFTER the walk. It must be: the walk owns " +
         "the deadline and the artifact's first slice, and the announcement is at " +
         "the tail of a payload the walk has already read.",
-    ).toBeGreaterThan(walkAt);
+    ).toBeGreaterThan(walks[0]);
     expect(
-      reconAt,
+      recons[0],
       "the reconstruction stage is not BEFORE finishAnalysis. It must be: " +
         "finishAnalysis is the statement that persists the scan_state, the error " +
         "code and the max_slice_ms this stage decided.",
-    ).toBeLessThan(finishAt);
+    ).toBeLessThan(finishes[0]);
   });
 
-  it("leaves the `visit` callback the Phase 3 no-op — the stage did not move into it", () => {
-    // The prohibition, executed. `visit` is synchronous and returns void, so a
-    // stage placed inside it could not await the store at all; the failure would
-    // be floating promises and rows that land after the analysis row says done.
-    const source = readFileSync(CONSUMER, "utf8");
-    const sf = ts.createSourceFile(
-      "consumer.ts",
-      source,
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.TS,
-    );
+  it("no `visit` callback awaits or writes — the stage did not move into one", () => {
+    // THE PROHIBITION, EXECUTED, AND OVER EVERY `visit` IN THE FILE. There are
+    // two walks now — the artifact's and the derived source's — and neither
+    // callback may become the stage. `visit` is `(window: Window) => void`:
+    // synchronous, returning void, so it cannot await the store at all, and a
+    // sourcemap is not a per-window object anyway. The announcement is at the
+    // tail and JSON.parse needs the whole map.
+    const { sf } = parsed();
     const bodies: string[] = [];
     const collect = (n: ts.Node): void => {
       if (
@@ -1734,16 +1790,31 @@ describe("D-08's stage sits where `visit` cannot reach, and the placement is ass
       ts.forEachChild(n, collect);
     };
     collect(sf);
-    expect(bodies.length, "consumer.ts declares no `visit` callback").toBe(1);
     expect(
-      bodies[0].includes("reconstruct") ||
-        bodies[0].includes("await") ||
-        bodies[0].includes("upsertRecoveredSource"),
-      "the reconstruction stage moved into the `visit` callback. `visit` is " +
-        "`(window: Window) => void` — synchronous, returning void — so it cannot " +
-        "await the store, and a sourcemap is not a per-window object anyway: the " +
-        "announcement is at the tail and JSON.parse needs the whole map.",
-    ).toBe(false);
+      bodies.length,
+      "consumer.ts declares no `visit` callback at all",
+    ).toBeGreaterThanOrEqual(1);
+    for (const body of bodies) {
+      for (const forbidden of [
+        "await",
+        "reconstruct",
+        "upsertRecoveredSource",
+        "recordSighting",
+        "findAnnouncement",
+      ]) {
+        expect(
+          body.includes(forbidden),
+          `a \`visit\` callback references ${forbidden}. The reconstruction stage ` +
+            `moved into the walk's per-window seam, which cannot await the store ` +
+            `and is the wrong shape for a tail-announced, whole-payload object.`,
+        ).toBe(false);
+      }
+    }
+    // The ARTIFACT walk's callback is still the Phase 3 no-op, specifically.
+    expect(
+      bodies.some((b) => b.includes("Phase 3 puts the detector here")),
+      "the artifact walk's `visit` is no longer the Phase 3 no-op",
+    ).toBe(true);
   });
 });
 
@@ -2136,5 +2207,184 @@ describe("MAP-01 — a project change mid-stage abandons the remaining writes", 
     ).toBe(1);
     expect(counters.abandonedOnProjectChange).toBeGreaterThan(0);
     expect(await countTable("source_sightings")).toBe(1);
+  });
+});
+
+// ===========================================================================
+// D-13 — THE DEPTH BOUND, PROVEN BY A DETECTOR THAT EXISTS ONLY IN THE SUITE
+// ===========================================================================
+//
+// T-07-31: an attacker-controlled body that recovers to another
+// attacker-controlled body is unbounded work on the one thread. The bound is one
+// level with no re-entry, and the reason it is wired NOW rather than left for
+// Phase 3 is that a limit added after the recursive path already exists is a
+// limit somebody has to remember.
+//
+// THE DETECTOR IS THE POINT. Asserting "the inner map produced no rows" alone
+// would pass just as well if the recovered source never reached the pipeline at
+// all — a bound over a path nobody executes. The injected `visitDerived` records
+// every window it is handed, so the suite can say the recovered BYTES arrived and
+// the announcement inside them was still not followed.
+
+describe("D-13 — a recovered source enters the pipeline once, and never twice", () => {
+  it("recovers the outer sources, refuses the inner announcement, and is SEEN doing it", async () => {
+    // The recovered source is ITSELF a bundle announcing an inline map. If the
+    // bound were missing, that inner map's two sources would land as rows.
+    const inner = mapDocument(
+      ["deep/one.ts", "deep/two.ts"],
+      ["const one = 1;\n", "const two = 2;\n"],
+    );
+    const innerBundle = Buffer.from(bundleAnnouncingInline(inner)).toString(
+      "utf8",
+    );
+    const outer = mapDocument(["outer/only.ts"], [innerBundle]);
+    const bytes = bundleAnnouncingInline(outer);
+
+    // THE TEST-ONLY DETECTOR. It exists nowhere in the shipped tree: `consumer.ts`
+    // defaults `visitDerived` to the same Phase 3 no-op the artifact walk uses.
+    const seen: Array<{ start: number; end: number }> = [];
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides, {
+      visitDerived: (w) => {
+        seen.push({ start: w.start, end: w.end });
+      },
+    });
+
+    // (a) the OUTER bundle's sources were recovered — exactly one, and it is the
+    //     inner bundle's text.
+    expect(await countTable("sources")).toBe(1);
+    expect(counters.sourcemap.sourcesRecovered).toBe(1);
+
+    // (b) the INNER announcement was NOT followed. Its two sources are absent,
+    //     which is what the row count says: one, not three.
+    expect(
+      await countTable("source_sightings"),
+      "the inner map's sources landed. D-13's bound is one level with no " +
+        "re-entry: a recovered source that itself announces a map is not " +
+        "reconstructed a second time.",
+    ).toBe(1);
+    expect(counters.sourcemap.announcedInline).toBe(1);
+
+    // (c) `depth_exceeded` fired exactly once — one recovered source, one
+    //     depth-1 stage, one refusal. Counted rather than inferred.
+    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(1);
+
+    // (d) THE DETECTOR SAW THE RECOVERED BYTES. Without this the three
+    //     assertions above are equally satisfied by a path that never ran.
+    expect(
+      seen.length,
+      "the derived walk never happened. The three row-count assertions above " +
+        "are all satisfied by a recovered source that never entered the " +
+        "pipeline at all — this is what tells them apart.",
+    ).toBeGreaterThan(0);
+    const observed = seen.reduce((max, w) => (w.end > max ? w.end : max), 0);
+    expect(
+      observed,
+      "the derived walk was handed something other than the recovered source.",
+    ).toBe(Buffer.byteLength(innerBundle, "utf8"));
+  });
+
+  it("does not fire depth_exceeded when nothing was recovered", async () => {
+    // The counter must describe the bound firing, not the stage running. A
+    // bundle with no map recovers nothing, so no depth-1 stage exists.
+    const p = plan([
+      { id: "r1", url: "https://x.test/plain.js", bytes: body("plain") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(0);
+  });
+
+  it("fires ONCE PER RECOVERED SOURCE, so the bound scales with what it bounds", async () => {
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["a.ts", "b.ts"], ["const a = 1;\n", "const b = 2;\n"]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(2);
+  });
+});
+
+describe("D-14 — the derived path refuses by its OWN vocabulary, with no admit() call", () => {
+  it("skips an EMPTY recovered source with a counter and no row", async () => {
+    // `sourcesContent[i]` as the empty string is legal per ECMA-426 and reaches
+    // the recovered list rather than the parser's skip list. It writes no row,
+    // costs a counter, and the sources BESIDE it still land — a refused source
+    // is not a refused map.
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["a.ts", "empty.ts"], ["const a = 1;\n", ""]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.sourcemap.derivedRejected.empty).toBe(1);
+    expect(await countTable("sources")).toBe(1);
+    expect(await countTable("source_sightings")).toBe(1);
+
+    // The MAP was not refused: `analyses` stays `done` with a null error.
+    const rows = await listObservations(fx.db, PROJECT);
+    const row = await getAnalysis(
+      fx.db,
+      PROJECT,
+      rows[0].sha256,
+      DETECTOR_CORPUS_VERSION,
+    );
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+  });
+
+  it("leaves the ADMISSION counters completely untouched", async () => {
+    // O-05's second argument, executed. A derived reason folded into
+    // `REJECT_REASONS` would appear in `counters.rejected` — on the one surface
+    // an operator consults to answer "is DefMiner keeping up with my browsing" —
+    // describing something admission never did.
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["a.ts", "empty.ts"], ["const a = 1;\n", ""]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    expect(counters.sourcemap.derivedRejected.empty).toBe(1);
+    expect(counters.rejected.empty).toBe(0);
+    expect(counters.rejected.too_large).toBe(0);
+    expect(counters.retro.rejected.empty).toBe(0);
+  });
+
+  it("consumer.ts never calls admit() on the derived path", () => {
+    // THE PROHIBITION, OVER THE AST. `contentTypeOf` is imported from
+    // `hooks/admit.ts` and used at the reload — that is the LIVE path and it is
+    // fine. What must not exist is an `admit(` call: admission answers status,
+    // body presence, size, kind and scope, and a recovered `.ts` has no status,
+    // no scope of its own and a kind that is whatever the developer wrote.
+    const CONSUMER = fileURLToPath(new URL("./consumer.ts", import.meta.url));
+    const sf = ts.createSourceFile(
+      "consumer.ts",
+      readFileSync(CONSUMER, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const calls: string[] = [];
+    const visit = (n: ts.Node): void => {
+      if (
+        ts.isCallExpression(n) &&
+        ts.isIdentifier(n.expression) &&
+        n.expression.text === "admit"
+      ) {
+        calls.push(n.getText(sf));
+      }
+      ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    expect(
+      calls,
+      "consumer.ts calls admit(). D-14 gives the derived path its own entry " +
+        "point precisely because three of admission's five axes have no answer " +
+        "for a recovered source that is not invented.",
+    ).toEqual([]);
   });
 });

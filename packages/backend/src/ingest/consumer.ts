@@ -46,6 +46,7 @@ import {
   INVALIDATION_EVENT,
   TERMINAL_SCAN_STATES,
 } from "@defminer/engine/contract";
+import type { Deadline } from "@defminer/engine/deadline";
 import { decodeUtf8 } from "@defminer/engine/decode";
 import { sha256Hex } from "@defminer/engine/digest";
 import {
@@ -79,6 +80,11 @@ import type { Database } from "sqlite";
 import { contentTypeOf } from "../hooks/admit";
 import type { EnqueueClock } from "../hooks/passive";
 import { getActiveScan, suspendForRetentionEviction } from "../scan/scans";
+import {
+  admitDerived,
+  admitDerivedDepth,
+  DERIVED_MAX_DEPTH,
+} from "../sourcemap/derive";
 import {
   claimAnalysis,
   DETECTOR_CORPUS_VERSION,
@@ -152,6 +158,14 @@ export type ConsumerDeps = {
   /** Cancellation for in-flight walks. Structural, not `AbortSignal`: that global
    *  was never enumerated inside this runtime. */
   signal?: AbortLike;
+  /** The Phase 3 detector seam for the DERIVED path (D-13, D-14).
+   *
+   *  BY INJECTION, and the reason is the same one `now` is injected for: it is
+   *  what lets a spec OBSERVE that a recovered source's bytes actually reached a
+   *  walk. A depth bound on a path with no detector behind it and no test in
+   *  front of it is a branch nobody has executed. Defaults to the same no-op the
+   *  artifact walk uses. */
+  visitDerived?: (window: { start: number; end: number }) => void;
   /** The corpus version CORE-08 keys the cache on. Defaults to the Phase 1
    *  sentinel; Phase 3's real detector-set hash arrives through here. */
   detectorSetHash?: string;
@@ -248,14 +262,18 @@ function extract(rr: {
  * The prefix that makes a map refusal TELLABLE APART in `analyses.error`.
  *
  * D-11 writes reconstruction refusals into a column Phase 1 shipped, and Phase 7
- * is its first non-null writer from this path. Two closed vocabularies reach it —
- * `MAP_PARSE_REASONS` here and plan 07-05's `DERIVED_REJECT_REASONS` for the
- * derived-artifact path — and `too_large` and `empty` are literal members of
- * BOTH. `contract.ts:88-120` keeps two colliding vocabularies apart with four
- * mechanisms, and the FIRST of them, a distinct column name, is not available
- * here: there is one `error` column and both vocabularies land in it. So the
- * codes are NAMESPACED at the point of writing, which is the same separation
- * bought a different way.
+ * is its first non-null writer from this path. Exactly ONE vocabulary reaches it
+ * today — `MAP_PARSE_REASONS`, for a map-level refusal — because a DERIVED
+ * refusal describes one recovered source and a recovered source has no
+ * `analyses` row of its own to mark.
+ *
+ * THE PREFIX IS WHAT LETS THE SECOND ONE ARRIVE LATER WITHOUT A COLLISION.
+ * `too_large` and `empty` are literal members of BOTH `MAP_PARSE_REASONS` and
+ * `sourcemap/derive.ts`'s `DERIVED_REJECT_REASONS`. `contract.ts:88-120` keeps
+ * two colliding vocabularies apart with four mechanisms, and the FIRST of them —
+ * a distinct column name — is not available here: there is one `error` column.
+ * Namespacing at the point of writing buys the same separation a different way,
+ * and it costs nothing to do now rather than as a migration later.
  *
  * A CODE, NEVER A MESSAGE (T-07-10). Every character of the written value is
  * DefMiner's word: a fixed prefix and a member of a frozen array declared in
@@ -823,6 +841,44 @@ export function startConsumer(
     rowsInserted: number;
   };
 
+  /**
+   * What one reconstruction stage is pointed at.
+   *
+   * A RECORD RATHER THAN `Extracted`, because the stage runs over TWO different
+   * things and only one of them is an artifact: at depth 0 the bytes are the
+   * admitted response body, and at depth 1 they are a source recovered out of
+   * it. `artifactSha256` and `requestId` are the PROVENANCE either way — the
+   * bundle the bytes ultimately came from and the request that served it — so a
+   * sighting written at any depth still points at the artifact an operator can
+   * find.
+   */
+  type ReconstructionInput = {
+    readonly bytes: Uint8Array;
+    /** The digest of the ADMITTED artifact, at every depth. */
+    readonly artifactSha256: string;
+    /** The Caido request id that served that artifact, at every depth. */
+    readonly requestId: string;
+    /** 0 for an admitted bundle; D-13 refuses at {@link DERIVED_MAX_DEPTH}. */
+    readonly depth: number;
+    /** The ARTIFACT's deadline, shared by every stage this iteration runs. */
+    readonly deadline: Deadline;
+  };
+
+  /**
+   * The detector seam for the DERIVED path.
+   *
+   * Optional and defaulting to the same no-op `analyseAndFinish` uses, for the
+   * same reason: no detector exists until Phase 3. It is injectable so a spec can
+   * OBSERVE that recovered bytes actually reach a walk — the difference between
+   * D-13's bound being a path that runs and a path with no detector behind it
+   * and no test in front of it.
+   */
+  const derivedVisit =
+    deps.visitDerived ??
+    ((): void => {
+      /* Phase 3 puts the detector here too. */
+    });
+
   /** Both refusal counters from ONE site, so the roll-up cannot drift from the
    *  per-reason map it rolls up. */
   function noteMapRefusal(reason: MapParseReason): void {
@@ -867,7 +923,7 @@ export function startConsumer(
    */
   async function reconstruct(
     projectId: string,
-    got: Extracted,
+    input: ReconstructionInput,
     stillCurrent: () => boolean,
   ): Promise<Reconstruction> {
     const sm = counters.sourcemap;
@@ -884,6 +940,32 @@ export function startConsumer(
       rowsInserted,
     });
 
+    // --- D-13's DEPTH BOUND, BEFORE ANYTHING ELSE ---------------------------
+    // AND BEFORE `findAnnouncement` IN PARTICULAR. The refusal is not "we found
+    // a map and declined to follow it"; it is "this stage may not run at this
+    // depth", so it costs a comparison rather than a scan over a body a
+    // recovered source chose. T-07-31: an attacker-controlled body that recovers
+    // to another attacker-controlled body is unbounded work on the one thread,
+    // and the bound is one level with no re-entry.
+    //
+    // COUNTER-LOG-RETURN, in the shape the authoritative size gate uses at the
+    // top of `handleOne`: increment, log, return, write no row. The refusal is
+    // NOT propagated as a `reason` — a depth-1 stage runs over a recovered
+    // SOURCE, which has no `analyses` row of its own, and marking the outer
+    // artifact `partial` for it would report the bound working as a degradation.
+    const depthGate = admitDerivedDepth(input.depth);
+    if (!depthGate.ok) {
+      sm.derivedRejected[depthGate.reason]++;
+      log(
+        "reconstruction refused at depth " +
+          String(input.depth) +
+          ": " +
+          depthGate.reason +
+          " (D-13)",
+      );
+      return done(null);
+    }
+
     // --- the whole-payload stretch: decode, scan, decode, parse -------------
     // ONE uninterrupted synchronous run, and it is measured as one because that
     // is what it is on the thread. The D-10 probe put the three inline-path
@@ -899,7 +981,7 @@ export function startConsumer(
     // Nothing derived from this string is persisted as an offset or a digest:
     // ENC-01's rule is untouched because the map's own digest below is taken over
     // the DECODED JSON's bytes and the artifact digest came from `toRaw()`.
-    const text = decodeUtf8(got.bytes, { crossCheck: false });
+    const text = decodeUtf8(input.bytes, { crossCheck: false });
     const announcement = findAnnouncement(text, SOURCEMAP_TAIL_WINDOW_BYTES);
     if (announcement === null) {
       // THE COMMON CASE, and it costs one backwards scan. The artifact finishes
@@ -920,7 +1002,7 @@ export function startConsumer(
       mark(sliceStart);
       log(
         "external sourcemap announced by " +
-          got.sha256.slice(0, 12) +
+          input.artifactSha256.slice(0, 12) +
           "; not fetched (D-01)",
       );
       return done(null);
@@ -957,6 +1039,31 @@ export function startConsumer(
     for (const source of parsed.recovered) {
       sliceStart = clock();
       const bytes = Buffer.from(source.content, "utf8");
+      // D-14's SECOND ENTRY POINT, and it deliberately BYPASSES `admit()`. The
+      // whole argument is in `sourcemap/derive.ts`'s header: admission answers
+      // status, body presence, size, kind and scope, and a recovered `.ts` has no
+      // status, no scope of its own and a kind that is whatever the developer
+      // wrote. The derived path carries a SIZE BOUND ONLY.
+      //
+      // COUNTER-LOG-RETURN per source, in the authoritative size gate's shape:
+      // increment, log, write no row, and move to the next index. A refused
+      // source is not a refused MAP, so `analyses.error` is untouched and the
+      // sources beside it still land.
+      const admitted = admitDerived({
+        content: source.content,
+        byteLen: bytes.length,
+      });
+      if (!admitted.ok) {
+        sm.derivedRejected[admitted.reason]++;
+        mark(sliceStart);
+        log(
+          "recovered source at index " +
+            String(source.sourcesIndex) +
+            " refused: " +
+            admitted.reason,
+        );
+        continue;
+      }
       const sourceSha256 = sha256Hex(bytes);
       const lineCount = countLines(source.content);
       mark(sliceStart);
@@ -997,8 +1104,8 @@ export function startConsumer(
         projectId,
         mapSha256,
         source.sourcesIndex,
-        got.sha256,
-        got.requestId,
+        input.artifactSha256,
+        input.requestId,
         sourceSha256,
         source.sourcesVerbatim,
         now,
@@ -1011,6 +1118,48 @@ export function startConsumer(
         rowsInserted += 1;
         noteChange("source_sightings", projectId, mapSha256);
       }
+
+      // --- D-13: THE RECOVERED SOURCE ENTERS THE PIPELINE, ONCE -------------
+      // WIRED NOW RATHER THAN LEFT FOR PHASE 3, and that is the whole point of
+      // the bound: a depth limit written after the recursive path already exists
+      // is a limit somebody has to remember to add. The recursion limit is the
+      // valuable half of MAP-06 and it is fully testable today.
+      //
+      // The recovered bytes go through the SAME `walk` the artifact did — same
+      // deadline, same window geometry, same yield primitive — so a detector
+      // arriving in Phase 3 sees them through the surface it already reads from.
+      // Then reconstruction is attempted at `depth + 1`, where the gate at the
+      // top of this function refuses it. THAT is what makes the bound a path
+      // that runs rather than a branch nobody executes.
+      //
+      // THE DEADLINE IS THE ARTIFACT'S, NOT A FRESH ONE. Derived analysis is
+      // work this artifact caused, so it spends this artifact's budget; a new
+      // deadline per recovered source would let a 781-source map buy itself 781
+      // times `ARTIFACT_DEADLINE_MS`.
+      const walked = await walk(bytes, {
+        now: clock,
+        deadline: input.deadline,
+        signal: deps.signal,
+        visit: derivedVisit,
+      });
+      if (walked.maxSliceMs > sliceMs) sliceMs = walked.maxSliceMs;
+
+      const derived = await reconstruct(
+        projectId,
+        {
+          bytes,
+          artifactSha256: input.artifactSha256,
+          requestId: input.requestId,
+          depth: input.depth + 1,
+          deadline: input.deadline,
+        },
+        stillCurrent,
+      );
+      rowsInserted += derived.rowsInserted;
+      // The DERIVED stage's own stretch still counts against this artifact's
+      // maximum: it ran on the same thread, inside the same iteration, and a
+      // number that omitted it would under-report exactly the work D-13 bounds.
+      if (derived.sliceMs > sliceMs) sliceMs = derived.sliceMs;
     }
 
     return done(null);
@@ -1058,7 +1207,19 @@ export function startConsumer(
     // itself; the short version is that `visit` is synchronous and every write
     // below it is awaited. `consumer.spec.ts` asserts these three offsets against
     // this file's own text so the placement cannot drift back.
-    const recon = await reconstruct(projectId, got, stillCurrent);
+    const recon = await reconstruct(
+      projectId,
+      {
+        bytes: got.bytes,
+        artifactSha256: got.sha256,
+        requestId: got.requestId,
+        // DEPTH 0 — an admitted artifact, reached directly rather than through a
+        // reconstruction. `DERIVED_MAX_DEPTH` is what turns that into a bound.
+        depth: 0,
+        deadline,
+      },
+      stillCurrent,
+    );
 
     // --- CORE-10's WIRE -----------------------------------------------------
     // The in-memory maximum `getStatus()` reports and the per-artifact

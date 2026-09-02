@@ -25,6 +25,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { makeFakeSdk } from "../test/fixtures/fake-sdk";
 
 import { REJECT_REASONS } from "./hooks/admit";
+import { DERIVED_REJECT_REASONS } from "./sourcemap/derive";
 import { ERROR_MAX } from "./store/analyses";
 import { resetDbHandleForTest } from "./store/db";
 import {
@@ -298,12 +299,30 @@ describe("counters.sourcemap — Phase 7 attribution inside the ONE object", () 
 
   it("starts every sourcemap member at zero", () => {
     for (const [name, value] of Object.entries(counters.sourcemap)) {
-      if (name === "mapRefused") continue;
+      if (name === "mapRefused" || name === "derivedRejected") continue;
       expect(value, `counters.sourcemap.${name} did not start at 0`).toBe(0);
     }
     for (const reason of MAP_PARSE_REASONS) {
       expect(counters.sourcemap.mapRefused[reason]).toBe(0);
     }
+    for (const reason of DERIVED_REJECT_REASONS) {
+      expect(counters.sourcemap.derivedRejected[reason]).toBe(0);
+    }
+  });
+
+  it("keys the DERIVED refusals on their own vocabulary, not on admission's", () => {
+    // O-05's fourth mechanism, executed. `too_large` and `empty` are literal
+    // members of BOTH `REJECT_REASONS` and `DERIVED_REJECT_REASONS` and they
+    // describe different subjects — a response the hook turned away, and a
+    // source a map declared. Separate sub-maps are what let an operator tell
+    // which one happened.
+    expect(Object.keys(counters.sourcemap.derivedRejected).sort()).toEqual(
+      [...DERIVED_REJECT_REASONS].sort(),
+    );
+    counters.sourcemap.derivedRejected.too_large += 1;
+    expect(counters.rejected.too_large).toBe(0);
+    expect(counters.retro.rejected.too_large).toBe(0);
+    expect(counters.sourcemap.mapRefused.too_large).toBe(0);
   });
 
   it("moves independently of the live and retro counters", () => {
