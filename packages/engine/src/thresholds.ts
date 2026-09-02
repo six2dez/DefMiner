@@ -116,36 +116,85 @@ export const ROWS_INSERTED_PER_ARTIFACT_MAX = 3;
  * DERIVATION — two properties that pull in opposite directions, and only stating
  * both makes the number derivable rather than chosen:
  *
- *   CONVERGENCE. RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N. A sweep that
- *   deletes fewer rows per interval than the interval inserts bounds nothing: past
- *   the retention ceiling the database grows monotonically while the sweep runs
- *   exactly as designed. 512 against 128 is 4x headroom, which means a backlog
- *   DRAINS under sustained ingest rather than merely failing to grow faster. It is
- *   also why a pass reporting `moreWork` defers to the next cadence boundary
- *   instead of looping to convergence — with the delete rate above the insert
- *   rate, deferral converges anyway, so the loop would buy nothing and cost a long
- *   uninterruptible stretch.
- *
- *   RESTATED 2026-09-02 (plan 07-05, Pitfall 2), AND THE RESTATEMENT IS WHAT MAKES
- *   IT SURVIVE D-09. It read `>= ROWS_INSERTED_PER_ARTIFACT_MAX *
- *   RETENTION_SWEEP_EVERY_N` — 512 >= 384 — while `ingest/consumer.ts`'s interval
- *   counted ARTIFACTS. One artifact carrying a 781-source map now inserts 1,565
- *   rows, 521x that bound, and the two obvious repairs both fail by construction:
- *   raising this constant to satisfy the old form needs 200,320, which breaks the
- *   1024 cost cap below by 195x, and lowering RETENTION_SWEEP_EVERY_N instead
- *   drives it below 1. So the INTERVAL was changed to count rows, which is what
- *   its own doc comment always said it counted, and the inequality now holds
- *   independently of how many rows any single artifact produces — delivering what
- *   D-09 needs WITHOUT the per-map row cap D-09 rejected.
- *   {@link ROWS_INSERTED_PER_ARTIFACT_MAX} is retained as documentation of the
- *   superseded form.
- *
  *   COST. Every delete is an awaited statement on a pooled worker-thread
  *   connection, so a sweep does not hold the JS thread the way a synchronous loop
  *   would; the bound that matters is that it not starve ingest. Capped at 1024 by
- *   assertion so a pass stays bounded no matter how the other constants move.
+ *   assertion so a PASS stays bounded no matter how the other constants move.
+ *
+ *   CONVERGENCE — and it is NOT a property of this constant alone. See
+ *   {@link RETENTION_SWEEP_MAX_PASSES}, which is the other half and where the
+ *   inequality is stated in full.
+ *
+ * ===========================================================================
+ * THE TWO SUPERSEDED FORMS, KEPT BECAUSE EACH ONE WAS WRONG IN A DIFFERENT WAY
+ * ===========================================================================
+ * FORM 1, through 2026-09-01: `>= ROWS_INSERTED_PER_ARTIFACT_MAX *
+ * RETENTION_SWEEP_EVERY_N` — 512 >= 384 — while `ingest/consumer.ts`'s interval
+ * counted ARTIFACTS. True and load-bearing for as long as one artifact could only
+ * insert three rows. D-09 broke it by up to 521x.
+ *
+ * FORM 2, 2026-09-02 (plan 07-05, Pitfall 2): the interval was changed to count
+ * ROWS and the inequality restated as `RETENTION_SWEEP_MAX_ROWS >=
+ * RETENTION_SWEEP_EVERY_N` — 512 >= 128 — claimed in three places to hold
+ * "INDEPENDENTLY of how many rows any single artifact produces".
+ *
+ * IT DID NOT ESTABLISH CONVERGENCE, because it compares the wrong two quantities
+ * (07-REVIEW.md HI-04). Convergence needs `rows deleted per pass >= rows inserted
+ * per sweep interval`. RETENTION_SWEEP_EVERY_N is not the insert side — it is only
+ * the THRESHOLD at which a pass becomes due. The sweep runs BETWEEN drain
+ * iterations, so the rows actually inserted before a pass fires are the rows
+ * inserted by the iteration that CROSSED the threshold, and one iteration can
+ * insert far more than the threshold. On this file's own monaco example, 1,565
+ * rows in against 512 out is +1,053 rows per iteration, monotonically — verbatim
+ * the failure the inequality exists to prevent. Form 2 did not solve the problem;
+ * it moved where the problem was invisible.
  */
 export const RETENTION_SWEEP_MAX_ROWS = 512;
+
+/**
+ * How many bounded passes one cadence crossing may run before deferring.
+ *
+ * ===========================================================================
+ * THE OTHER HALF OF CONVERGENCE, AND THE HALF THAT MAKES IT TRUE
+ * ===========================================================================
+ * The inequality that is actually load-bearing, stated in the quantities it is
+ * about — `thresholds.spec.ts` asserts exactly this:
+ *
+ *   RETENTION_SWEEP_MAX_ROWS * RETENTION_SWEEP_MAX_PASSES
+ *     >= RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX
+ *
+ *   8,192 >= 4,227, which is ~1.9x headroom.
+ *
+ * READ THE RIGHT-HAND SIDE AS WHAT IT IS: the most rows that can be inserted
+ * before a pass fires. Up to `RETENTION_SWEEP_EVERY_N - 1` rows can already have
+ * accumulated below the threshold, and then ONE iteration crosses it — and a
+ * single iteration can insert {@link ROWS_INSERTED_PER_ITERATION_MAX}. Bounding
+ * the left-hand side by the per-PASS cap alone can never dominate that, because
+ * the per-pass cap is held down by the cost cap.
+ *
+ * SO THE PASS REPEATS WITHIN ONE CADENCE INSTEAD OF THE CAP BEING RAISED, and the
+ * two rejected repairs are why. Raising RETENTION_SWEEP_MAX_ROWS to 4,227 breaks
+ * the 1024-row cost cap `thresholds.spec.ts` asserts; a per-map ROW cap tight
+ * enough to fix it (~190 sources) would refuse monaco's 781-source map outright,
+ * and D-09 rejected a per-map row cap anyway.
+ *
+ * THE COST ARGUMENT IS UNCHANGED AND THAT IS THE POINT. A pass is still bounded at
+ * RETENTION_SWEEP_MAX_ROWS, and `ingest/consumer.ts` YIELDS between passes — so
+ * this is not the long uninterruptible stretch the bounded pass exists to prevent.
+ * It is up to sixteen bounded stretches with the event loop between them. The
+ * loop ALSO stops the moment a pass reports no work remains, so an ordinary
+ * cadence still runs exactly one pass; the repeat is reachable only when there is
+ * a real backlog, which is the only case where convergence was ever in question.
+ *
+ * SIXTEEN, AND NOT NINE. Nine is the smallest integer that satisfies the
+ * inequality (4,227 / 512 = 8.26). The next power of two buys the property the
+ * superseded Form 1 comment claimed and never had: a backlog DRAINS under
+ * sustained worst-case ingest rather than merely failing to grow.
+ *
+ * IT IS A CEILING, NOT A TARGET. A pass that reports `moreWork` on the sixteenth
+ * iteration defers to the next cadence boundary exactly as before.
+ */
+export const RETENTION_SWEEP_MAX_PASSES = 16;
 
 /**
  * Run one retention sweep pass every N processed artifacts.
@@ -154,8 +203,14 @@ export const RETENTION_SWEEP_MAX_ROWS = 512;
  * periodically by construction — there is one thread and `setTimeout` is the only
  * yield primitive, so a long-lived background timer is a design smell here. Tying
  * the cadence to processed artifacts means retention pressure scales with the
- * ingest that creates it. See RETENTION_SWEEP_MAX_ROWS for the convergence
- * inequality that binds the two (decision P1-D7).
+ * ingest that creates it. See {@link RETENTION_SWEEP_MAX_PASSES} for the
+ * convergence inequality that binds the three (decision P1-D7).
+ *
+ * COUNTED IN ROWS since 2026-09-02, which is what this comment always claimed.
+ * IT IS A THRESHOLD AND NOT AN INSERT RATE, and confusing the two is how the
+ * superseded convergence inequality came to compare the wrong quantities: the
+ * rows inserted before a pass fires are this number PLUS whatever the crossing
+ * iteration inserted, which is {@link ROWS_INSERTED_PER_ITERATION_MAX}.
  */
 export const RETENTION_SWEEP_EVERY_N = 128;
 
@@ -384,6 +439,33 @@ export const SOURCE_LINE_COUNT_MAX = 500_000;
  * fixture this refuses: a legal map declaring 1,000,000 one-character sources.
  */
 export const SOURCE_ROWS_PER_MAP_MAX = 2_048;
+
+/**
+ * The most rows ONE consumer iteration can insert — the insert side of the
+ * retention convergence inequality (07-REVIEW.md HI-04).
+ *
+ * DERIVED RATHER THAN CHOSEN, and it is the quantity the superseded inequality
+ * left out. One iteration processes one artifact, which inserts at most
+ * {@link ROWS_INSERTED_PER_ARTIFACT_MAX} base rows plus whatever its announced
+ * map recovers. `parseSourceMap` refuses past {@link SOURCE_ROWS_PER_MAP_MAX}
+ * DECLARED SOURCES, and under D-05 each recovered source writes TWO rows — one
+ * `sources` row per new content hash and one `source_sightings` row per
+ * `(map, index)` — so the map half is `2 * SOURCE_ROWS_PER_MAP_MAX`.
+ *
+ * THE `2 *` IS THE UNIT MISMATCH 07-REVIEW.md MD-01 RECORDS, NOT A CHOICE MADE
+ * HERE. `SOURCE_ROWS_PER_MAP_MAX` is derived and documented as a ROW bound and
+ * enforced as a declared-SOURCES bound; until that is settled the real ceiling is
+ * twice the stated one, and an insert bound that used the stated one would be
+ * half of what the code can actually do. If MD-01 is fixed by enforcing the gate
+ * in rows, this factor becomes 1 and the inequality only gets slacker — it cannot
+ * become false by that edit.
+ *
+ * ONE MAP PER ITERATION. `findAnnouncement` returns the LAST announcement in the
+ * body and the derived stage is refused at `DERIVED_MAX_DEPTH`, so a single
+ * iteration reconstructs one map and not a chain of them.
+ */
+export const ROWS_INSERTED_PER_ITERATION_MAX =
+  ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * SOURCE_ROWS_PER_MAP_MAX;
 
 // Referenced by the derivations above so the imports are not "unused" to a linter
 // and so a reader can see, in one place, which measured values the policy set

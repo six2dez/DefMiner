@@ -437,12 +437,34 @@ describe("the per-pass cap and convergence", () => {
     });
   });
 
-  it("the per-pass cap dominates what one interval can insert", () => {
+  it("the CADENCE's delete budget dominates what one interval can insert", () => {
     // The convergence inequality, asserted against the SAME constants the sweep
-    // reads. thresholds.spec.ts owns the full derivation; this asserts the sweep
-    // is not using different numbers from the ones that were reasoned about.
+    // and the scheduler read. thresholds.spec.ts owns the full derivation; this
+    // asserts the sweep is not using different numbers from the ones that were
+    // reasoned about.
+    //
+    // THE LEFT SIDE IS THE CADENCE'S BUDGET, NOT ONE PASS'S (07-REVIEW.md
+    // HI-04). This case used to read `maxRowsPerPass >= insertedPerArtifact` —
+    // 512 >= 3 — which compares a delete cap against the base rows of an
+    // artifact carrying NO sourcemap. It is true, it is not the bound, and it
+    // stayed green through the entire D-09 divergence.
+    const deletedPerInterval =
+      RETENTION_PASS_LIMITS.maxRowsPerPass * RETENTION_PASS_LIMITS.maxPasses;
+    const insertedPerInterval =
+      RETENTION_PASS_LIMITS.sweepEveryNRows +
+      RETENTION_PASS_LIMITS.insertedPerIteration;
+    expect(
+      deletedPerInterval,
+      `one cadence may delete ${String(deletedPerInterval)} rows against ` +
+        `${String(insertedPerInterval)} that can be inserted before it fires. ` +
+        `Below that the database grows monotonically past the retention ` +
+        `ceiling WHILE THE SWEEP RUNS EXACTLY AS DESIGNED.`,
+    ).toBeGreaterThanOrEqual(insertedPerInterval);
+
+    // AND THE NARROWER NUMBERS ARE STILL WHAT THEY CLAIM. `insertedPerArtifact`
+    // describes an artifact carrying no sourcemap, which is most of them.
     expect(RETENTION_PASS_LIMITS.insertedPerArtifact).toBe(3);
-    expect(RETENTION_PASS_LIMITS.maxRowsPerPass).toBeGreaterThanOrEqual(
+    expect(RETENTION_PASS_LIMITS.insertedPerIteration).toBeGreaterThan(
       RETENTION_PASS_LIMITS.insertedPerArtifact,
     );
   });

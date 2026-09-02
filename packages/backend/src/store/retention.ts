@@ -45,8 +45,11 @@
 // halfway leaves a parent with fewer children and never a child with no parent.
 
 import {
+  RETENTION_SWEEP_EVERY_N,
+  RETENTION_SWEEP_MAX_PASSES,
   RETENTION_SWEEP_MAX_ROWS,
   ROWS_INSERTED_PER_ARTIFACT_MAX,
+  ROWS_INSERTED_PER_ITERATION_MAX,
 } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
@@ -138,15 +141,24 @@ export type RetentionSweepSummary = {
 };
 
 /**
- * The convergence inequality, restated where the code that depends on it lives.
+ * The per-PASS delete cap. NOT, ON ITS OWN, THE CONVERGENCE BOUND.
  *
- * A processed artifact inserts at most ROWS_INSERTED_PER_ARTIFACT_MAX rows, and a
- * sweep runs once per RETENTION_SWEEP_EVERY_N processed artifacts. A pass that
- * removed fewer rows than the interval inserts would let the database grow
- * monotonically past the retention ceiling WHILE RUNNING EXACTLY AS DESIGNED —
- * which is the failure mode this constant exists to make impossible.
- * `thresholds.spec.ts` asserts the inequality; this module reads the constants
- * rather than hard-coding either, so the two cannot drift.
+ * This module bounds ONE pass and says nothing about how often a pass runs. The
+ * convergence inequality is a property of three constants together —
+ * `RETENTION_SWEEP_MAX_ROWS * RETENTION_SWEEP_MAX_PASSES >=
+ * RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX` — and it is stated
+ * at `RETENTION_SWEEP_MAX_PASSES` and asserted by `thresholds.spec.ts`.
+ *
+ * SAID HERE BECAUSE THIS COMMENT USED TO CLAIM OTHERWISE (07-REVIEW.md HI-04).
+ * It read "a processed artifact inserts at most ROWS_INSERTED_PER_ARTIFACT_MAX
+ * rows, and a sweep runs once per RETENTION_SWEEP_EVERY_N processed artifacts",
+ * which stopped being true when D-09 let one artifact insert 1,565 rows and the
+ * interval changed to count rows. A module that restates a bound it does not
+ * enforce is the thing a verifier will cite, so it restates the SCOPE of what it
+ * enforces instead: one pass, bounded, and the scheduler decides the rest.
+ *
+ * The constants are still READ rather than hard-coded, so this file and
+ * `thresholds.ts` cannot drift.
  */
 const MAX_ROWS_PER_PASS = RETENTION_SWEEP_MAX_ROWS;
 
@@ -1007,9 +1019,22 @@ export async function retentionCounts(
   };
 }
 
-/** The per-pass cap and the insert bound it must dominate, surfaced so a spec can
- *  assert against the SAME numbers the sweep uses rather than re-deriving them. */
+/**
+ * The four numbers the convergence argument is made of, surfaced so a spec can
+ * assert against the SAME values the sweep and the scheduler use rather than
+ * re-deriving them.
+ *
+ * `maxRowsPerPass` ALONE IS NOT THE DELETE SIDE — `maxPasses` multiplies it, and
+ * `insertedPerIteration` rather than `insertedPerArtifact` is the insert side
+ * (07-REVIEW.md HI-04). Both of the narrower numbers are kept: one pass really
+ * is bounded by `maxRowsPerPass`, and an artifact carrying no sourcemap really
+ * does insert `insertedPerArtifact` rows, which is the only claim that constant
+ * still makes.
+ */
 export const RETENTION_PASS_LIMITS = {
   maxRowsPerPass: MAX_ROWS_PER_PASS,
+  maxPasses: RETENTION_SWEEP_MAX_PASSES,
   insertedPerArtifact: INSERTED_PER_ARTIFACT,
+  insertedPerIteration: ROWS_INSERTED_PER_ITERATION_MAX,
+  sweepEveryNRows: RETENTION_SWEEP_EVERY_N,
 } as const;

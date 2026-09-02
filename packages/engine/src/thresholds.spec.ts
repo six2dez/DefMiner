@@ -215,47 +215,101 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     ).toBeGreaterThanOrEqual(worstCaseMs);
   });
 
-  // --- PITFALL 2 — THE CONVERGENCE INEQUALITY, RESTATED (plan 07-05) --------
+  // --- THE CONVERGENCE INEQUALITY (P1-D7, twice superseded) -----------------
   //
-  // A CHANGE TO PHASE 1 MACHINERY, DECLARED AS ONE. The assertion below read
-  // `RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
-  // RETENTION_SWEEP_EVERY_N` — 512 >= 3 * 128 — and it was correct for as long as
-  // `ingest/consumer.ts`'s sweep interval advanced by ONE per row-inserting
-  // iteration, because then "artifacts per interval" times "rows per artifact"
-  // WAS "rows per interval".
+  // A CHANGE TO PHASE 1 MACHINERY, DECLARED AS ONE, TWICE. Both superseded forms
+  // are recorded because each was wrong in a different way and the second one
+  // looked like a fix.
   //
-  // D-09 breaks the right-hand side by up to 521x: one artifact carrying monaco's
-  // real 781-source map inserts `3 + 781 + 781 = 1,565` rows in a single
-  // iteration. Raising RETENTION_SWEEP_MAX_ROWS to satisfy the old form needs
-  // `1,565 * 128 = 200,320`, which violates the 1024-row cost cap asserted
-  // immediately below by 195x; lowering RETENTION_SWEEP_EVERY_N instead drives it
-  // below 1. Both fail BY CONSTRUCTION, not by preference.
+  // FORM 1, through 2026-09-01: `RETENTION_SWEEP_MAX_ROWS >=
+  // ROWS_INSERTED_PER_ARTIFACT_MAX * RETENTION_SWEEP_EVERY_N` — 512 >= 3 * 128.
+  // Correct for as long as `ingest/consumer.ts`'s sweep interval advanced by ONE
+  // per row-inserting iteration, because then "artifacts per interval" times
+  // "rows per artifact" WAS "rows per interval". D-09 broke the right-hand side
+  // by up to 521x: one artifact carrying monaco's real 781-source map inserts
+  // `3 + 781 + 781 = 1,565` rows in a single iteration.
   //
-  // So the INTERVAL changed to count rows — which is what its own doc comment
-  // already claimed it counted — and the inequality is restated in the terms that
-  // are now true. It holds INDEPENDENTLY of how many rows any single artifact
-  // produces, which is exactly the property D-09 needs, and it delivers that
-  // WITHOUT the per-map row cap D-09 rejected.
+  // FORM 2, 2026-09-02 (plan 07-05, Pitfall 2): the interval was changed to count
+  // ROWS and the inequality restated as `RETENTION_SWEEP_MAX_ROWS >=
+  // RETENTION_SWEEP_EVERY_N` — 512 >= 128 — claimed to hold "INDEPENDENTLY of how
+  // many rows any single artifact produces".
+  //
+  // IT WAS NOT A CONVERGENCE PROOF (07-REVIEW.md HI-04). Convergence needs
+  //
+  //     rows deleted per interval >= rows inserted per interval
+  //
+  // and RETENTION_SWEEP_EVERY_N is not the insert side — it is the THRESHOLD at
+  // which a pass becomes due. The sweep runs BETWEEN drain iterations, so the
+  // rows inserted before a pass fires are whatever had accumulated below the
+  // threshold PLUS everything the crossing iteration inserted. On the code's own
+  // monaco example that is 1,565 in against 512 out: +1,053 rows per iteration,
+  // monotonically, which is verbatim the failure the inequality exists to
+  // prevent. The form was true and it bounded nothing.
+  //
+  // FORM 3, ASSERTED BELOW. The delete side is the CADENCE's budget rather than
+  // one pass's, because the per-pass cap is held down by the 1024-row cost cap
+  // and cannot be raised to 4,227 without breaking it. `ingest/consumer.ts`
+  // repeats the bounded pass while the database says work remains, yielding
+  // between passes, up to RETENTION_SWEEP_MAX_PASSES.
+  //
+  // THE CHECK NOW READS ROWS_INSERTED_PER_ARTIFACT_MAX AGAIN, DELIBERATELY, and
+  // that reverses a demotion this spec asserted mechanically on 2026-09-02. The
+  // demotion's premise was that "no constant multiplier relates artifacts to
+  // rows" — which is true of a MULTIPLIER and false of the SUM the insert side
+  // actually is: an iteration inserts the artifact's base rows PLUS its map's.
+  // `ROWS_INSERTED_PER_ITERATION_MAX` is that sum, derived in `thresholds.ts`,
+  // and the constant is load-bearing again as one of its two terms.
 
   it("the retention sweep CONVERGES against worst-case ingest", () => {
+    // THE DELETE SIDE: what one cadence crossing may remove.
+    const deletedPerInterval =
+      T.RETENTION_SWEEP_MAX_ROWS * T.RETENTION_SWEEP_MAX_PASSES;
+
+    // THE INSERT SIDE: what may be inserted before that crossing fires. Up to
+    // RETENTION_SWEEP_EVERY_N rows sit below the threshold, and then ONE
+    // iteration crosses it — and one iteration can insert
+    // ROWS_INSERTED_PER_ITERATION_MAX.
+    const insertedPerInterval =
+      T.RETENTION_SWEEP_EVERY_N + T.ROWS_INSERTED_PER_ITERATION_MAX;
+
     expect(
-      T.RETENTION_SWEEP_MAX_ROWS,
-      `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) is below ` +
-        `RETENTION_SWEEP_EVERY_N (${T.RETENTION_SWEEP_EVERY_N}). Both are counted in ` +
-        `ROWS: the interval is RETENTION_SWEEP_EVERY_N rows inserted, and the pass ` +
-        `deletes at most RETENTION_SWEEP_MAX_ROWS. A sweep that deletes fewer rows per ` +
-        `interval than the interval inserts bounds NOTHING: past the retention ceiling ` +
-        `the database grows monotonically while the sweep runs exactly as designed ` +
-        `(decision P1-D7, restated by plan 07-05 for D-09).`,
-    ).toBeGreaterThanOrEqual(T.RETENTION_SWEEP_EVERY_N);
+      deletedPerInterval,
+      `one cadence crossing may delete ${deletedPerInterval} rows ` +
+        `(${T.RETENTION_SWEEP_MAX_ROWS} x ${T.RETENTION_SWEEP_MAX_PASSES}) ` +
+        `against ${insertedPerInterval} that can be inserted before it fires ` +
+        `(${T.RETENTION_SWEEP_EVERY_N} below the threshold + ` +
+        `${T.ROWS_INSERTED_PER_ITERATION_MAX} from the crossing iteration). ` +
+        `A sweep that deletes fewer rows per interval than the interval inserts ` +
+        `bounds NOTHING: past the retention ceiling the database grows ` +
+        `monotonically while the sweep runs exactly as designed (decision P1-D7, ` +
+        `restated by 07-REVIEW.md HI-04).`,
+    ).toBeGreaterThanOrEqual(insertedPerInterval);
   });
 
-  it("the convergence check no longer READS ROWS_INSERTED_PER_ARTIFACT_MAX", () => {
-    // THE DEMOTION, MADE MECHANICAL RATHER THAN ASSERTED IN PROSE. The constant
-    // is retained as documentation of the superseded form — deleting it would
-    // erase the record of what the old inequality meant — and a retained constant
-    // that something still reads is not demoted at all. This reads THIS FILE and
-    // checks the convergence case's own text.
+  it("the insert side is DERIVED from what one iteration can actually write", () => {
+    // THE HALF THAT WENT MISSING TWICE, ASSERTED BY NAME so it cannot drift back
+    // into being a threshold or an artifact count. Each recovered source writes
+    // TWO rows under D-05 — one `sources` row per new content hash and one
+    // `source_sightings` row per `(map, index)` — and `parseSourceMap` refuses
+    // past SOURCE_ROWS_PER_MAP_MAX DECLARED SOURCES (the unit mismatch
+    // 07-REVIEW.md MD-01 records, which is why the factor is 2 and not 1).
+    expect(T.ROWS_INSERTED_PER_ITERATION_MAX).toBe(
+      T.ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * T.SOURCE_ROWS_PER_MAP_MAX,
+    );
+    // AND IT DOMINATES THE THRESHOLD, which is the whole reason Form 2 failed:
+    // if the crossing iteration could only insert less than the threshold, the
+    // threshold WOULD have been the insert side.
+    expect(T.ROWS_INSERTED_PER_ITERATION_MAX).toBeGreaterThan(
+      T.RETENTION_SWEEP_EVERY_N,
+    );
+  });
+
+  it("the convergence check names every quantity the inequality is made of", () => {
+    // MECHANICAL, IN THE SHAPE THE SUPERSEDED DEMOTION CHECK USED. An inequality
+    // that quietly stopped reading one of its four terms would still evaluate to
+    // `true` and would be asserting a weaker property than the one it claims —
+    // which is exactly how Form 2 shipped. This reads THIS FILE and checks the
+    // convergence case's own text.
     const source = readFileSync(THIS_FILE, "utf8");
     const start = source.indexOf(
       'it("the retention sweep CONVERGES against worst-case ingest"',
@@ -263,17 +317,43 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     expect(start, "the convergence case was renamed").toBeGreaterThan(-1);
     const end = source.indexOf("\n  });", start);
     const body = source.slice(start, end);
-    expect(
-      body.includes("ROWS_INSERTED_PER_ARTIFACT_MAX"),
-      "the convergence check reads ROWS_INSERTED_PER_ARTIFACT_MAX again. That " +
-        "constant became documentation on 2026-09-02 (plan 07-05): under D-09 no " +
-        "constant multiplier relates artifacts to rows, so an inequality built on " +
-        "one is asserting a relationship that no longer exists.",
-    ).toBe(false);
-    // Non-vacuity: the slice really is the case body and really does hold the
-    // assertion, so the `false` above is not passing over an empty string.
-    expect(body.includes("RETENTION_SWEEP_EVERY_N")).toBe(true);
+    for (const term of [
+      "RETENTION_SWEEP_MAX_ROWS",
+      "RETENTION_SWEEP_MAX_PASSES",
+      "RETENTION_SWEEP_EVERY_N",
+      "ROWS_INSERTED_PER_ITERATION_MAX",
+    ]) {
+      expect(
+        body.includes(term),
+        `the convergence check no longer reads ${term}. All four are terms of ` +
+          `the inequality; dropping one leaves an assertion that passes while ` +
+          `bounding something narrower than it claims (07-REVIEW.md HI-04).`,
+      ).toBe(true);
+    }
+    // Non-vacuity: the slice really is the case body.
     expect(body.length).toBeGreaterThan(200);
+  });
+
+  it("one retention PASS is still a bounded piece of work", () => {
+    // THE COST HALF, UNCHANGED. Convergence is now satisfied by REPEATING a
+    // bounded pass with a yield between passes rather than by raising this cap,
+    // precisely so this assertion keeps holding: sixteen bounded stretches with
+    // the event loop between them is not the long uninterruptible stretch the
+    // bounded pass exists to prevent.
+    expect(
+      T.RETENTION_SWEEP_MAX_ROWS,
+      `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) exceeds the 1024-row ` +
+        `cost cap. Convergence and cost pull in opposite directions; raising the delete ` +
+        `budget to satisfy convergence must not turn one pass into a long stretch that ` +
+        `starves ingest. Raise RETENTION_SWEEP_MAX_PASSES instead.`,
+    ).toBeLessThanOrEqual(1024);
+  });
+
+  it("the pass budget is a CEILING and is bounded in its own right", () => {
+    // A budget that could grow without limit would make one cadence crossing an
+    // unbounded amount of work again, by a different route.
+    expect(T.RETENTION_SWEEP_MAX_PASSES).toBeGreaterThanOrEqual(1);
+    expect(T.RETENTION_SWEEP_MAX_PASSES).toBeLessThanOrEqual(64);
   });
 
   it("ROWS_INSERTED_PER_ARTIFACT_MAX survives as the record of what changed", () => {
@@ -281,16 +361,6 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     // sourcemap inserts an `artifacts` row, an `observations` row and an
     // `analyses` row.
     expect(T.ROWS_INSERTED_PER_ARTIFACT_MAX).toBe(3);
-  });
-
-  it("one retention sweep pass stays a bounded piece of work", () => {
-    expect(
-      T.RETENTION_SWEEP_MAX_ROWS,
-      `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) exceeds the 1024-row ` +
-        `cost cap. Convergence and cost pull in opposite directions; raising the delete ` +
-        `budget to satisfy convergence must not turn one pass into a long stretch that ` +
-        `starves ingest. Lower RETENTION_SWEEP_EVERY_N instead.`,
-    ).toBeLessThanOrEqual(1024);
   });
 
   // --- D-01's backpressure watermark (plan 06-03) ---------------------------

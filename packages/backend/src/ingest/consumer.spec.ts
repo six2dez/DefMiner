@@ -45,6 +45,7 @@ import {
   PASSIVE_MAX_BYTES,
   QUEUE_CAP,
   RETENTION_SWEEP_EVERY_N,
+  RETENTION_SWEEP_MAX_PASSES,
   RETENTION_SWEEP_MAX_ROWS,
   ROWS_INSERTED_PER_ARTIFACT_MAX,
 } from "@defminer/engine/thresholds";
@@ -812,11 +813,11 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     expect(counters.retentionSweeps).toBe(1);
   });
 
-  it("a single cadence crossing performs EXACTLY ONE pass, not a loop to convergence", async () => {
-    // A pass reporting `moreWork` defers to the next boundary. Looping until it
-    // is false would rebuild the long uninterruptible stretch the bounded pass
-    // exists to prevent — and deferral converges anyway, because the per-pass
-    // delete cap dominates the worst-case insert rate by assertion.
+  it("a cadence crossing with NOTHING to sweep performs exactly one pass", async () => {
+    // THE ORDINARY CASE, AND IT IS STILL ONE PASS. `sweepRetention` re-counts
+    // the tables and reports `moreWork: false` whenever they are inside their
+    // bounds, so the multi-pass drain added for 07-REVIEW.md HI-04 is not
+    // reachable here. The repeat costs nothing on a database that is not behind.
     const entries: Planned[] = [];
     for (let i = 0; i < RETENTION_SWEEP_EVERY_N; i += 1) {
       entries.push({
@@ -846,8 +847,8 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     //   pass 3: first row at or past 132 + 128 = 260 -> iteration 87, row 261
     //   next would need row 389, and the run ends at 384
     //
-    // A loop-to-convergence, or a per-iteration sweep, would still be far more —
-    // which is the property this case has always been about.
+    // A per-iteration sweep would still be far more — which is the property this
+    // case has always been about.
     expect(
       counters.retentionSweeps,
       `${counters.retentionSweeps} sweeps over ${RETENTION_SWEEP_EVERY_N} processed artifacts. ` +
@@ -856,8 +857,80 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     ).toBe(3);
     expect(
       counters.retentionSweeps,
-      "one pass per iteration — the loop-to-convergence shape the bounded pass exists to refuse.",
+      "one pass per iteration — a shape the cadence exists to refuse.",
     ).toBeLessThan(RETENTION_SWEEP_EVERY_N);
+  });
+
+  it("REPEATS the bounded pass within one crossing while a backlog remains", async () => {
+    // 07-REVIEW.md HI-04. One pass deletes at most RETENTION_SWEEP_MAX_ROWS,
+    // held there by the 1024-row cost cap, while ONE iteration can insert
+    // ROWS_INSERTED_PER_ITERATION_MAX. Exactly one pass per crossing therefore
+    // cannot converge — on the code's own monaco example it is +1,053 rows per
+    // iteration, monotonically, which is the failure the inequality was written
+    // to prevent.
+    //
+    // THE BACKLOG IS THREE PASSES DEEP ON PURPOSE. A two-pass backlog would pass
+    // against an off-by-one "run one extra pass"; this needs a real loop.
+    const backlog = RETENTION_SWEEP_MAX_ROWS * 2 + 100;
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "10",
+      Date.now(),
+    );
+    seedArtifacts(backlog, Date.now() - 1_000);
+    expect((await retentionCounts(fx.db, PROJECT)).artifacts).toBe(backlog);
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("trigger") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    // THE BACKLOG IS CLEARED INSIDE ONE CROSSING. Under the single-pass rule
+    // this stopped at `backlog + 1 - RETENTION_SWEEP_MAX_ROWS` rows and waited
+    // for the next cadence boundary that sustained ingest never lets it win.
+    const after = await retentionCounts(fx.db, PROJECT);
+    expect(
+      after.artifacts,
+      `${after.artifacts} artifacts remain against a row bound of 10. One ` +
+        `bounded pass can only remove ${RETENTION_SWEEP_MAX_ROWS}; the drain ` +
+        `must repeat while work remains.`,
+    ).toBeLessThanOrEqual(11);
+
+    // AND IT REALLY DID TAKE SEVERAL PASSES — the counter is what proves the
+    // loop ran rather than the cap having been raised behind the test's back.
+    expect(counters.retentionSweeps).toBeGreaterThan(1);
+    expect(counters.retentionSweeps).toBeLessThanOrEqual(
+      RETENTION_SWEEP_MAX_PASSES,
+    );
+    expect(counters.retentionDeleted).toBeGreaterThan(RETENTION_SWEEP_MAX_ROWS);
+  });
+
+  it("does NOT repeat a pass that deleted nothing — the spin guard", async () => {
+    // A pass whose deletes are all rejecting re-counts the tables, finds them
+    // still over the bound, and reports `moreWork` for ever. Repeating it inside
+    // one cadence would multiply its error counters and log lines by the pass
+    // budget and remove nothing. Progress is part of the repeat condition, so a
+    // failing sweep costs ONE pass per crossing exactly as it did before.
+    await putSetting(
+      fx.db,
+      GLOBAL_PROJECT_ID,
+      RETENTION_MAX_ROWS_KEY,
+      "1",
+      Date.now(),
+    );
+    seedArtifacts(RETENTION_SWEEP_MAX_ROWS * 2, Date.now() - 1_000);
+
+    const p = plan([
+      { id: "r1", url: "https://x.test/a.js", bytes: body("locked") },
+    ]);
+    p.offer();
+    await runOnce(p.overrides, { db: dbWhereDeletesFail() });
+
+    expect(counters.retentionSweeps).toBe(1);
+    expect(counters.retentionDeleted).toBe(0);
   });
 
   it("does not repeat a cadence pass while early returns leave the write count stalled", async () => {

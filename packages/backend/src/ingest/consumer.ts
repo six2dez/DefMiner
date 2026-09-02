@@ -65,6 +65,7 @@ import {
   MAP_MAX_BYTES,
   PASSIVE_MAX_BYTES,
   RETENTION_SWEEP_EVERY_N,
+  RETENTION_SWEEP_MAX_PASSES,
   SOURCE_ROWS_PER_MAP_MAX,
   SOURCEMAP_TAIL_WINDOW_BYTES,
 } from "@defminer/engine/thresholds";
@@ -501,9 +502,26 @@ export function startConsumer(
   // SO THE COUNTER IS MADE TO MATCH THE DOCUMENTATION RATHER THAN THE OTHER WAY
   // ROUND. The shipped comment at the increment site already said the interval's
   // right-hand side is "rows inserted per sweep interval"; it simply was not
-  // true. Now it is, and the restated inequality —
-  // `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N` — holds INDEPENDENTLY
-  // of how many rows any single artifact produces.
+  // true. Now it is, and the interval is a ROW count.
+  //
+  // AND THE INEQUALITY THAT WAS RESTATED ALONGSIDE IT WAS STILL NOT A
+  // CONVERGENCE PROOF (07-REVIEW.md HI-04, 2026-09-02). It read
+  // `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N` — 512 >= 128 — with
+  // the claim, in three places, that it holds "INDEPENDENTLY of how many rows
+  // any single artifact produces". It compares the delete cap against the
+  // THRESHOLD at which a pass becomes due, not against rows inserted per
+  // interval. The sweep runs BETWEEN iterations, so the rows inserted before a
+  // pass fires are the rows inserted by the iteration that CROSSED the
+  // threshold — 1,565 for monaco's map by this comment's own example, and up to
+  // ROWS_INSERTED_PER_ITERATION_MAX in the worst case. 1,565 in against 512 out
+  // is +1,053 rows per iteration, monotonically: verbatim the failure the
+  // inequality exists to prevent.
+  //
+  // The counter change above is RETAINED — the interval genuinely should count
+  // rows — and the convergence half is fixed at the SCHEDULER instead, by
+  // repeating the bounded pass while work remains. See RETENTION_SWEEP_MAX_PASSES
+  // for the inequality that is now load-bearing and the drain loop below for the
+  // shape.
   //
   // Monotonic for the plugin's lifetime; never reset by a sweep, or the interval
   // would restart every time it fired.
@@ -512,22 +530,48 @@ export function startConsumer(
   let lastSweptAtProcessedCount = 0;
 
   /**
-   * ONE bounded retention pass. Never a loop to convergence.
+   * ONE bounded retention pass. Returns whether work REMAINS after it.
    *
    * A single pass is bounded (RETENTION_SWEEP_MAX_ROWS) precisely so it cannot
-   * become the long synchronous stretch the sweep exists to prevent — looping
-   * until `moreWork` is false would rebuild exactly that. Deferral converges
-   * anyway, because RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
-   * RETENTION_SWEEP_EVERY_N by assertion: the delete rate is above the worst-case
-   * insert rate, so a backlog DRAINS under sustained ingest rather than merely
-   * failing to grow faster.
+   * become the long synchronous stretch the sweep exists to prevent. THAT BOUND
+   * IS UNCHANGED; what changed on 2026-09-02 is what the caller does with the
+   * answer, and why (07-REVIEW.md HI-04).
+   *
+   * THIS DOCBLOCK USED TO CITE AN ASSERTION THAT NO LONGER EXISTS. It read
+   * "deferral converges anyway, because RETENTION_SWEEP_MAX_ROWS >=
+   * ROWS_INSERTED_PER_ARTIFACT_MAX * RETENTION_SWEEP_EVERY_N BY ASSERTION" —
+   * and `thresholds.spec.ts` had deleted that assertion in the same phase. The
+   * one function whose correctness turns on the inequality was citing the
+   * superseded form of it.
+   *
+   * AND THE FORM THAT REPLACED IT WAS ALSO NOT A CONVERGENCE PROOF.
+   * `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N` compares the delete cap
+   * against the THRESHOLD at which a pass becomes due, not against rows inserted
+   * per interval. One iteration carrying monaco's map inserts 1,565 rows against
+   * 512 deleted: +1,053 per iteration, monotonically.
+   *
+   * SO THE CALLER REPEATS THE PASS WHILE IT IS MAKING PROGRESS, bounded by
+   * RETENTION_SWEEP_MAX_PASSES and yielding between passes. The inequality that
+   * is actually load-bearing is stated at {@link RETENTION_SWEEP_MAX_PASSES} and
+   * asserted by `thresholds.spec.ts`. `moreWork` is re-COUNTED against the
+   * database at the end of every pass rather than inferred from the pass's own
+   * bookkeeping, so the loop's exit condition is a fact about the tables.
+   *
+   * WHAT IS RETURNED IS "REPEAT ME", NOT `moreWork` — AND THE DIFFERENCE IS A
+   * SPIN GUARD. A pass that deleted NOTHING and still reports work remaining is
+   * a pass that is not converging: the deletes are failing (a locked database, a
+   * half-applied schema) or every candidate is one the bounds require keeping.
+   * Repeating it inside the same cadence would multiply the failure's error
+   * counters and log lines by the pass budget and delete nothing. Progress is
+   * therefore part of the condition, which also makes the loop terminate on its
+   * own merits rather than only on the ceiling.
    *
    * Retention is the ONLY bound on this database. Caido never garbage-collects
    * it, does not delete it when a project is deleted, and it survives a
    * force-reinstall — so a sweep that is available but never scheduled closes
    * nothing at all.
    */
-  async function runRetentionPass(projectId: string): Promise<void> {
+  async function runRetentionPass(projectId: string): Promise<boolean> {
     try {
       const bounds = await getRetentionBounds(deps.db, projectId);
       const summary = await sweepRetention(
@@ -601,21 +645,33 @@ export function startConsumer(
         log(text);
       }
       if (summary.moreWork) {
-        // Picked up at the NEXT cadence boundary, deliberately.
+        // Picked up by the next pass WITHIN this cadence if the pass budget
+        // allows, and at the next cadence boundary otherwise.
         log(
           "retention pass deleted " +
             String(summary.deleted) +
             " of " +
             String(summary.examined) +
-            " examined; more remains for the next cadence boundary",
+            " examined; more remains",
         );
       }
+      // `deleted > 0` IS THE SPIN GUARD, ARGUED IN THE DOCBLOCK. `moreWork`
+      // alone would loop the pass budget over a sweep whose every delete is
+      // rejecting — `workRemains` re-counts the tables and keeps answering
+      // true, because nothing was removed.
+      return summary.moreWork && summary.deleted > 0;
     } catch (e) {
       // A sweep must never take the loop down with it: the database growing is a
       // problem, and the plugin stopping is a bigger one.
       counters.consumerErrors++;
       recordError(e);
       log("retention sweep failed: " + describeError(e));
+      // FALSE, NOT `summary.moreWork`. `sweepRetention` pins `moreWork` true on
+      // its own internal throw, and a throw OUT of it means the pass reported
+      // nothing at all — repeating it inside the same cadence would spin on a
+      // failure that is not going to resolve between two yields. The next
+      // cadence boundary retries, which is where a persistent failure belongs.
+      return false;
     }
   }
 
@@ -1388,7 +1444,41 @@ export function startConsumer(
           if (projectId !== "") {
             sweptSinceStart = true;
             lastSweptAtProcessedCount = processedForSweep;
-            await runRetentionPass(projectId);
+            // ===============================================================
+            // BOUNDED PER SLICE, NOT PER CADENCE (07-REVIEW.md HI-04)
+            // ===============================================================
+            // Convergence needs `rows deleted per interval >= rows inserted per
+            // interval`, and ONE pass cannot deliver it: the delete side is
+            // held at RETENTION_SWEEP_MAX_ROWS by the 1024-row cost cap while
+            // one iteration carrying monaco's map inserts 1,565 rows. Exactly
+            // one pass per crossing is +1,053 rows per iteration, for ever.
+            //
+            // So the pass REPEATS while the database says work remains, up to
+            // RETENTION_SWEEP_MAX_PASSES, and the inequality it satisfies is
+            // stated and asserted at that constant.
+            //
+            // THE COST ARGUMENT SURVIVES INTACT, and the yield is what makes
+            // that true: each pass is still bounded at RETENTION_SWEEP_MAX_ROWS
+            // and the event loop runs between them, so this is up to sixteen
+            // bounded stretches rather than one long uninterruptible one.
+            //
+            // AN ORDINARY CADENCE STILL RUNS EXACTLY ONE PASS. `moreWork` is
+            // false whenever the tables are inside their bounds, so the repeat
+            // is reachable only when there is a real backlog — which is the
+            // only case in which convergence was ever in question.
+            //
+            // `stopped` IS CHECKED EVERY TIME AROUND. A shutdown arriving mid-
+            // drain must not be held for fifteen more passes. And the pass
+            // itself declines to be repeated unless it DELETED something, so a
+            // failing sweep costs one pass per cadence and not sixteen.
+            for (
+              let pass = 0;
+              pass < RETENTION_SWEEP_MAX_PASSES && !stopped;
+              pass += 1
+            ) {
+              if (!(await runRetentionPass(projectId))) break;
+              await yieldToLoop();
+            }
           }
         }
 
