@@ -41,7 +41,7 @@
 // why this module sanitises nothing: there is nothing here to sanitise, and a
 // `forCellText` call over an integer would imply the opposite.
 
-import type { HealthCounters } from "../api/client";
+import type { HealthCounters, SourcemapHealthCounters } from "../api/client";
 
 import { groupThousands } from "./table-contract";
 
@@ -49,15 +49,27 @@ import { groupThousands } from "./table-contract";
 // THE FOUR COUNTERS
 // ---------------------------------------------------------------------------
 
+/**
+ * A field of {@link HealthCounters} the STRIP renders — the four flat numbers,
+ * and never the nested reconstruction sub-object.
+ *
+ * `Exclude`d rather than listed, so a fifth flat counter added to the payload
+ * is available here without a second edit and a nested one can never be
+ * mistaken for a strip cell.
+ *
+ * @internal
+ */
+export type StripCounterId = Exclude<keyof HealthCounters, "sourcemap">;
+
 /** One counter's identity, its label, its unit and what it tells the operator.
  *
  * @internal
  */
 export type HealthCounter = {
-  /** The field on {@link HealthCounters} this row renders. Typed as a key of
-   *  that object, so a renamed field is a typecheck failure here rather than an
-   *  `undefined` rendered as a blank number. */
-  readonly id: keyof HealthCounters;
+  /** The field this row renders. Typed as a key of the object it reads, so a
+   *  renamed field is a typecheck failure here rather than an `undefined`
+   *  rendered as a blank number. */
+  readonly id: StripCounterId | keyof SourcemapHealthCounters;
   readonly label: string;
   /** Rendered after the number, or `""` for a bare count. DefMiner-authored,
    *  like every other string that reaches this strip. */
@@ -68,6 +80,22 @@ export type HealthCounter = {
   readonly help: string;
 };
 
+/** A counter row addressing one of the payload's FLAT fields — a strip cell.
+ *
+ * @internal
+ */
+export type StripHealthCounter = HealthCounter & {
+  readonly id: StripCounterId;
+};
+
+/** A counter row addressing one field of the reconstruction sub-object.
+ *
+ * @internal
+ */
+export type SourcemapHealthCounter = HealthCounter & {
+  readonly id: keyof SourcemapHealthCounters;
+};
+
 /**
  * The four numbers, in the order 05-UI-SPEC.md names them.
  *
@@ -76,7 +104,7 @@ export type HealthCounter = {
  * an operator reads by position does not move under them between two visits to
  * the same page.
  */
-export const HEALTH_COUNTERS: readonly HealthCounter[] = Object.freeze([
+export const HEALTH_COUNTERS: readonly StripHealthCounter[] = Object.freeze([
   {
     id: "queueDepth",
     label: "Queue depth",
@@ -104,11 +132,94 @@ export const HEALTH_COUNTERS: readonly HealthCounter[] = Object.freeze([
 ] as const);
 
 // ---------------------------------------------------------------------------
+// THE SIX RECONSTRUCTION COUNTERS (Phase 7, plan 07-10)
+// ---------------------------------------------------------------------------
+
+/**
+ * What sourcemap reconstruction did, as labelled ROWS rather than strip cells.
+ *
+ * ===========================================================================
+ * ROWS AND NOT A SECOND STRIP, AND THE REASON IS THE SHIPPED STRIP'S CONTRACT
+ * ===========================================================================
+ * `overflow / health-strip` requires that the strip's height come from ONE
+ * utility and that no counter ever wrap it. That works at four short cells on
+ * one `h-12` line; six cells with labels this long would either wrap the strip
+ * — breaking the row the shipped contract turns on — or clip the labels, which
+ * is worse than a second block. These are diagnostics an operator READS, not a
+ * pulse they GLANCE at, so they get the reading shape.
+ *
+ * ===========================================================================
+ * THE EXTERNAL ROW IS THE LOAD-BEARING ONE AND IT IS NOT A FAILURE
+ * ===========================================================================
+ * Under D-01 an external `.map` announcement is DISCOVERED and not consumed, on
+ * purpose: DefMiner never fetches a `.map`, because that would be a request the
+ * target can see. So the number is neither good news nor bad news — it is the
+ * MEASUREMENT of how much of MAP-01 this phase hands to Phase 8. Its label says
+ * what it means without reading as an error, its `help` says why the number
+ * exists, and `HealthPanel.vue` gives it the same tone as every other row: no
+ * `danger`, no `info`, no degradation styling of any kind. A number coloured as
+ * a fault is a number an operator files a bug about.
+ */
+export const SOURCEMAP_COUNTERS: readonly SourcemapHealthCounter[] =
+  Object.freeze([
+    {
+      id: "announcedInline",
+      label: "Inline maps announced",
+      unit: "",
+      help: "Bundles that carried their sourcemap inside themselves, as a data: URI. These are the ones DefMiner can reconstruct from, because the map arrived in bytes Caido already had.",
+    },
+    {
+      id: "announcedExternal",
+      label: "External maps announced",
+      unit: "",
+      help: "Bundles that named a separate .map file. DefMiner does not fetch them — a fetch is a request the target can see, and DefMiner stays silent — so these are counted and left. This number is how much of the sourcemap surface is waiting on a later release, not a count of anything that went wrong.",
+    },
+    {
+      id: "mapRefusedTooLarge",
+      label: "Maps refused for size",
+      unit: "",
+      help: "Inline maps whose decoded JSON was larger than the measured ceiling. The backend runs on one thread and parsing a map that large would stall the proxy, so the map is refused rather than attempted.",
+    },
+    {
+      id: "mapMalformed",
+      label: "Maps malformed",
+      unit: "",
+      help: "Inline maps that announced a sourcemap and were not one — truncated base64, invalid JSON, a document too deeply nested, or a shape the format does not allow.",
+    },
+    {
+      id: "sourcesRecovered",
+      label: "Sources recovered",
+      unit: "",
+      help: "Distinct source files reconstructed and stored, counted once per content hash. The same file in two bundles is one row here and two sightings below.",
+    },
+    {
+      id: "sightingsRecorded",
+      label: "Sightings recorded",
+      unit: "",
+      help: "Times a recovered source was seen in a map. This is the number that grows when the same library appears across a target's bundles, and it is what the drill-down's per-artifact counts are read from.",
+    },
+  ] as const);
+
+// ---------------------------------------------------------------------------
 // COPY
 // ---------------------------------------------------------------------------
 
 /** The section heading. */
 export const HEALTH_HEADING = "Backend health";
+
+/** The reconstruction block's heading. */
+export const SOURCEMAP_HEADING = "Sourcemap reconstruction";
+
+/**
+ * Why these six numbers are on screen, said on the surface itself.
+ *
+ * IT PRE-EMPTS THE MISREADING RATHER THAN WAITING FOR IT. An operator who sees
+ * a low `Sources recovered` beside a high `External maps announced` should read
+ * a deliberate design choice, not a broken feature — and the only place that
+ * sentence can do its work is next to the numbers.
+ */
+export const SOURCEMAP_PURPOSE =
+  "DefMiner recovers source only from sourcemaps embedded in a bundle it already has. It never fetches a .map file — that would be a request the target can see. A low recovered count beside a high external count is the expected result on production traffic, not a fault.";
 
 /**
  * Why the operator is looking at this, said on the surface itself.
@@ -220,6 +331,8 @@ export function counterText(counter: HealthCounter, value: number): string {
  * buys and a rule that asked whether the expression happened to be safe would be
  * a rule somebody argues with.
  */
-export function counterId(id: keyof HealthCounters): string {
+export function counterId(
+  id: StripCounterId | keyof SourcemapHealthCounters,
+): string {
   return "defminer-health-" + id;
 }

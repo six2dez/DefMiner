@@ -1615,6 +1615,11 @@ export async function init(sdk: PluginSdk): Promise<void> {
     // reporting about would be the joke research pitfall P-07 warns against.
     sdk.api.register("getHealth", () => {
       if (currentProjectId() === null) return HEALTH_UNAVAILABLE;
+      // ONE READ OF THE PROJECTION, not two. `slimStatus()` deep-copies the
+      // counters, so calling it twice would hand the strip two snapshots taken
+      // at two moments and invite a reader to compare them as if they were one.
+      const status = slimStatus();
+      const map = status.counters.sourcemap;
       return {
         outcome: "health",
         health: {
@@ -1623,7 +1628,20 @@ export async function init(sdk: PluginSdk): Promise<void> {
           jobsInFlight: jobsInFlight(),
           // FROM THE SAME PROJECTION `getStatus` READS, not a second reader of
           // the same module variable. One number, one owner.
-          maxSliceMs: slimStatus().maxSliceMs,
+          maxSliceMs: status.maxSliceMs,
+          // PHASE 7's OWN NUMBERS, and `announcedExternal` is the load-bearing
+          // one: it measures how much of MAP-01 D-01 hands to Phase 8. MAPPED
+          // FIELD BY FIELD, NEVER SPREAD — the rule every projection in this
+          // file follows, so a counter added to the sub-map tomorrow does not
+          // arrive on an operator-facing surface without anybody choosing it.
+          sourcemap: {
+            announcedInline: map.announcedInline,
+            announcedExternal: map.announcedExternal,
+            mapRefusedTooLarge: map.mapRefusedTooLarge,
+            mapMalformed: map.mapMalformed,
+            sourcesRecovered: map.sourcesRecovered,
+            sightingsRecorded: map.sightingsRecorded,
+          },
         },
       };
     });

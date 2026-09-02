@@ -170,6 +170,20 @@ import type { SlimStatus } from "../telemetry";
  * the request grew a `scopeSha256` field. That is a changed ARGUMENT shape on a
  * SHIPPED endpoint, which the rule at the top of this comment covers outright.
  *
+ * NOT BUMPED BY PLAN 07-10, AND THAT IS AN APPLICATION OF THE RULE AT THE TOP
+ * RATHER THAN AN EXEMPTION FROM IT — recorded so the next author does not have
+ * to re-derive it. 07-10 WIDENS {@link HealthPayload} with a `sourcemap`
+ * sub-object of six integers. A shipped reader holding the old shape reads the
+ * four numbers it knows and never looks at the fifth field: a widening of a
+ * RESPONSE payload with no union and no discriminant cannot be misread the way
+ * `getScanStatus`'s null-or-payload could, and there is no arm here for an
+ * `undefined` to be mistaken for. And the version that carries the health
+ * surface's Phase 7 rows at all is 6, which was bumped by plan 07-06 IN THIS
+ * SAME PHASE — there is no shipped bundle anywhere that has seen version 6's
+ * narrower `HealthPayload` and not this one. Bumping again would spend a forced
+ * reload on a mismatch that cannot exist, and would make the NEXT bump — the
+ * one that does protect somebody — one number harder to reason about.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
 export const CONTRACT_VERSION = 6;
@@ -452,7 +466,44 @@ type SettingWriteRequest = {
 };
 
 /**
- * What `getHealth` answers with — OBS-01's four numbers, and nothing else.
+ * What reconstruction did, for the health surface (Phase 7, plan 07-10).
+ *
+ * ===========================================================================
+ * D-03's COUNTER IS THE POINT OF THIS SHAPE, AND IT IS A MEASUREMENT
+ * ===========================================================================
+ * {@link announcedExternal} counts the `.map` announcements this phase
+ * DELIBERATELY DOES NOT FOLLOW. D-01 refuses every outbound fetch, so an
+ * external announcement costs a counter increment and nothing else — no table,
+ * no row, no target-controlled URL at rest for a phase that will not use it.
+ * The number is therefore how much of MAP-01 this phase HANDS TO PHASE 8, and
+ * it answers a question the phase cannot otherwise answer: a low recovered-
+ * source count on real traffic is an EXPECTED outcome, not a defect. It is
+ * surfaced rather than left internal for exactly that reason.
+ *
+ * SIX INTEGERS AND NO STRING, which is what lets it ride {@link HealthPayload}
+ * without weakening the property that payload's docblock turns on. The
+ * per-reason sub-maps in `telemetry.ts` — `mapRefused`, `derivedRejected` —
+ * are deliberately NOT here: the strip renders labelled totals, and a reason
+ * breakdown belongs to the diagnostic projection `getStatus` already carries.
+ */
+export type SourcemapHealth = {
+  /** Inline `data:application/json;base64,` announcements seen (D-01). */
+  readonly announcedInline: number;
+  /** Announcements naming a URL this phase does not fetch (D-03). */
+  readonly announcedExternal: number;
+  /** Inline maps refused because the payload exceeded `MAP_MAX_BYTES`. */
+  readonly mapRefusedTooLarge: number;
+  /** Inline maps refused for any reason that is not size. */
+  readonly mapMalformed: number;
+  /** Recovered sources written to `sources`, one row per distinct content. */
+  readonly sourcesRecovered: number;
+  /** `(map, index)` sightings written to `source_sightings`. */
+  readonly sightingsRecorded: number;
+};
+
+/**
+ * What `getHealth` answers with — OBS-01's four numbers, and the Phase 7
+ * reconstruction counters beside them.
  *
  * WHY THIS EXISTS BESIDE `getStatus`, WHICH ALREADY CARRIES THEM. `getStatus`
  * carries the whole {@link SlimStatus} projection: every counter, the last error
@@ -466,9 +517,15 @@ type SettingWriteRequest = {
  * it at all.
  *
  * NO NEW MEASUREMENT. Every number here is already measured — the queue's own
- * depth and overflow count, the consumer's drain flag, and the running maximum
- * `recordSlice` keeps. OBS-01 formally belongs to Phase 2; this exposes what
- * exists rather than instrumenting anything.
+ * depth and overflow count, the consumer's drain flag, the running maximum
+ * `recordSlice` keeps, and `telemetry.ts`'s `sourcemap` sub-map. OBS-01
+ * formally belongs to Phase 2; this exposes what exists rather than
+ * instrumenting anything.
+ *
+ * {@link SourcemapHealth} DOES NOT WEAKEN THE NO-STRING PROPERTY. It is six
+ * integers on a nested object, so the shape that reaches the strip still has
+ * no string on it at all and the `long-text / health-strip` row stays a
+ * property of the shape rather than of anyone's discipline.
  */
 export type HealthPayload = {
   /** Entries waiting in the bounded queue right now. */
@@ -481,6 +538,8 @@ export type HealthPayload = {
   /** The largest uninterrupted synchronous stretch observed, in float ms. THE
    *  NUMBER THAT DISTINGUISHES A BLOCKED BACKEND FROM A SLOW RENDERER. */
   readonly maxSliceMs: number;
+  /** What sourcemap reconstruction did, including D-03's counter. */
+  readonly sourcemap: SourcemapHealth;
 };
 
 /**

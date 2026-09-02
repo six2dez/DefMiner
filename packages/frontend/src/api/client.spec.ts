@@ -234,7 +234,20 @@ const SETTING_ROWS: readonly SettingRow[] = [
 
 const HEALTH: HealthOutcome = {
   outcome: "health",
-  health: { queueDepth: 0, droppedCount: 0, jobsInFlight: 0, maxSliceMs: 0 },
+  health: {
+    queueDepth: 0,
+    droppedCount: 0,
+    jobsInFlight: 0,
+    maxSliceMs: 0,
+    sourcemap: {
+      announcedInline: 0,
+      announcedExternal: 0,
+      mapRefusedTooLarge: 0,
+      mapMalformed: 0,
+      sourcesRecovered: 0,
+      sightingsRecorded: 0,
+    },
+  },
 };
 
 /** DEPLOY-02's footprint. Three readable rows against their caps, no path and

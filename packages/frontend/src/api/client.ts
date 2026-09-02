@@ -49,7 +49,7 @@
 //   * `getCompat` IS WRAPPED. The refusal surface renders its report, and on a
 //     refusing build it is one of only TWO endpoints that exist at all.
 //   * `getStatus` IS STILL NOT, and that is a decision rather than an omission.
-//     The health strip reads `getHealth`, which carries four numbers and no
+//     The health strip reads `getHealth`, which carries numbers and no
 //     string; `getStatus` carries the whole telemetry projection including
 //     `lastError`. A strip built over the wider shape would be one field access
 //     away from rendering a plugin-generated string that quotes what the plugin
@@ -413,19 +413,46 @@ export type SettingWriteOutcome =
   | { readonly ok: false; readonly reason: BoundRejection };
 
 /**
- * The four numbers the health strip renders.
+ * The numbers the health strip renders.
  *
- * Mirrors `HealthPayload` in packages/backend/src/api/spec.ts. FOUR NUMBERS AND
+ * Mirrors `HealthPayload` in packages/backend/src/api/spec.ts. NUMBERS AND
  * NO STRING, and the absence is the property: 05-UI-SPEC.md's `long-text /
  * health-strip` row makes "only DefMiner-authored labels and numeric counters"
  * a rule of this surface, and a shape with no string on it cannot break it by a
  * later edit adding one field access.
  */
+/**
+ * What sourcemap reconstruction did (Phase 7, plan 07-10).
+ *
+ * Mirrors `SourcemapHealth` in packages/backend/src/api/spec.ts, for the reason
+ * this file's header gives — the two packages cannot import each other.
+ *
+ * SIX INTEGERS AND NO STRING, which is what lets these rows join the health
+ * surface without weakening `long-text / health-strip`'s property: there is no
+ * field here a later edit could render a target byte through.
+ *
+ * `announcedExternal` IS THE LOAD-BEARING ONE AND IT IS NOT AN ERROR TALLY. It
+ * counts the `.map` announcements this phase deliberately does not follow —
+ * D-01 refuses every outbound fetch — so it is the measurement of how much of
+ * MAP-01 Phase 7 hands to Phase 8, which is why it is on screen rather than
+ * left internal. A low recovered-source count on real traffic is an EXPECTED
+ * outcome, and this number is what says so.
+ */
+export type SourcemapHealthCounters = {
+  readonly announcedInline: number;
+  readonly announcedExternal: number;
+  readonly mapRefusedTooLarge: number;
+  readonly mapMalformed: number;
+  readonly sourcesRecovered: number;
+  readonly sightingsRecorded: number;
+};
+
 export type HealthCounters = {
   readonly queueDepth: number;
   readonly droppedCount: number;
   readonly jobsInFlight: number;
   readonly maxSliceMs: number;
+  readonly sourcemap: SourcemapHealthCounters;
 };
 
 /**
@@ -861,7 +888,8 @@ export type BackendClient = {
   writeSetting: (
     request: SettingWriteRequest,
   ) => Promise<RpcResult<SettingWriteOutcome>>;
-  /** The four counters that tell a blocked backend from a slow renderer. */
+  /** The counters that tell a blocked backend from a slow renderer, plus
+   *  Phase 7's reconstruction totals. */
   getHealth: () => Promise<RpcResult<HealthOutcome>>;
   /** Where the data lives and how much of each retention cap it uses
    *  (DEPLOY-02, D-19, D-25). No path, no bytes. */

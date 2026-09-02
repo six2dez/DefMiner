@@ -46,10 +46,16 @@ import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
-import type { HealthCounters, HealthOutcome, RpcResult } from "../api/client";
+import type {
+  HealthCounters,
+  HealthOutcome,
+  RpcResult,
+  SourcemapHealthCounters,
+} from "../api/client";
 
 import {
   counterId,
+  counterText,
   HEALTH_COUNTERS,
   HEALTH_FAILED_BODY,
   HEALTH_HEADING,
@@ -58,6 +64,9 @@ import {
   HEALTH_REFRESHING_LABEL,
   HEALTH_STRIP_HEIGHT_CLASS,
   HEALTH_UNAVAILABLE_BODY,
+  SOURCEMAP_COUNTERS,
+  SOURCEMAP_HEADING,
+  SOURCEMAP_PURPOSE,
 } from "./health-contract";
 import HealthPanel from "./HealthPanel.vue";
 
@@ -65,12 +74,38 @@ import HealthPanel from "./HealthPanel.vue";
 // FIXTURES
 // ---------------------------------------------------------------------------
 
+/** No reconstruction has happened yet. */
+const NO_RECONSTRUCTION: SourcemapHealthCounters = {
+  announcedInline: 0,
+  announcedExternal: 0,
+  mapRefusedTooLarge: 0,
+  mapMalformed: 0,
+  sourcesRecovered: 0,
+  sightingsRecorded: 0,
+};
+
+/**
+ * The shape of a REAL session, which is the shape the D-03 row exists for:
+ * every announcement seen was external, so nothing was recovered and nothing
+ * went wrong. Zero of the eight pinned production bundles carries an inline
+ * map, so this is the ordinary case rather than a pathological one.
+ */
+const ALL_EXTERNAL: SourcemapHealthCounters = {
+  announcedInline: 0,
+  announcedExternal: 8,
+  mapRefusedTooLarge: 0,
+  mapMalformed: 0,
+  sourcesRecovered: 0,
+  sightingsRecorded: 0,
+};
+
 /** What a perfectly idle, perfectly healthy backend reports. */
 const IDLE: HealthCounters = {
   queueDepth: 0,
   droppedCount: 0,
   jobsInFlight: 0,
   maxSliceMs: 0,
+  sourcemap: NO_RECONSTRUCTION,
 };
 
 /** A backend in the state this surface exists for: the queue is deep, the
@@ -81,6 +116,14 @@ const IN_TROUBLE: HealthCounters = {
   droppedCount: 8_901,
   jobsInFlight: 1,
   maxSliceMs: 12_345,
+  sourcemap: {
+    announcedInline: 12,
+    announcedExternal: 1_234,
+    mapRefusedTooLarge: 3,
+    mapMalformed: 2,
+    sourcesRecovered: 4_211,
+    sightingsRecorded: 9_876,
+  },
 };
 
 const STRIP = "[data-defminer-health-strip]";
@@ -364,5 +407,192 @@ describe("HealthPanel — re-reading", () => {
     const action = h.wrapper.get("#defminer-health-refresh");
     expect(action.text()).toBe(HEALTH_REFRESH_LABEL);
     expect(action.attributes("disabled")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PHASE 7's SIX RECONSTRUCTION COUNTERS, AND D-03's ROW
+// ---------------------------------------------------------------------------
+//
+// The load-bearing one is `External maps announced`. Under D-01 an external
+// `.map` announcement is DISCOVERED and not consumed, on purpose — DefMiner
+// never fetches a `.map`, because that would be a request the target can see —
+// so the number is the MEASUREMENT of how much of MAP-01 this phase hands to
+// Phase 8. It is neither good news nor bad news, and the cases below assert
+// that the surface says so: the label reads as a fact, the help line explains
+// why the number exists, and NOTHING about the row is toned as a degradation.
+
+const SOURCEMAP_BLOCK = "[data-defminer-health-sourcemap]";
+const SOURCEMAP_ROW = "[data-defminer-health-sourcemap-row]";
+
+describe("HealthPanel — the reconstruction counters (D-03, MAP-01)", () => {
+  it("renders SIX rows, each with its label, its grouped value and its help", async () => {
+    const { wrapper } = harness({ counters: IN_TROUBLE });
+    await settle(wrapper);
+
+    expect(
+      SOURCEMAP_COUNTERS,
+      "the contract lists fewer than six",
+    ).toHaveLength(6);
+    expect(wrapper.findAll(SOURCEMAP_ROW)).toHaveLength(6);
+
+    for (const counter of SOURCEMAP_COUNTERS) {
+      const row = wrapper.get(`#${counterId(counter.id)}`);
+      expect(row.text(), `${counter.id} has no label`).toContain(counter.label);
+      expect(row.text(), `${counter.id} has no help line`).toContain(
+        counter.help,
+      );
+      expect(row.text(), `${counter.id} has no value`).toContain(
+        counterText(counter, IN_TROUBLE.sourcemap[counter.id]),
+      );
+    }
+
+    // AND THE NUMBERS ARE GROUPED, for the reason the strip's own case gives:
+    // `1234` and `12345` differ by one character and by a factor of ten.
+    const block = wrapper.get(SOURCEMAP_BLOCK).text();
+    expect(block).toContain("1,234");
+    expect(block).toContain("4,211");
+    expect(block).toContain("9,876");
+  });
+
+  it("names D-03's row so it reads as a MEASUREMENT, not as a failure", async () => {
+    const { wrapper } = harness({ counters: IN_TROUBLE });
+    await settle(wrapper);
+
+    const row = wrapper.get("#defminer-health-announcedExternal");
+    expect(row.text()).toContain("External maps announced");
+    // THE EXPLANATION IS PRESENT AND IT SAYS WHY THE NUMBER EXISTS. Without it
+    // a large external count reads as a large number of failures.
+    expect(row.text()).toContain("DefMiner does not fetch them");
+    expect(row.text()).toContain("not a count of anything that went wrong");
+    // AND NO FAILURE VOCABULARY ANYWHERE ON IT.
+    for (const word of ["error", "Error", "failed", "Failed", "refused"]) {
+      expect(row.text(), `the row uses the word "${word}"`).not.toContain(word);
+    }
+  });
+
+  it("gives D-03's row NO degradation tone — not danger, not info, not a role", async () => {
+    const { wrapper } = harness({ counters: IN_TROUBLE });
+    await settle(wrapper);
+
+    const external = wrapper.get("#defminer-health-announcedExternal");
+    // A NUMBER COLOURED AS A FAULT IS A NUMBER AN OPERATOR FILES A BUG ABOUT.
+    // Asserted over the row's WHOLE subtree, so a toned child fails too.
+    const html = external.html();
+    expect(html).not.toContain("danger-");
+    expect(html).not.toContain("info-");
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain('role="status"');
+
+    // AND IT IS INDISTINGUISHABLE FROM ITS SIBLINGS. The strongest form of
+    // "no special tone": the row's classes EQUAL another row's.
+    const inline = wrapper.get("#defminer-health-announcedInline");
+    expect(external.attributes("class")).toBe(inline.attributes("class"));
+  });
+
+  it("says on the surface WHY a low recovered count is the expected result", async () => {
+    // Open Question 2, pre-empted where the operator will actually ask it: a
+    // zero recovered count beside eight external announcements is the ordinary
+    // outcome on production traffic, not a broken feature.
+    const { wrapper } = harness({
+      counters: { ...IDLE, sourcemap: ALL_EXTERNAL },
+    });
+    await settle(wrapper);
+
+    const block = wrapper.get(SOURCEMAP_BLOCK).text();
+    expect(block).toContain("It never fetches a .map file");
+    expect(block).toContain("not a fault");
+    // The two numbers that make the sentence necessary are both on screen.
+    expect(wrapper.get("#defminer-health-announcedExternal").text()).toContain(
+      "8",
+    );
+    expect(wrapper.get("#defminer-health-sourcesRecovered").text()).toContain(
+      "0",
+    );
+  });
+
+  it("renders the rows as ABSENT while the read has not answered — never as zeroes", async () => {
+    // THE SHIPPED STILL-RESOLVING RULE, INHERITED RATHER THAN RESTATED. A zero
+    // is a measured claim; a read that has not returned has made none. The
+    // block is under the same `v-if` the strip is, so this is a property of
+    // the arrangement rather than of six separate guards.
+    const { wrapper } = harness({ hang: true });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find(SOURCEMAP_BLOCK).exists()).toBe(false);
+    expect(wrapper.findAll(SOURCEMAP_ROW)).toHaveLength(0);
+    for (const counter of SOURCEMAP_COUNTERS) {
+      expect(wrapper.find(`#${counterId(counter.id)}`).exists()).toBe(false);
+    }
+    // AND NO ZERO ANYWHERE IN THE PANEL, which is what "absent, not zero"
+    // actually means on a surface whose whole subject is numbers.
+    expect(wrapper.text()).not.toContain("0");
+  });
+
+  it("renders the rows as ABSENT on a FAILED read and on `unavailable`", async () => {
+    const failed = harness({ fails: true });
+    await settle(failed.wrapper);
+    expect(failed.wrapper.find(SOURCEMAP_BLOCK).exists()).toBe(false);
+
+    const none = harness({ unavailable: true });
+    await settle(none.wrapper);
+    expect(none.wrapper.find(SOURCEMAP_BLOCK).exists()).toBe(false);
+  });
+
+  it("keeps the reconstruction rows OUT of the fixed-height strip", async () => {
+    // The `overflow / health-strip` row requires a height that comes from one
+    // utility and never wraps. Six long labels in that strip would either wrap
+    // it or clip them, so they are rows below it — asserted by containment
+    // rather than described.
+    const { wrapper } = harness({ counters: IN_TROUBLE });
+    await settle(wrapper);
+
+    const strip = wrapper.get(STRIP).element;
+    for (const counter of SOURCEMAP_COUNTERS) {
+      const row = wrapper.get(`#${counterId(counter.id)}`).element;
+      expect(strip.contains(row), `${counter.id} is inside the strip`).toBe(
+        false,
+      );
+    }
+    // And the strip still carries exactly the four it shipped with.
+    expect(strip.querySelectorAll("[id^='defminer-health-']")).toHaveLength(
+      HEALTH_COUNTERS.length,
+    );
+  });
+
+  it("carries NO string from the payload — the rows are integers and copy only", async () => {
+    // `long-text / health-strip`'s property, extended to the new block and
+    // still a property of the SHAPE: `SourcemapHealthCounters` is six numbers
+    // and no string, so there is no field here a later edit could render.
+    const { wrapper } = harness({ counters: IN_TROUBLE });
+    await settle(wrapper);
+
+    const authored = new Set<string>();
+    for (const counter of SOURCEMAP_COUNTERS) {
+      authored.add(counter.label);
+      authored.add(counter.help);
+      authored.add(counterText(counter, IN_TROUBLE.sourcemap[counter.id]));
+    }
+    authored.add(SOURCEMAP_HEADING);
+    authored.add(SOURCEMAP_PURPOSE);
+
+    const texts: string[] = [];
+    const walk = (node: Node): void => {
+      if (node.nodeType === 3) {
+        const text = (node.nodeValue ?? "").trim();
+        if (text.length > 0) texts.push(text);
+        return;
+      }
+      for (const child of node.childNodes) walk(child);
+    };
+    walk(wrapper.get(SOURCEMAP_BLOCK).element);
+
+    expect(texts.length).toBeGreaterThan(12);
+    for (const text of texts) {
+      expect(
+        authored.has(text),
+        `unexpected string in the block: ${text}`,
+      ).toBe(true);
+    }
   });
 });

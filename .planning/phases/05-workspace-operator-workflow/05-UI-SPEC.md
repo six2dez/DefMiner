@@ -76,8 +76,8 @@ Declared values, expressed as the Tailwind v3 utility that produces them. All ar
 | xs | 4px | `-1` | Gap between a status badge and its text label; vertical padding inside a table cell |
 | sm | 8px | `-2` | Horizontal padding inside a table cell; gap between adjacent filter controls; gap between triage buttons |
 | md | 16px | `-4` | Padding inside the evidence panel and every dialog; gap between the table and the detail panel |
-| lg | 24px | `-6` | Padding around a settings section; gap between settings groups |
-| xl | 32px | `-8` | **Fixed virtualised row height** (`RecycleScroller :item-size="32"`) and the table header row height |
+| lg | 24px | `-6` | Padding around a settings section; gap between settings groups; **fixed virtualised source-line height** (`SOURCE_LINE_HEIGHT_PX`) |
+| xl | 32px | `-8` | **Fixed virtualised table row height** (`TABLE_ROW_HEIGHT_PX`, `RecycleScroller :item-size="32"`) and the table header row height |
 | 2xl | 48px | `-12` | Page toolbar height; sidebar-page top chrome height |
 | 3xl | 64px | `-16` | Vertical breathing room above and below an empty-state block |
 
@@ -94,6 +94,20 @@ dialogs — which is the whole surface this contract can actually control.
 cell is allowed to wrap — degrades it to `DynamicScroller` and costs the 10,000-row responsiveness
 target in Phase 5 success criterion 2. **Table cells never wrap.** That is why truncation in
 `## Rendering Safety Contract` is mandatory rather than cosmetic.
+
+**AMENDMENT A5 — 2026-09-02, plan 07-10 (Phase 7).** The `xl` usage entry above narrowed from
+*"Fixed virtualised row height"* to *"Fixed virtualised **table** row height"*, and the `lg` entry
+gained the fixed virtualised **source-line** height. **Phase 5 had one virtualised list shape and
+Phase 7 has two.** A code line is not a table row: at the Body role's `text-sm` / `leading-normal` a
+32px row buys 11px of dead space per line and costs the operator a third of the source they could
+otherwise see on one screen. `TABLE_ROW_HEIGHT_PX` is **byte-unchanged** and `h-6` joins
+`ROW_HEIGHT_CLASSES` as a literal because Tailwind's JIT scans source text.
+
+**This is an addition to a usage column, not an exception to the scale, and `Exceptions: none`
+above still holds.** The contract fixes the seven *values*; a second virtualised geometry at a
+different step on that same seven-value scale takes one of them. That distinction was contested
+while 07-UI-SPEC.md was being written and the narrower reading won; it is recorded here so it is not
+re-litigated.
 
 ---
 
@@ -183,11 +197,23 @@ of five, it is `surface`-toned with an underline or a border.
 | Semantic | Token | Used for, and only for |
 |----------|-------|------------------------|
 | `success` | `success-500` | The `done` scan-state badge |
-| `info` | `info-500` | The `partial` scan-state badge, the degraded marker, and the partial-view banner |
+| `info` | `info-500` | The `partial` scan-state badge, the **analysis-state** degraded marker, and the partial-view banner |
 
 The justification the checker should weigh: these are not decorative accents, they are the visual
 half of the OBS-02 degradation vocabulary. They map one-to-one onto the shipped `scan_state`
 values and appear nowhere else.
+
+**AMENDMENT A6 — 2026-09-02, plan 07-10 (Phase 7).** The `info` row above narrowed from *"the
+degraded marker"* to *"the **analysis-state** degraded marker"*.
+It is the ANALYSIS-STATE degraded marker, and no other kind. **As originally written it reads as
+claimable by any later degradation vocabulary**, and Phase 7 introduced a second one: the source
+`producibility` axis, whose `gone` and `changed` members are also a kind of degradation. They are a
+different subject — a request Caido lost, or a bundle the target redeployed — and they take
+`surface-400` instead, never `info`. Only an explicit narrowing keeps the next author from reaching
+for `info` and quietly merging two vocabularies at the pixel level, which is the collapse
+`packages/engine/src/contract.ts` spends thirty lines refusing in prose. The sentence immediately
+above is unchanged and is what the narrowing enforces: `info` maps **one-to-one** onto `scan_state`
+and appears nowhere else.
 
 **The Caido palette has no `warning` role** — verified against the plugin source this session. So
 "degraded" cannot be a yellow. It is `info` plus a mandatory text label, which is the better answer
@@ -307,6 +333,51 @@ Not a Phase 5 requirement — DEPLOY-02 lands in Phase 6 — but it is free to h
 expensive to retrofit: **any filesystem path the Settings surface displays is labelled "on the
 Caido server" and is never presented as a path on the operator's machine.** Caido is client/server;
 the backend may be a remote VPS or a container.
+
+### R6 — Target-controlled strings never become filenames (MAP-04)
+
+**AMENDMENT A7 — 2026-09-02, plan 07-10 (Phase 7), added in the same commit as the code it
+describes.** R1 already states that an extracted URL is **data to be displayed, never a destination
+to be offered**, for `<a href>`. A download name is the same principle at a different sink, and
+Phase 7 is the first phase in this project to have that sink. Any later phase offering a download
+inherits this rule.
+
+**A target-controlled string is never used to build a filename, a download name, or any path-like
+value.** In Phase 7 the string in question is a sourcemap's `sources` entry. The browser download is
+the one sink such a string could plausibly reach, and it is closed by CONSTRUCTION rather than left
+to a reviewer — the name is **content-addressed**:
+
+```
+{first 16 hex of the content's sha256}{extension}
+```
+
+where the extension is chosen from a **closed, DefMiner-authored allowlist** —
+`.ts .tsx .js .jsx .vue .css .scss .json .md`, falling back to `.txt` — MATCHED against the label's
+suffix rather than DERIVED from it. **No byte of the target's string reaches the filename.**
+
+Mechanically assertable, and asserted: the generated name matches
+`^[0-9a-f]{16}\.(ts|tsx|js|jsx|vue|css|scss|json|md|txt)$`, with a FIRING fixture (a
+traversal-shaped label) and a legal fixture, in the shape the gate family already uses. The
+membership of the allowlist is a proposal; **that the list is closed, DefMiner-authored and matched
+rather than derived is binding.**
+
+### Three things Phase 7 examined and did NOT amend, recorded so they are not mistaken for amendments
+
+Recorded here beside A5, A6 and A7 by plan 07-10 (2026-09-02). A silence that is not written down
+gets re-litigated, and each of these looked like a divergence and is not.
+
+1. **A4's scoping already covers the source tree, so not calling `assertColumnContract` on it is
+   OBEDIENCE rather than divergence.** The tree is a hierarchy of one label — it has no columns, no
+   sort keys and no keyset cursor — and A4 scopes the column contract to keyset-paginated column
+   matrices. A contract asserted on a shape it does not describe is a contract that gets weakened
+   the first time somebody has to make it pass.
+2. **The `Sources` column IS in the table contract's scope, and it keeps `assertColumnContract`
+   green.** It renders a DefMiner-computed integer and is NOT marked `targetControlled`, so the
+   exactly-one-target-controlled-column count on the artifacts table is unchanged.
+3. **`## Data & Interaction Contract`'s Layout text is not amended.** It describes the left region
+   as "findings table on the left"; the shipped `App.vue` already renders five different bodies
+   there, so Phase 7's drill-down is a SIXTH STATE of an already-general region rather than a change
+   to the layout contract.
 
 ---
 

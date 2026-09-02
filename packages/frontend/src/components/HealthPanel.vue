@@ -41,8 +41,14 @@
 
 import { computed, onMounted, ref } from "vue";
 
-import type { HealthCounters, HealthOutcome, RpcResult } from "../api/client";
+import type {
+  HealthCounters,
+  HealthOutcome,
+  RpcResult,
+  SourcemapHealthCounters,
+} from "../api/client";
 
+import type { StripCounterId } from "./health-contract";
 import {
   counterId,
   counterText,
@@ -57,6 +63,9 @@ import {
   HEALTH_REFRESHING_LABEL,
   HEALTH_STRIP_HEIGHT_CLASS,
   HEALTH_UNAVAILABLE_BODY,
+  SOURCEMAP_COUNTERS,
+  SOURCEMAP_HEADING,
+  SOURCEMAP_PURPOSE,
 } from "./health-contract";
 import { FOCUS_RING_CLASS } from "./table-contract";
 
@@ -161,8 +170,22 @@ const unavailable = computed<boolean>(
   () => settled.value && !failed.value && counters.value === null,
 );
 
-function valueOf(id: keyof HealthCounters): number {
+function valueOf(id: StripCounterId): number {
   return counters.value === null ? 0 : counters.value[id];
+}
+
+/**
+ * One reconstruction counter's value.
+ *
+ * THE SHIPPED STILL-RESOLVING RULE, UNCHANGED: this is only ever called from
+ * inside a `v-if="showStrip"` block, so an unresolved read renders the rows as
+ * ABSENT rather than as six zeroes. The `0` below is unreachable while that
+ * holds, and it is a `0` rather than a throw for the reason the strip's own
+ * lookup gives — a render-time throw on the surface whose subject is failures
+ * would take the failure copy down with it.
+ */
+function sourcemapValueOf(id: keyof SourcemapHealthCounters): number {
+  return counters.value === null ? 0 : counters.value.sourcemap[id];
 }
 
 const actionLabel = computed<string>(() =>
@@ -268,6 +291,47 @@ const actionLabel = computed<string>(() =>
           class="flex flex-col gap-1"
         >
           <dt class="text-xs font-semibold">{{ counter.label }}</dt>
+          <dd class="text-surface-400">{{ counter.help }}</dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- PHASE 7's RECONSTRUCTION COUNTERS. Under the SAME `v-if` the strip
+         uses, which is how the shipped still-resolving rule reaches them
+         unchanged: a read that has not answered renders these rows ABSENT, and
+         six zeroes are never shown for a number nobody has taken.
+
+         ROWS, NOT A SECOND STRIP. The `overflow / health-strip` row requires a
+         fixed height no counter can wrap, and six long labels on one `h-12`
+         line would either wrap it or clip them. These are read, not glanced at.
+
+         AND NO TONE. Every row here carries the same classes — no `danger`, no
+         `info`, no degradation styling — because `External maps announced` is a
+         MEASUREMENT of a deliberate design choice, not a fault. A number
+         coloured as a fault is a number an operator files a bug about. -->
+    <section
+      v-if="showStrip"
+      class="flex flex-col gap-2"
+      data-defminer-health-sourcemap
+    >
+      <h3 class="text-xs font-semibold">{{ SOURCEMAP_HEADING }}</h3>
+      <p class="text-surface-400">{{ SOURCEMAP_PURPOSE }}</p>
+      <dl class="flex flex-col gap-2">
+        <div
+          v-for="counter in SOURCEMAP_COUNTERS"
+          :id="counterId(counter.id)"
+          :key="counter.id"
+          class="flex flex-col gap-1"
+          data-defminer-health-sourcemap-row
+        >
+          <dt :class="[HEALTH_CELL_CLASS, 'flex items-center gap-2 text-xs']">
+            <span class="font-semibold text-surface-400">{{
+              counter.label
+            }}</span>
+            <span class="text-sm">{{
+              counterText(counter, sourcemapValueOf(counter.id))
+            }}</span>
+          </dt>
           <dd class="text-surface-400">{{ counter.help }}</dd>
         </div>
       </dl>

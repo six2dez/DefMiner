@@ -64,7 +64,7 @@ import { resetDbHandleForTest } from "./store/db";
 import { migrate } from "./store/migrations";
 import type { KnownSettingValue } from "./store/settings";
 import { GLOBAL_PROJECT_ID, resetBootMarkerForTest } from "./store/settings";
-import { resetTelemetryForTest } from "./telemetry";
+import { counters, resetTelemetryForTest } from "./telemetry";
 
 import { init, resetScanDriverForTest } from "./index";
 
@@ -1687,7 +1687,7 @@ describe("OBS-01's four numbers, projected", () => {
     return { rpc };
   }
 
-  it("answers the four counters and NOTHING else — no string reaches this shape", async () => {
+  it("answers the counters and NOTHING else — no string reaches this shape", async () => {
     const { rpc } = await boot();
     const answered = rpc.getHealth(null) as {
       outcome: string;
@@ -1695,19 +1695,54 @@ describe("OBS-01's four numbers, projected", () => {
     };
 
     expect(answered.outcome).toBe("health");
-    // AN EQUALITY OVER THE WHOLE KEY SET, not four presence checks. The strip's
-    // safety property is NEGATIVE — it carries only DefMiner-authored labels and
-    // numeric counters — and a field added here (`lastError` being the obvious
-    // one, since `getStatus` carries it) would be invisible to a search.
+    // AN EQUALITY OVER THE WHOLE KEY SET, not a handful of presence checks. The
+    // strip's safety property is NEGATIVE — it carries only DefMiner-authored
+    // labels and numeric counters — and a field added here (`lastError` being
+    // the obvious one, since `getStatus` carries it) would be invisible to a
+    // search. Plan 07-10 added the fifth key and it is a SUB-OBJECT OF
+    // INTEGERS, which is why the walk below recurses rather than reading
+    // `Object.values` one level deep.
     expect(Object.keys(answered.health).sort()).toEqual([
       "droppedCount",
       "jobsInFlight",
       "maxSliceMs",
       "queueDepth",
+      "sourcemap",
     ]);
-    for (const value of Object.values(answered.health)) {
-      expect(typeof value).toBe("number");
-    }
+    expect(Object.keys(answered.health.sourcemap as object).sort()).toEqual([
+      "announcedExternal",
+      "announcedInline",
+      "mapMalformed",
+      "mapRefusedTooLarge",
+      "sightingsRecorded",
+      "sourcesRecovered",
+    ]);
+
+    // EVERY LEAF IS A NUMBER, AT EVERY DEPTH. A one-level check would have
+    // passed the day somebody nested a string under the new sub-object.
+    const leaves = (value: unknown): unknown[] =>
+      value !== null && typeof value === "object"
+        ? Object.values(value).flatMap(leaves)
+        : [value];
+    const all = leaves(answered.health);
+    expect(all).toHaveLength(10);
+    for (const value of all) expect(typeof value).toBe("number");
+  });
+
+  it("projects D-03's external-announcement counter onto the health shape", async () => {
+    // THE ONE NUMBER THIS PHASE OWES AN OPERATOR. It measures how much of
+    // MAP-01 D-01 hands to Phase 8, so a projection that dropped it would take
+    // the phase's own honest answer off the surface silently.
+    const { rpc } = await boot();
+    const answered = rpc.getHealth(null) as {
+      health: { sourcemap: Record<string, number> };
+    };
+    expect(answered.health.sourcemap.announcedExternal).toBe(
+      counters.sourcemap.announcedExternal,
+    );
+    expect(answered.health.sourcemap.sourcesRecovered).toBe(
+      counters.sourcemap.sourcesRecovered,
+    );
   });
 
   it("fails closed with an EXPLICIT outcome when no project is resolved — never four zeroes", async () => {
