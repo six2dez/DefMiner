@@ -52,14 +52,18 @@
 // `EvidencePanel` at the artifact level where the analysis vocabulary lives.
 // Nothing below renders an analysis-state word.
 
-import type { DeriveSourceResult } from "@defminer/engine/contract";
+import type {
+  DeriveSourceResult,
+  SourceMappingsResult,
+} from "@defminer/engine/contract";
 import { SOURCE_LINE_MAX_GRAPHEMES } from "@defminer/engine/sanitise";
 import { SOURCE_LINE_COUNT_MAX } from "@defminer/engine/thresholds";
-import { computed, shallowRef, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { RecycleScroller } from "vue-virtual-scroller";
 
 import type { RpcResult, SourceRef } from "../api/client";
 import {
+  copyToClipboard,
   forCellText,
   forSourceLine,
   sourceLineTruncated,
@@ -67,6 +71,7 @@ import {
 
 import { browserDownload } from "./export-download";
 import { sourceDownloadName } from "./source-filename";
+import SourcePositionStrip from "./SourcePositionStrip.vue";
 import {
   counted,
   FOCUS_RING_CLASS,
@@ -86,6 +91,11 @@ import {
  */
 type ViewerClient = {
   deriveSource: (request: SourceRef) => Promise<RpcResult<DeriveSourceResult>>;
+  /** Passed straight through to the position strip, which is the only thing
+   *  that calls it — and calls it LAZILY, on the first line selection. */
+  readSourceMappings: (
+    request: SourceRef,
+  ) => Promise<RpcResult<SourceMappingsResult>>;
 };
 
 const { client, sourceRef, label } = defineProps<{
@@ -222,6 +232,12 @@ type Body =
 
 const body = shallowRef<Body>({ kind: "idle" });
 
+/** The selected line's index, ZERO-BASED. `null` until the operator picks one,
+ *  which is also what keeps the position read LAZY. Declared beside `body`
+ *  rather than beside its own handlers, because `derive()` clears it and the
+ *  `immediate` watcher runs `derive()` before a later declaration exists. */
+const selectedLine = ref<number | null>(null);
+
 /** Which derivation the answer in flight belongs to. A second selection while
  *  the first is in flight must not have the first's answer land on it. */
 let inFlight = 0;
@@ -267,6 +283,7 @@ async function derive(): Promise<void> {
   }
   inFlight += 1;
   const generation = inFlight;
+  selectedLine.value = null;
   body.value = { kind: "loading" };
 
   const result = await client.deriveSource(request);
@@ -362,6 +379,66 @@ const headerLabel = computed<string>(() => forCellText(label ?? ""));
 
 function gutter(key: number): string {
   return groupThousands(key + 1);
+}
+
+// ---------------------------------------------------------------------------
+// SELECTION, AND WHAT THE POSITION STRIP IS TOLD
+// ---------------------------------------------------------------------------
+
+function select(key: number): void {
+  selectedLine.value = selectedLine.value === key ? null : key;
+}
+
+/**
+ * The two integers the truncation notice needs, computed ONCE for the line the
+ * operator asked about.
+ *
+ * `total` is a grapheme count and there is no way to have one without walking
+ * the value — which is exactly why `display.ts` keeps that walk OUT of the
+ * per-row predicate and puts the cost here, deliberately, on one line, on
+ * demand. It is spelled with a spread rather than reached for through
+ * `forDisplay`, because importing the walking wrapper is the one thing this
+ * module's named-import equality forbids.
+ *
+ * NEITHER NUMBER IS THE LINE. The untruncated line never leaves this component.
+ */
+const truncation = computed<{ shown: number; total: number } | null>(() => {
+  const state = body.value;
+  const index = selectedLine.value;
+  if (state.kind !== "content" || index === null) return null;
+  const line = state.lines[index];
+  if (line === undefined || !sourceLineTruncated(line)) return null;
+  return {
+    shown: [...forSourceLine(line)].length,
+    total: [...line].length,
+  };
+});
+
+/**
+ * Copy full line — CLIPBOARD ONLY.
+ *
+ * The full line is read from the frontend's own store and written to the
+ * clipboard. It is never inserted into the DOM, never placed in a `title` and
+ * never placed in a `data-*`: R2 states all three as absolutes, and this
+ * affordance is the reason the absolutes are affordable.
+ */
+function copyFullLine(): void {
+  const state = body.value;
+  const index = selectedLine.value;
+  if (state.kind !== "content" || index === null) return;
+  const line = state.lines[index];
+  if (line === undefined) return;
+  // THE SHIPPED HELPER, not a fourth structural DOM host in this file. It is
+  // also the ONLY sanctioned route: it has no `document.execCommand` fallback,
+  // because that path copies by putting the full value INTO the document,
+  // which is precisely what R2 forbids.
+  //
+  // The rejection is swallowed DELIBERATELY and the reason is stated rather
+  // than assumed: the helper rejects only on a host with no async clipboard
+  // API, which the Caido renderer is not. Copying nothing is the fail-closed
+  // direction; an unhandled rejection here would take down the very viewer the
+  // position strip's own wrap exists to keep on screen.
+  void copyToClipboard(line).catch(() => undefined);
 }
 
 function retry(): void {
@@ -570,8 +647,11 @@ function save(): void {
               SOURCE_LINE_HEIGHT_CLASS,
               FOCUS_RING_CLASS,
               'flex w-full items-center gap-2 text-left',
+              selectedLine === item.key ? 'bg-surface-700' : '',
             ]"
             data-defminer-source-line
+            :aria-current="selectedLine === item.key ? 'true' : undefined"
+            @click="select(item.key)"
           >
             <!-- The gutter. A DefMiner-computed integer, fixed width, right
                  aligned, and OUTSIDE the horizontally scrolling column. -->
@@ -602,5 +682,19 @@ function save(): void {
         </RecycleScroller>
       </div>
     </template>
+
+    <!-- ===================================================================
+         THE POSITION STRIP — ALWAYS PRESENT, at its fixed height, in every
+         body state. A fixed-height block that appears and then fills is a
+         flash rather than a skeleton, and a strip that is always there is
+         also where the position feature is discovered.
+         =================================================================== -->
+    <SourcePositionStrip
+      :client="client"
+      :source-ref="sourceRef"
+      :selected-line="selectedLine"
+      :truncation="truncation"
+      @copy-full-line="copyFullLine()"
+    />
   </div>
 </template>

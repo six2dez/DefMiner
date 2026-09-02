@@ -57,7 +57,6 @@
       // postcss configs are NOT listed: knip already treats them as entries by
       // default and naming them again is a redundant pattern it reports.
       "entry": ["src/index.ts", "src/**/*.spec.ts", "externals.mjs"],
-      "project": ["src/**/*.{ts,vue}", "*.{ts,mjs,cjs}"],
       // `@defminer/engine` IS NO LONGER LISTED BELOW. It was, carrying the
       // note "Remove this entry when the first import lands", and plan 05-05
       // landed it: src/safety/display.ts imports forDisplay, forEvidence,
@@ -83,27 +82,28 @@
       // ignore that starts hiding the next real one, and knip reports the
       // stale entry itself as a configuration hint.
       //
-      // AND IT IS BACK, FOR EXACTLY ONE ENTRY AND FOR EXACTLY ONE WAVE — plan
-      // 07-03. D-16 relocates `@jridgewell/sourcemap-codec` from the root
-      // devDependencies into this workspace's `dependencies` so the VLQ decode
-      // runs in the operator's browser rather than on the proxy thread
-      // (SPIKE-06 measured vlq_decode at 167 ms on 8.3 MB against a 25 ms
-      // slice, and decode() consumes the whole mappings string so it cannot be
-      // chunked). The DECLARATION lands in 07-03 because
-      // packages/backend/src/codec-prohibition.spec.ts — the D-17 capability
-      // ban — has to be able to say where the codec legitimately lives; the
-      // IMPORT lands in plan 07-08, whose viewer decodes positions in the
-      // frontend. Between those two plans knip is correct that nothing imports
-      // it, and `pnpm knip` is a gate every downstream plan's verify step runs.
+      // AND `@jridgewell/sourcemap-codec` IS NO LONGER LISTED EITHER. Plan
+      // 07-03 added it back for exactly one wave, carrying the note "REMOVE
+      // THIS ENTRY WHEN 07-08's VIEWER IMPORTS THE CODEC, in the same edit" —
+      // because D-16 relocates the codec into this workspace so the VLQ decode
+      // runs in the operator's browser rather than on the proxy thread, and the
+      // DECLARATION had to land a wave before the IMPORT so that
+      // packages/backend/src/codec-prohibition.spec.ts (the D-17 capability
+      // ban) could say where the codec legitimately lives.
       //
-      // REMOVE THIS ENTRY WHEN 07-08's VIEWER IMPORTS THE CODEC, in the same
-      // edit. That is the identical contract the three notes above carried and
-      // each of them was honoured, which is the only reason this one is
-      // credible. The root devDependency is NOT removed and must not be:
+      // Plan 07-08 landed the import: src/components/SourcePositionStrip.vue
+      // imports `decode` from it, and that component's spec asserts by an
+      // exact-set walk of the frontend source tree that it is the ONLY consumer
+      // — which is the property the whole relocation exists to establish.
+      // Removed in the same edit, as promised, and for the same reason the
+      // three notes above were: an ignore that has stopped being needed is an
+      // ignore that starts hiding the next real one.
+      //
+      // The root devDependency is NOT removed and must not be:
       // tier1/parse/src/index.ts is the SPIKE-06 probe and knip treats
       // `tier1/*/src/index.ts` as a root-workspace entry point, so removing it
       // would make the probe unbuildable.
-      "ignoreDependencies": ["@jridgewell/sourcemap-codec"]
+      "project": ["src/**/*.{ts,vue}", "*.{ts,mjs,cjs}"]
     }
   },
   // RESTORED TO `error` BY PLAN 01-03, as plan 01-02 asked for in this file.

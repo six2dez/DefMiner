@@ -33,7 +33,10 @@
 
 import { readFileSync } from "node:fs";
 
-import type { DeriveSourceResult } from "@defminer/engine/contract";
+import type {
+  DeriveSourceResult,
+  SourceMappingsResult,
+} from "@defminer/engine/contract";
 import { HOSTILE_CASES } from "@defminer/engine/hostile.fixture";
 import { SOURCE_LINE_MAX_GRAPHEMES } from "@defminer/engine/sanitise";
 import { SOURCE_LINE_COUNT_MAX } from "@defminer/engine/thresholds";
@@ -106,16 +109,34 @@ const CountingScrollerStub = defineComponent({
 
 type Client = {
   deriveSource: (request: SourceRef) => Promise<RpcResult<DeriveSourceResult>>;
+  readSourceMappings: (
+    request: SourceRef,
+  ) => Promise<RpcResult<SourceMappingsResult>>;
+};
+
+/** The fake, with its own call log. The LOG is the point: the laziness rule is
+ *  a claim about WHEN a method is called, which nothing in the DOM can show. */
+type Fake = Client & {
+  readonly deriveCalls: SourceRef[];
+  readonly positionCalls: SourceRef[];
 };
 
 function clientReturning(
   result: RpcResult<DeriveSourceResult>,
-  calls: SourceRef[] = [],
-): Client {
+  mappings: RpcResult<SourceMappingsResult> = ok({ outcome: "unavailable" }),
+): Fake {
+  const deriveCalls: SourceRef[] = [];
+  const positionCalls: SourceRef[] = [];
   return {
+    deriveCalls,
+    positionCalls,
     deriveSource: async (request) => {
-      calls.push(request);
+      deriveCalls.push(request);
       return await Promise.resolve(result);
+    },
+    readSourceMappings: async (request) => {
+      positionCalls.push(request);
+      return await Promise.resolve(mappings);
     },
   };
 }
@@ -368,6 +389,8 @@ describe("the four body states — mutually exclusive, none collapsible", () => 
             await new Promise<RpcResult<DeriveSourceResult>>(() => {
               /* never settles */
             }),
+          readSourceMappings: async () =>
+            await Promise.resolve(ok({ outcome: "unavailable" })),
         },
         sourceRef: SOURCE_REF,
         label: "webpack:///./src/app.ts",
@@ -678,6 +701,7 @@ describe("SourceViewer.vue imports EXACTLY these modules", () => {
     expect(parse().specifiers).toEqual([
       "../api/client",
       "../safety/display",
+      "./SourcePositionStrip.vue",
       "./export-download",
       "./source-filename",
       "./table-contract",
@@ -695,15 +719,171 @@ describe("SourceViewer.vue imports EXACTLY these modules", () => {
     // over budget and a 37,395 ms scroll through it on a 4 MiB single line,
     // against 0 of 396 and 4,010 ms through the text-only family.
     expect(parse().namesFromDisplay).toEqual([
+      "copyToClipboard",
       "forCellText",
       "forSourceLine",
       "sourceLineTruncated",
     ]);
+    // AND WHAT THE EQUALITY PROVES, SAID OUT LOUD. `copyToClipboard` is not a
+    // wrapper at all — it is the sanctioned escape R2's absolute names, and
+    // reusing it is why this file has no structural DOM host of its own. Every
+    // WALKING wrapper is absent, and that is the T-07-12 mitigation.
+    for (const walking of [
+      "forCell",
+      "forDisplay",
+      "forPanel",
+      "forEvidence",
+    ]) {
+      expect(parse().namesFromDisplay).not.toContain(walking);
+    }
   });
 
   it("parsed a NON-EMPTY script block — the non-vacuity half", () => {
     const facts = parse();
     expect(facts.visited).toBeGreaterThan(200);
     expect(readFileSync(MODULE, "utf8")).toContain("splitOnce");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE POSITION STRIP, THROUGH THE VIEWER — LAZINESS AND CONTAINMENT
+// ---------------------------------------------------------------------------
+//
+// The strip's own seven states live in `SourcePositionStrip.spec.ts`. What is
+// here is the pair of properties that are only true of the two components
+// TOGETHER: the position table does not block first paint, and a decode failure
+// does not take the source down behind it.
+
+const STRIP = "[data-defminer-source-position-strip]";
+
+describe("viewer-position-strip / loading — the position data is LAZY", () => {
+  it("is not read on mount, not read on scroll, read on the FIRST selection", async () => {
+    const client = clientReturning(
+      ok(contentArm(MULTI_LINE)),
+      ok({ outcome: "mappings", mappings: "AAAA" }),
+    );
+    const wrapper = await mountViewer(client);
+
+    // FIRST PAINT HAPPENED AND NOT ONE BYTE OF `mappings` HAS CROSSED THE RPC.
+    expect(client.deriveCalls).toHaveLength(1);
+    expect(client.positionCalls).toHaveLength(0);
+
+    // AND THE VIEWER IS FULLY USABLE IN BETWEEN: the rows are on screen, the
+    // strip is present at its fixed height, and it states the discovery line.
+    const rows = wrapper.findAll("[data-defminer-source-line]");
+    expect(rows).toHaveLength(4);
+    expect(wrapper.find(STRIP).text()).toContain(
+      "Select a line to see where it appears in the minified bundle.",
+    );
+
+    await wrapper
+      .find("[data-defminer-source-viewer-content]")
+      .trigger("scroll");
+    await flush();
+    expect(client.positionCalls).toHaveLength(0);
+
+    await rows[0]?.trigger("click");
+    await flush();
+    expect(client.positionCalls).toHaveLength(1);
+    expect(client.positionCalls[0]).toEqual(SOURCE_REF);
+  });
+
+  it("keeps the strip present at its fixed height in EVERY body state", async () => {
+    const arms: DeriveSourceResult[] = [
+      contentArm(MULTI_LINE),
+      { outcome: "gone", cause: "no_request", recoveredAt: RECOVERED_AT },
+      {
+        outcome: "changed",
+        recoveredAt: RECOVERED_AT,
+        recordedByteLen: 1,
+        reloadedByteLen: 2,
+      },
+      { outcome: "unavailable" },
+    ];
+    for (const arm of arms) {
+      const wrapper = await mountViewer(clientReturning(ok(arm)));
+      const strip = wrapper.find(STRIP);
+      expect(strip.exists()).toBe(true);
+      expect(strip.classes()).toContain("h-12");
+      expect(strip.text().length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("viewer-position-strip / error — a decode throw degrades the STRIP only", () => {
+  it("leaves every line row on screen and raises no unhandled rejection", async () => {
+    // The RPC boundary, not the parser: the contract's `string` is a
+    // compile-time claim about a runtime value, and `decode(null)` throws.
+    const hostile = {
+      outcome: "mappings",
+      mappings: null,
+    } as unknown as SourceMappingsResult;
+    const rejections: unknown[] = [];
+    const record = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", record);
+    try {
+      const wrapper = await mountViewer(
+        clientReturning(ok(contentArm(MULTI_LINE)), ok(hostile)),
+      );
+      await wrapper.findAll("[data-defminer-source-line]")[0]?.trigger("click");
+      await flush();
+
+      // THE SOURCE IS STILL ON SCREEN AND STILL READABLE.
+      expect(wrapper.findAll("[data-defminer-source-line]")).toHaveLength(4);
+      expect(codeNodes(wrapper)).toHaveLength(4);
+      expect(codeNodes(wrapper)[0]?.textContent).toBe("const a = 1;");
+
+      // AND THE STRIP SAYS SO, IN ITS OWN WORDS.
+      expect(wrapper.find(STRIP).text()).toBe(
+        "DefMiner could not read this map's position table. The source above " +
+          "is unaffected.",
+      );
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", record);
+    }
+  });
+});
+
+describe("Copy full line — the clipboard, never the DOM", () => {
+  it("writes the FULL untruncated line while the DOM holds only the prefix", async () => {
+    const long = "x".repeat(SOURCE_LINE_MAX_GRAPHEMES + 500);
+    const written: string[] = [];
+    const host = globalThis as unknown as {
+      navigator?: { clipboard?: { writeText(text: string): Promise<void> } };
+    };
+    const before = host.navigator;
+    host.navigator = {
+      clipboard: {
+        writeText: async (text: string) => {
+          written.push(text);
+          await Promise.resolve();
+        },
+      },
+    };
+    try {
+      const wrapper = await mountViewer(clientReturning(ok(contentArm(long))));
+      await wrapper.findAll("[data-defminer-source-line]")[0]?.trigger("click");
+      await flush();
+
+      const strip = wrapper.find(STRIP);
+      expect(strip.text()).toContain(
+        `Line 1 truncated at ${groupThousands(SOURCE_LINE_MAX_GRAPHEMES)} of ` +
+          `${groupThousands(long.length)} characters.`,
+      );
+      await wrapper.find("[data-defminer-copy-full-line]").trigger("click");
+      expect(written).toEqual([long]);
+
+      // AND THE DOM STILL HOLDS ONLY THE PREFIX. R2's absolute is what makes
+      // this affordance necessary and what makes it safe.
+      expect(codeNodes(wrapper)[0]?.textContent).toHaveLength(
+        SOURCE_LINE_MAX_GRAPHEMES,
+      );
+      expect(wrapper.html().includes(long)).toBe(false);
+    } finally {
+      host.navigator = before;
+    }
   });
 });
