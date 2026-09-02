@@ -1423,3 +1423,210 @@ describe("UAT gap 1 — the cascade reaches `sources` and `source_sightings`", (
     expect(counts.source_sightings).toBe(3);
   });
 });
+
+describe("W-5 — both ordinary bounds now apply to `source_sightings`", () => {
+  // THE CASCADE IS NOT THE WHOLE BOUND, AND THIS IS THE REST OF IT. The block
+  // above proves a sighting dies with its bundle; a bundle that is never evicted
+  // can still accumulate sightings for ever, which is exactly the shape real
+  // traffic produces — the artifact row is upserted on every re-serve while each
+  // map-bearing re-serve writes a fresh row per (bundle, map, index).
+  //
+  // So `source_sightings` takes BOTH bounds, like every other non-audit table,
+  // and `sources` takes NEITHER: its ceiling is inherited through the anti-join,
+  // because a surviving source needs a surviving sighting. That is what makes
+  // 07-VERIFICATION.md W-5's claim true rather than merely arithmetic.
+
+  const MAP = digest("da");
+  const ART = digest("0"); // seedArtifacts' first digest
+
+  /** The `source_index` values still present, ascending. Index order IS
+   *  recovery order here, so this is how a case asserts WHICH rows went. */
+  function sightingIndexes(projectId: string): number[] {
+    return (
+      fx.raw
+        .prepare(
+          "SELECT source_index FROM source_sightings WHERE project_id = ? ORDER BY source_index ASC",
+        )
+        .all(projectId) as { source_index: number }[]
+    ).map((r) => Number(r.source_index));
+  }
+
+  /** `count` sightings of one recent bundle, index i recovered at
+   *  `firstAt + i * stepMs`, so index 0 is the oldest on both keys. */
+  function seedSightingRun(
+    count: number,
+    firstAt: number,
+    stepMs = 1,
+    sourceSha256: string | null = null,
+  ): void {
+    for (let i = 0; i < count; i += 1) {
+      seedSighting(P1, ART, MAP, i, sourceSha256, firstAt + i * stepMs);
+    }
+  }
+
+  it("the AGE bound applies to sightings in their own right, and the cutoff is STRICT", async () => {
+    // The artifact is recent, so only the per-table age bound can remove these
+    // rows — the same construction the `observations` age case uses, for the
+    // same reason.
+    const maxAgeMs = 10_000;
+    const cutoff = NOW - maxAgeMs;
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSighting(P1, ART, MAP, 0, null, cutoff - 2);
+    seedSighting(P1, ART, MAP, 1, null, cutoff - 1);
+    seedSighting(P1, ART, MAP, 2, null, cutoff); // exactly at the cutoff
+    seedSighting(P1, ART, MAP, 3, null, cutoff + 1);
+
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    // Oldest first, and the boundary is STRICT: index 2 sits exactly on it and
+    // survives, exactly as an artifact at the cutoff does.
+    expect(sightingIndexes(P1)).toEqual([2, 3]);
+    expect((await retentionCounts(fx.db, P1)).source_sightings).toBe(2);
+    // The bundle itself is inside both bounds and is untouched.
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(1);
+  });
+
+  it("the ROW bound is PER TABLE here too — the oldest sightings go first", async () => {
+    // Ten sightings of ONE bundle against a bound of three. Without a per-table
+    // bound a project inside the artifact bound could still hold an unbounded
+    // number of sightings of those artifacts.
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSightingRun(10, NOW - 10_000, 1);
+
+    await sweepToConvergence(P1, {
+      maxRows: 3,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    // EXACTLY three, and they are the three most recently recovered.
+    expect(sightingIndexes(P1)).toEqual([7, 8, 9]);
+    expect((await retentionCounts(fx.db, P1)).source_sightings).toBe(3);
+  });
+
+  it("a sighting eligible under BOTH bounds is deleted ONCE and counted once", async () => {
+    // `pushVictims`' de-duplication, applied to this table. Every row below is
+    // over the age bound AND over the row cap; a double count would report
+    // twelve deletions for six rows and misreport the pass to a caller whose
+    // whole job is deciding whether the sweep is keeping up.
+    //
+    // THE BUNDLE SURVIVES ON PURPOSE — `maxRows: 1` leaves it at the cap
+    // exactly. Evicting it would make every sighting an ORPHAN and the cascade
+    // would remove them, which is a true statement about a different code path
+    // and would leave this case unable to fail.
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSightingRun(6, NOW - 400 * 24 * 60 * 60 * 1000, 1);
+
+    const summary = await sweepRetention(
+      fx.db,
+      P1,
+      {
+        maxRows: 1,
+        maxAgeMs: DEFAULT_RETENTION_MAX_AGE_MS,
+        auditMaxRows: HUGE_ROWS,
+      },
+      NOW,
+    );
+
+    expect(sightingIndexes(P1)).toEqual([]);
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(1);
+    // SIX, not twelve. Both bounds selected every one of these rows.
+    expect(summary.deleted).toBe(6);
+    expect(summary.errors).toBe(0);
+  });
+
+  it("a backlog DEEPER than one pass is cleared by the multi-pass drain", async () => {
+    // 07-REVIEW.md HI-04's shape, over the table its arithmetic counts inserts
+    // into. One bounded pass removes at most `maxRowsPerPass`; a backlog three
+    // passes deep must be cleared by the drain rather than left for a cadence
+    // boundary sustained ingest never yields.
+    //
+    // `passes` here is what `consumer.ts` reports as `retentionSweeps`: this
+    // file has no consumer, so it counts the passes it drove itself.
+    const cap = RETENTION_PASS_LIMITS.maxRowsPerPass;
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSightingRun(cap * 2 + 100, NOW - 10_000, 1);
+
+    const { passes } = await sweepToConvergence(P1, {
+      maxRows: 10,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect((await retentionCounts(fx.db, P1)).source_sightings).toBe(10);
+    expect(
+      passes,
+      "one pass cleared a backlog deeper than the per-pass cap, which means " +
+        "the cap is not being applied to this table.",
+    ).toBeGreaterThan(1);
+    expect(
+      passes,
+      "the drain needed more passes than the cadence budget allows, so a " +
+        "running plugin would never converge on this backlog.",
+    ).toBeLessThanOrEqual(RETENTION_PASS_LIMITS.maxPasses);
+  });
+
+  it("a pass whose sightings work exhausts the budget deletes NO `sources` row", async () => {
+    // T-07-71, EXECUTED. The anti-join must be asked of a sighting set the pass
+    // FINISHED with. `SRC_STRANDED` is already unsighted, so it is eligible the
+    // moment the anti-join runs — and it must not run in a pass that stopped on
+    // budget inside the sightings work.
+    const cap = RETENTION_PASS_LIMITS.maxRowsPerPass;
+    const SRC_STRANDED = digest("7a");
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSource(P1, SRC_STRANDED, NOW - 10_000);
+    // More eligible sightings than one pass can delete. `maxRows: 1` leaves the
+    // single artifact alone (at the cap exactly, `excess > 0` is false), so the
+    // whole budget goes to sightings.
+    seedSightingRun(cap + 50, NOW - 10_000, 1);
+
+    const bounds: RetentionBounds = {
+      maxRows: 1,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    };
+    const first = await sweepRetention(fx.db, P1, bounds, NOW);
+
+    expect(first.deleted).toBe(cap);
+    expect(first.moreWork).toBe(true);
+    expect(
+      (await retentionCounts(fx.db, P1)).sources,
+      "the anti-join ran in a pass that stopped on budget inside the sightings " +
+        "work. It must be asked of a sighting set the pass finished with.",
+    ).toBe(1);
+
+    // DEFERRED, NOT FORGOTTEN — the guard costs a pass and never a row.
+    await sweepToConvergence(P1, bounds);
+    expect(await retentionCounts(fx.db, P1)).toEqual({
+      artifacts: 1,
+      observations: 0,
+      analyses: 0,
+      audit: 0,
+      scans: 0,
+      sources: 0,
+      source_sightings: 1,
+    });
+  });
+
+  it("the convergence docblock says what W-5 asked it to say", () => {
+    // The claim lives where the arithmetic lives. `MAX_ROWS_PER_PASS`'s docblock
+    // already explains that this module bounds ONE pass and that the inequality
+    // lives at `RETENTION_SWEEP_MAX_PASSES`; W-5 is the observation that the
+    // inequality's INSERT side counted rows into two tables the delete side
+    // could not reach, so it held numerically while the property it claims did
+    // not. Asserted as text because it is a claim about what the next reader
+    // finds when they go looking, exactly as D-26's predicate case is.
+    const doc = /\/\*\*(?:(?!\*\/)[\s\S])*\*\/\s*const MAX_ROWS_PER_PASS/.exec(
+      RETENTION_SOURCE,
+    );
+    expect(doc, "MAX_ROWS_PER_PASS lost its doc block").not.toBeNull();
+    const text = doc?.[0] ?? "";
+    expect(text).toContain("W-5");
+    expect(text).toContain("source_sightings");
+    expect(text).toContain("sources");
+  });
+});
