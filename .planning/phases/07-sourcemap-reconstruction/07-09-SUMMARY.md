@@ -31,7 +31,10 @@ provides:
 affects: [07-10-manifest-export, phase-verification]
 
 # Actuals (#2632). PRIMARY figure is the protocol's own scale: chars/4 over the
-# REALIZED DIFF (88,918 added chars across the seven changed files).
+# REALIZED DIFF: 88,504 added chars across the seven changed files, measured
+# against `4c608eb` (07-08's last commit, this plan's true parent) rather than
+# against `main` — a `main` baseline would have swept in every earlier phase-7
+# edit to these files and inflated the figure to 88,918.
 #
 # The sibling summaries in this phase (07-07, 07-08) report chars/4 over the
 # FULL TEXT of their changed files, which for them was ~the same number because
@@ -42,7 +45,7 @@ affects: [07-10-manifest-export, phase-verification]
 # 224,821 chars => 56,205, and it is recorded here only so the three summaries
 # can still be lined up; it is not the honest cost of this plan.
 actuals:
-  tokens: 22229
+  tokens: 22126
   tasks: 2
   commits: 3
 
@@ -171,7 +174,7 @@ coverage:
         ref: "packages/frontend/src/App.spec.ts#leaves the toolbar's Export CTA exactly where and what it was"
         status: pass
       - kind: other
-        ref: "git diff 702fe62..HEAD -- packages/frontend/src/App.vue — the `TABS` declaration (App.vue:100-115) and `exportTable` (App.vue:544-546) show no changed line"
+        ref: "git diff 4c608eb..HEAD -- packages/frontend/src/App.vue — the `TABS` declaration (App.vue:100-115) and `exportTable` (App.vue:544-546) show no changed line"
         status: pass
     human_judgment: false
   - id: D8
@@ -188,7 +191,7 @@ coverage:
         ref: "packages/frontend/src/components/SourceBrowser.spec.ts#keeps the evidence panel mounted at its shipped width while the drill-down is open"
         status: pass
       - kind: other
-        ref: "git diff 702fe62..HEAD -- packages/frontend/src/stores/coalescer.ts packages/frontend/src/stores/inventory.ts — empty; neither triageLocked early return is touched"
+        ref: "git diff --stat 4c608eb..HEAD -- packages/frontend/src/stores/ — EMPTY; neither triageLocked early return, nor any other line of the coalescer or the store, is touched"
         status: pass
     human_judgment: false
   - id: D9
@@ -428,7 +431,7 @@ The edit was reverted and `git diff` over the component is clean. The demonstrat
 
 **The resolution taken:** the manifest gets its **own scoped CTA — `Export source manifest` — in the drill-down header**, and the toolbar CTA, `exportTable` and every shipped export assertion are byte-unchanged. There is still one export **mechanism**, one redaction ceremony and one `danger` confirmation; there are now two places to start it, and each names what it will export. The spirit of the Phase 5 rule — the operator always knows exactly which rows are leaving and in what form — is strengthened by this, not weakened.
 
-**Asserted, not merely argued.** `App.spec.ts#leaves the toolbar's Export CTA exactly where and what it was` captures the whole toolbar's text before entering the drill-down and asserts it byte-identical after, and asserts it still contains `EXPORT_CTA`. The `TABS` declaration (`App.vue:100-115`) and the `exportTable` computation (`App.vue:544-546`) show no changed line in `git diff 702fe62..HEAD`.
+**Asserted, not merely argued.** `App.spec.ts#leaves the toolbar's Export CTA exactly where and what it was` captures the whole toolbar's text before entering the drill-down and asserts it byte-identical after, and asserts it still contains `EXPORT_CTA`. The `TABS` declaration (`App.vue:100-115`) and the `exportTable` computation (`App.vue:544-546`) show no changed line in `git diff 4c608eb..HEAD`; the only diff hunks mentioning either name are new *comments* that cite them.
 
 ## The bundle, and the gates that now mean something
 
@@ -520,7 +523,7 @@ None. Every trust boundary this plan crosses was already in its `<threat_model>`
 | T-07-39 (producibility read as an analysis state) | O-07 mechanism 5's replacement, requirements 1 and 2, asserted in **both** directions over the fully rendered drill-down in the closest-together arrangement, with three non-vacuity checks and a RED demonstration |
 | T-07-43 (a resolved zero and an unknown count rendered identically) | Three cell states asserted separately **and as an inequality**; the unresolved cell asserted on both axes (no text AND no child element); the failed lookup deliberately byte-identical to the pending one, with the read failure surfacing at the artifact level instead |
 | T-07-50 (an operator trapped in a failed drill-down) | The leave action and the whole header asserted to survive a failed source-list read and asserted to still fire; Escape asserted from a **deep descendant** rather than the root; the failure asserted to render in the tree column and asserted absent from the header |
-| T-07-51 (the drill-down disturbing the parent's analysis state) | Entering asserted not to clear the selection, not to unmount the panel; `coalescer.ts` and `inventory.ts` show an **empty diff**, so neither `triageLocked` early return is touched; the tab-list declaration and the export computation asserted byte-unchanged both by test and by `git diff` |
+| T-07-51 (the drill-down disturbing the parent's analysis state) | Entering asserted not to clear the selection, not to unmount the panel; `git diff --stat 4c608eb..HEAD -- src/stores/` is **empty**, so neither `triageLocked` early return is touched; the tab-list declaration and the export computation asserted byte-unchanged both by test and by `git diff` |
 | T-07-SC (package installs) | **Nothing installed.** `pnpm knip`, `pnpm check:bundle` and `pnpm check:externals` all exit 0 |
 
 ## Issues Encountered
@@ -544,7 +547,7 @@ None. Every trust boundary this plan crosses was already in its `<threat_model>`
 | `pnpm check:externals` | 1 bare specifier, `vue`; the codec is inlined and measured present in the artifact |
 | `pnpm check:css` | 144 rules checked against `#plugin--defminer` (142 before) |
 | `git diff --exit-code -- SourceViewer.vue SourcePositionStrip.vue` | **exit 0** — plan 07-08's components were mounted, not edited |
-| `TABS` and `exportTable` byte-unchanged | Yes — no changed line in `git diff 702fe62..HEAD -- App.vue` at either site, and asserted by test |
+| `TABS` and `exportTable` byte-unchanged | Yes — no changed line in `git diff 4c608eb..HEAD -- App.vue` at either site, and asserted by test |
 | All 9 of this plan's `## UI Considerations` rows have an assertion | Yes — coverage block D1–D5 (`sources-count-column`) and D10–D13 (`drilldown-header`) |
 | O-07 requirement 2, both directions, non-vacuous | Yes, and demonstrated RED — 7 failures across 2 files from one misplaced word |
 
