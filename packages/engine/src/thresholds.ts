@@ -163,7 +163,16 @@ export const RETENTION_SWEEP_MAX_ROWS = 512;
  *   RETENTION_SWEEP_MAX_ROWS * RETENTION_SWEEP_MAX_PASSES
  *     >= RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX
  *
- *   8,192 >= 4,227, which is ~1.9x headroom.
+ *   8,192 >= 2,179, which is ~3.76x headroom.
+ *
+ * AND THE FIGURES IN THIS PARAGRAPH ARE THEMSELVES ASSERTED, which they were not
+ * when it last drifted. `thresholds.spec.ts`'s describe block "the DOCUMENTED
+ * derivation matches the SHIPPED constants" READS this docblock as TEXT and
+ * compares every figure below against the constants it imports. The convergence
+ * tests beside it compute the inequality FROM the constants and so cannot fail on
+ * a stale sentence; that is how this paragraph spent a full verification round
+ * computing a value the code had retired (07-VERIFICATION.md WR-01). Edit a
+ * constant without editing these words and a test goes red.
  *
  * READ THE RIGHT-HAND SIDE AS WHAT IT IS: the most rows that can be inserted
  * before a pass fires. Up to `RETENTION_SWEEP_EVERY_N - 1` rows can already have
@@ -173,10 +182,13 @@ export const RETENTION_SWEEP_MAX_ROWS = 512;
  * the per-pass cap is held down by the cost cap.
  *
  * SO THE PASS REPEATS WITHIN ONE CADENCE INSTEAD OF THE CAP BEING RAISED, and the
- * two rejected repairs are why. Raising RETENTION_SWEEP_MAX_ROWS to 4,227 breaks
- * the 1024-row cost cap `thresholds.spec.ts` asserts; a per-map ROW cap tight
- * enough to fix it (~190 sources) would refuse monaco's 781-source map outright,
- * and D-09 rejected a per-map row cap anyway.
+ * two rejected repairs are why. Raising RETENTION_SWEEP_MAX_ROWS to 2,179 breaks
+ * the 1024-row cost cap `thresholds.spec.ts` asserts — and THE REJECTION STILL
+ * HOLDS AT THE SMALLER FIGURE, which is worth saying because this sentence carried
+ * a larger one until plan 07-14 retired the MD-01 factor: 2,179 is still more than
+ * twice the cost cap, so nothing about the argument shrank when the number did. A
+ * per-map ROW cap tight enough to fix it instead (~190 sources) would refuse
+ * monaco's 781-source map outright, and D-09 rejected a per-map row cap anyway.
  *
  * THE COST ARGUMENT IS UNCHANGED AND THAT IS THE POINT. A pass is still bounded at
  * RETENTION_SWEEP_MAX_ROWS, and `ingest/consumer.ts` YIELDS between passes — so
@@ -186,10 +198,21 @@ export const RETENTION_SWEEP_MAX_ROWS = 512;
  * cadence still runs exactly one pass; the repeat is reachable only when there is
  * a real backlog, which is the only case where convergence was ever in question.
  *
- * SIXTEEN, AND NOT NINE. Nine is the smallest integer that satisfies the
- * inequality (4,227 / 512 = 8.26). The next power of two buys the property the
- * superseded Form 1 comment claimed and never had: a backlog DRAINS under
- * sustained worst-case ingest rather than merely failing to grow.
+ * SIXTEEN IS RETAINED HEADROOM AND IT IS NOT THE DERIVED VALUE. The derivation
+ * ends at eight. The smallest integer that satisfies the inequality is 5, because
+ * 2,179 / 512 = 4.26, and the next power of two above it is 8. Eight ALREADY buys
+ * the property the superseded Form 1 comment claimed and never had: a backlog
+ * DRAINS under sustained worst-case ingest rather than merely failing to grow.
+ *
+ * SO WHY IS IT STILL SIXTEEN — because lowering it to 8 was considered on
+ * 2026-09-02, when this paragraph was corrected, and was NOT approved. The extra
+ * doubling costs nothing at runtime: the loop stops the moment a pass reports no
+ * work remains, so an ordinary cadence still runs exactly one pass and the further
+ * passes are reachable only under a real backlog. What it buys is a wider drain
+ * margin under exactly the sustained worst-case ingest the paragraph above claims
+ * to survive. DO NOT "tidy" 16 down to 8 on the strength of this derivation: the
+ * derivation produces 8, the constant is 16, and the gap between them is the
+ * headroom rather than a mistake.
  *
  * IT IS A CEILING, NOT A TARGET. A pass that reports `moreWork` on the sixteenth
  * iteration defers to the next cadence boundary exactly as before.
