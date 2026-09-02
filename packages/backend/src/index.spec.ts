@@ -2455,6 +2455,60 @@ describe("deriveSource — D-07's reload, D-24's re-verify, D-23's tombstone", (
     expect(answer).toEqual({ outcome: "unavailable" });
   });
 
+  it("a ref naming a bundle that never carried this sighting is ANSWERED, never served", async () => {
+    // THE NEGATIVE HALF OF THE WIDENING (plan 07-11, finding W-3), and it is the
+    // control the widening is FOR. `SourceRef` now names the bundle, so there is
+    // a NEW way to reach the `readSightingOrigin` returned `undefined` arm: a
+    // caller that names a REAL map, a REAL index and the WRONG bundle. Before
+    // the widening this ref was simply not expressible; the predicate ignored
+    // the digest and served bundle A's body under bundle B's name.
+    //
+    // FOUR ASSERTIONS, AND THE FOURTH IS THE ONE WORTH SPELLING OUT. The refusal
+    // must write NO producibility row: a sighting DefMiner could not find has
+    // not been proven unproducible, and under D-23 a tombstone written from an
+    // absence of evidence is permanent. That is why `unavailable` and not
+    // `gone`, and why the row is read back rather than inferred from the arm.
+    seedSighting();
+    const otherArtifact = "d".repeat(64);
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES ('p1', ?, 10, 'script', ?, ?, 1)",
+      )
+      .run(otherArtifact, RECOVERED_AT, RECOVERED_AT);
+
+    const before = counters.sourcemap.derivationsUnavailable;
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId: "p1",
+      db: () => Promise.resolve(fx.db),
+      get: () => Promise.resolve(storedResponse(BUNDLE)),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+
+    const answer = await rpc.deriveSource(null, {
+      ...REF,
+      artifactSha256: otherArtifact,
+      mapSha256: MAP_SHA,
+    });
+
+    expect(answer).toEqual({ outcome: "unavailable" });
+    expect(counters.sourcemap.derivationsUnavailable).toBe(before + 1);
+    expect(
+      sdk.calls.requestsGet,
+      "a ref naming the wrong bundle reached the request store anyway, so the " +
+        "set of stored bodies this endpoint can reach is not the set DefMiner " +
+        "recorded a sighting for",
+    ).toEqual([]);
+    expect(
+      producibilityNow(),
+      "a ref naming the wrong bundle wrote a PERMANENT tombstone onto the " +
+        "sighting that was there all along",
+    ).toBe("producible");
+  });
+
   it("an index the map no longer carries content for is `unavailable`, never `gone`", async () => {
     // The bundle is still there and still hashes correctly, so the source has
     // not been proven unproducible — only unread this time. A `gone` here would
