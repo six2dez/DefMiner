@@ -39,6 +39,16 @@
 // index, and the viewer header renders the VERBATIM `sources` entry, which is
 // what makes the losslessness visible rather than merely provable.
 //
+// MD-02 IS THE ONE PLACE THAT SENTENCE WAS FALSE, and the shape of the leak is
+// worth stating because it will present itself again. The directory merge in
+// step 5 compared `label` — `forCellText`'s output, sanitised AND TRUNCATED at
+// the cell cap — so two directory names agreeing for the whole of the cap and
+// differing only past it merged into one node, and the tree told the operator
+// that two files in two different directories were siblings in one. Nothing
+// was mis-sanitised and nothing was mis-rendered; a DISPLAY value was used as
+// an IDENTITY. The merge now keys on `Building.mergeKey`, the raw segment,
+// and the label is carried beside it untouched.
+//
 // This module has NO WRITE PATH. It takes rows, returns nodes, and mutates
 // nothing; the verbatim string is never rewritten, normalised, case-folded or
 // re-encoded. `tree.spec.ts` proves it the way `schema.spec.ts`'s
@@ -389,15 +399,41 @@ function displaySegment(segment: string): DisplaySegment {
 // differ only in case. Collapsing either pair merges TWO GENUINELY DISTINCT
 // SOURCE FILES into one node and loses the fact that the target shipped both.
 //
-// So directory nodes merge on a BYTE-IDENTICAL label and nothing weaker, and a
-// leaf never merges at all: it is keyed by `(label, sourcesIndex)`, so two rows
-// that normalise to the same display path render as two nodes and each carries
-// its own index. The operator sees two `app.js` entries and can tell them apart
-// by opening either.
+// So directory nodes merge on a BYTE-IDENTICAL SEGMENT and nothing weaker, and
+// a leaf never merges at all: it is keyed by `(label, sourcesIndex)`, so two
+// rows that normalise to the same display path render as two nodes and each
+// carries its own index. The operator sees two `app.js` entries and can tell
+// them apart by opening either.
+//
+// THE COMPARED VALUE IS `mergeKey`, NOT `label`, AND MD-02 IS WHY. The merge
+// used to read the post-`forCellText` label — sanitised AND TRUNCATED at the
+// cell cap — so two directory names agreeing for the whole of the cap and
+// differing only past it became one node, and the tree told the operator that
+// two files in two different directories were siblings in one. The truncation
+// is a DISPLAY concern that had leaked into an IDENTITY comparison. That is the
+// class of bug to watch for the next time a display helper's output is
+// conveniently to hand at a comparison: a value that has been through a
+// sanitiser or a cap answers "what does the operator see?", never "is this the
+// same thing?".
 
 /** A node under construction. The mutable half, private to one build. */
 type Building = {
   key: string;
+  /**
+   * THE IDENTITY, and never rendered.
+   *
+   * The RAW segment exactly as `resolveClimbs` produced it: the value the store
+   * holds, not the value the screen shows. Byte identity and nothing weaker (no
+   * truncation, no sanitisation) and nothing stronger (no case folding, no
+   * Unicode normalisation — step 5's header refuses both by name).
+   *
+   * INTERNAL TO ONE BUILD. It is deliberately NOT a field of the frozen
+   * {@link SourceTreeNode} the component renders: an unsanitised,
+   * target-controlled string on a rendered node is the `title`/`data-*` leak
+   * `safety/hostile.spec.ts` asserts against from the render side, and
+   * `tree.spec.ts` asserts against from this side.
+   */
+  mergeKey: string;
   label: string;
   sourcesIndex: number;
   climbs: number;
@@ -418,6 +454,16 @@ function freezeNode(node: Building, duplicate: boolean): SourceTreeNode {
   if (node.climbs > 0) notes.push("path-clamped");
   if (node.truncated) notes.push("label-truncated");
 
+  // THE `duplicate` MARKER COUNTS DISPLAY LABELS, DELIBERATELY, AND STAYS
+  // THERE AFTER MD-02. It is not an identity claim and must not be read as one:
+  // its job is to warn the operator that two rendered rows LOOK IDENTICAL, so
+  // the index shown beside them is the only thing telling them apart. That is
+  // exactly the situation MD-02's two directories are now in — two distinct
+  // names, both cut at the cell cap, rendering as the same 256 characters.
+  // Counting `mergeKey` here would leave that pair UNMARKED and the operator
+  // would read two identical rows as the renderer having drawn one directory
+  // twice. A marker that says "these two look the same on screen" is
+  // defensible; one that claims "these two ARE the same" is the defect.
   const labels = new Map<string, number>();
   for (const child of node.children) {
     labels.set(child.label, (labels.get(child.label) ?? 0) + 1);
@@ -469,12 +515,19 @@ export function buildSourceTree(
     const { rootLabel, remainder } = classify(verbatim);
     const resolved = resolveClimbs(splitSegments(remainder));
 
+    // THE ROOT MERGE ALREADY KEYED ON THE RAW VALUE and MD-02 never reached it:
+    // `rootByLabel` is looked up with `classify`'s RAW `rootLabel` and
+    // `forCellText` is applied only when the node is BUILT, one line below. The
+    // interior merge is the one that read a display value. Confirmed by reading
+    // rather than assumed, and `tree.spec.ts` pins it so a later edit cannot
+    // quietly introduce here what this change removed there.
     let siblings = roots;
     if (rootLabel !== null) {
       const existing = rootByLabel.get(rootLabel);
       if (existing === undefined) {
         const created: Building = {
           key: key(),
+          mergeKey: rootLabel,
           label: forCellText(rootLabel),
           sourcesIndex: row.sourceIndex,
           climbs: 0,
@@ -491,18 +544,30 @@ export function buildSourceTree(
       }
     }
 
-    // The interior segments become directories, merged on a byte-identical
-    // label. The FINAL segment becomes the source node and is never merged.
-    const display = resolved.segments.map(displaySegment);
+    // The interior segments become directories, merged on the BYTE-IDENTICAL
+    // RAW SEGMENT. The FINAL segment becomes the source node and is never
+    // merged.
+    //
+    // THE RAW AND THE DISPLAY VALUE TRAVEL AS ONE OBJECT rather than as two
+    // arrays paired by index. `resolved.segments` already holds the raw
+    // segments, so this costs one field and no extra walk — and a pair that
+    // cannot be indexed apart cannot be indexed apart WRONGLY, which is the
+    // failure mode a second parallel array would have introduced next to a bug
+    // about comparing the wrong one of two values.
+    const display = resolved.segments.map((raw) => ({
+      raw,
+      ...displaySegment(raw),
+    }));
     for (let depth = 0; depth + 1 < display.length; depth++) {
       const segment = display[depth];
       let directory = siblings.find(
         (candidate) =>
-          candidate.kind === "directory" && candidate.label === segment.label,
+          candidate.kind === "directory" && candidate.mergeKey === segment.raw,
       );
       if (directory === undefined) {
         directory = {
           key: key(),
+          mergeKey: segment.raw,
           label: segment.label,
           sourcesIndex: row.sourceIndex,
           climbs: 0,
@@ -524,6 +589,10 @@ export function buildSourceTree(
     const last = display[display.length - 1];
     siblings.push({
       key: key(),
+      // A LEAF NEVER MERGES, so its key is never compared. It is carried anyway
+      // because a `Building` whose identity field were sometimes absent is a
+      // field a reader has to reason about before trusting the comparison above.
+      mergeKey: last?.raw ?? "",
       label: last?.label ?? "",
       sourcesIndex: row.sourceIndex,
       climbs: resolved.climbs,

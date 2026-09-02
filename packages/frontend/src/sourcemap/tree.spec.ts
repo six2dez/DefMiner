@@ -44,6 +44,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 import { forCellText } from "../safety/display";
+
 import {
   buildSourceTree,
   expandableKeys,
