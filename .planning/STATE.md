@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-14-PLAN.md
-last_updated: "2026-09-02T10:42:22.568Z"
+stopped_at: Completed 07-17-PLAN.md
+last_updated: "2026-09-02T11:03:36.327Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 7b33586492cc0e0bdebdb139668a73f9cb67339a
+state_head: a3937a1aa31b24b837e6d817e7bbdd859bb969dc
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 84
+  completed_plans: 85
 ---
 
 # Project State
@@ -28,11 +28,49 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 12 of 17
+Plan: 13 of 17
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-17: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
+> `state.advance-plan` was invoked EXACTLY ONCE and returned
+> `{"previous_plan": 12, "current_plan": 13}`. It still INCREMENTS the prose
+> counter rather than recomputing, but this round the value it found was the one
+> 07-14 had corrected from the file count, so the increment landed on the truth:
+> 17 PLAN files and 13 SUMMARY files on disk. `completed_plans` moved 84 -> 85 by
+> its own recomputation. The next outstanding plans are 07-12, 07-13, 07-15 and
+> 07-16.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the TENTH consecutive occurrence across phases 05, 06 and 07. Steady handler
+> behaviour, not a transient. The `Progress:` line above still describes PHASE 01
+> plan execution and is deliberately untouched.
+>
+> UI-05 WAS NOT MARKED COMPLETE, AND THAT IS THE GATE WORKING.
+> `requirements.ready-ids` reported `1/2 ready`: MAP-04 ready and reported
+> `already_complete` by an earlier plan, UI-05 blocked because sibling plans
+> 07-12, 07-13, 07-15 and 07-16 also declare it and have no SUMMARY yet.
+> `.planning/REQUIREMENTS.md` is byte-unchanged, which this plan also prohibits
+> changing.
+>
+> THE W-2 CLASS RECURRED A THIRD TIME IN THIS PHASE AND WAS CAUGHT TWICE HERE.
+> The first attempt to write this plan's new spec block emitted a LITERAL NUL
+> byte and literal combining-acute characters; the harness refused the call and
+> the block was re-spelled with `\uXXXX` escapes throughout, then verified
+> ASCII-only by an explicit scan before being written. The same class then
+> appeared in `07-17-SUMMARY.md` itself — one literal NUL inside a prose example
+> — and was caught by a second scan and repaired the same way. Every non-ASCII
+> codepoint in the 47 new corpus expectation lines is escaped for exactly this
+> reason.
+>
+> NO PROHIBITED COMMAND WAS RUN. No `git stash` in any form, no `git clean`, no
+> branch created or switched, and `packages/backend`,
+> `packages/frontend/src/safety/hostile.spec.ts`, `.planning/REQUIREMENTS.md` and
+> `07-UI-SPEC.md` are byte-unchanged — all asserted by `git diff` at close-out
+> rather than claimed.
 
 > PHASE 07 PLAN 07-14: THE PROSE COUNTER DRIFTED BY THE HANDLER'S OWN HAND AND
 > IS CORRECTED FROM THE FILE COUNT, RECORDED RATHER THAN QUIETLY FIXED, by the
@@ -409,6 +447,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07-sourcemap-reconstruction P10 | 42min | 3 tasks | 18 files |
 | Phase 07 P11 | 22 min | 3 tasks | 11 files |
 | Phase 07 P14 | 19 min | 3 tasks | 6 files |
+| Phase 07 P17 | 14 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -782,6 +821,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: `announce.ts` imports SOURCEMAP_TAIL_WINDOW_BYTES from thresholds.ts as its URL bound rather than restating ceil(MAP_MAX_BYTES * 4/3) + ANNOUNCEMENT_PREFIX_MAX — One derivation, not two — the second copy is the one that stops tracking MAP_MAX_BYTES the first time the D-10 ladder is re-run. It is a NUMBER import so the module stays SDK-free, and it sits 81 characters above the longest URL this build can accept, so nothing reachable is cut.
 - [Phase 07]: LO-01s parse-side property is asserted STRUCTURALLY — parse.spec.ts reads parse.ts's decodeInlineMap and compares the source offsets of the size gate and the payload slice — Both orders return the same reason for the same input and only the cost differs, so no behavioural case can be RED. Same move announce.spec.ts already makes for the no-pattern property over both modules: a property no input can expose is asserted against the source or not at all.
 - [Phase 07]: announce.spec.ts now gates ITSELF against literal C0/C1 control bytes and literal U+2028/U+2029 — The gate caught three literal separators in this plans own new fixtures on its first run — verbatim finding W-2s class, which commit f6cbf07 already had to repair once in this phase. A literal separator is invisible in every diff and every review tool, so a human reviewer would not have seen it.
+- [Phase 07]: 07-17 (MD-02): the display tree's interior-directory merge keys on Building.mergeKey — the RAW segment as resolveClimbs produced it — and never on the forCellText label. — The compared label was sanitised AND truncated at 256 graphemes, so two directory names agreeing for the whole of the cap and differing only past it became ONE node and the tree told the operator that two files in two different directories were siblings in one. A display value had been used as an identity. mergeKey is internal to one build and is deliberately not a field of the frozen SourceTreeNode, so the unsanitised target-controlled string cannot reach a title or a data-* attribute (T-07-73).
+- [Phase 07]: 07-17: the duplicate marker stays on the DISPLAY label and is NOT moved to the merge key. — The marker warns the operator that two rendered rows LOOK IDENTICAL, so the index beside them is the only thing telling them apart — which is exactly the situation MD-02's two directories are now in, both cut at the same cap. Counting mergeKey would leave that pair unmarked and the operator would read two identical rows as the renderer having drawn one directory twice. A marker that says 'these two look the same on screen' is defensible; one that claims 'these two ARE the same' is the defect.
+- [Phase 07]: 07-17: the review's 'at most one directory node per row' bound for T-07-74 is corrected — the bound that holds is the fully-unmerged ceiling, a function of the ROWS. — Measured: the two-row reproduction goes 3 -> 4 nodes, and the same pair with three shared segments below the divergence goes 6 -> 10, i.e. two added nodes per row. Every interior directory can newly fail to merge, not only the first. SOURCE_TREE_LOAD_MAX (contract.ts:317) bounds ROWS not nodes, and RecycleScroller takes a fixed item-size over scrollerItems (SourceTree.vue:236-238, :405-412), so the scroller holds no assumption relating node count to row count. T-07-74's accept disposition survives intact.
 
 ### Known Risks Carried Forward
 
@@ -824,8 +866,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T10:42:22.410Z
-**Stopped at:** Completed 07-14-PLAN.md
+**Last session:** 2026-09-02T11:03:36.161Z
+**Stopped at:** Completed 07-17-PLAN.md
 **Resume file:** None
 
 ### Blockers
