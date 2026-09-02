@@ -1260,30 +1260,18 @@ export function startConsumer(
     // describes a bound working as designed as if it were a refusal
     // (07-REVIEW.md MD-03).
     //
-    // COUNTED AND LOGGED ONLY WHEN THERE IS SOMETHING TO RECURSE OVER. A map
-    // that parsed and recovered nothing declined nothing, and `consumer.spec.ts`
-    // pins that: the counter describes the BOUND FIRING, not the stage running.
-    // The count in the message is `parsed.recovered.length` — the sources that
-    // reach the loop — which OVER-STATES by the sources `admitDerived` refuses
-    // below before they could recurse. Said plainly rather than left for a
-    // reader to discover: the refusal is one per stage either way, and the
-    // number beside it is the stage's recovered-source count, not a count of
-    // recursions that were individually declined.
+    // COUNTED AND LOGGED FROM WHAT WAS ADMITTED, AND REPORTED BELOW THE LOOP.
+    // The decision is taken HERE because it is a property of this stage's depth;
+    // the REPORT is emitted after the loop, from `admittedForRecursion` — the
+    // sources that actually reached the recursion call site. RECOVERY IS NOT
+    // ADMISSION: a map can recover sources that `admitDerived` refuses as
+    // `empty` or `too_large` before they could recurse, and a stage that
+    // admitted none of them declined nothing at any depth. Guarding the emission
+    // on `parsed.recovered.length` claimed the bound had fired when it had not,
+    // and put the recovered count beside a noun that meant recursions — two
+    // inaccuracies sharing one condition, both closed here (07-REVIEW.md IN-01).
     const nextDepth = admitDerivedDepth(input.depth + 1);
-    if (!nextDepth.ok && parsed.recovered.length > 0) {
-      sm.derivedRejected[nextDepth.reason]++;
-      log(
-        "reconstruction of the " +
-          String(parsed.recovered.length) +
-          " source(s) recovered from " +
-          input.artifactSha256.slice(0, 12) +
-          " not attempted at depth " +
-          String(input.depth + 1) +
-          ": " +
-          nextDepth.reason +
-          " (D-13)",
-      );
-    }
+    let admittedForRecursion = 0;
 
     for (const source of parsed.recovered) {
       sliceStart = clock();
@@ -1424,6 +1412,12 @@ export function startConsumer(
       });
       if (walked.maxSliceMs > sliceMs) sliceMs = walked.maxSliceMs;
 
+      // ADMITTED FOR RECURSION, COUNTED WHERE RECURSION IS REACHED. The
+      // increment sits on the one path that arrives at the call site below:
+      // `admitDerived`'s refusal arm has already `continue`d, and the two
+      // `stillCurrent()` re-checks above have already returned. Counting any
+      // earlier would count sources that never got here.
+      admittedForRecursion += 1;
       if (nextDepth.ok) {
         const derived = await reconstruct(
           projectId,
@@ -1443,6 +1437,38 @@ export function startConsumer(
         // bounds.
         if (derived.sliceMs > sliceMs) sliceMs = derived.sliceMs;
       }
+    }
+
+    // --- D-13's DEPTH REFUSAL, REPORTED FROM WHAT ACTUALLY HAPPENED --------
+    // DECIDED AT THE TOP, REPORTED AT THE BOTTOM. The guard reads
+    // `admittedForRecursion` and not `parsed.recovered.length`, so the refusal
+    // fires on ADMISSION rather than on recovery. A map whose every
+    // `sourcesContent` entry is the empty string — or whose every source is over
+    // `DERIVED_SOURCE_MAX_BYTES`, both reachable from one hostile map — recovers
+    // sources and admits none of them, attempts no recursion at any depth, and
+    // therefore declines nothing. The number beside the reason is the ADMITTED
+    // count and the noun beside it says so, which is the unit `telemetry.ts`
+    // already states: one reconstruction stage that DECLINED TO RECURSE, and a
+    // non-zero value always meaning at least one map-bearing artifact reached the
+    // bound (07-REVIEW.md IN-01).
+    //
+    // A STAGE ABANDONED ON PROJECT CHANGE EMITS NO REFUSAL AT ALL, because the
+    // two `stillCurrent()` re-checks inside the loop `return done(null)` and
+    // never reach here — a stage that was abandoned did not decline to recurse,
+    // it stopped.
+    if (!nextDepth.ok && admittedForRecursion > 0) {
+      sm.derivedRejected[nextDepth.reason]++;
+      log(
+        "reconstruction of the " +
+          String(admittedForRecursion) +
+          " admitted source(s) from " +
+          input.artifactSha256.slice(0, 12) +
+          " not attempted at depth " +
+          String(input.depth + 1) +
+          ": " +
+          nextDepth.reason +
+          " (D-13)",
+      );
     }
 
     return done(null);
