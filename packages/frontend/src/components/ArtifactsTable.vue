@@ -92,7 +92,12 @@ import InventoryTable from "./InventoryTable.vue";
 import PartialBanner from "./PartialBanner.vue";
 import StatusBadge from "./StatusBadge.vue";
 import type { ColumnDefinition } from "./table-contract";
-import { counted, FOCUS_RING_CLASS, groupThousands } from "./table-contract";
+import {
+  counted,
+  FOCUS_RING_CLASS,
+  formatTimestamp,
+  groupThousands,
+} from "./table-contract";
 
 const { store, analyses, sourceCounts, affectedFilter } = defineProps<{
   store: InventoryStore<ArtifactRow>;
@@ -155,11 +160,6 @@ const EMPTY_SOURCE_COUNTS: ReadonlyMap<string, number> = new Map();
 const counts = computed<ReadonlyMap<string, number>>(
   () => sourceCounts ?? EMPTY_SOURCE_COUNTS,
 );
-
-/** A millisecond epoch as a fixed-width, sortable, locale-independent string. */
-function formatTimestamp(ms: number): string {
-  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
-}
 
 const COLUMNS: readonly ColumnDefinition<ArtifactRow>[] = [
   // 1 — the lead. Rendered through the `cell-state` slot below.

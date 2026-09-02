@@ -57,6 +57,14 @@ which is where the operator will first see the two tables growing unbounded.
   copies of a date format is still how one of them comes to disagree with the other two about a
   timezone. **Suggested owner:** any plan that already touches either table.
 
+  **HALF DISCHARGED by plan 07-09 (2026-09-02).** `ArtifactsTable.vue` is in that plan's
+  `files_modified` for the `Sources` column, so it is the plan the suggested owner names. Its
+  private copy was deleted and it now imports `table-contract.ts`'s exported one; the two were
+  byte-identical, and `FindingsTable.spec.ts`'s `Last seen` assertions cover the result.
+  `ObservationsTable.vue`'s copy REMAINS — that file is outside 07-09's scope and is not reachable
+  from any 07-09 module. **Remaining owner:** any plan that touches `ObservationsTable.vue`. Two
+  copies left, down from three.
+
 - **`pnpm --filter @defminer/frontend typecheck` (vue-tsc) still reports the 5 PRE-EXISTING
   errors 07-07 recorded**, in `ExportDialog.vue` and `SettingsPanel.vue`. 07-08 adds none: its
   three new modules are clean under `tsc --build`, which is the repo gate and is green. Unchanged
