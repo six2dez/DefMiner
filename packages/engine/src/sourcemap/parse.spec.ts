@@ -617,6 +617,105 @@ describe("MAP-05 — the decoded ceiling, from both sides, at MAP_MAX_BYTES", ()
   });
 });
 
+// ===========================================================================
+// THE AGGREGATE BOUND IS A ROW BOUND — MD-01, FROM BOTH SIDES
+// ===========================================================================
+// `SOURCE_ROWS_PER_MAP_MAX` is DERIVED in rows — `thresholds.ts` computes it
+// from the probe's source density as "471 sources and 942 rows" and rounds to
+// the next power of two — and until 07-14 it was ENFORCED against the declared
+// SOURCE count. The two units differ by exactly the D-05 factor of two, so the
+// reachable ceiling was 4,096 rows against a documented 2,048 (07-REVIEW.md
+// MD-01). A gate whose unit does not match its derivation is not a weaker gate;
+// it is a gate that says one number and does another, and the retention
+// convergence inequality carried a compensating `2 *` because of it.
+//
+// EXERCISED FROM BOTH SIDES, in `admit.spec.ts`'s idiom: exactly at the row
+// ceiling is ACCEPTED and one source past it is REFUSED. One side alone passes
+// by getting the side it was tested on right.
+
+/** D-05: one `sources` row per new content hash, one `source_sightings` row per `(map, index)`. */
+const ROWS_PER_DECLARED_SOURCE = 2;
+
+/** The most sources a map may declare before it would write more than the row bound. */
+const SOURCES_AT_ROW_CEILING =
+  SOURCE_ROWS_PER_MAP_MAX / ROWS_PER_DECLARED_SOURCE;
+
+/** A legal map declaring `count` distinct labels and no content. The COUNT is the subject. */
+function mapDeclaring(count: number): string {
+  const labels: string[] = [];
+  for (let i = 0; i < count; i += 1) labels.push(`"src/s${i}.ts"`);
+  return (
+    '{"version":3,"file":"app.js","sources":[' +
+    labels.join(",") +
+    '],"names":[],"mappings":"AAAA"}'
+  );
+}
+
+/** The same `count` labels, split across two sections, to defeat a per-section gate. */
+function sectionedMapDeclaring(count: number): string {
+  const half = Math.floor(count / 2);
+  const section = (from: number, to: number, line: number): string =>
+    '{"offset":{"line":' +
+    String(line) +
+    ',"column":0},"map":{"version":3,"sources":[' +
+    Array.from({ length: to - from }, (_, i) => `"src/s${from + i}.ts"`).join(
+      ",",
+    ) +
+    '],"names":[],"mappings":"AAAA"}}';
+  return (
+    '{"version":3,"file":"app.js","sections":[' +
+    section(0, half, 0) +
+    "," +
+    section(half, count, 1) +
+    "]}"
+  );
+}
+
+describe("MAP-06 — the aggregate bound refuses at the ROWS it documents", () => {
+  it("the bound is EVEN, so the row ceiling converts to a whole number of sources", () => {
+    // Without this the two cases below would straddle a rounding decision rather
+    // than a boundary, and "exactly at the ceiling" would be a fiction.
+    expect(SOURCE_ROWS_PER_MAP_MAX % ROWS_PER_DECLARED_SOURCE).toBe(0);
+    expect(SOURCES_AT_ROW_CEILING).toBe(SOURCE_ROWS_PER_MAP_MAX / 2);
+  });
+
+  it(`ACCEPTS ${SOURCES_AT_ROW_CEILING} sources — exactly ${SOURCE_ROWS_PER_MAP_MAX} rows, the boundary from below`, () => {
+    const result = parse(mapDeclaring(SOURCES_AT_ROW_CEILING));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.declaredSources).toBe(SOURCES_AT_ROW_CEILING);
+    expect(result.declaredSources * ROWS_PER_DECLARED_SOURCE).toBe(
+      SOURCE_ROWS_PER_MAP_MAX,
+    );
+  });
+
+  it(`REFUSES ${SOURCES_AT_ROW_CEILING + 1} sources — ${SOURCE_ROWS_PER_MAP_MAX + ROWS_PER_DECLARED_SOURCE} rows, the boundary from above`, () => {
+    const result = parse(mapDeclaring(SOURCES_AT_ROW_CEILING + 1));
+    noteReason(result);
+    expect(
+      refusalOf(result),
+      `a map declaring ${SOURCES_AT_ROW_CEILING + 1} sources writes ` +
+        `${(SOURCES_AT_ROW_CEILING + 1) * ROWS_PER_DECLARED_SOURCE} rows under D-05, ` +
+        `past SOURCE_ROWS_PER_MAP_MAX (${SOURCE_ROWS_PER_MAP_MAX}). Accepting it is ` +
+        `MD-01: the gate compares the DECLARED SOURCE count against a bound derived ` +
+        `in ROWS, so the real ceiling is twice the documented one and the retention ` +
+        `convergence inequality has to carry a factor to compensate.`,
+    ).toBe("too_many_sources");
+  });
+
+  it("a SECTIONED map is refused at the same AGGREGATE, not per section", () => {
+    // An index map cannot get under the bound by splitting: `absorb` sums
+    // `declared` across sections and the gate reads the sum.
+    const result = parse(sectionedMapDeclaring(SOURCES_AT_ROW_CEILING + 1));
+    noteReason(result);
+    expect(refusalOf(result)).toBe("too_many_sources");
+    // The control: the same split, one source fewer, is ACCEPTED — so the refusal
+    // above is the aggregate and not the sectioning.
+    const under = parse(sectionedMapDeclaring(SOURCES_AT_ROW_CEILING));
+    expect(under.ok).toBe(true);
+  });
+});
+
 describe("EVERY reason in the closed vocabulary has a case", () => {
   it("`too_deep` is produced by the shipped classifier from a REAL RangeError", () => {
     // THE ONLY BRANCH THIS RUNTIME CANNOT TRIGGER THROUGH THE FRONT DOOR, and it

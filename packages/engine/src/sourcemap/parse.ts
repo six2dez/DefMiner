@@ -230,9 +230,21 @@ export type SkippedSource = {
 
 /** The bounds `parseSourceMap` enforces, passed in rather than imported. */
 export type ParseLimits = {
-  /** `SOURCE_ROWS_PER_MAP_MAX` in production. */
+  /** `SOURCE_ROWS_PER_MAP_MAX` in production. A ROW bound, enforced in rows. */
   readonly maxSourceRows: number;
 };
+
+/**
+ * How many rows ONE recovered source writes, under D-05.
+ *
+ * One `sources` row per new content hash and one `source_sightings` row per
+ * `(map, index)`. Named here rather than written as a bare 2 at the comparison,
+ * because it is the exact quantity `thresholds.ts` uses to derive
+ * `SOURCE_ROWS_PER_MAP_MAX` from the probe's source density and the one
+ * `ROWS_INSERTED_PER_ITERATION_MAX` sums over. A literal at each of those three
+ * sites is how the units came apart in the first place (07-REVIEW.md MD-01).
+ */
+const ROWS_PER_RECOVERED_SOURCE = 2;
 
 /** Reconstructed, or refused with a named reason. */
 export type MapParseResult =
@@ -326,12 +338,26 @@ function absorb(
   if (!Array.isArray(sources)) return null;
 
   acc.declared += sources.length;
+  // IN ROWS, WHICH IS THE UNIT THE BOUND IS DERIVED IN (07-REVIEW.md MD-01).
+  // `SOURCE_ROWS_PER_MAP_MAX` is computed from the probe's source density as a
+  // ROW figure — "471 sources and 942 rows" — and this comparison used to hand
+  // it the declared SOURCE count instead. The two units differ by exactly
+  // ROWS_PER_RECOVERED_SOURCE, so the reachable ceiling was twice the documented
+  // one and `ROWS_INSERTED_PER_ITERATION_MAX` carried a `2 *` to compensate.
+  //
+  // The conversion is on the LEFT and the bound is bare on the RIGHT, because
+  // the bound is declared in rows: halving the right-hand side would compute the
+  // same answer while reading as a source-count bound wearing a row bound's
+  // name, which is the confusion MD-01 is about.
+  //
   // ON THE DECLARED COUNT, BEFORE ANY ENTRY IS VISITED. The
   // `million-tiny-sources` fixture is a legal map with a million one-character
   // labels; walking it to discover it is too big is the cost the bound exists to
   // avoid. Summed across sections so an index map cannot get under the bound by
   // splitting.
-  if (acc.declared > limits.maxSourceRows) return "too_many_sources";
+  if (acc.declared * ROWS_PER_RECOVERED_SOURCE > limits.maxSourceRows) {
+    return "too_many_sources";
+  }
 
   const contents = map["sourcesContent"];
   const hasContents = Array.isArray(contents);

@@ -415,7 +415,7 @@ export const SOURCEMAP_TAIL_WINDOW_BYTES =
 export const SOURCE_LINE_COUNT_MAX = 500_000;
 
 /**
- * MAP-06's aggregate limit, expressed as a ROW bound.
+ * MAP-06's aggregate limit, expressed as a ROW bound AND ENFORCED AS ONE.
  *
  * A ROW BOUND AND NOT A SOURCE-COUNT BOUND, deliberately, so that Pitfall 2's
  * convergence fix and MAP-06's aggregate limit are THE SAME CONSTANT. Under
@@ -426,6 +426,16 @@ export const SOURCE_LINE_COUNT_MAX = 500_000;
  * for one quantity is how the retention sweep comes to bound nothing while
  * running exactly as designed.
  *
+ * AND THE GATE NOW EXECUTES THAT ARITHMETIC RATHER THAN APPROXIMATING IT, which
+ * is 07-REVIEW.md MD-01's closing sentence and the difference between a
+ * derivation and a hope. `parse.ts`'s `absorb` compares
+ * `declared * ROWS_PER_RECOVERED_SOURCE` against this number. Until plan 07-14 it
+ * compared the DECLARED SOURCE count against it, so a map declaring 2,048
+ * sources — 4,096 rows — passed a bound documented as 2,048 rows, and the real
+ * ceiling was twice the stated one. `parse.spec.ts` exercises the boundary from
+ * both sides in the unit stated here: 1,024 sources ACCEPTED at exactly 2,048
+ * rows, 1,025 REFUSED at 2,050.
+ *
  * DERIVATION FROM THE PROBE'S RSS CURVE, not from a preference. `map-bytes.json`
  * measured 11.32 RSS bytes per decoded map byte, and at {@link MAP_MAX_BYTES}
  * that projects to ~29.7 MB of peak RSS for one map. The probe's own points give
@@ -433,7 +443,10 @@ export const SOURCE_LINE_COUNT_MAX = 500_000;
  * so a map at MAP_MAX_BYTES carries roughly 471 sources and 942 rows. 2,048 is
  * the next power of two above that, giving ~2.2x headroom for a map whose
  * sources are unusually small — and it stays inside the same RSS projection
- * because the rows are bounded by the bytes that produced them.
+ * because the rows are bounded by the bytes that produced them. THAT 942 IS THE
+ * NUMBER THE GATE IS NOW MEASURED AGAINST: a map at MAP_MAX_BYTES writes ~942
+ * rows against a 2,048-row refusal, rather than ~942 rows against a refusal that
+ * only fired at 4,096.
  *
  * `million-tiny-sources` in `packages/engine/src/sourcemap/map-fixture.ts` is the
  * fixture this refuses: a legal map declaring 1,000,000 one-character sources.
