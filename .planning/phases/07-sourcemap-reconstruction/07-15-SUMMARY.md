@@ -393,3 +393,11 @@ None - no external service configuration required.
 ---
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-02*
+
+## Self-Check: PASSED
+
+All five modified files exist on disk. All seven commits (`e674a55`, `01a3f30`,
+`2815745`, `ad2c08b`, `c404f24`, `6b3a3bf`, `4358078`) are present in
+`git log --all`. Every task's `<acceptance_criteria>` was re-run and every
+plan-level `<verification>` command was executed; results are in the
+Verification table above.
