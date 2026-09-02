@@ -42,10 +42,18 @@ import {
   HOSTILE_CASE_IDS,
   HOSTILE_CASES,
 } from "@defminer/engine/hostile.fixture";
-import { BIDI_OVERRIDES_ISOLATES, C0_C1_CONTROLS } from "@defminer/engine/sanitise";
+import {
+  BIDI_OVERRIDES_ISOLATES,
+  C0_C1_CONTROLS,
+} from "@defminer/engine/sanitise";
 import { SOURCES_LABEL_CASES } from "@defminer/engine/sourcemap/map-fixture";
 import { beforeEach, describe, expect, it } from "vitest";
 
+// A SPEC-ONLY cross-package import, and deliberately so: `isProtocolShapedLabel`
+// restates this function's `"protocol"` branch because the shipped backend
+// cannot depend on `@defminer/frontend`, and the drift gate below is what keeps
+// the restatement honest. Nothing this import touches reaches shipped code.
+import { sourcePathShape } from "../../../frontend/src/sourcemap/tree";
 import { createFixtureDb } from "../../test/fixtures/sqlite-fixture";
 
 import {
@@ -57,7 +65,9 @@ import {
   type ExportChunkRequest,
   exportFilename,
   floorStatement,
+  isProtocolShapedLabel,
   readExportChunk,
+  redactSourceLabelForExport,
   redactUrlForExport,
   serialiseRows,
 } from "./export";
@@ -739,11 +749,19 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     );
   });
 
-  it("the label column carries the SHIPPED url redactor — no per-column exemption", () => {
+  it("the label column carries the SHIPPED marker through a NARROWED application — still no per-column exemption", () => {
     const label = EXPORT_COLUMNS.sources.find(
       (c) => c.name === "sources_verbatim",
     );
-    expect(label?.redact).toBe(redactUrlForExport);
+    // LO-04 moved this from `redactUrlForExport` to a function that CALLS it,
+    // and the distinction is the whole finding: the column is not exempt from
+    // redaction, the redactor is applied where its subject exists. Both facts
+    // are asserted, because "it delegates" is what stops this from becoming the
+    // second spelling of the marker that the no-exemption argument refuses.
+    expect(label?.redact).toBe(redactSourceLabelForExport);
+    expect(redactSourceLabelForExport("webpack://app/x.ts?a=1")).toBe(
+      redactUrlForExport("webpack://app/x.ts?a=1"),
+    );
     // And it is the ONLY covered column on this table: eight DefMiner
     // measurements and one target-controlled string.
     expect(
@@ -861,6 +879,32 @@ describe("the manifest export table (D-20, MAP-07)", () => {
       expect(manifestLabelField(label, "redacted")).toBe(expected);
     },
   );
+
+  it("agrees with the FRONTEND classifier on every corpus label — the two implementations, diffed", () => {
+    // THE DRIFT GATE FOR A CLASSIFICATION THAT EXISTS TWICE.
+    // `isProtocolShapedLabel` restates `sourcePathShape`'s `"protocol"` branch
+    // because the backend cannot import the frontend (see the comment at the
+    // constant). A second implementation nobody diffs is a second
+    // implementation that silently becomes wrong, so this diffs them — in a
+    // SPEC, where a cross-package import costs nothing that ships.
+    const extra = [
+      "src/components/Button#new.tsx",
+      "src/a://b#c.ts",
+      "webpack:app.js?v=2",
+      "webpack:///./src/app.js?v=2",
+      "http://evil.example/app.js?token=hunter2",
+      "file:///etc/defminer-escape.txt",
+    ];
+    for (const value of [
+      ...SOURCES_LABEL_CASES.map((c) => c.value),
+      ...extra,
+    ]) {
+      expect(
+        isProtocolShapedLabel(value),
+        `the two shape classifiers disagree on ${JSON.stringify(value)}`,
+      ).toBe(sourcePathShape(value) === "protocol");
+    }
+  });
 
   it("returns EVERY hostile-corpus label byte-identical in BOTH modes — none of them has a query axis", () => {
     // The 23-entry corpus is the measured set of shapes a real `sources` array

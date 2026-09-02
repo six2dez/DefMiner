@@ -202,6 +202,79 @@ export function redactUrlForExport(url: string): string {
 }
 
 /**
+ * The schemes a `sources` label may carry WITHOUT an authority separator, and
+ * the separator itself.
+ *
+ * A SECOND IMPLEMENTATION OF ONE CLASSIFICATION, AND THAT COST IS RECORDED
+ * RATHER THAN HIDDEN. `packages/frontend/src/sourcemap/tree.ts` already decides
+ * this for the display tree, in `classify()` behind the exported
+ * `sourcePathShape()`, and its `"protocol"` branch is the one restated here.
+ * The backend CANNOT call it: `packages/backend/package.json` depends on
+ * `@defminer/engine` alone, the frontend is not a dependency of it, and adding
+ * one would run a Vue-package import graph through the plugin that talks to the
+ * Caido SDK. Inventing that dependency to save nine lines is the worse trade.
+ *
+ * SO THE TWO ARE KEPT ALIGNED BY NAME. If `sourcePathShape`'s `"protocol"`
+ * branch changes — a scheme added, the separator rule loosened — this list and
+ * {@link isProtocolShapedLabel} change with it. Nothing in the toolchain
+ * enforces that, which is exactly why it is written here instead of being left
+ * for a reader to notice.
+ */
+const LABEL_KNOWN_SCHEMES = ["webpack:", "file:", "https:", "http:"] as const;
+const LABEL_SCHEME_SEPARATOR = "://";
+
+/**
+ * Whether one `sources` label is a URL rather than a path.
+ *
+ * The `firstSlash === separator + 1` test is not decoration: it is what stops a
+ * path segment that merely CONTAINS a colon-slash-slash — `src/a://b` — from
+ * being read as an authority separator. `tree.ts` makes the same test for the
+ * same reason.
+ *
+ * @internal
+ */
+export function isProtocolShapedLabel(label: string): boolean {
+  const separator = label.indexOf(LABEL_SCHEME_SEPARATOR);
+  const firstSlash = label.indexOf("/");
+  if (separator > 0 && firstSlash === separator + 1) return true;
+  return LABEL_KNOWN_SCHEMES.some((scheme) => label.startsWith(scheme));
+}
+
+/**
+ * The redacted form of one manifest `sources` label.
+ *
+ * ===========================================================================
+ * THIS IS NOT A PER-COLUMN EXEMPTION. IT IS REDACTION APPLIED WHERE ITS
+ * SUBJECT EXISTS (LO-04)
+ * ===========================================================================
+ * The `sources` entry below used to argue that "NO PER-COLUMN EXEMPTION IS
+ * INVENTED", and that argument STILL STANDS — nothing here withholds less of a
+ * URL than `observations.url` withholds, and the raw option remains the only
+ * route to the unredacted bytes. What changed is narrower than an exemption:
+ * {@link redactUrlForExport} cuts at the first `?` or `#` because in a URL
+ * those characters BEGIN the query and the fragment. A label that is not a URL
+ * has neither axis, so there is no query to withhold and the marker would be a
+ * FALSE STATEMENT in an exported artifact — plus a legal filename tail thrown
+ * away with it. `src/components/Button#new.tsx` exported as
+ * `src/components/Button<query-redacted>`: two wrong claims in one field.
+ *
+ * A redaction that reports withholding something that was never there is not a
+ * stronger redaction. It is an unreliable one, and an operator who finds one
+ * marker they can prove is false has no reason to trust the next.
+ *
+ * NO NEW VOCABULARY. The marker is {@link EXPORT_QUERY_REDACTION}, unchanged
+ * and spelt in exactly one place; this function decides WHERE the shipped
+ * redactor runs, never what it says. And `observations.url` does not reach this
+ * function at all — `redactUrlForExport` is untouched, so that column's output
+ * is byte-identical to what it has always been.
+ *
+ * @internal
+ */
+export function redactSourceLabelForExport(label: string): string {
+  return isProtocolShapedLabel(label) ? redactUrlForExport(label) : label;
+}
+
+/**
  * One exported column.
  *
  * `redact` is `null` for a column the raw mode has nothing to reveal about, and
@@ -287,18 +360,29 @@ export const EXPORT_COLUMNS: Readonly<
     { name: "map_sha256", redact: null },
     { name: "source_index", redact: null },
     // ===================================================================
-    // THE MANIFEST'S ONE TARGET-CONTROLLED COLUMN, AND THE SHIPPED URL
-    // REDACTOR IS THE RIGHT FUNCTION FOR IT
+    // THE MANIFEST'S ONE TARGET-CONTROLLED COLUMN, AND WHICH HALF OF THE
+    // ORIGINAL ARGUMENT SURVIVED LO-04
     // ===================================================================
-    // A `sources` entry is URL-SHAPED BY CONSTRUCTION — `webpack://…`,
+    // WHAT SURVIVES. A `sources` entry is OFTEN URL-SHAPED — `webpack://…`,
     // `file://…` and `http://…` are all real shapes SPIKE-12 measured against
-    // the corpus — so `redactUrlForExport` applies to it for the same reason it
-    // applies to an observed URL: the host and path are the analytic content
-    // and the QUERY is the residual. NO PER-COLUMN EXEMPTION IS INVENTED. The
-    // evidence D-06 preserves is retrievable through the raw option, which is
-    // what the raw option is for, and an exemption here would be one column
-    // quietly outside the ceremony that governs every other one.
-    { name: "sources_verbatim", redact: redactUrlForExport },
+    // the corpus — and for those the shipped redactor applies for the same
+    // reason it applies to an observed URL: the host and path are the analytic
+    // content and the QUERY is the residual. NO PER-COLUMN EXEMPTION IS
+    // INVENTED, and that is still true: the evidence D-06 preserves is
+    // retrievable through the raw option, which is what the raw option is for,
+    // and this column is inside the same ceremony as every other one.
+    //
+    // WHAT DOES NOT SURVIVE: "URL-SHAPED BY CONSTRUCTION". It is not. Five
+    // shapes are measured and four of them are paths, so the sentence held for
+    // the `webpack://` prefix and never for the path body. Cutting a bare path
+    // at its first `#` discarded a legal filename tail AND printed a marker
+    // claiming a query had been withheld from a value with no query axis.
+    //
+    // Hence {@link redactSourceLabelForExport}: the SAME redactor, the SAME
+    // marker, applied where its subject exists. Not an exemption — a narrowed
+    // application, which is a different thing and is argued in full at that
+    // function.
+    { name: "sources_verbatim", redact: redactSourceLabelForExport },
     { name: "source_sha256", redact: null },
     { name: "byte_len", redact: null },
     { name: "line_count", redact: null },
