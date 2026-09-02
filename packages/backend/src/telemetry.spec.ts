@@ -509,9 +509,9 @@ describe("snapshotCounters preserves SHAPE, not just numbers (LO-05)", () => {
         unknown
       >;
       expect(Array.isArray(projected.futureNestedArray)).toBe(true);
-      expect(
-        Array.isArray((projected.futureNestedArray as unknown[])[0]),
-      ).toBe(true);
+      expect(Array.isArray((projected.futureNestedArray as unknown[])[0])).toBe(
+        true,
+      );
       expect(projected.futureNestedArray).toEqual([[1, 2], [3]]);
     } finally {
       delete live.futureNestedArray;
@@ -567,14 +567,14 @@ describe("snapshotCounters preserves SHAPE, not just numbers (LO-05)", () => {
     // read by eye, and it is the assertion that catches a fix which quietly
     // dropped or renamed something on its way past.
     const projected = slimStatus().counters;
-    expect(walkKeys(projected).sort()).toEqual(
-      walkKeys(counters).sort(),
-    );
+    expect(walkKeys(projected).sort()).toEqual(walkKeys(counters).sort());
     expect(
       walkValues(projected).filter((e) => typeof e.value !== "number").length,
       "every counter member is a DefMiner-authored integer or a container of " +
         "them; a non-number here is a member the walk would not reach honestly.",
-    ).toBe(walkValues(counters).filter((e) => typeof e.value !== "number").length);
+    ).toBe(
+      walkValues(counters).filter((e) => typeof e.value !== "number").length,
+    );
   });
 });
 

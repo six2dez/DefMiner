@@ -906,10 +906,38 @@ export type SlimStatus = {
  * DefMiner-authored integer or a `Record<string, number>`; `telemetry.spec.ts`
  * walks the projection recursively and fails on ANY string, so a member that
  * this copy would not reach honestly is one the suite refuses first.
+ *
+ * ===========================================================================
+ * THE ARRAY BRANCH, AND WHY `structuredClone` IS NOT USED INSTEAD (LO-05)
+ * ===========================================================================
+ * `Object.entries` of an ARRAY yields INDEX KEYS, so without the branch below
+ * an array-valued counter left here as `{ "0": …, "1": … }` — the wrong JSON
+ * type on the one channel by which internal state leaves the plugin — and the
+ * `as Counters` cast below said nothing about it. No member is an array today,
+ * which is precisely what made it invisible: the walk is TOTAL over whatever
+ * the object holds, so the defect was latent in the totality that is the whole
+ * point of deriving rather than hand-listing.
+ *
+ * `structuredClone(counters)` would be the smaller change and it is NOT
+ * AVAILABLE HERE. This module runs inside Caido's embedded QuickJS, not Node,
+ * and SPIKE-07 measured `typeof structuredClone === "undefined"` on Caido
+ * 0.57.1 — the same measurement that makes `meriyah@7`'s polyfill guard
+ * mandatory rather than defensive (`.planning/REQUIREMENTS.md` SPIKE-07,
+ * `.planning/phases/00-runtime-reality-check/results/go-no-go.json`). A
+ * `typeof` guard falling back to this walk would ship both implementations and
+ * exercise only one of them in the suite, which is worse than shipping the one
+ * that always runs.
+ *
+ * THE CAST STAYS, AND IT STILL HIDES SOMETHING. `copy` returns `unknown`
+ * because it is total over shapes the type does not name, so the cast is still
+ * required and would still be silent about a Map, a Set, a Date or a class
+ * instance — none of which this object holds. THE WALK IS THE THING TO EXTEND
+ * if a member ever becomes one of those; the cast will not tell you.
  */
 function snapshotCounters(): Counters {
   const copy = (value: unknown): unknown => {
     if (value === null || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map(copy);
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       out[k] = copy(v);
