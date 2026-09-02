@@ -288,13 +288,33 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
 
   it("the insert side is DERIVED from what one iteration can actually write", () => {
     // THE HALF THAT WENT MISSING TWICE, ASSERTED BY NAME so it cannot drift back
-    // into being a threshold or an artifact count. Each recovered source writes
-    // TWO rows under D-05 — one `sources` row per new content hash and one
-    // `source_sightings` row per `(map, index)` — and `parseSourceMap` refuses
-    // past SOURCE_ROWS_PER_MAP_MAX DECLARED SOURCES (the unit mismatch
-    // 07-REVIEW.md MD-01 records, which is why the factor is 2 and not 1).
-    expect(T.ROWS_INSERTED_PER_ITERATION_MAX).toBe(
-      T.ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * T.SOURCE_ROWS_PER_MAP_MAX,
+    // into being a threshold or an artifact count. One iteration inserts the
+    // artifact's base rows PLUS its map's rows, and the map's rows are bounded by
+    // SOURCE_ROWS_PER_MAP_MAX — which `parse.ts` now enforces IN ROWS, converting
+    // the declared source count at D-05's two rows per source before comparing.
+    //
+    // THE FACTOR IS ONE, AND IT IS ASSERTED AS A NAMED QUANTITY RATHER THAN
+    // WRITTEN INTO THE EXPRESSION (07-REVIEW.md MD-01). Through 2026-09-02 this
+    // read `2 * SOURCE_ROWS_PER_MAP_MAX`, because the gate was documented in rows
+    // and enforced in sources: the factor was the unit mismatch, not a choice.
+    // Plan 07-14 fixed the gate first and retired the factor second, and this
+    // assertion exists so the unit cannot come apart again silently — a gate that
+    // reverted to counting sources would make MAP_ROWS_PER_SOURCE_ROW_BOUND 2
+    // again and this line the place that says so.
+    const MAP_ROWS_PER_SOURCE_ROW_BOUND = 1;
+    expect(
+      T.ROWS_INSERTED_PER_ITERATION_MAX,
+      `ROWS_INSERTED_PER_ITERATION_MAX (${T.ROWS_INSERTED_PER_ITERATION_MAX}) is no ` +
+        `longer ROWS_INSERTED_PER_ARTIFACT_MAX (${T.ROWS_INSERTED_PER_ARTIFACT_MAX}) + ` +
+        `${MAP_ROWS_PER_SOURCE_ROW_BOUND} x SOURCE_ROWS_PER_MAP_MAX ` +
+        `(${T.SOURCE_ROWS_PER_MAP_MAX}). The factor between the two is the UNIT ` +
+        `RELATIONSHIP between the map gate and the insert bound: it is 1 exactly ` +
+        `while \`absorb\` refuses on ROWS, and it was 2 while \`absorb\` refused on ` +
+        `declared SOURCES. A factor that drifts without this line failing is MD-01 ` +
+        `happening again.`,
+    ).toBe(
+      T.ROWS_INSERTED_PER_ARTIFACT_MAX +
+        MAP_ROWS_PER_SOURCE_ROW_BOUND * T.SOURCE_ROWS_PER_MAP_MAX,
     );
     // AND IT DOMINATES THE THRESHOLD, which is the whole reason Form 2 failed:
     // if the crossing iteration could only insert less than the threshold, the
@@ -302,6 +322,35 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     expect(T.ROWS_INSERTED_PER_ITERATION_MAX).toBeGreaterThan(
       T.RETENTION_SWEEP_EVERY_N,
     );
+  });
+
+  it("retiring the MD-01 factor made the inequality SLACKER, never tighter", () => {
+    // THE ORDERING CLAIM, EXECUTED. The superseded comment predicted that fixing
+    // MD-01 would make this factor 1 and the inequality "only slacker — it cannot
+    // become false by that edit". That is the sentence plan 07-14 was held to, so
+    // it is asserted rather than trusted: the superseded insert side is
+    // recomputed here and the shipped one must be strictly smaller against the
+    // same delete budget.
+    const deletedPerInterval =
+      T.RETENTION_SWEEP_MAX_ROWS * T.RETENTION_SWEEP_MAX_PASSES;
+    const supersededInsertSide =
+      T.RETENTION_SWEEP_EVERY_N +
+      T.ROWS_INSERTED_PER_ARTIFACT_MAX +
+      2 * T.SOURCE_ROWS_PER_MAP_MAX;
+    const shippedInsertSide =
+      T.RETENTION_SWEEP_EVERY_N + T.ROWS_INSERTED_PER_ITERATION_MAX;
+    expect(
+      shippedInsertSide,
+      `the insert side is ${shippedInsertSide} against the superseded ` +
+        `${supersededInsertSide}. Retiring the compensating factor must LOOSEN the ` +
+        `inequality, because the gate it compensated for now refuses at half the ` +
+        `rows it used to. An insert side that grew means the factor was retired ` +
+        `while the gate still counted sources, which is the ordering HI-04 records ` +
+        `as the failure.`,
+    ).toBeLessThan(supersededInsertSide);
+    // And both forms are satisfied, so the change never crossed the boundary.
+    expect(deletedPerInterval).toBeGreaterThanOrEqual(supersededInsertSide);
+    expect(deletedPerInterval).toBeGreaterThanOrEqual(shippedInsertSide);
   });
 
   it("the convergence check names every quantity the inequality is made of", () => {

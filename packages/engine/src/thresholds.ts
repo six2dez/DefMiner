@@ -461,24 +461,34 @@ export const SOURCE_ROWS_PER_MAP_MAX = 2_048;
  * left out. One iteration processes one artifact, which inserts at most
  * {@link ROWS_INSERTED_PER_ARTIFACT_MAX} base rows plus whatever its announced
  * map recovers. `parseSourceMap` refuses past {@link SOURCE_ROWS_PER_MAP_MAX}
- * DECLARED SOURCES, and under D-05 each recovered source writes TWO rows — one
- * `sources` row per new content hash and one `source_sightings` row per
- * `(map, index)` — so the map half is `2 * SOURCE_ROWS_PER_MAP_MAX`.
+ * ROWS — `absorb` converts the declared source count at D-05's two rows per
+ * source and compares the ROW figure — so the map half is
+ * `SOURCE_ROWS_PER_MAP_MAX` itself, with no conversion left to do here.
  *
- * THE `2 *` IS THE UNIT MISMATCH 07-REVIEW.md MD-01 RECORDS, NOT A CHOICE MADE
- * HERE. `SOURCE_ROWS_PER_MAP_MAX` is derived and documented as a ROW bound and
- * enforced as a declared-SOURCES bound; until that is settled the real ceiling is
- * twice the stated one, and an insert bound that used the stated one would be
- * half of what the code can actually do. If MD-01 is fixed by enforcing the gate
- * in rows, this factor becomes 1 and the inequality only gets slacker — it cannot
- * become false by that edit.
+ * ===========================================================================
+ * THE `2 *` THIS SUM ONCE CARRIED, KEPT AS HISTORY BECAUSE A READER WOULD
+ * OTHERWISE FIND THE FACTOR ARBITRARY AND ITS REMOVAL UNEXPLAINED
+ * ===========================================================================
+ * Through 2026-09-02 the map half read `2 * SOURCE_ROWS_PER_MAP_MAX`, and the
+ * factor was the UNIT MISMATCH 07-REVIEW.md MD-01 records rather than a choice
+ * made here: `SOURCE_ROWS_PER_MAP_MAX` was derived and documented as a ROW bound
+ * and ENFORCED as a declared-SOURCES bound, so the real ceiling was twice the
+ * stated one and an insert bound using the stated one would have been half of
+ * what the code could actually do. That comment ended by predicting exactly what
+ * plan 07-14 then did — "if MD-01 is fixed by enforcing the gate in rows, this
+ * factor becomes 1 and the inequality only gets slacker; it cannot become false
+ * by that edit" — and the prediction is the record of why the ORDER of the two
+ * commits mattered. The gate landed first (4,227 on the insert side, over-stated
+ * and therefore safe) and the factor was retired second (2,179, exact). Taken the
+ * other way round the insert side would have UNDER-stated for the length of one
+ * commit, which is verbatim the failure HI-04 records.
  *
  * ONE MAP PER ITERATION. `findAnnouncement` returns the LAST announcement in the
  * body and the derived stage is refused at `DERIVED_MAX_DEPTH`, so a single
  * iteration reconstructs one map and not a chain of them.
  */
 export const ROWS_INSERTED_PER_ITERATION_MAX =
-  ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * SOURCE_ROWS_PER_MAP_MAX;
+  ROWS_INSERTED_PER_ARTIFACT_MAX + SOURCE_ROWS_PER_MAP_MAX;
 
 // Referenced by the derivations above so the imports are not "unused" to a linter
 // and so a reader can see, in one place, which measured values the policy set
