@@ -1494,6 +1494,10 @@ export async function init(sdk: PluginSdk): Promise<void> {
         chunkIndex: req.chunkIndex,
         cursor: req.cursor,
         chunkRows: req.chunkRows,
+        // NULL ON THE TWO INVENTORY TABLES AND THE ARTIFACT DIGEST ON THE
+        // MANIFEST. The exporter refuses a manifest with no scope through the
+        // shipped empty outcome rather than serialising every project's rows.
+        scopeSha256: req.scopeSha256,
         counts,
         nowMs: Date.now(),
       });
@@ -1510,7 +1514,20 @@ export async function init(sdk: PluginSdk): Promise<void> {
         // The reachable count for this table and filter IS the export's row
         // count, and it is the same number the dialog put in front of the
         // operator before they confirmed.
-        const exported = await countInventory(db, pid, req.table, req.filter);
+        // THE MANIFEST IS COUNTED BY ITS OWN READ, because `countInventory`
+        // answers for a table with a FILTER and the manifest has no filter axis
+        // — it has a SCOPE. Routing it through the inventory counter would have
+        // needed a third arm in that statement matrix for a number this audit
+        // row can get honestly from the read the export actually used.
+        const exported =
+          req.table === "sources"
+            ? {
+                visible:
+                  (await countRecoveredSourcesByArtifact(db, pid)).get(
+                    req.scopeSha256 ?? "",
+                  ) ?? 0,
+              }
+            : await countInventory(db, pid, req.table, req.filter);
         // ONE id, used as BOTH the event id and the subject. One completed
         // export is one event about one export, and inventing a second
         // identifier would be inventing a second thing to correlate.

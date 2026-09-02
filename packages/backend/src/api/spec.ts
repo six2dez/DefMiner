@@ -29,6 +29,7 @@ import type {
   DeriveSourceResult,
   ExportFormat,
   ExportRedactionMode,
+  ExportTable,
   INVALIDATION_EVENT,
   InvalidationEventPayload,
   OperatorSettingKey,
@@ -161,6 +162,13 @@ import type { SlimStatus } from "../telemetry";
  * tombstone, which is a durable-looking claim made from an absence of evidence.
  * The cost of the bump is one forced reload; the cost of the other choice is an
  * operator told a source is gone for ever because a call timed out.
+ *
+ * AND THE SAME PLAN THEN MADE IT A RULE APPLICATION RATHER THAN AN OVER-BUMP,
+ * which is recorded here because the paragraph above would otherwise be the only
+ * justification on file and it is the weaker one. `exportInventory`'s `table` is
+ * no longer `InventoryTable`; it is `ExportTable`, which has a third member, and
+ * the request grew a `scopeSha256` field. That is a changed ARGUMENT shape on a
+ * SHIPPED endpoint, which the rule at the top of this comment covers outright.
  *
  * Monotonically increasing. Never reused, never decremented.
  */
@@ -329,7 +337,12 @@ export type RetryOutcome = {
  */
 type ExportRequest = {
   readonly projectId: string;
-  readonly table: InventoryTable;
+  readonly table: ExportTable;
+  /** The ARTIFACT a MANIFEST export is scoped to; `null` on the two inventory
+   *  tables. A SCOPE AND NOT A FILTER: the manifest is one bundle's recovered
+   *  sources in the map's own declaration order, a read with no sort and no
+   *  filter axis at all. */
+  readonly scopeSha256: string | null;
   readonly format: ExportFormat;
   readonly mode: ExportRedactionMode;
   readonly filter: PageRequest["filter"];

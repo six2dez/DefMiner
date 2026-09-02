@@ -42,6 +42,7 @@ import {
   assertNoOtherProducibility,
   DEGRADED_ANALYSIS_FILTER,
   EVIDENCE_PANEL_MANDATORY_FIELDS,
+  EXPORT_TABLES,
   INVALIDATION_CATEGORIES,
   INVALIDATION_EVENT,
   isDegradedScanState,
@@ -65,6 +66,7 @@ import type {
   EntityLead,
   EntityRowBase,
   EvidencePanelFrame,
+  ExportTable,
   InvalidationCategory,
   InvalidationEventPayload,
   InvalidationSummary,
@@ -843,6 +845,42 @@ describe("DeriveSourceResult — the four arms, and what each one may carry", ()
       mappings: "AAAA;",
     };
     expect(Object.keys(positions).sort()).toEqual(["mappings", "outcome"]);
+  });
+});
+
+describe("EXPORT_TABLES — the manifest is a THIRD table, not a third inventory", () => {
+  it("holds exactly three members, manifest last", () => {
+    // ORDER IS DECLARATION ORDER and the member name reaches the operator's
+    // disk through `exportFilename`, so it is a DefMiner-authored word.
+    expect(EXPORT_TABLES).toEqual(["artifacts", "observations", "sources"]);
+  });
+
+  it("shares no member with either scan vocabulary or the producibility list", () => {
+    // The same collision discipline every vocabulary in this file obeys: one
+    // literal must not carry two meanings anywhere the type system stops being
+    // able to tell them apart.
+    const taken = new Set<string>([
+      ...(SCAN_STATES as readonly string[]),
+      ...(SCAN_LIFECYCLE_STATES as readonly string[]),
+      ...(SOURCE_PRODUCIBILITY_STATES as readonly string[]),
+    ]);
+    expect(EXPORT_TABLES.filter((table) => taken.has(table))).toEqual([]);
+  });
+
+  it("is snake_case-safe and free of a path separator or a dot", () => {
+    // IT IS INTERPOLATED INTO A FILENAME the browser writes to the operator's
+    // own disk. Nothing target-controlled is anywhere near it, and this is what
+    // keeps that true of a member somebody adds later.
+    for (const table of EXPORT_TABLES) {
+      expect(table, `${table} is not snake_case`).toMatch(/^[a-z]+(_[a-z]+)*$/);
+      expect(table).not.toContain("/");
+      expect(table).not.toContain(".");
+    }
+  });
+
+  it("types an export table — no bare string on the export path", () => {
+    const value: ExportTable = "sources";
+    expect(EXPORT_TABLES).toContain(value);
   });
 });
 

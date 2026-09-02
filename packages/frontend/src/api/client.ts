@@ -64,6 +64,7 @@ import type {
   DeriveSourceResult,
   ExportFormat,
   ExportRedactionMode,
+  ExportTable,
   InvalidationEventPayload,
   InvalidationSummary,
   PageCursor,
@@ -291,7 +292,16 @@ export type CountRequest = {
  */
 export type ExportChunkRequest = {
   readonly projectId: string;
-  readonly table: InventoryTable;
+  /** THREE TABLES, NOT TWO. The third is the recovered-source MANIFEST, which
+   *  is not an inventory table: it is scoped to one artifact rather than
+   *  filtered, and it is neither sortable nor filterable. `ExportTable` is
+   *  imported from the engine contract rather than mirrored here for the reason
+   *  the two redaction vocabularies are — the ORDER and the MEMBERSHIP of a list
+   *  the export ceremony reads must not exist in two copies. */
+  readonly table: ExportTable;
+  /** The ARTIFACT a manifest export is scoped to; `null` on the two inventory
+   *  tables. A scope, not a filter. */
+  readonly scopeSha256: string | null;
   readonly format: ExportFormat;
   readonly mode: ExportRedactionMode;
   readonly filter: PageRequest["filter"];

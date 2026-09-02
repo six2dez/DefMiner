@@ -30,8 +30,13 @@
 // asserts the shipped source issues no outbound call. None of them can assert
 // what the module is FOR, which is what is here.
 
+import { readFileSync } from "node:fs";
+
 import type { PageRequest } from "@defminer/engine/contract";
-import { EXPORT_REDACTION_MODES } from "@defminer/engine/contract";
+import {
+  EXPORT_REDACTION_MODES,
+  EXPORT_TABLES,
+} from "@defminer/engine/contract";
 import { DANGEROUS_LEADS } from "@defminer/engine/csv";
 import {
   HOSTILE_CASE_IDS,
@@ -60,6 +65,7 @@ import {
 } from "./export";
 import { migrate } from "./migrations";
 import { QUERY_VALUE_REDACTION } from "./observations";
+import { INVENTORY_TABLES } from "./reads";
 
 const PROJECT = "proj-alpha";
 const NOW = 1_767_000_000_000;
@@ -575,6 +581,9 @@ describe("readExportChunk over real rows", () => {
     sortKey: "observed_at",
     direction: "asc",
     chunkRows: 2,
+    // NULL ON THE INVENTORY TABLES. The manifest's own cases set it; a scope on
+    // a table that has none would be a field nothing reads.
+    scopeSha256: null,
     counts: NO_DEGRADATION,
     nowMs: NOW,
   };
@@ -670,5 +679,400 @@ describe("readExportChunk over real rows", () => {
     expect(name).toMatch(/^defminer-observations-raw-\d{8}T\d{6}Z\.csv$/);
     expect(EXPORT_CONTENT_TYPES.csv).toContain("text/csv");
     expect(EXPORT_CONTENT_TYPES.json).toContain("application/json");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE MANIFEST — MAP-07's SECOND HALF, AND NOTHING ELSE ABOUT THIS PATH MOVED
+// ---------------------------------------------------------------------------
+//
+// The whole point of the third table is that it needed almost no code: the
+// chunking, the field escaping, the floor statement, the filename, the raw
+// ceremony and the two audit kinds are the shipped ones. So the cases below are
+// in two halves — what the new entry IS, and what is asserted UNCHANGED around
+// it. The second half is the one that would otherwise rot.
+
+/** One manifest row, as `readOnePage` projects it. */
+function manifestRow(over: Partial<ExportableRow> = {}): ExportableRow {
+  return {
+    artifact_sha256: "a".repeat(64),
+    map_sha256: "b".repeat(64),
+    source_index: 0,
+    sources_verbatim: "webpack://app/src/secret.ts",
+    source_sha256: "c".repeat(64),
+    byte_len: 128,
+    line_count: 9,
+    producibility: "producible",
+    recovered_at: NOW,
+    ...over,
+  };
+}
+
+describe("the manifest export table (D-20, MAP-07)", () => {
+  it("EXPORT_COLUMNS has exactly three tables and the manifest lists nine columns in order", () => {
+    expect(Object.keys(EXPORT_COLUMNS).sort()).toEqual([
+      "artifacts",
+      "observations",
+      "sources",
+    ]);
+    expect(EXPORT_COLUMNS.sources.map((c) => c.name)).toEqual([
+      "artifact_sha256",
+      "map_sha256",
+      "source_index",
+      "sources_verbatim",
+      "source_sha256",
+      "byte_len",
+      "line_count",
+      "producibility",
+      "recovered_at",
+    ]);
+  });
+
+  it("the export table list is the INVENTORY list plus the manifest, checked rather than described", () => {
+    // Two lists that merely happen to agree today are two lists that drift. The
+    // export set is defined as the pageable inventory plus one manifest, so the
+    // relationship is asserted in that direction.
+    expect(EXPORT_TABLES.slice(0, INVENTORY_TABLES.length)).toEqual([
+      ...INVENTORY_TABLES,
+    ]);
+    expect(EXPORT_TABLES.length).toBe(INVENTORY_TABLES.length + 1);
+    expect(Object.keys(EXPORT_COLUMNS).sort()).toEqual(
+      [...EXPORT_TABLES].sort(),
+    );
+  });
+
+  it("the label column carries the SHIPPED url redactor — no per-column exemption", () => {
+    const label = EXPORT_COLUMNS.sources.find(
+      (c) => c.name === "sources_verbatim",
+    );
+    expect(label?.redact).toBe(redactUrlForExport);
+    // And it is the ONLY covered column on this table: eight DefMiner
+    // measurements and one target-controlled string.
+    expect(
+      EXPORT_COLUMNS.sources
+        .filter((c) => c.redact !== null)
+        .map((c) => c.name),
+    ).toEqual(["sources_verbatim"]);
+  });
+
+  it("redacts a webpack:// label's query in redacted mode", () => {
+    const text = serialiseRows({
+      table: "sources",
+      format: "csv",
+      mode: "redacted",
+      rows: [
+        manifestRow({
+          sources_verbatim: "webpack://app/src/secret.ts?token=hunter2",
+        }),
+      ],
+      chunkIndex: 0,
+      lastChunk: true,
+      counts: NO_DEGRADATION,
+    });
+    expect(text).toContain(
+      `webpack://app/src/secret.ts${EXPORT_QUERY_REDACTION}`,
+    );
+    expect(text).not.toContain("hunter2");
+  });
+
+  it("returns the label BYTE-IDENTICAL in raw mode — what the raw option is for", () => {
+    // D-06's evidence is retrievable through the raw option, which is the whole
+    // reason no per-column exemption was invented. The two modes are asserted as
+    // two tests rather than one comparison, because the failure that matters is
+    // "redacted leaked" and it is a different fact from "raw withheld".
+    const label = "webpack://app/src/secret.ts?token=hunter2";
+    const of = (mode: "redacted" | "raw") =>
+      serialiseRows({
+        table: "sources",
+        format: "csv",
+        mode,
+        rows: [manifestRow({ sources_verbatim: label })],
+        chunkIndex: 0,
+        lastChunk: true,
+        counts: NO_DEGRADATION,
+      });
+    expect(of("raw")).toContain(label);
+    expect(of("raw")).not.toBe(of("redacted"));
+  });
+
+  it("two exports of an unchanged row set are BYTE-IDENTICAL", () => {
+    const rows = [
+      manifestRow({ source_index: 0 }),
+      manifestRow({ source_index: 1, sources_verbatim: null }),
+      manifestRow({ source_index: 2, source_sha256: null, byte_len: null }),
+    ];
+    const once = () =>
+      serialiseRows({
+        table: "sources",
+        format: "csv",
+        mode: "redacted",
+        rows,
+        chunkIndex: 0,
+        lastChunk: true,
+        counts: NO_DEGRADATION,
+      });
+    expect(once()).toBe(once());
+  });
+
+  it("a null label and a null digest export as the EMPTY value, never the word null", () => {
+    // The two Pitfall-3 nulls reach a file here, and a reader who saw the
+    // string `null` would read it as a label a bundler emitted.
+    const text = serialiseRows({
+      table: "sources",
+      format: "json",
+      mode: "redacted",
+      rows: [manifestRow({ sources_verbatim: null, source_sha256: null })],
+      chunkIndex: 0,
+      lastChunk: true,
+      counts: NO_DEGRADATION,
+    });
+    const parsed = JSON.parse(text) as { rows: Record<string, string>[] };
+    expect(parsed.rows[0]?.sources_verbatim).toBe("");
+    expect(parsed.rows[0]?.source_sha256).toBe("");
+    expect(text).not.toContain('"null"');
+  });
+
+  it("crosses the chunk seam byte-identically at EXPORT_RPC_CHUNK_ROWS + 1", () => {
+    // ONE ROW MORE THAN THE MEASURED CHUNK CONSTANT, serialised as two chunks
+    // and as one pass, compared as bytes. That is the whole of the chunking
+    // contract and the manifest rides it unchanged: the header belongs to chunk
+    // zero and to no other, and concatenating the chunks reproduces the file.
+    const rows: ExportableRow[] = [];
+    for (let i = 0; i < EXPORT_RPC_CHUNK_ROWS + 1; i += 1) {
+      rows.push(manifestRow({ source_index: i }));
+    }
+    const single = serialiseRows({
+      table: "sources",
+      format: "csv",
+      mode: "redacted",
+      rows,
+      chunkIndex: 0,
+      lastChunk: true,
+      counts: NO_DEGRADATION,
+    });
+    const first = serialiseRows({
+      table: "sources",
+      format: "csv",
+      mode: "redacted",
+      rows: rows.slice(0, EXPORT_RPC_CHUNK_ROWS),
+      chunkIndex: 0,
+      lastChunk: false,
+      counts: NO_DEGRADATION,
+    });
+    const second = serialiseRows({
+      table: "sources",
+      format: "csv",
+      mode: "redacted",
+      rows: rows.slice(EXPORT_RPC_CHUNK_ROWS),
+      chunkIndex: 1,
+      lastChunk: true,
+      counts: NO_DEGRADATION,
+    });
+    expect(first + second).toBe(single);
+    // NON-VACUITY: the seam was actually crossed.
+    expect(second.length).toBeGreaterThan(0);
+    expect(rows.length).toBe(EXPORT_RPC_CHUNK_ROWS + 1);
+  });
+
+  it("names the file from the table, with no target byte anywhere near it", () => {
+    const name = exportFilename("sources", "raw", "csv", NOW);
+    expect(name).toMatch(/^defminer-sources-raw-\d{8}T\d{6}Z\.csv$/);
+  });
+});
+
+describe("readExportChunk over a real manifest", () => {
+  let fx: ReturnType<typeof createFixtureDb>;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    const report = await migrate(fx.db);
+    expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+  });
+
+  const ART = "a".repeat(64);
+  const MAP = "b".repeat(64);
+
+  function seedSighting(index: number, label: string | null): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+          "VALUES (?, ?, ?, ?, 'req-1', NULL, ?, 'producible', NULL, ?)",
+      )
+      .run(PROJECT, MAP, index, ART, label, NOW + index);
+  }
+
+  const MANIFEST: Omit<ExportChunkRequest, "chunkIndex" | "cursor"> = {
+    projectId: PROJECT,
+    table: "sources",
+    format: "csv",
+    mode: "redacted",
+    filter: null as PageRequest["filter"],
+    // IGNORED BY THE MANIFEST ARM, and set to a real inventory value on purpose:
+    // a sort key that silently took effect here would reorder the evidence.
+    sortKey: "observed_at",
+    direction: "asc",
+    scopeSha256: ART,
+    chunkRows: 2,
+    counts: NO_DEGRADATION,
+    nowMs: NOW,
+  };
+
+  it("emits rows in the map's own index order, ascending", async () => {
+    // THE ORDER IS THE EVIDENCE. Seeded out of order so the assertion is about
+    // the statement's ORDER BY rather than about insertion order.
+    for (const i of [2, 0, 1]) {
+      seedSighting(i, `webpack://app/src/${String(i)}.ts`);
+    }
+    const result = await readExportChunk(fx.db, {
+      ...MANIFEST,
+      chunkRows: 100,
+      chunkIndex: 0,
+      cursor: null,
+    });
+    expect(result.outcome).toBe("chunk");
+    if (result.outcome !== "chunk") return;
+    const indexes = [...result.chunk.text.matchAll(/src\/(\d)\.ts/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(indexes).toEqual([0, 1, 2]);
+  });
+
+  it("two exports of an unchanged DATABASE are byte-identical", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      seedSighting(i, `webpack://app/src/${String(i)}.ts`);
+    }
+    const once = async () => {
+      const result = await readExportChunk(fx.db, {
+        ...MANIFEST,
+        chunkRows: 100,
+        chunkIndex: 0,
+        cursor: null,
+      });
+      return result.outcome === "chunk" ? result.chunk.text : "";
+    };
+    expect(await once()).toBe(await once());
+    expect((await once()).length).toBeGreaterThan(0);
+  });
+
+  it("a manifest with NO SCOPE answers the explicit empty outcome, never a header-only file", async () => {
+    for (let i = 0; i < 3; i += 1) seedSighting(i, "webpack://app/src/x.ts");
+    const result = await readExportChunk(fx.db, {
+      ...MANIFEST,
+      scopeSha256: null,
+      chunkIndex: 0,
+      cursor: null,
+    });
+    // Open decision D3's rule unchanged: the reason goes ON the control and no
+    // file is written. A header-only document would invite a caller that
+    // ignores the rule.
+    expect(result).toEqual({ outcome: "empty" });
+  });
+
+  it("an artifact with ZERO recovered sources answers empty rather than a header-only file", async () => {
+    const result = await readExportChunk(fx.db, {
+      ...MANIFEST,
+      scopeSha256: "f".repeat(64),
+      chunkIndex: 0,
+      cursor: null,
+    });
+    expect(result).toEqual({ outcome: "empty" });
+  });
+
+  it("redacts the label in redacted mode and returns it byte-identical in raw", async () => {
+    seedSighting(0, "webpack://app/src/secret.ts?token=hunter2");
+    const of = async (mode: "redacted" | "raw") => {
+      const result = await readExportChunk(fx.db, {
+        ...MANIFEST,
+        mode,
+        chunkRows: 100,
+        chunkIndex: 0,
+        cursor: null,
+      });
+      return result.outcome === "chunk" ? result.chunk.text : "";
+    };
+    expect(await of("redacted")).not.toContain("hunter2");
+    expect(await of("redacted")).toContain(EXPORT_QUERY_REDACTION);
+    expect(await of("raw")).toContain(
+      "webpack://app/src/secret.ts?token=hunter2",
+    );
+  });
+
+  it("fails closed with no project, exactly as the inventory tables do", async () => {
+    seedSighting(0, "webpack://app/src/x.ts");
+    const result = await readExportChunk(fx.db, {
+      ...MANIFEST,
+      projectId: "",
+      chunkIndex: 0,
+      cursor: null,
+    });
+    expect(result).toEqual({ outcome: "refused", reason: "no-project" });
+  });
+
+  it("pages across the chunk seam with no duplicate and no gap", async () => {
+    for (let i = 0; i < 5; i += 1) {
+      seedSighting(i, `webpack://app/src/${String(i)}.ts`);
+    }
+    const seen: number[] = [];
+    let cursor: ExportChunkRequest["cursor"] = null;
+    let chunkIndex = 0;
+    for (;;) {
+      const result = await readExportChunk(fx.db, {
+        ...MANIFEST,
+        chunkRows: 2,
+        chunkIndex,
+        cursor,
+      });
+      expect(result.outcome).toBe("chunk");
+      if (result.outcome !== "chunk") return;
+      for (const m of result.chunk.text.matchAll(/src\/(\d)\.ts/g)) {
+        seen.push(Number(m[1]));
+      }
+      if (!result.chunk.hasMore) break;
+      cursor = result.chunk.nextCursor;
+      chunkIndex += 1;
+    }
+    expect(chunkIndex).toBeGreaterThan(0);
+    expect(seen).toEqual([0, 1, 2, 3, 4]);
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+});
+
+describe("the shipped export path is UNCHANGED by the manifest", () => {
+  it("does not add or rename an audit kind — `audit` is written only on destruction", () => {
+    // `AUDIT_KINDS` is a CLOSED CHECK inside a one-way migration, and the two
+    // export kinds already exist. A third kind here would have been a migration
+    // for a disclosure the two existing words already name.
+    const audit = readFileSync("packages/backend/src/store/audit.ts", "utf8");
+    expect(audit).toContain('"export_raw"');
+    expect(audit).toContain('"export_redacted"');
+    expect(audit.match(/"export_raw"/g)?.length).toBe(1);
+    expect(audit).not.toContain("export_sources");
+    expect(audit).not.toContain("export_manifest");
+  });
+
+  it("needs nothing new from the frontend download path", () => {
+    // D-04's mechanism is a Blob and an anchor over bytes the backend returned.
+    // A manifest is bytes exactly as an inventory export is, so this module has
+    // nothing to learn about a third table — and the assertion is that it does
+    // not know about one.
+    const download = readFileSync(
+      "packages/frontend/src/components/export-download.ts",
+      "utf8",
+    );
+    expect(download).not.toContain("sources");
+    expect(download).not.toContain("manifest");
+    expect(download).toContain("browserDownload");
+  });
+
+  it("writes no second field escaper — the manifest rides the engine's csv rule", () => {
+    const exporter = readFileSync(
+      "packages/backend/src/store/export.ts",
+      "utf8",
+    );
+    // ONE import of the field rule, and no local re-implementation of it.
+    expect(exporter).toContain('from "@defminer/engine/csv"');
+    expect(exporter.match(/function csvField/g)).toBeNull();
+    // And the chunk constant is not restated for the new table.
+    expect(exporter.match(/EXPORT_RPC_CHUNK_ROWS = /g)?.length).toBe(1);
   });
 });

@@ -70,6 +70,7 @@
 import type {
   ExportFormat,
   ExportRedactionMode,
+  ExportTable,
   PageCursor,
   PageRequest,
 } from "@defminer/engine/contract";
@@ -93,10 +94,10 @@ import type { Database } from "sqlite";
 
 import {
   countInventory,
-  type InventoryTable,
   KEYSET_PAGE_ROWS,
   listArtifactsPage,
   listObservationsPage,
+  listRecoveredSourcesPage,
 } from "./reads";
 
 // ---------------------------------------------------------------------------
@@ -216,21 +217,51 @@ export type ExportColumn = {
 };
 
 /**
- * The exported columns of each inventory table, in order.
+ * The exported columns of each export table, in order.
  *
- * ONE COVERED COLUMN EXISTS TODAY: `observations.url`, the only
- * target-controlled field on either shipped table. `artifacts` carries none —
- * a digest, a byte length, a kind and three timestamps are all DefMiner's own
- * measurements — so a raw export of `artifacts` is byte-identical to a redacted
- * one, asserted in `export.spec.ts`.
+ * TWO COVERED COLUMNS EXIST TODAY: `observations.url` and the manifest's
+ * `sources_verbatim`. `artifacts` carries none — a digest, a byte length, a kind
+ * and three timestamps are all DefMiner's own measurements — so a raw export of
+ * `artifacts` is byte-identical to a redacted one, asserted in `export.spec.ts`.
  *
  * THE CEREMONY IN FRONT OF THE RAW OPTION IS NOT WEAKENED FOR THAT TABLE, and
  * that is deliberate: an operator should not have to learn which tables are
  * "safe", because that knowledge stops being true the moment a table with a
- * covered column is added — which is exactly what the deferred entity pass adds.
+ * covered column is added — which is exactly what the manifest did.
+ *
+ * ===========================================================================
+ * THE MANIFEST, AND WHICH HALF OF MAP-07 EACH MECHANISM MEETS (D-20)
+ * ===========================================================================
+ * MAP-07 asks that recovered source be "browsable in the plugin UI and
+ * exportable with a manifest", and it splits at THIS PATH's own seam. Stated
+ * here rather than left for a verifier to work out:
+ *
+ *   "browsable in the plugin UI"   `listRecoveredSources` + `deriveSource`,
+ *                                  with content RE-DERIVED ON DEMAND per D-07 —
+ *                                  nothing is held at rest, so there is nothing
+ *                                  here to serialise.
+ *   "exportable with a manifest"   THE ROWS BELOW, riding this module unchanged
+ *                                  and delivered by the shipped chunked RPC
+ *                                  download.
+ *   single-file content            a browser download from the content already
+ *                                  in the viewer, one file at a time.
+ *
+ * WHAT WAS REJECTED, AND WHY, because a rejected option that is not written
+ * down gets proposed again. A BULK CONTENT EXPORT would need a second export
+ * shape `serialiseRows` does not describe — it serialises ROWS, not file bodies
+ * — it would RE-DERIVE EVERY FILE during the export, reloading and re-hashing
+ * one bundle per source, and it would therefore be a long serial job needing its
+ * own progress surface, its own cancellation and its own partial-result
+ * semantics. That is Phase 6's lesson about what a long serial job costs, paid a
+ * second time, for a capability the single-file download already covers.
+ *
+ * NINE COLUMNS, MIRRORING THE ROW `listRecoveredSourcesPage` RETURNS, plus the
+ * artifact digest the read carries as its SCOPE rather than as a column. It is
+ * first because it is what makes an exported row self-describing: a manifest
+ * read a week later has no drill-down header above it.
  */
 export const EXPORT_COLUMNS: Readonly<
-  Record<InventoryTable, readonly ExportColumn[]>
+  Record<ExportTable, readonly ExportColumn[]>
 > = Object.freeze({
   artifacts: Object.freeze([
     { name: "project_id", redact: null },
@@ -250,6 +281,29 @@ export const EXPORT_COLUMNS: Readonly<
     { name: "status", redact: null },
     { name: "content_type", redact: null },
     { name: "observed_at", redact: null },
+  ]),
+  sources: Object.freeze([
+    { name: "artifact_sha256", redact: null },
+    { name: "map_sha256", redact: null },
+    { name: "source_index", redact: null },
+    // ===================================================================
+    // THE MANIFEST'S ONE TARGET-CONTROLLED COLUMN, AND THE SHIPPED URL
+    // REDACTOR IS THE RIGHT FUNCTION FOR IT
+    // ===================================================================
+    // A `sources` entry is URL-SHAPED BY CONSTRUCTION — `webpack://…`,
+    // `file://…` and `http://…` are all real shapes SPIKE-12 measured against
+    // the corpus — so `redactUrlForExport` applies to it for the same reason it
+    // applies to an observed URL: the host and path are the analytic content
+    // and the QUERY is the residual. NO PER-COLUMN EXEMPTION IS INVENTED. The
+    // evidence D-06 preserves is retrievable through the raw option, which is
+    // what the raw option is for, and an exemption here would be one column
+    // quietly outside the ceremony that governs every other one.
+    { name: "sources_verbatim", redact: redactUrlForExport },
+    { name: "source_sha256", redact: null },
+    { name: "byte_len", redact: null },
+    { name: "line_count", redact: null },
+    { name: "producibility", redact: null },
+    { name: "recovered_at", redact: null },
   ]),
 });
 
@@ -408,7 +462,7 @@ function projectRow(
  *
  *  @internal */
 export type SerialiseRequest = {
-  readonly table: InventoryTable;
+  readonly table: ExportTable;
   readonly format: ExportFormat;
   readonly mode: ExportRedactionMode;
   readonly rows: readonly ExportableRow[];
@@ -483,7 +537,7 @@ export function serialiseRows(request: SerialiseRequest): string {
  * than a spreadsheet.
  */
 export function exportFilename(
-  table: InventoryTable,
+  table: ExportTable,
   mode: ExportRedactionMode,
   format: ExportFormat,
   nowMs: number,
@@ -530,7 +584,16 @@ export type ExportChunkResult =
 /** The argument one chunk read takes. */
 export type ExportChunkRequest = {
   readonly projectId: string;
-  readonly table: InventoryTable;
+  readonly table: ExportTable;
+  /**
+   * The ARTIFACT the manifest is scoped to. `null` on the inventory tables.
+   *
+   * A SCOPE AND NOT A FILTER, which is why it is its own field. The manifest is
+   * the recovered sources of ONE bundle in the map's own declaration order;
+   * `filter`, `sortKey` and `direction` describe axes that read has none of and
+   * are IGNORED for it, which is stated at the branch that ignores them.
+   */
+  readonly scopeSha256: string | null;
   readonly format: ExportFormat;
   readonly mode: ExportRedactionMode;
   readonly filter: PageRequest["filter"];
@@ -555,6 +618,85 @@ function clampChunkRows(requested: number | null): number {
   if (n < 1) return 1;
   if (n > EXPORT_RPC_CHUNK_ROWS) return EXPORT_RPC_CHUNK_ROWS;
   return n;
+}
+
+/**
+ * One page of whichever table is being exported, projected onto plain rows.
+ *
+ * THREE ARMS AND NO STATEMENT OF ITS OWN, which is the property `readExportChunk`
+ * has always had and the manifest does not get to break: every arm goes through
+ * `reads.ts`'s already-audited statements, so an export can never be a second,
+ * ungated SQL surface over the same partition.
+ *
+ * THE MANIFEST ARM IGNORES `sortKey`, `direction` AND `filter`, and that is the
+ * read's own contract rather than an omission here. `07-UI-SPEC.md` fixes the
+ * order as the map's own `sources` declaration order — WHICH IS THE EVIDENCE —
+ * so the list is not sortable, will not become sortable, and offers no filter.
+ * `store/reads.ts` carries the same argument at the statement, which is why that
+ * read has two literals where the inventory reads have a matrix.
+ */
+async function readOnePage(
+  db: Database,
+  request: ExportChunkRequest,
+  cursor: PageCursor | null,
+  pageLimit: number,
+): Promise<{
+  rows: readonly ExportableRow[];
+  nextCursor: PageCursor | null;
+  exhausted: boolean;
+}> {
+  if (request.table === "artifacts") {
+    return listArtifactsPage(db, {
+      projectId: request.projectId,
+      sortKey: request.sortKey,
+      direction: request.direction,
+      filter: request.filter,
+      cursor,
+      limit: pageLimit,
+    });
+  }
+  if (request.table === "observations") {
+    return listObservationsPage(db, {
+      projectId: request.projectId,
+      sortKey: request.sortKey,
+      direction: request.direction,
+      filter: request.filter,
+      cursor,
+      limit: pageLimit,
+    });
+  }
+  const scope = request.scopeSha256 ?? "";
+  const page = await listRecoveredSourcesPage(
+    db,
+    request.projectId,
+    scope,
+    cursor,
+    pageLimit,
+  );
+  return {
+    // MAPPED FIELD BY FIELD, NEVER SPREAD — the rule the RPC projections
+    // follow, applied here for the same reason: a spread would carry every
+    // column this table grows into an exported FILE on the day somebody adds
+    // one, and a file outlives the session.
+    //
+    // `artifact_sha256` comes from the request's SCOPE, because the statement is
+    // scoped to it and does not select it back. It is the first column so an
+    // exported row is self-describing a week later, with no drill-down header
+    // above it.
+    rows: page.rows.map((row) => ({
+      artifact_sha256: scope,
+      map_sha256: row.map_sha256,
+      source_index: row.source_index,
+      sources_verbatim: row.sources_verbatim,
+      source_sha256: row.source_sha256,
+      byte_len: row.byte_len,
+      line_count: row.line_count,
+      producibility: row.producibility,
+      recovered_at: row.recovered_at,
+    })),
+    nextCursor: page.nextCursor,
+    exhausted: page.exhausted,
+  };
 }
 
 /**
@@ -595,29 +737,23 @@ export async function readExportChunk(
   const ceiling = clampChunkRows(request.chunkRows);
   const pageLimit = Math.min(ceiling, KEYSET_PAGE_ROWS);
 
+  // THE MANIFEST IS SCOPED TO ONE ARTIFACT AND CANNOT BE ASKED FOR WITHOUT ONE.
+  // A request with no scope has genuinely nothing in scope, which is the SAME
+  // claim the zero-row path below makes — so it takes the same explicit `empty`
+  // outcome rather than a new refusal reason. Open decision D3's rule is
+  // unchanged: a zero-row export is DISABLED at the control with the reason on
+  // it, never answered with a header-only file.
+  const scope = request.scopeSha256;
+  if (request.table === "sources" && scope === null) {
+    return { outcome: "empty" };
+  }
+
   const rows: ExportableRow[] = [];
   let cursor = request.cursor;
   let exhausted = false;
 
   for (;;) {
-    const page =
-      request.table === "artifacts"
-        ? await listArtifactsPage(db, {
-            projectId: request.projectId,
-            sortKey: request.sortKey,
-            direction: request.direction,
-            filter: request.filter,
-            cursor,
-            limit: pageLimit,
-          })
-        : await listObservationsPage(db, {
-            projectId: request.projectId,
-            sortKey: request.sortKey,
-            direction: request.direction,
-            filter: request.filter,
-            cursor,
-            limit: pageLimit,
-          });
+    const page = await readOnePage(db, request, cursor, pageLimit);
 
     for (const row of page.rows) rows.push(row);
 

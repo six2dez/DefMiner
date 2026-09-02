@@ -197,6 +197,8 @@ const MAPPINGS: SourceMappingsResult = {
 const EXPORT_REQUEST: ExportChunkRequest = {
   projectId: "p1",
   table: "observations",
+  // NULL ON THE INVENTORY TABLES. The manifest's scope is plan 07-10's CTA.
+  scopeSha256: null,
   format: "csv",
   mode: "redacted",
   filter: null,

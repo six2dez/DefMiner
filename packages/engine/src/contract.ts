@@ -1430,6 +1430,32 @@ export const EXPORT_FORMATS = ["csv", "json"] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
+ * The tables an export can address, in the order they were added.
+ *
+ * THREE MEMBERS, AND THE THIRD IS NOT AN INVENTORY TABLE — which is exactly why
+ * this list exists rather than the export reusing `INVENTORY_TABLES`. The first
+ * two are PAGEABLE INVENTORY: sortable, filterable, addressed by the workspace's
+ * statement matrix. The third is a MANIFEST over one artifact's recovered
+ * sources: not sortable, not filterable, and scoped to a digest rather than to a
+ * filter. Folding it into the inventory list would have made every sort key and
+ * every filter column on that list nominally valid for a read that has none of
+ * them.
+ *
+ * `export.spec.ts` asserts the first two members are byte-identical to
+ * `store/reads.ts`'s `INVENTORY_TABLES`, so the two lists cannot drift: the
+ * export set IS the inventory set plus the manifest, and that relationship is
+ * checked rather than described.
+ *
+ * ORDER IS DECLARATION ORDER and is never sorted at runtime. The member name
+ * reaches the operator's disk — `exportFilename` interpolates it — so it is a
+ * DefMiner-authored word and no target byte is anywhere near it.
+ */
+export const EXPORT_TABLES = ["artifacts", "observations", "sources"] as const;
+
+/** One member of {@link EXPORT_TABLES}. */
+export type ExportTable = (typeof EXPORT_TABLES)[number];
+
+/**
  * The two redaction modes, REDACTED FIRST.
  *
  * THE ORDER IS A SAFETY PROPERTY AND NOT ALPHABETICAL LUCK. The first member is
