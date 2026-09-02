@@ -920,6 +920,104 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     }
   });
 
+  it("bounds a redacted manifest field at RAW + one marker — the payload-budget question, answered by arithmetic", () => {
+    // THE ONE WAY LO-04 COULD HAVE COST BYTES. A redacted label that keeps its
+    // path body is longer than one cut at the first `#`, and those bytes land in
+    // an operator-visible export measured against
+    // `tests/export-payload-budget.spec.ts`.
+    //
+    // THE CEILING DID NOT MOVE, and the arithmetic is worth stating exactly,
+    // because the obvious invariant — "redacted is never longer than raw" — is
+    // FALSE and was false before this plan: the marker is APPENDED, so
+    // `webpack:///./src/app.js?v=2` (27) redacts to 39. What actually holds,
+    // before AND after LO-04, is `redacted <= raw + EXPORT_QUERY_REDACTION`:
+    //
+    //   before  min(cut, L) + 17   where L = raw length, cut = first `?`/`#`
+    //   after   L, or cut + 17 when the label is URL-shaped
+    //   both    <= L + 17
+    //
+    // And `store/sources.ts` caps the STORED label at SOURCES_LABEL_MAX (4,096
+    // code points) at write time, so the per-field ceiling is 4,113 in both the
+    // old behaviour and the new one. LO-04 redistributes bytes inside a bound it
+    // does not raise: a bare path gets its tail back and gives up the marker.
+    //
+    // Asserted over the corpus plus the shapes this plan added, because an
+    // arithmetic argument nobody executes is an argument that rots.
+    const extra = [
+      "src/components/Button#new.tsx",
+      "src/gen/what?.ts",
+      "src/a://b#c.ts",
+      "webpack:///./src/app.js?v=2",
+      "webpack:///./src/app.js#L5",
+      "http://evil.example/app.js?token=hunter2",
+    ];
+    for (const value of [
+      ...SOURCES_LABEL_CASES.map((c) => c.value),
+      ...extra,
+    ]) {
+      const redacted = (manifestLabelField(value, "redacted") ?? "").length;
+      const raw = (manifestLabelField(value, "raw") ?? "").length;
+      expect(
+        redacted,
+        `redacting ${JSON.stringify(value)} grew the field past raw + one marker`,
+      ).toBeLessThanOrEqual(raw + EXPORT_QUERY_REDACTION.length);
+      // The marker is appended ONCE or not at all — never twice, which is the
+      // shape a second redaction pass over an already-redacted value would make.
+      expect(redacted).toBeGreaterThanOrEqual(
+        Math.min(raw, EXPORT_QUERY_REDACTION.length),
+      );
+    }
+  });
+
+  it("leaves `observations.url` BYTE-IDENTICAL — the shared redactor did not move under LO-04", () => {
+    // THE REGRESSION PIN. LO-04 changed which function the MANIFEST column
+    // carries and changed `redactUrlForExport` not at all, so the observed-URL
+    // column must be exactly what it has always been — query cut, fragment cut,
+    // marker appended, nothing else. If this ever fails, a manifest fix reached
+    // a column it has no business touching.
+    const of = (url: string, mode: "redacted" | "raw") =>
+      (
+        JSON.parse(
+          serialiseRows({
+            table: "observations",
+            format: "json",
+            mode,
+            rows: [observationRow({ url })],
+            chunkIndex: 0,
+            lastChunk: true,
+            counts: NO_DEGRADATION,
+          }),
+        ) as { rows: Record<string, string>[] }
+      ).rows[0]?.url;
+
+    for (const [url, redacted] of [
+      [
+        "https://assets.example.test/app.js?v=1",
+        `https://assets.example.test/app.js${EXPORT_QUERY_REDACTION}`,
+      ],
+      [
+        "https://assets.example.test/app.js#L5",
+        `https://assets.example.test/app.js${EXPORT_QUERY_REDACTION}`,
+      ],
+      // A URL is a URL whatever it looks like, and this is the case that would
+      // silently change if the manifest's shape test ever leaked into this
+      // column: a path-shaped value on the OBSERVED-URL axis is still cut.
+      [
+        "not-really-a-url/app.js#L5",
+        `not-really-a-url/app.js${EXPORT_QUERY_REDACTION}`,
+      ],
+      [
+        "https://assets.example.test/app.js",
+        "https://assets.example.test/app.js",
+      ],
+    ] as const) {
+      expect(of(url, "redacted"), `observations.url moved for ${url}`).toBe(
+        redacted,
+      );
+      expect(of(url, "raw")).toBe(url);
+    }
+  });
+
   it("returns the label BYTE-IDENTICAL in raw mode — what the raw option is for", () => {
     // D-06's evidence is retrievable through the raw option, which is the whole
     // reason no per-column exemption was invented. The two modes are asserted as

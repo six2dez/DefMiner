@@ -578,6 +578,50 @@ describe("snapshotCounters preserves SHAPE, not just numbers (LO-05)", () => {
   });
 });
 
+describe("the LO-05 fix is INVISIBLE to every member that exists today", () => {
+  it("agrees with the PRE-FIX walk over the live counters object, key for key and value for value", () => {
+    // THE BLAST-RADIUS PROOF, EXECUTED. The fix added one branch, and the claim
+    // that it changes nothing live rests on "no member of `Counters` is an
+    // array". That claim is a fact about the object, not about the walk — so
+    // run BOTH walks over the real object and compare, rather than asserting
+    // the fix is safe and hoping.
+    //
+    // The pre-fix walk is restated here as a MEASUREMENT and nowhere else. It
+    // is not a second implementation to maintain: the day a member becomes an
+    // array this test is the one that should be deleted, and its failure
+    // message says so.
+    const preFixCopy = (value: unknown): unknown => {
+      if (value === null || typeof value !== "object") return value;
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = preFixCopy(v);
+      }
+      return out;
+    };
+
+    // Non-vacuity: compare over DATA, not over an object of zeros.
+    counters.admitted += 3;
+    counters.rejected.not_scriptish += 7;
+    counters.retro.pagesWalked += 11;
+    counters.sourcemap.announcedInline += 13;
+    counters.sourcemap.mapRefused.malformed_json += 17;
+
+    const shipped = slimStatus().counters;
+    expect(
+      shipped,
+      "the array branch changed a member that exists today. If a member of " +
+        "Counters is now legitimately an array, DELETE this test — the pre-fix " +
+        "walk it compares against is the defect LO-05 closed.",
+    ).toEqual(preFixCopy(counters));
+    expect(walkKeys(shipped).sort()).toEqual(
+      walkKeys(preFixCopy(counters)).sort(),
+    );
+    // And the member set is non-trivial, so the equality above is not two
+    // empty objects agreeing.
+    expect(walkKeys(shipped).length).toBeGreaterThan(30);
+  });
+});
+
 describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
   it("carries no string that parses as a URL", () => {
     recordError(
