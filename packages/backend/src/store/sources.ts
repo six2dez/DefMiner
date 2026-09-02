@@ -63,8 +63,66 @@ import type { StoreWriteResult } from "./artifacts";
  * THIS IS THE ONE PLACE THIS PHASE BOUNDS EVIDENCE. Above the cap the stored
  * label is a PREFIX of what the map declared, and `sources.spec.ts` asserts that
  * from both sides so the fact is executed rather than promised.
+ *
+ * =====================================================================
+ * THE UNIT IS UNICODE CODE POINTS, AND IT USED TO BE UTF-16 CODE UNITS
+ * =====================================================================
+ * 4,096 CODE POINTS, enforced by {@link truncateToCodePoints}. Until plan 07-15
+ * the cut was `slice(0, SOURCES_LABEL_MAX)` — code UNITS — so a label whose
+ * 4,096th code unit was a HIGH SURROGATE stored an UNPAIRED surrogate, an
+ * invalid UTF-8 sequence in a `TEXT` column (07-REVIEW.md LO-03). It does not
+ * even survive the write: MEASURED against `node:sqlite`, binding a lone
+ * U+D83D stores U+FFFD, so the column stopped being the bytes the map declared
+ * and the D-06 round-trip claim above stopped being true for that value.
+ *
+ * THE AT-REST FOOTPRINT THIS IMPLIES, stated because the paragraph above
+ * computes a character budget and a reviewer needs the byte one. 4,096 code
+ * points is 4 KiB of UTF-8 for an ASCII label, up to 12 KiB for a
+ * BMP-non-Latin label, and up to 16 KiB for a label of astral characters. The
+ * upper end is the number to reason about; `MAP_MAX_BYTES` caps how many such
+ * labels one map can carry.
+ *
+ * THE NUMBER IS UNCHANGED AT 4,096. Plan 07-15 moved the unit, not the budget:
+ * the operator approved a column whose cap is 4,096 and both arguments above —
+ * the 1,024-grapheme display caps and `map-fixture.ts`'s `four-kilobyte-label`
+ * — are arguments about that number and are untouched.
  */
 export const SOURCES_LABEL_MAX = 4096;
+
+/**
+ * Cut `value` to at most `maxCodePoints` Unicode code points, never between the
+ * halves of a surrogate pair.
+ *
+ * A PREFIX, AND NOTHING ELSE. This is a truncation and not a transformation:
+ * the returned string is `value` itself when it fits, and otherwise a leading
+ * substring of it. Nothing is trimmed, normalised, decoded, escaped or
+ * replaced, which is what keeps D-06's write-path rule checkable
+ * (see {@link recordSighting}).
+ *
+ * WALKED RATHER THAN SPREAD, and that is a proxy-thread decision rather than a
+ * style one. The obvious `[...value].slice(0, max).join("")` allocates an array
+ * with one entry per code point of the WHOLE label before discarding all but
+ * the first few thousand — and the label is target-controlled, bounded only by
+ * `MAP_MAX_BYTES`. This loop stops after at most `maxCodePoints` code points,
+ * so the work is bounded by the CAP rather than by the input, and it allocates
+ * nothing but the result.
+ *
+ * A LONE SURROGATE ALREADY IN THE INPUT IS PRESERVED, not repaired. It counts
+ * as one code point and is copied through if it falls inside the prefix. LO-03
+ * is about the cut CREATING an unpaired surrogate out of a valid pair; a map
+ * that declared a broken label declared a broken label, and rewriting it here
+ * would be exactly the write-time sanitisation D-06 refuses.
+ */
+function truncateToCodePoints(value: string, maxCodePoints: number): string {
+  let unit = 0;
+  for (let seen = 0; seen < maxCodePoints && unit < value.length; seen += 1) {
+    const code = value.charCodeAt(unit);
+    const high = code >= 0xd800 && code <= 0xdbff;
+    const low = high ? value.charCodeAt(unit + 1) : 0;
+    unit += high && low >= 0xdc00 && low <= 0xdfff ? 2 : 1;
+  }
+  return unit >= value.length ? value : value.slice(0, unit);
+}
 
 /**
  * The state every sighting is born in, READ FROM THE VOCABULARY rather than
@@ -456,13 +514,21 @@ export async function recordSighting(
       artifactSha256,
       requestId,
       sourceSha256,
-      // TRUNCATED, NEVER TRANSFORMED. `slice` is the only thing done to this
-      // value on the whole write path: no trim, no normalise, no decode, no
-      // sanitiser. D-06 puts all of that at display time, and the bound is
+      // TRUNCATED, NEVER TRANSFORMED. A LENGTH BOUND is the only thing done to
+      // this value on the whole write path: no trim, no normalise, no decode,
+      // no sanitiser. D-06 puts all of that at display time, and the bound is
       // argued at `SOURCES_LABEL_MAX`.
+      //
+      // A CODE-POINT CUT IS STILL A TRUNCATION, and this comment has to say so
+      // because it is the reason D-06's write-time-sanitisation refusal stays
+      // checkable. `truncateToCodePoints` returns the value unchanged when it
+      // fits and a leading SUBSTRING of it when it does not — the same claim
+      // `slice` made, in a unit that cannot cut a surrogate pair in half.
+      // Plan 07-15 moved the unit after 07-REVIEW.md LO-03; nothing about
+      // "never transformed" was weakened to do it.
       sourcesVerbatim === null
         ? null
-        : sourcesVerbatim.slice(0, SOURCES_LABEL_MAX),
+        : truncateToCodePoints(sourcesVerbatim, SOURCES_LABEL_MAX),
       INITIAL_PRODUCIBILITY,
       recoveredAt,
     );
