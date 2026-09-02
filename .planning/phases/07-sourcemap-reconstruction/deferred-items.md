@@ -45,3 +45,19 @@ which is where the operator will first see the two tables growing unbounded.
   The repo gate is `pnpm typecheck` (`tsc --build`), which is green; `vue-tsc` is not wired into
   any script and is therefore not a gate today. Out of scope for this plan under the executor's
   scope boundary; recorded rather than fixed.
+
+## From plan 07-08 (2026-09-02)
+
+- **`formatTimestamp` is declared three times in the frontend.** Plan 07-08 needed a
+  DefMiner-formatted date for the two producibility tombstone sentences and, rather than add a
+  third private copy, exported one from `components/table-contract.ts`. The two PRE-EXISTING
+  copies — `ArtifactsTable.vue:98` and `ObservationsTable.vue:68`, byte-identical one-liners —
+  were NOT rewritten: they are outside this plan's `files_modified` and neither is reachable from
+  any 07-08 module. Nothing new copies the line, so the duplication stopped growing here; three
+  copies of a date format is still how one of them comes to disagree with the other two about a
+  timezone. **Suggested owner:** any plan that already touches either table.
+
+- **`pnpm --filter @defminer/frontend typecheck` (vue-tsc) still reports the 5 PRE-EXISTING
+  errors 07-07 recorded**, in `ExportDialog.vue` and `SettingsPanel.vue`. 07-08 adds none: its
+  three new modules are clean under `tsc --build`, which is the repo gate and is green. Unchanged
+  and still out of scope.
