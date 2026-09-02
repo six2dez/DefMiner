@@ -45,6 +45,8 @@ import {
   PASSIVE_MAX_BYTES,
   QUEUE_CAP,
   RETENTION_SWEEP_EVERY_N,
+  RETENTION_SWEEP_MAX_ROWS,
+  ROWS_INSERTED_PER_ARTIFACT_MAX,
 } from "@defminer/engine/thresholds";
 import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -828,13 +830,34 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     await runOnce(p.overrides);
 
     expect(counters.processed).toBe(RETENTION_SWEEP_EVERY_N);
-    // One at the first iteration, one when the counter crossed the cadence.
-    // Exactly two — a loop-to-convergence, or a per-iteration sweep, would be more.
+    // ONE PASS PER CROSSING, AND THE NUMBER OF CROSSINGS IS NOW COUNTED IN ROWS.
+    //
+    // THIS EXPECTATION CHANGED FROM 2 TO 3, AND THE CHANGE IS THE POINT (plan
+    // 07-05, Pitfall 2). The interval used to advance by one per ARTIFACT, so
+    // 128 artifacts crossed it exactly once. It now advances by one per ROW, and
+    // each of these artifacts is new at this corpus version — so it inserts
+    // ROWS_INSERTED_PER_ARTIFACT_MAX rows, which is precisely what that constant
+    // now DOCUMENTS. The arithmetic, spelled out so the number is derivable
+    // rather than remembered:
+    //
+    //   128 artifacts x 3 rows            = 384 rows
+    //   pass 1: the first-iteration pass, at row 3
+    //   pass 2: first row at or past 3 + 128 = 131  -> iteration 44, row 132
+    //   pass 3: first row at or past 132 + 128 = 260 -> iteration 87, row 261
+    //   next would need row 389, and the run ends at 384
+    //
+    // A loop-to-convergence, or a per-iteration sweep, would still be far more —
+    // which is the property this case has always been about.
     expect(
       counters.retentionSweeps,
       `${counters.retentionSweeps} sweeps over ${RETENTION_SWEEP_EVERY_N} processed artifacts. ` +
-        `Expected exactly 2: one on the first iteration after start, one at the cadence boundary.`,
-    ).toBe(2);
+        `Expected exactly 3: one on the first iteration after start, and one per ` +
+        `RETENTION_SWEEP_EVERY_N ROWS thereafter.`,
+    ).toBe(3);
+    expect(
+      counters.retentionSweeps,
+      "one pass per iteration — the loop-to-convergence shape the bounded pass exists to refuse.",
+    ).toBeLessThan(RETENTION_SWEEP_EVERY_N);
   });
 
   it("does not repeat a cadence pass while early returns leave the write count stalled", async () => {
@@ -856,12 +879,15 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
 
     expect(counters.processed).toBe(RETENTION_SWEEP_EVERY_N);
     expect(counters.reloadMissing).toBe(3);
+    // THE SAME THREE PASSES AS THE CASE ABOVE, AND NOT ONE MORE. The three
+    // reloads that returned early inserted NO rows, so they advance the interval
+    // by nothing — which is exactly the claim: a stalled write count schedules no
+    // further pass however many queue entries follow it.
     expect(
       counters.retentionSweeps,
-      "the write counter stayed on a cadence boundary while three reloads " +
-        "returned early; that boundary must schedule one pass, not one pass " +
-        "per later queue entry",
-    ).toBe(2);
+      "three reloads returned early without inserting a row; they must schedule " +
+        "no further pass, not one pass per later queue entry",
+    ).toBe(3);
   });
 
   /** The fixture database with every DELETE rejecting — the shape a locked
@@ -922,8 +948,16 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
     // since the first-iteration sweep has already happened, nothing was ever
     // scheduled again. Every existing cadence case feeds fully-processed
     // entries, so none of them can see it.
+    //
+    // `RETENTION_SWEEP_EVERY_N + 1` ARTIFACTS, NOT `RETENTION_SWEEP_EVERY_N`, and
+    // the extra one is arithmetic rather than padding: each abandoned iteration
+    // inserts exactly ONE row, the first-iteration pass consumes the first of
+    // them, and the interval then needs a further RETENTION_SWEEP_EVERY_N rows to
+    // cross. Under the old artifact-counting interval the counts happened to
+    // coincide; under row counting they do not, and stating why is cheaper than
+    // a number that looks arbitrary.
     const entries: Planned[] = [];
-    for (let i = 0; i < RETENTION_SWEEP_EVERY_N; i += 1) {
+    for (let i = 0; i < RETENTION_SWEEP_EVERY_N + 1; i += 1) {
       entries.push({
         id: "r" + String(i),
         url: "https://x.test/" + String(i) + ".js",
@@ -948,16 +982,16 @@ describe("STORE-06 — retention is SCHEDULED from the loop, not merely availabl
       counters.abandonedOnProjectChange,
       "the fixture did not actually abandon the iterations it was built to " +
         "abandon, so this case would pass against the bug it exists to catch.",
-    ).toBe(RETENTION_SWEEP_EVERY_N);
+    ).toBe(RETENTION_SWEEP_EVERY_N + 1);
     expect(counters.processed).toBe(0);
     expect(
       (await retentionCounts(fx.db, PROJECT)).artifacts,
       "every iteration wrote its artifact row before abandoning — that is the " +
         "whole premise.",
-    ).toBe(RETENTION_SWEEP_EVERY_N);
+    ).toBe(RETENTION_SWEEP_EVERY_N + 1);
     expect(
       counters.retentionSweeps,
-      `${counters.retentionSweeps} sweeps after ${RETENTION_SWEEP_EVERY_N} ` +
+      `${counters.retentionSweeps} sweeps after ${RETENTION_SWEEP_EVERY_N + 1} ` +
         `rows were inserted. Retention is the ONLY bound on this database, and ` +
         `an interval that counts completions rather than writes stops advancing ` +
         `exactly when the rows keep coming.`,
@@ -2386,5 +2420,98 @@ describe("D-14 — the derived path refuses by its OWN vocabulary, with no admit
         "point precisely because three of admission's five axes have no answer " +
         "for a recovered source that is not invented.",
     ).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// PITFALL 2 — THE SWEEP INTERVAL COUNTS ROWS, AND MAP-HEAVY TRAFFIC PROVES IT
+// ===========================================================================
+//
+// A CHANGE TO PHASE 1 MACHINERY, DECLARED AS ONE (plan 07-05). The interval used
+// to advance by one per row-inserting ITERATION, and `thresholds.spec.ts`
+// asserted `RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
+// RETENTION_SWEEP_EVERY_N` on that basis. Under D-05 plus D-09 one artifact
+// carrying monaco's real 781-source map inserts 1,565 rows in ONE iteration —
+// 521x that bound — so 128 such artifacts would insert ~200,000 rows between
+// sweeps against a DEFAULT_RETENTION_MAX_ROWS of 50,000: the database grows
+// monotonically while the sweep runs exactly as designed.
+//
+// The case below is the POSITIVE demonstration, run rather than described. Its
+// negative twin — the same scenario against a scratch revert to `+= 1`, where the
+// sweep does NOT fire — is recorded in 07-05-SUMMARY.md, because the revert
+// cannot live in the tree and be green at the same time.
+
+describe("Pitfall 2 — a few map-bearing artifacts cross the row interval", () => {
+  /** A map with `n` recovered sources, so one artifact inserts 3 + 2n rows. */
+  function mapHeavyBundle(seed: string, n: number): Uint8Array {
+    const labels: string[] = [];
+    const contents: string[] = [];
+    for (let i = 0; i < n; i += 1) {
+      labels.push(seed + "/src/" + String(i) + ".ts");
+      contents.push(
+        "export const v" + seed + String(i) + " = " + String(i) + ";\n",
+      );
+    }
+    return bundleAnnouncingInline(mapDocument(labels, contents));
+  }
+
+  const SOURCES_PER_MAP = 100;
+  /** `artifacts` + `observations` + `analyses`, then one `sources` row and one
+   *  `source_sightings` row per recovered source (D-05, D-09). */
+  const ROWS_PER_ARTIFACT =
+    ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * SOURCES_PER_MAP;
+  /** Few enough that the OLD artifact-counting interval could never cross. */
+  const ARTIFACTS = 4;
+
+  it("the scenario really is more rows than the pass deletes, in fewer artifacts than the old interval", () => {
+    // THE PREMISE, ASSERTED FIRST. Without this the sweep count below could be
+    // explained by a run that simply happened to be long.
+    expect(ROWS_PER_ARTIFACT * ARTIFACTS).toBeGreaterThan(
+      RETENTION_SWEEP_MAX_ROWS,
+    );
+    expect(ARTIFACTS).toBeLessThan(RETENTION_SWEEP_EVERY_N);
+  });
+
+  it("the sweep FIRES — once at start, then once per RETENTION_SWEEP_EVERY_N rows", async () => {
+    const entries: Planned[] = [];
+    for (let i = 0; i < ARTIFACTS; i += 1) {
+      entries.push({
+        id: "m" + String(i),
+        url: "https://x.test/bundle" + String(i) + ".js",
+        bytes: mapHeavyBundle("b" + String(i), SOURCES_PER_MAP),
+      });
+    }
+    const p = plan(entries);
+    p.offer();
+    await runOnce(p.overrides);
+
+    // The rows really landed, so the interval really had something to count.
+    expect(await countTable("sources")).toBe(SOURCES_PER_MAP * ARTIFACTS);
+    expect(await countTable("source_sightings")).toBe(
+      SOURCES_PER_MAP * ARTIFACTS,
+    );
+
+    // Four artifacts. Under the OLD `+= 1` interval `processedForSweep` would
+    // read 4, the cadence would never be reached, and the ONLY pass would be the
+    // one-off at start — 812 rows inserted against a 512-row pass that ran once.
+    // Under row counting each artifact's 203 rows crosses the 128-row interval on
+    // its own.
+    expect(
+      counters.retentionSweeps,
+      `${counters.retentionSweeps} sweeps after ${ARTIFACTS} map-bearing ` +
+        `artifacts inserted ${ROWS_PER_ARTIFACT * ARTIFACTS} rows. With the ` +
+        `interval counting ARTIFACTS this reads 1 — the start-up pass and nothing ` +
+        `else — while the database grows monotonically past its ceiling.`,
+    ).toBe(ARTIFACTS);
+  });
+
+  it("the SAME run under artifact counting would sweep exactly once", () => {
+    // THE NEGATIVE, COMPUTED FROM THE SAME NUMBERS THE CASE ABOVE RAN. Not a
+    // second implementation of the scheduler: the old rule was "advance by one
+    // per row-inserting iteration, sweep when the count lands on a multiple of
+    // RETENTION_SWEEP_EVERY_N", and with 4 iterations the count reaches 4. There
+    // is no multiple of 128 at or below 4, so the start-up pass is the only one.
+    expect(ARTIFACTS % RETENTION_SWEEP_EVERY_N).not.toBe(0);
+    expect(Math.floor(ARTIFACTS / RETENTION_SWEEP_EVERY_N)).toBe(0);
   });
 });

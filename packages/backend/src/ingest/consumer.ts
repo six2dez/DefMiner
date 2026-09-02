@@ -465,11 +465,43 @@ export function startConsumer(
     pendingInvalidations.clear();
   }
 
-  // STORE-06's cadence state. Monotonic for the plugin's lifetime; never reset by
-  // a sweep, or the interval would restart every time it fired.
+  // ===========================================================================
+  // STORE-06's CADENCE STATE — AND IT COUNTS ROWS, NOT ARTIFACTS
+  // ===========================================================================
+  //
+  // A CHANGE TO PHASE 1 MACHINERY, MADE DELIBERATELY AND SAID OUT LOUD (plan
+  // 07-05, Pitfall 2, 2026-09-02). This counter advanced by ONE per row-inserting
+  // iteration from Phase 1 until now, and `thresholds.spec.ts` asserted
+  // convergence as `RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
+  // RETENTION_SWEEP_EVERY_N` — 512 >= 3 * 128 — which was true and load-bearing
+  // for as long as one artifact could only insert three rows.
+  //
+  // D-09 BREAKS THAT BY UP TO 521x. Under D-05 plus D-09 one artifact carrying
+  // monaco's real 781-source map inserts `3 + 781 + 781 = 1,565` rows in a SINGLE
+  // iteration against a declared `ROWS_INSERTED_PER_ARTIFACT_MAX` of 3. With the
+  // counter advancing by one, 128 such artifacts would insert roughly 200,000
+  // rows between sweeps against a `DEFAULT_RETENTION_MAX_ROWS` of 50,000: the
+  // database grows monotonically while the sweep runs exactly as designed, which
+  // is the exact failure the inequality exists to prevent.
+  //
+  // BOTH OBVIOUS REPAIRS FAIL BY CONSTRUCTION. Satisfying the OLD inequality by
+  // raising `RETENTION_SWEEP_MAX_ROWS` needs `1,565 * 128 = 200,320`, which
+  // violates the shipped 1024-row cost cap by 195x. Satisfying it by lowering
+  // `RETENTION_SWEEP_EVERY_N` drives it below 1. The third option — a per-map row
+  // cap — is what D-09 explicitly rejected.
+  //
+  // SO THE COUNTER IS MADE TO MATCH THE DOCUMENTATION RATHER THAN THE OTHER WAY
+  // ROUND. The shipped comment at the increment site already said the interval's
+  // right-hand side is "rows inserted per sweep interval"; it simply was not
+  // true. Now it is, and the restated inequality —
+  // `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N` — holds INDEPENDENTLY
+  // of how many rows any single artifact produces.
+  //
+  // Monotonic for the plugin's lifetime; never reset by a sweep, or the interval
+  // would restart every time it fired.
   let processedForSweep = 0;
   let sweptSinceStart = false;
-  let lastSweptAtProcessedCount = -1;
+  let lastSweptAtProcessedCount = 0;
 
   /**
    * ONE bounded retention pass. Never a loop to convergence.
@@ -717,19 +749,29 @@ export function startConsumer(
       // table exactly as it was, and telling the frontend to re-query would send
       // it looking for a row that is not there.
       noteChange("artifacts", projectId, got.sha256);
+      // THE RETENTION INTERVAL COUNTS WRITES, NOT COMPLETIONS — AND IT COUNTS
+      // THEM IN ROWS.
+      //
+      // THE POSITION IS UNCHANGED AND THAT IS DELIBERATE. This used to be the
+      // last statement of the function, reached only on the full-success path —
+      // but the two project-change returns below happen AFTER this artifact row
+      // (and, for the second, after the observation row) has already landed.
+      // Under sustained project churn the rows accumulated while the counter
+      // stayed frozen, and because `sweptSinceStart` was already true by then NO
+      // sweep was scheduled at all. Moving this broke convergence once already.
+      //
+      // WHAT CHANGED IS THE UNIT, not the site: `+= 1` per ITERATION became `+= 1`
+      // per ROW, advanced beside each write as it lands. See the cadence state's
+      // declaration for the arithmetic D-09 forces.
+      //
+      // AN UPSERT THAT UPDATED IS COUNTED AS A ROW, conservatively and on
+      // purpose. `INSERT ... ON CONFLICT DO UPDATE` reports `changes: 1` either
+      // way on this driver, so insert and update are not distinguishable here at
+      // all — and the interval must never UNDER-count, because under-counting is
+      // the failure that leaves the database unbounded. Over-counting only sweeps
+      // more often, which the cost half is checked against separately.
+      processedForSweep += 1;
     }
-    // THE RETENTION INTERVAL COUNTS WRITES, NOT COMPLETIONS.
-    //
-    // It used to be the last statement of this function, reached only on the
-    // full-success path — but the two project-change returns below happen AFTER
-    // this artifact row (and, for the second, after the observation row) has
-    // already landed. Under sustained project churn the rows accumulated while
-    // the counter stayed frozen at whatever it was, and because `sweptSinceStart`
-    // is already true by then, NO sweep was scheduled at all. That breaks the
-    // convergence inequality thresholds.spec.ts asserts, whose right-hand side is
-    // "rows inserted per sweep interval" and holds only if every row-inserting
-    // iteration advances the interval.
-    processedForSweep += 1;
 
     // --- 2. THE EDGE --------------------------------------------------------
     // UNCONDITIONAL, and never skipped on a cache hit. An artifact written
@@ -761,6 +803,7 @@ export function startConsumer(
       log("OBSERVATION_WRITE_FAILED " + o.error);
     } else {
       noteChange("observations", projectId, got.requestId);
+      processedForSweep += 1;
     }
 
     // --- 3. CORE-08's SKIP --------------------------------------------------
@@ -796,7 +839,15 @@ export function startConsumer(
         log("ANALYSIS_CLAIM_FAILED " + claim.error);
       } else if (claim.claimed) {
         c.analysisStarted++;
-        await analyseAndFinish(projectId, got, detectorSetHash, stillCurrent);
+        // The `analyses` row this claim just inserted. `analyseAndFinish` adds
+        // whatever the reconstruction stage writes on top of it.
+        processedForSweep += 1;
+        processedForSweep += await analyseAndFinish(
+          projectId,
+          got,
+          detectorSetHash,
+          stillCurrent,
+        );
       } else if (isTerminal(claim.state)) {
         // The row reached a terminal state between the isAnalysed read above and
         // this claim. Genuinely a cache hit.
@@ -1184,7 +1235,7 @@ export function startConsumer(
     got: Extracted,
     detectorHash: string,
     stillCurrent: () => boolean,
-  ): Promise<void> {
+  ): Promise<number> {
     const deadline = artifactDeadline(clock);
     const result = await walk(got.bytes, {
       now: clock,
@@ -1198,7 +1249,7 @@ export function startConsumer(
     if (!stillCurrent()) {
       counters.abandonedOnProjectChange++;
       log("project changed during the walk; not finishing the analysis row");
-      return;
+      return 0;
     }
 
     // --- D-08's STAGE, AND THIS IS WHERE IT GOES ----------------------------
@@ -1257,6 +1308,10 @@ export function startConsumer(
       counters.storeErrors++;
       log("ANALYSIS_FINISH_FAILED " + finished.error);
     }
+    // The rows the reconstruction stage inserted, returned rather than reached
+    // for: STORE-06's interval is `handleOne`'s to advance, and a stage that
+    // mutated the counter directly would put the cadence in two places.
+    return recon.rowsInserted;
   }
 
   async function drain(): Promise<void> {
@@ -1289,11 +1344,20 @@ export function startConsumer(
         // growing forever between bursts; then one pass per
         // RETENTION_SWEEP_EVERY_N processed artifacts, so retention pressure
         // scales with the ingest that creates it.
+        // A CROSSING TEST, NOT A LANDING TEST, and this is the second half of
+        // Pitfall 2's fix rather than a tidy-up. It was
+        // `processedForSweep % RETENTION_SWEEP_EVERY_N === 0`, which is exactly
+        // right for a counter that advances by ONE — every boundary is landed on.
+        // A counter that advances by ROWS STEPS OVER boundaries: an iteration
+        // inserting 203 rows goes 203, 406, 609 and lands on no multiple of 128
+        // ever, so a modulo test would schedule the cadence pass NEVER and the
+        // rows-counting fix would silently make convergence worse than the bug it
+        // repairs. The delta form fires on the first iteration at or past the
+        // interval, whatever the step size.
         const due =
           !sweptSinceStart ||
-          (processedForSweep > 0 &&
-            processedForSweep % RETENTION_SWEEP_EVERY_N === 0 &&
-            processedForSweep !== lastSweptAtProcessedCount);
+          processedForSweep - lastSweptAtProcessedCount >=
+            RETENTION_SWEEP_EVERY_N;
         if (due) {
           const projectId = await deps.getProjectId();
           if (projectId !== "") {

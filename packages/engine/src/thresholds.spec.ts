@@ -45,6 +45,10 @@ const GO_NO_GO =
 const GENERATOR = REPO_ROOT + "scripts/ci/gen-thresholds.mjs";
 const GENERATED_FILE =
   REPO_ROOT + "packages/engine/src/thresholds.generated.ts";
+/** This spec, read by the Pitfall 2 demotion case below — the same
+ *  read-your-own-source idiom `telemetry.spec.ts`'s AST scan uses on the tree it
+ *  polices. */
+const THIS_FILE = fileURLToPath(import.meta.url);
 
 const REGEN = "re-run `node scripts/ci/gen-thresholds.mjs`";
 
@@ -211,19 +215,72 @@ describe("gate 3 — every POLICY constant still satisfies its derivation", () =
     ).toBeGreaterThanOrEqual(worstCaseMs);
   });
 
+  // --- PITFALL 2 — THE CONVERGENCE INEQUALITY, RESTATED (plan 07-05) --------
+  //
+  // A CHANGE TO PHASE 1 MACHINERY, DECLARED AS ONE. The assertion below read
+  // `RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
+  // RETENTION_SWEEP_EVERY_N` — 512 >= 3 * 128 — and it was correct for as long as
+  // `ingest/consumer.ts`'s sweep interval advanced by ONE per row-inserting
+  // iteration, because then "artifacts per interval" times "rows per artifact"
+  // WAS "rows per interval".
+  //
+  // D-09 breaks the right-hand side by up to 521x: one artifact carrying monaco's
+  // real 781-source map inserts `3 + 781 + 781 = 1,565` rows in a single
+  // iteration. Raising RETENTION_SWEEP_MAX_ROWS to satisfy the old form needs
+  // `1,565 * 128 = 200,320`, which violates the 1024-row cost cap asserted
+  // immediately below by 195x; lowering RETENTION_SWEEP_EVERY_N instead drives it
+  // below 1. Both fail BY CONSTRUCTION, not by preference.
+  //
+  // So the INTERVAL changed to count rows — which is what its own doc comment
+  // already claimed it counted — and the inequality is restated in the terms that
+  // are now true. It holds INDEPENDENTLY of how many rows any single artifact
+  // produces, which is exactly the property D-09 needs, and it delivers that
+  // WITHOUT the per-map row cap D-09 rejected.
+
   it("the retention sweep CONVERGES against worst-case ingest", () => {
     expect(
       T.RETENTION_SWEEP_MAX_ROWS,
       `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) is below ` +
-        `ROWS_INSERTED_PER_ARTIFACT_MAX * RETENTION_SWEEP_EVERY_N ` +
-        `(${T.ROWS_INSERTED_PER_ARTIFACT_MAX} * ${T.RETENTION_SWEEP_EVERY_N} = ` +
-        `${T.ROWS_INSERTED_PER_ARTIFACT_MAX * T.RETENTION_SWEEP_EVERY_N}). A sweep that ` +
-        `deletes fewer rows per interval than the interval inserts bounds NOTHING: past ` +
-        `the retention ceiling the database grows monotonically while the sweep runs ` +
-        `exactly as designed (decision P1-D7).`,
-    ).toBeGreaterThanOrEqual(
-      T.ROWS_INSERTED_PER_ARTIFACT_MAX * T.RETENTION_SWEEP_EVERY_N,
+        `RETENTION_SWEEP_EVERY_N (${T.RETENTION_SWEEP_EVERY_N}). Both are counted in ` +
+        `ROWS: the interval is RETENTION_SWEEP_EVERY_N rows inserted, and the pass ` +
+        `deletes at most RETENTION_SWEEP_MAX_ROWS. A sweep that deletes fewer rows per ` +
+        `interval than the interval inserts bounds NOTHING: past the retention ceiling ` +
+        `the database grows monotonically while the sweep runs exactly as designed ` +
+        `(decision P1-D7, restated by plan 07-05 for D-09).`,
+    ).toBeGreaterThanOrEqual(T.RETENTION_SWEEP_EVERY_N);
+  });
+
+  it("the convergence check no longer READS ROWS_INSERTED_PER_ARTIFACT_MAX", () => {
+    // THE DEMOTION, MADE MECHANICAL RATHER THAN ASSERTED IN PROSE. The constant
+    // is retained as documentation of the superseded form — deleting it would
+    // erase the record of what the old inequality meant — and a retained constant
+    // that something still reads is not demoted at all. This reads THIS FILE and
+    // checks the convergence case's own text.
+    const source = readFileSync(THIS_FILE, "utf8");
+    const start = source.indexOf(
+      'it("the retention sweep CONVERGES against worst-case ingest"',
     );
+    expect(start, "the convergence case was renamed").toBeGreaterThan(-1);
+    const end = source.indexOf("\n  });", start);
+    const body = source.slice(start, end);
+    expect(
+      body.includes("ROWS_INSERTED_PER_ARTIFACT_MAX"),
+      "the convergence check reads ROWS_INSERTED_PER_ARTIFACT_MAX again. That " +
+        "constant became documentation on 2026-09-02 (plan 07-05): under D-09 no " +
+        "constant multiplier relates artifacts to rows, so an inequality built on " +
+        "one is asserting a relationship that no longer exists.",
+    ).toBe(false);
+    // Non-vacuity: the slice really is the case body and really does hold the
+    // assertion, so the `false` above is not passing over an empty string.
+    expect(body.includes("RETENTION_SWEEP_EVERY_N")).toBe(true);
+    expect(body.length).toBeGreaterThan(200);
+  });
+
+  it("ROWS_INSERTED_PER_ARTIFACT_MAX survives as the record of what changed", () => {
+    // Kept, and kept CORRECT for what it still describes: an artifact carrying no
+    // sourcemap inserts an `artifacts` row, an `observations` row and an
+    // `analyses` row.
+    expect(T.ROWS_INSERTED_PER_ARTIFACT_MAX).toBe(3);
   });
 
   it("one retention sweep pass stays a bounded piece of work", () => {

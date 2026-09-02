@@ -73,12 +73,40 @@ export const ARTIFACT_DEADLINE_MS = 30_000;
 export const CACHE_HIT_RATE = CACHE_HIT_RATE_ASSUMED;
 
 /**
- * The worst-case number of rows one processed artifact INSERTS.
+ * The worst-case number of rows one PHASE 1 artifact inserts.
  *
- * DERIVATION: an `artifacts` row and an `analyses` row when the digest is new at
- * the current corpus version, plus an `observations` row EVERY time, since each
- * sighting carries a distinct request id. Three is an upper bound; at the
- * pessimistic CACHE_HIT_RATE of 0.4 the real figure is nearer 2.2.
+ * ===========================================================================
+ * A DOCUMENTATION CONSTANT SINCE 2026-09-02 (plan 07-05, Pitfall 2)
+ * ===========================================================================
+ * IT NO LONGER BOUNDS ANYTHING, AND IT IS KEPT ANYWAY. Until Phase 7 this was
+ * load-bearing: `thresholds.spec.ts` asserted convergence as
+ * `RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
+ * RETENTION_SWEEP_EVERY_N`, and the consumer's sweep interval advanced by ONE
+ * per row-inserting iteration — so "rows per interval" and "artifacts per
+ * interval" differed by exactly this factor.
+ *
+ * D-09 ENDED THAT. One artifact carrying monaco's real 781-source map inserts
+ * `3 + 781 + 781 = 1,565` rows in a single consumer iteration — 521x the figure
+ * below — so no constant multiplier relates the two quantities any more. The fix
+ * was not a bigger multiplier: `ingest/consumer.ts`'s interval now advances by
+ * ROWS, and the inequality is restated as
+ * `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N`, which holds
+ * INDEPENDENTLY of how many rows any single artifact produces.
+ *
+ * WHY IT IS NOT DELETED. It is the RECORD of what the old inequality meant and
+ * of what changed. Deleting it would leave `RETENTION_SWEEP_MAX_ROWS`'s
+ * derivation referring to an argument with no surviving trace, and the next
+ * reader re-deriving 512 would have no way to see that a per-artifact row bound
+ * was ever the term. `thresholds.spec.ts` asserts MECHANICALLY that the
+ * convergence check no longer reads it, so the demotion is checkable rather than
+ * promised.
+ *
+ * ORIGINAL DERIVATION, PRESERVED: an `artifacts` row and an `analyses` row when
+ * the digest is new at the current corpus version, plus an `observations` row
+ * EVERY time, since each sighting carries a distinct request id. Three is an
+ * upper bound; at the pessimistic CACHE_HIT_RATE of 0.4 the real figure is
+ * nearer 2.2. It remains the correct figure for an artifact carrying NO
+ * sourcemap, which is most of them.
  */
 export const ROWS_INSERTED_PER_ARTIFACT_MAX = 3;
 
@@ -88,15 +116,29 @@ export const ROWS_INSERTED_PER_ARTIFACT_MAX = 3;
  * DERIVATION — two properties that pull in opposite directions, and only stating
  * both makes the number derivable rather than chosen:
  *
- *   CONVERGENCE. RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX *
- *   RETENTION_SWEEP_EVERY_N. A sweep that deletes fewer rows per interval than the
- *   interval inserts bounds nothing: past the retention ceiling the database grows
- *   monotonically while the sweep runs exactly as designed. 512 against a
- *   worst-case 384 is 1.33x headroom, which means a backlog DRAINS under sustained
- *   ingest rather than merely failing to grow faster. It is also why a pass
- *   reporting `moreWork` defers to the next cadence boundary instead of looping to
- *   convergence — with the delete rate above the insert rate, deferral converges
- *   anyway, so the loop would buy nothing and cost a long uninterruptible stretch.
+ *   CONVERGENCE. RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N. A sweep that
+ *   deletes fewer rows per interval than the interval inserts bounds nothing: past
+ *   the retention ceiling the database grows monotonically while the sweep runs
+ *   exactly as designed. 512 against 128 is 4x headroom, which means a backlog
+ *   DRAINS under sustained ingest rather than merely failing to grow faster. It is
+ *   also why a pass reporting `moreWork` defers to the next cadence boundary
+ *   instead of looping to convergence — with the delete rate above the insert
+ *   rate, deferral converges anyway, so the loop would buy nothing and cost a long
+ *   uninterruptible stretch.
+ *
+ *   RESTATED 2026-09-02 (plan 07-05, Pitfall 2), AND THE RESTATEMENT IS WHAT MAKES
+ *   IT SURVIVE D-09. It read `>= ROWS_INSERTED_PER_ARTIFACT_MAX *
+ *   RETENTION_SWEEP_EVERY_N` — 512 >= 384 — while `ingest/consumer.ts`'s interval
+ *   counted ARTIFACTS. One artifact carrying a 781-source map now inserts 1,565
+ *   rows, 521x that bound, and the two obvious repairs both fail by construction:
+ *   raising this constant to satisfy the old form needs 200,320, which breaks the
+ *   1024 cost cap below by 195x, and lowering RETENTION_SWEEP_EVERY_N instead
+ *   drives it below 1. So the INTERVAL was changed to count rows, which is what
+ *   its own doc comment always said it counted, and the inequality now holds
+ *   independently of how many rows any single artifact produces — delivering what
+ *   D-09 needs WITHOUT the per-map row cap D-09 rejected.
+ *   {@link ROWS_INSERTED_PER_ARTIFACT_MAX} is retained as documentation of the
+ *   superseded form.
  *
  *   COST. Every delete is an awaited statement on a pooled worker-thread
  *   connection, so a sweep does not hold the JS thread the way a synchronous loop
