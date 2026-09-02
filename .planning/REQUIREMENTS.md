@@ -205,10 +205,8 @@ authoritative and the shipped text is the defect.
 
 THE SURFACES THAT COMPARISON REACHES - 2, RENDERED FROM THE ONE
 DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:
-
   - packages/backend/src/outbound-prohibition.spec.ts
   - .planning/REQUIREMENTS.md
-
 NO OTHER FILE IN THIS REPOSITORY IS REACHED BY IT. A file that is not listed
 just above - including a file under the planning directory that is not listed
 just above - carries at most a POINTER to these two and is byte-compared to
@@ -217,7 +215,6 @@ with or renders into an unlisted file is FALSE, and the disposition for such
 a sentence is to DELETE it rather than to re-date it.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
-
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES

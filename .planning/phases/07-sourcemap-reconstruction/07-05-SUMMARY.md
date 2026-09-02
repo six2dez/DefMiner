@@ -586,6 +586,21 @@ None — no external service configuration required.
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-02*
 
+**4. [Rule 1 — Bug] `requirements.mark-complete` reformatted a machine-owned derived block**
+
+- **Found during:** the post-plan state update, caught by the final `pnpm test`.
+- **Issue:** `.planning/REQUIREMENTS.md` carries a sentinel-delimited span that
+  `outbound-prohibition.spec.ts` GENERATES and byte-compares — "the GENERATED text is authoritative
+  and the shipped text is the defect". The SDK's markdown writer normalised that span while flipping
+  the three MAP checkboxes, inserting blank lines after two headings inside it, and the byte
+  comparison went red.
+- **Fix:** Restored the derived span to its pre-write bytes and kept only the three intended checkbox
+  flips. `git diff` against the pre-update file now shows exactly three changed lines.
+- **Verification:** `packages/backend/src/outbound-prohibition.spec.ts` 465 passed; full suite green.
+- **Committed in:** the state-metadata commit.
+
+---
+
 ## Self-Check: PASSED
 
 Files created verified present on disk: `packages/backend/src/sourcemap/derive.ts`,
