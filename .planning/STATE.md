@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-16-PLAN.md
-last_updated: "2026-09-02T12:19:29.911Z"
+stopped_at: Completed 07-13-PLAN.md
+last_updated: "2026-09-02T12:56:58.718Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 922460f6799f61799ace5abcf511b7e9d436cce3
+state_head: 4e60d5ec26ae9fe01c5c8a27f3952d67049b9a9a
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 87
+  completed_plans: 88
 ---
 
 # Project State
@@ -28,11 +28,57 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 15 of 17
+Plan: 16 of 17
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-13: THE PROSE COUNTER WAS CORRECTED BY HAND, AND THAT IS
+> THIS EXECUTOR'S OWN MISTAKE RATHER THAN THE HANDLER'S.
+> `state.advance-plan` was invoked TWICE. The second call was meant to be a
+> read of the result the first one had already printed, and that verb is a
+> MUTATION, not a query: it moved the prose counter 15 -> 16 -> 17. Disk truth
+> is 17 PLAN files and 16 SUMMARY files, so the line was set back to
+> `Plan: 16 of 17` BY HAND. The three preceding plans each recorded that
+> nothing was corrected by hand; this one was, and saying so is cheaper than
+> leaving the next reader to find a counter that disagrees with `ls`.
+> `completed_plans` is UNAFFECTED and needed no correction — it RECOMPUTES from
+> the files on disk rather than incrementing, and moved 87 -> 88 correctly
+> despite the double call. That difference between the two counters is the
+> whole lesson.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the TWELFTH consecutive occurrence across phases 05, 06 and 07. Steady
+> handler behaviour, not a transient. The `Progress:` line above still describes
+> PHASE 01 plan execution and is deliberately untouched.
+>
+> `.planning/REQUIREMENTS.md` WAS NOT TOUCHED, AND FOR ONCE THE GATE AND THE
+> PROHIBITION AGREE. `requirements.ready-ids` reported `0/1 ready`: MAP-06 is
+> declared by SEVEN plans in this phase and sibling 07-15 still has no SUMMARY,
+> so the shared-ID gate blocks it. `requirements.mark-complete` was NOT run —
+> the plan prohibits any change to that file, the gate independently says the ID
+> is not ready, and MAP-06 is already `[x]` on disk. sha256 of the file is
+> unchanged at `c09e8dfc...4672467d`.
+>
+> THE W-2 CLASS RECURRED A FOURTH TIME IN THIS PHASE AND WAS CAUGHT.
+> Two literal NUL bytes were emitted into the sightings de-duplication key while
+> writing Task 2's GREEN. The pre-commit byte scan caught them and they were
+> re-spelled as escape sequences before the commit, matching the neighbouring
+> `trimChildTable`. Worth knowing why it mattered beyond tidiness: a file
+> containing NUL makes grep treat it as BINARY, so the acceptance criterion
+> `grep -c 'W-5' retention.ts` printed NOTHING rather than a count — an
+> invisible byte three hundred lines away failing a check about something else.
+>
+> THE BENCHMARK EARNED ITS PLACE ON ITS FIRST RUN. `a8-measure.spec.ts` caught
+> that the `sources` anti-join this plan added was QUADRATIC: written as the
+> correlated `NOT EXISTS` every other anti-join in the file uses, it probes a
+> column no shipped index leads on. 447 ms at 4,000 rows per table, 11,069 ms at
+> 20,000, projecting past a minute at the shipped 50,000 ceiling on a call
+> `workRemains` repeats every pass. The tell was an IDLE run costing 13.2 s
+> against a WORKING run of 0.7 s. Fixed to a scoped `NOT IN` with no schema
+> change; `migrations.ts` is byte-unchanged.
 
 > PHASE 07 PLAN 07-12: THE COUNTERS ARE RIGHT AGAIN, AND NOTHING WAS
 > CORRECTED BY HAND.
@@ -482,6 +528,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P17 | 14 min | 3 tasks | 2 files |
 | Phase 07 P12 | 20 min | 4 tasks | 9 files |
 | Phase 07 P16 | 18 min | 3 tasks | 4 files |
+| Phase 07 P13 | 26 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -864,6 +911,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: LO-04 closed by NARROWED APPLICATION, not a second redaction vocabulary: `redactSourceLabelForExport` calls the unchanged `redactUrlForExport` only when the manifest label is protocol-shaped — A bare path has no query axis, so the appended marker was a false statement in an exported artifact and a legal filename tail was discarded with it. The `NO PER-COLUMN EXEMPTION IS INVENTED` argument survives — same redactor, same marker, same raw-mode escape hatch; only `URL-SHAPED BY CONSTRUCTION` did not, because four of the five measured `sources` shapes are paths.
 - [Phase 07]: The `sources` shape classifier is RESTATED in packages/backend rather than imported from packages/frontend, with a spec-only drift gate diffing the two — packages/backend declares `@defminer/engine` as its only dependency; adding `@defminer/frontend` would run a Vue import graph through the one package permitted to touch the Caido SDK. The drift gate lives in export.spec.ts, so nothing cross-package reaches the shipped bundle.
 - [Phase 07]: LO-05 closed with an explicit `Array.isArray` branch in `snapshotCounters`, NOT with `structuredClone` — SPIKE-07 measured `typeof structuredClone === "undefined"` on Caido 0.57.1 — this module runs in QuickJS, not Node — recorded in three places in this repo. A `typeof` guard falling back to the walk would ship two implementations and exercise one.
+- [Phase 07]: trimChildTable was NOT generalised for source_sightings: a four-column key with an INTEGER member does not fit its three-element delete tuple over a two-member secondKey union, so the table got its own bounded loop in audit's and scans' shape.
+- [Phase 07]: sources takes NO retention bound of its own. Its ceiling is INHERITED through the anti-join — a surviving source needs a surviving sighting — so count(sources) <= count(source_sightings) <= bounds.maxRows. Bounded by an edge, not exempt.
+- [Phase 07]: The sources anti-join is a scoped NOT IN with an explicit IS NOT NULL guard, not the correlated NOT EXISTS used elsewhere in retention.ts: it probes a column no shipped index leads on, measured at 447 ms vs 1.5 ms over 4,000 rows per table and 11,069 ms vs 7.5 ms over 20,000.
 
 ### Known Risks Carried Forward
 
@@ -906,8 +956,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T12:19:29.741Z
-**Stopped at:** Completed 07-16-PLAN.md
+**Last session:** 2026-09-02T12:56:01.411Z
+**Stopped at:** Completed 07-13-PLAN.md
 **Resume file:** None
 
 ### Blockers
