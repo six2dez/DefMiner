@@ -427,22 +427,38 @@ async function reloadVerifiedBundle(
   if (reloaded === undefined) {
     counters.sourcemap.derivationsGoneNoRequest++;
     return failed(
-      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
-        outcome: "gone",
-        cause: "no_request",
-        recoveredAt: origin.recovered_at,
-      }),
+      await tombstone(
+        sdk,
+        database,
+        projectId,
+        artifactSha256,
+        mapSha256,
+        sourceIndex,
+        {
+          outcome: "gone",
+          cause: "no_request",
+          recoveredAt: origin.recovered_at,
+        },
+      ),
     );
   }
   const response = reloaded.response;
   if (response === undefined || response === null) {
     counters.sourcemap.derivationsGoneNoResponse++;
     return failed(
-      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
-        outcome: "gone",
-        cause: "no_response",
-        recoveredAt: origin.recovered_at,
-      }),
+      await tombstone(
+        sdk,
+        database,
+        projectId,
+        artifactSha256,
+        mapSha256,
+        sourceIndex,
+        {
+          outcome: "gone",
+          cause: "no_response",
+          recoveredAt: origin.recovered_at,
+        },
+      ),
     );
   }
 
@@ -479,15 +495,23 @@ async function reloadVerifiedBundle(
     // content field exists on the arm this returns.
     counters.sourcemap.derivationsChanged++;
     return failed(
-      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
-        outcome: "changed",
-        recoveredAt: origin.recovered_at,
-        // `byteLenMismatch`'s REPORTING shape, so the expected benign cause is
-        // visible as a number rather than only as a refusal the operator cannot
-        // explain. Null when retention already swept the artifact row.
-        recordedByteLen: origin.byte_len,
-        reloadedByteLen: raw.length,
-      }),
+      await tombstone(
+        sdk,
+        database,
+        projectId,
+        artifactSha256,
+        mapSha256,
+        sourceIndex,
+        {
+          outcome: "changed",
+          recoveredAt: origin.recovered_at,
+          // `byteLenMismatch`'s REPORTING shape, so the expected benign cause is
+          // visible as a number rather than only as a refusal the operator cannot
+          // explain. Null when retention already swept the artifact row.
+          recordedByteLen: origin.byte_len,
+          reloadedByteLen: raw.length,
+        },
+      ),
     );
   }
 
@@ -506,11 +530,17 @@ async function reloadVerifiedBundle(
  *
  * `projectId` is the one captured before the caller's first `await`, so the
  * scoping IS the epoch check for this single statement.
+ *
+ * `artifactSha256` NAMES WHICH SIGHTING IS BEING TOMBSTONED and is forwarded
+ * unchanged to `markProducibility` (finding W-3). A tombstone is permanent, so a
+ * write that matched more than the sighting the caller meant could never be
+ * undone — one call must move one row.
  */
 async function tombstone(
   sdk: PluginSdk,
   database: Database,
   projectId: string,
+  artifactSha256: string,
   mapSha256: string,
   sourceIndex: number,
   answer: SourceDerivationFailure & { outcome: "gone" | "changed" },
@@ -522,6 +552,7 @@ async function tombstone(
   const written = await markProducibility(
     database,
     projectId,
+    artifactSha256,
     mapSha256,
     sourceIndex,
     next,

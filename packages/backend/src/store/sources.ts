@@ -187,7 +187,8 @@ WHERE source_sightings.artifact_sha256 = excluded.artifact_sha256
 const MARK_PRODUCIBILITY_SQL = `
 UPDATE source_sightings
 SET producibility = ?, producibility_at = ?
-WHERE project_id = ? AND map_sha256 = ? AND source_index = ?
+WHERE project_id = ? AND artifact_sha256 = ?
+  AND map_sha256 = ? AND source_index = ?
   AND producibility = ?
 `;
 
@@ -202,6 +203,19 @@ WHERE project_id = ? AND map_sha256 = ? AND source_index = ?
 // move a sighting back out of a tombstone. A caller-side "read it, check it,
 // write it" would be two operations with no transaction primitive to join them.
 //
+// `artifact_sha256` IS IN THE `WHERE` SO THAT "ONE CALL MOVES ONE SIGHTING" IS A
+// PROPERTY OF THE STATEMENT TOO (07-REVIEW.md HI-03, finding W-3). It sits
+// immediately after `project_id`, in key order. Without it this write matches on
+// `(project_id, map_sha256, source_index)` — and `map_sha256` is
+// content-addressed over the DECODED MAP and never over the bundle, so two
+// bundles can share one. A tombstone raised from ONE bundle's drill-down would
+// then move EVERY bundle's sighting at that index, and D-23 makes the damage
+// permanent: no sequence of calls moves any of them back. Measured against the
+// pre-widening statement, one call reported `changes: 2` and marked both bundles
+// `gone`. Today the shipped primary key makes the second row unrepresentable, so
+// that is latent rather than live; plan 07-12 removes exactly that accident,
+// which is why this predicate ships FIRST.
+//
 // O-06's VERDICT, RECORDED WHERE THE STATEMENT IS. `sql-discipline.spec.ts`
 // models statement TEXT and has no concept of which RPC issues a statement, so
 // "a write on a read path" is not a category it can express — asking it to
@@ -210,6 +224,14 @@ WHERE project_id = ? AND map_sha256 = ? AND source_index = ?
 // the shape is safe is visible in the statement itself rather than in the
 // caller: it is guarded, single-row and idempotent.
 
+// DELIBERATELY MAP-SCOPED AND DELIBERATELY NOT WIDENED BY PLAN 07-11. This is
+// the third and last statement in the backend that names sightings by map, and
+// unlike the two above it does NOT name ONE sighting — it is MAP-06's aggregate
+// over every sighting of a map, which is the count 07-05's refusal compares
+// against, so a bundle predicate would change what it counts rather than
+// disambiguate it. It also has NO production caller today (07-REVIEW.md MD-04),
+// and plan 07-15 owns both its wiring and the artifact scope its bound needs.
+// Widening it here would be guessing that plan's answer.
 const COUNT_SOURCES_FOR_MAP_SQL = `
 SELECT COUNT(*) AS n
 FROM source_sightings
@@ -427,10 +449,21 @@ export async function recordSighting(
  * and the caller must not treat it as one: a tombstone is the record that
  * DefMiner could not produce these bytes at a moment it tried, and a later
  * attempt that also fails has nothing new to say.
+ *
+ * THE FOUR KEY ARGUMENTS NAME EXACTLY THE SIGHTING THE CALLER MEANS, and
+ * `artifactSha256` sits between `projectId` and `mapSha256` so the argument
+ * order mirrors {@link readSightingOrigin}'s and the key's. This used to reason
+ * from a sighting being unique on `(map, index)`, which is true only while the
+ * shipped primary key and `recordSighting`'s attribution guard together make a
+ * second bundle's sighting unrepresentable. A tombstone written for one bundle's
+ * sighting must leave any other bundle's sighting at the same `(map, index)` in
+ * its shipped state — and because D-23 is STICKY, a write that moved the wrong
+ * row could never be moved back.
  */
 export async function markProducibility(
   db: Database,
   projectId: string,
+  artifactSha256: string,
   mapSha256: string,
   sourceIndex: number,
   next: SourceProducibility,
@@ -442,6 +475,7 @@ export async function markProducibility(
       next,
       at,
       projectId,
+      artifactSha256,
       mapSha256,
       sourceIndex,
       // SPREAD, never passed as one array: an array handed to a bind position is

@@ -729,7 +729,15 @@ describe("HI-03 — one map in TWO bundles never reattributes the first's eviden
         "src/app.js",
         2000,
       );
-      await markProducibility(fx.db, PROJECT, MAP_A, 0, "gone", 5000);
+      await markProducibility(
+        fx.db,
+        PROJECT,
+        ARTIFACT_A,
+        MAP_A,
+        0,
+        "gone",
+        5000,
+      );
       expect(
         await recordSighting(
           fx.db,
@@ -987,6 +995,85 @@ describe("W-3 — a sighting is READ by a key that names its bundle", () => {
   });
 });
 
+describe("W-3 — a sighting is WRITTEN by a key that names its bundle", () => {
+  it("tombstones ONE bundle's sighting and leaves the other's shipped state", async () => {
+    // D-23 MAKES THIS THE EXPENSIVE ONE TO GET WRONG. A read that matched the
+    // wrong row shows the operator one wrong answer; a WRITE that matched the
+    // wrong row is permanent, because the trailing producibility guard means no
+    // sequence of later calls moves it back. Measured against the pre-widening
+    // statement this call reported `changes: 2` and marked BOTH bundles `gone`.
+    //
+    // The pair is built on {@link widerKeyFixture} for the reason that helper
+    // gives: under the shipped key the second row cannot exist, so the damage is
+    // latent rather than live — and plan 07-12 is what makes it live.
+    const fx = await widerKeyFixture();
+    try {
+      seedTwoBundleSighting(fx);
+
+      const written = await markProducibility(
+        fx.db,
+        PROJECT,
+        ARTIFACT_A,
+        MAP_A,
+        0,
+        "gone",
+        5000,
+      );
+      expect(written).toEqual({ ok: true, changes: 1 });
+
+      const rows = fx.raw
+        .prepare(
+          "SELECT artifact_sha256, producibility FROM source_sightings ORDER BY artifact_sha256",
+        )
+        .all() as { artifact_sha256: string; producibility: string }[];
+      expect(rows).toEqual([
+        { artifact_sha256: ARTIFACT_A, producibility: "gone" },
+        {
+          artifact_sha256: ARTIFACT_B,
+          producibility: SOURCE_PRODUCIBILITY_STATES[0],
+        },
+      ]);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("is still idempotent on the four-part key — one row, then zero", async () => {
+    // THE PROPERTY THE WIDENING MUST NOT COST. D-23's stickiness lives in the
+    // trailing `AND producibility = ?`, which the bundle predicate sits in front
+    // of rather than replaces, so a second call for the SAME four-part key still
+    // matches nothing.
+    const fx = await widerKeyFixture();
+    try {
+      seedTwoBundleSighting(fx);
+      expect(
+        await markProducibility(
+          fx.db,
+          PROJECT,
+          ARTIFACT_A,
+          MAP_A,
+          0,
+          "gone",
+          5000,
+        ),
+      ).toEqual({ ok: true, changes: 1 });
+      expect(
+        await markProducibility(
+          fx.db,
+          PROJECT,
+          ARTIFACT_A,
+          MAP_A,
+          0,
+          "changed",
+          9999,
+        ),
+      ).toEqual({ ok: true, changes: 0 });
+    } finally {
+      fx.close();
+    }
+  });
+});
+
 describe("D-23 — the producibility write is sticky BY STATEMENT CONSTRUCTION", () => {
   it("changes one row, then zero, and the second call cannot move producibility_at", async () => {
     // THE TOMBSTONE CANNOT BE UN-STUCK. The trailing `AND producibility = ?` is
@@ -1011,6 +1098,7 @@ describe("D-23 — the producibility write is sticky BY STATEMENT CONSTRUCTION",
       const first = await markProducibility(
         fx.db,
         PROJECT,
+        ARTIFACT_A,
         MAP_A,
         0,
         "gone",
@@ -1021,6 +1109,7 @@ describe("D-23 — the producibility write is sticky BY STATEMENT CONSTRUCTION",
       const second = await markProducibility(
         fx.db,
         PROJECT,
+        ARTIFACT_A,
         MAP_A,
         0,
         "changed",
@@ -1055,7 +1144,15 @@ describe("D-23 — the producibility write is sticky BY STATEMENT CONSTRUCTION",
         2000,
       );
       expect(
-        await markProducibility(fx.db, "p2", MAP_A, 0, "gone", 5000),
+        await markProducibility(
+          fx.db,
+          "p2",
+          ARTIFACT_A,
+          MAP_A,
+          0,
+          "gone",
+          5000,
+        ),
       ).toEqual({ ok: true, changes: 0 });
       const row = fx.raw
         .prepare(
@@ -1119,7 +1216,15 @@ describe("MAP-06 — recording the same sighting twice leaves one row", () => {
         "src/app.js",
         2000,
       );
-      await markProducibility(fx.db, PROJECT, MAP_A, 0, "gone", 5000);
+      await markProducibility(
+        fx.db,
+        PROJECT,
+        ARTIFACT_A,
+        MAP_A,
+        0,
+        "gone",
+        5000,
+      );
       await recordSighting(
         fx.db,
         PROJECT,
