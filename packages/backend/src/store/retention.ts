@@ -403,6 +403,99 @@ const DELETE_ANALYSIS_SQL = `
 DELETE FROM analyses WHERE project_id = ? AND sha256 = ? AND detector_set_hash = ?
 `;
 
+// ===========================================================================
+// THE TWO TABLES PHASE 7 ADDED, SWEPT IN THE ORDER THE OPERATOR CHOSE:
+// CASCADE — A SOURCE DIES WITH ITS LAST SIGHTING.
+// ===========================================================================
+// Migration `v: 8` created `sources` and `source_sightings` and this module
+// named neither of them, while `v: 8` declares NO FOREIGN KEY and NO
+// `ON DELETE CASCADE` — so deleting an artifact ORPHANED its sightings and both
+// tables grew with nothing able to delete from them (deferred item D1,
+// 07-VERIFICATION.md W-5). The eviction order was a design question and it was
+// answered by the operator at Phase 7's UAT, not here.
+//
+// AND IT IS AN ANTI-JOIN AND NOT A FOREIGN KEY, deliberately. An FK is a second
+// schema change and a sixth one-way `EXPECTED_TABLES` approval; the anti-join
+// needs neither, and `PRAGMA foreign_keys` is per-connection on a pool of five
+// anyway (decision P4-D3) — the same reason the artifact cascade above is
+// explicit rather than declared.
+//
+// WHY `sources` TAKES NO BOUND OF ITS OWN, and why growth is still bounded.
+// Every other table here carries an age bound, a row bound or both. `sources`
+// carries neither, because its lifetime is DERIVED: a row survives exactly as
+// long as some sighting names it. Since a surviving `sources` row requires at
+// least one surviving `source_sightings` row, and `source_sightings` carries
+// BOTH ordinary bounds, `count(sources) <= count(source_sightings) <=
+// bounds.maxRows`. The ceiling is inherited rather than declared, which is what
+// makes "a source dies with its last sighting" and "neither table grows past the
+// retention ceiling" the same statement.
+//
+// THIS IS NOT A THIRD EXEMPTION. The two exemptions above are refusals to apply
+// a bound that would otherwise be right (D-06's age bound on `audit`, D-26's age
+// bound on suspended `scans`). This is a table whose ceiling comes from an edge
+// rather than from a cap — bounded, not exempt — so the paragraph the exemption
+// block asks for is not owed here.
+
+// Sightings whose BUNDLE is already gone. This is the cascade: the artifact
+// sweep above removes the `artifacts` row, and the sighting rows that named it
+// are collected here in the same pass, in `ORPHAN_OBSERVATIONS_SQL`'s exact
+// shape — `NOT EXISTS` with `project_id` matched on BOTH sides, so a sweep in
+// one project cannot reach another project's rows in the one shared SQLite file
+// (T-07-56).
+//
+// The four key columns are selected because the key IS four columns since
+// migration `v: 9`, and every delete below binds all four.
+const ORPHAN_SIGHTINGS_SQL = `
+SELECT artifact_sha256, map_sha256, source_index FROM source_sightings
+WHERE project_id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM artifacts
+    WHERE artifacts.project_id = source_sightings.project_id
+      AND artifacts.sha256 = source_sightings.artifact_sha256
+  )
+ORDER BY recovered_at ASC, artifact_sha256 ASC, map_sha256 ASC, source_index ASC
+LIMIT ?
+`;
+
+const COUNT_SIGHTINGS_SQL = `SELECT COUNT(*) AS n FROM source_sightings WHERE project_id = ?`;
+
+const DELETE_SIGHTING_SQL = `
+DELETE FROM source_sightings
+WHERE project_id = ? AND artifact_sha256 = ? AND map_sha256 = ? AND source_index = ?
+`;
+
+// THE ANTI-JOIN, AND THIS IS WHERE CONTENT-ADDRESSED DEDUPE SURVIVES THE SWEEP.
+//
+// `sources` is keyed on the CONTENT digest (D-05), so two bundles shipping the
+// same module produce ONE row with TWO sightings. Selecting by "the evicted
+// bundle's sightings" would take that row out from under the bundle still
+// sighting it; selecting by "no sighting names it AT ALL" cannot. A `sources`
+// row therefore outlives either bundle alone and dies with its LAST sighting,
+// which is the property the operator chose this shape for and the one
+// `retention.spec.ts` fails on if the `NOT EXISTS` is replaced by a blind
+// delete.
+//
+// `first_seen_at` leads the ordering because `idx_sources_seen` does, and
+// `sources.ts` keeps that column OUT of its upsert's update arm precisely so
+// retention's ordering describes the first sighting rather than the latest.
+const UNSIGHTED_SOURCES_SQL = `
+SELECT source_sha256 FROM sources
+WHERE project_id = ?
+  AND NOT EXISTS (
+    SELECT 1 FROM source_sightings
+    WHERE source_sightings.project_id = sources.project_id
+      AND source_sightings.source_sha256 = sources.source_sha256
+  )
+ORDER BY first_seen_at ASC, source_sha256 ASC
+LIMIT ?
+`;
+
+const COUNT_SOURCES_SQL = `SELECT COUNT(*) AS n FROM sources WHERE project_id = ?`;
+
+const DELETE_SOURCE_SQL = `
+DELETE FROM sources WHERE project_id = ? AND source_sha256 = ?
+`;
+
 async function countRows(
   db: Database,
   sql: string,
@@ -721,6 +814,73 @@ export async function sweepRetention(
       }
     }
 
+    // --- 3d. the cascade the operator chose: sightings, THEN sources -------
+    //
+    // SIGHTINGS BEFORE SOURCES, IN EVERY PASS, WITHOUT EXCEPTION. The anti-join
+    // is a question about a sighting set, so it must be asked of the set this
+    // pass FINISHED with. `sightingsCapped` is what enforces that: if any part
+    // of the sightings work stopped on budget, the anti-join does not run at all
+    // in this pass and the next one asks the question again (T-07-71).
+    //
+    // THE DIRECTION OF THE RISK, STATED HONESTLY RATHER THAN OVERSOLD. Because
+    // the anti-join selects only sources with NO sighting left, having deleted
+    // FEWER sightings can only leave MORE sources protected — so running it
+    // against a half-swept set would delete too few rather than too many, and
+    // the cost of the guard is one deferred pass rather than a lost row. The
+    // guard is kept anyway: that argument holds only while the enumeration and
+    // the delete agree about what "unsighted" means, and an invariant that
+    // depends on nobody widening either statement is not an invariant. What it
+    // buys is that a `sources` row is never evicted on the strength of a
+    // sighting set the pass was still in the middle of.
+    let sightingsCapped = false;
+
+    // The cascade half: sightings whose bundle the artifact sweep above already
+    // removed. `examined` counts them as rows, like every other candidate here.
+    if (budget() > 0) {
+      const orphanSightStmt = await db.prepare(ORPHAN_SIGHTINGS_SQL);
+      const orphanSightings = await orphanSightStmt.all<{
+        artifact_sha256: string;
+        map_sha256: string;
+        source_index: number;
+      }>(projectId, Math.min(budget(), CANDIDATE_SCAN_LIMIT));
+      examined += orphanSightings.length;
+      for (const s of orphanSightings) {
+        if (budget() <= 0) {
+          moreWork = true;
+          sightingsCapped = true;
+          break;
+        }
+        deleted += await remove(DELETE_SIGHTING_SQL, [
+          projectId,
+          String(s.artifact_sha256),
+          String(s.map_sha256),
+          Number(s.source_index),
+        ]);
+      }
+    } else {
+      sightingsCapped = true;
+    }
+
+    // The anti-join half: `sources` rows no surviving sighting names.
+    if (budget() > 0 && !sightingsCapped) {
+      const unsightedStmt = await db.prepare(UNSIGHTED_SOURCES_SQL);
+      const unsighted = await unsightedStmt.all<{ source_sha256: string }>(
+        projectId,
+        Math.min(budget(), CANDIDATE_SCAN_LIMIT),
+      );
+      examined += unsighted.length;
+      for (const s of unsighted) {
+        if (budget() <= 0) {
+          moreWork = true;
+          break;
+        }
+        deleted += await remove(DELETE_SOURCE_SQL, [
+          projectId,
+          String(s.source_sha256),
+        ]);
+      }
+    }
+
     // --- 4. does work remain for the next pass? ----------------------------
     // Asked by RE-COUNTING rather than by trusting the loop's bookkeeping: the
     // question is about the database, and the database is right there.
@@ -753,8 +913,22 @@ export async function sweepRetention(
  *  fail without being counted. */
 type DeleteFn = (
   sql: string,
-  params: [string, string] | [string, string, string],
+  params: DeleteParams,
 ) => Promise<number>;
+
+/** The bound parameters of one fully-bound single-row delete, `project_id`
+ *  FIRST in every arm.
+ *
+ *  The four-element arm arrived with `source_sightings`, whose key has been
+ *  `(project_id, artifact_sha256, map_sha256, source_index)` since migration
+ *  `v: 9`. Its last member is a NUMBER and not a string: `source_index` is an
+ *  INTEGER column, and binding "0" where the row holds 0 matches nothing in
+ *  SQLite — a delete that silently removes no row is exactly the shape
+ *  `deleteOne` was rewritten to stop reporting as success. */
+type DeleteParams =
+  | [string, string]
+  | [string, string, string]
+  | [string, string, string, number];
 
 /**
  * Remove ONE digest and everything hanging off it, within the remaining budget.
@@ -932,7 +1106,7 @@ async function trimChildTable(
 async function deleteOne(
   db: Database,
   sql: string,
-  params: [string, string] | [string, string, string],
+  params: DeleteParams,
 ): Promise<{ deleted: number; error: string | null }> {
   try {
     const stmt = await db.prepare(sql);
@@ -992,6 +1166,20 @@ async function workRemains(
   if ((await countRows(db, COUNT_SCANS_SQL, projectId)) > bounds.maxRows)
     return true;
 
+  // The cascade's two tables. WITHOUT THESE THE MULTI-PASS DRAIN STOPS ONE PASS
+  // EARLY on exactly the backlog this coverage creates the ability to clear: a
+  // pass whose budget ran out inside the sightings work would report "nothing
+  // remains" and the consumer would wait for a cadence boundary that sustained
+  // ingest never yields (07-REVIEW.md HI-04's failure shape, one table over).
+  const orphanSightings = await db.prepare(ORPHAN_SIGHTINGS_SQL);
+  if ((await orphanSightings.all<object>(projectId, 1)).length > 0) return true;
+
+  // `sources` is asked about its EDGE and never about a cap, because it has no
+  // cap of its own — see the section header above. An unsighted source is work
+  // remaining; a large but fully-sighted `sources` table is not.
+  const unsighted = await db.prepare(UNSIGHTED_SOURCES_SQL);
+  if ((await unsighted.all<object>(projectId, 1)).length > 0) return true;
+
   return false;
 }
 
@@ -1006,6 +1194,8 @@ export async function retentionCounts(
   analyses: number;
   audit: number;
   scans: number;
+  sources: number;
+  source_sightings: number;
 }> {
   return {
     artifacts: await countRows(db, COUNT_ARTIFACTS_SQL, projectId),
@@ -1016,6 +1206,16 @@ export async function retentionCounts(
     // here, and a table the sweep deletes from but no reader can count is a
     // table whose bound nothing can be shown to hold.
     scans: await countRows(db, COUNT_SCANS_SQL, projectId),
+    // The same reason, for the two tables plan 07-13 gave the sweep. These are
+    // what let W-5's claim be SHOWN rather than asserted: the convergence
+    // inequality's insert side counts rows into both, and until this plan the
+    // delete side could reach neither and no reader could even count them.
+    //
+    // SNAKE_CASE, MATCHING THE TABLE. Every other key here is the table's own
+    // name, and renaming one of them to fit a naming convention would make the
+    // one function whose job is "count the tables" disagree with the schema.
+    sources: await countRows(db, COUNT_SOURCES_SQL, projectId),
+    source_sightings: await countRows(db, COUNT_SIGHTINGS_SQL, projectId),
   };
 }
 

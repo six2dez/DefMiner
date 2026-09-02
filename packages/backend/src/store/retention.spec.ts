@@ -548,6 +548,8 @@ describe("the per-pass cap and convergence", () => {
       analyses: 0,
       audit: 0,
       scans: 0,
+      sources: 0,
+      source_sightings: 0,
     });
   });
 
@@ -639,6 +641,8 @@ describe("a sweep that cannot delete", () => {
       analyses: 0,
       audit: 0,
       scans: 0,
+      sources: 0,
+      source_sightings: 0,
     });
   });
 
@@ -705,6 +709,8 @@ describe("the cascade leaves no orphan", () => {
       analyses: 6,
       audit: 0,
       scans: 0,
+      sources: 0,
+      source_sightings: 0,
     });
 
     await sweepToConvergence(P1, {
@@ -721,6 +727,8 @@ describe("the cascade leaves no orphan", () => {
       analyses: 3,
       audit: 0,
       scans: 0,
+      sources: 0,
+      source_sightings: 0,
     });
     // Counted DIRECTLY, not inferred from the delete order.
     expect(orphanCount(P1)).toEqual({ observations: 0, analyses: 0 });
