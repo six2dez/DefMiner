@@ -2492,9 +2492,18 @@ describe("D-13 — a recovered source enters the pipeline once, and never twice"
     ).toBe(1);
     expect(counters.sourcemap.announcedInline).toBe(1);
 
-    // (c) `depth_exceeded` fired exactly once — one recovered source, one
-    //     depth-1 stage, one refusal. Counted rather than inferred.
-    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(1);
+    // (c) `depth_exceeded` fired exactly once.
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "THIS EXPECTATION IS STILL 1 AND IT NOW MEANS SOMETHING ELSE, WHICH IS " +
+        "THE POINT (07-REVIEW.md MD-03). Before plan 07-15 it was 1 because " +
+        "there was exactly ONE RECOVERED SOURCE and the depth gate was " +
+        "re-taken inside `reconstruct`'s preamble once per source; the number " +
+        "happened to agree with the per-stage number at N=1 and diverged at " +
+        "every larger N. It is now 1 because there is exactly ONE " +
+        "RECONSTRUCTION STAGE that declined to recurse, for any N. The " +
+        "many-source case below is what tells the two readings apart.",
+    ).toBe(1);
 
     // (d) THE DETECTOR SAW THE RECOVERED BYTES. Without this the three
     //     assertions above are equally satisfied by a path that never ran.
@@ -2519,17 +2528,98 @@ describe("D-13 — a recovered source enters the pipeline once, and never twice"
     ]);
     p.offer();
     await runOnce(p.overrides);
-    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(0);
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "THIS EXPECTATION WAS 0 BEFORE PLAN 07-15 AND IS STILL 0, AND THE " +
+        "REASON CHANGED. It used to be 0 because no per-source recursion was " +
+        "ever attempted, so the gate in `reconstruct`'s preamble was never " +
+        "reached; it is now 0 because the hoisted gate above the per-source " +
+        "loop is counted only when the loop has at least one recovered source " +
+        "to recurse over. Zero recovered sources is still zero refusals, so " +
+        "the counter keeps describing the bound FIRING rather than the stage " +
+        "RUNNING.",
+    ).toBe(0);
   });
 
-  it("fires ONCE PER RECOVERED SOURCE, so the bound scales with what it bounds", async () => {
+  it("fires ONCE PER STAGE, so the bound does not scale with what it bounds", async () => {
     const bytes = bundleAnnouncingInline(
       mapDocument(["a.ts", "b.ts"], ["const a = 1;\n", "const b = 2;\n"]),
     );
     const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
     p.offer();
     await runOnce(p.overrides);
-    expect(counters.sourcemap.derivedRejected.depth_exceeded).toBe(2);
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "THIS EXPECTATION CHANGED FROM 2 TO 1, AND THE CHANGE IS THE POINT " +
+        "(07-REVIEW.md MD-03). It was 2 because the depth gate was re-taken " +
+        "inside `reconstruct`'s preamble for EVERY recovered source, which " +
+        "made the counter equal to `sourcesRecovered` by construction and " +
+        "therefore carry no information. The gate now lives at the CALL SITE, " +
+        "above the per-source loop, so two sources in one map are one " +
+        "reconstruction stage that declined to recurse: 1. The bound itself " +
+        "is unmoved — neither source is analysed at depth 2, which the case " +
+        "above still asserts by row count.",
+    ).toBe(1);
+  });
+
+  // =========================================================================
+  // MD-03 — ONE MAP-BEARING ARTIFACT, ONE REFUSAL, ONE LOG LINE
+  // =========================================================================
+  // The failure this closes: an artifact carrying monaco's real 781-source map
+  // emitted 781 identical `sdk.console.log` lines on the proxy thread in a
+  // single consumer iteration, and drove `depth_exceeded` to exactly
+  // `sourcesRecovered`. Both halves are asserted here, because a counter fixed
+  // without the log line fixed is half the defect.
+  it("emits ONE depth refusal and ONE log line for a map carrying many sources", async () => {
+    const N = 12;
+    const labels = Array.from(
+      { length: N },
+      (_, i) => "src/mod" + String(i) + ".ts",
+    );
+    const contents = Array.from(
+      { length: N },
+      (_, i) => "export const m" + String(i) + " = " + String(i) + ";\n",
+    );
+    const bytes = bundleAnnouncingInline(mapDocument(labels, contents));
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    const sdk = await runOnce(p.overrides);
+
+    // All twelve sources were recovered: the bound refuses RE-ENTRY, never
+    // recovery, and a case that recovered fewer would be measuring the wrong
+    // thing.
+    expect(counters.sourcemap.sourcesRecovered).toBe(N);
+
+    // ONE increment for twelve sources.
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "the depth gate is still being re-taken per recovered source: this " +
+        "reports the source count where one reconstruction stage was expected.",
+    ).toBe(1);
+
+    // ONE log line. This is the half that makes it a regression test rather
+    // than an arithmetic check — the counter could be corrected while the
+    // proxy thread still took N trips through `sdk.console.log`.
+    const refusals = sdk.calls.consoleLog.filter((line) =>
+      line.includes("depth_exceeded"),
+    );
+    expect(
+      refusals.length,
+      "the refusal was logged " +
+        String(refusals.length) +
+        " times for one reconstruction stage. MD-03's failure scenario is " +
+        "781 identical lines on the proxy thread from one artifact.",
+    ).toBe(1);
+
+    // THE INEQUALITY IS THE PROPERTY. A counter equal by construction to
+    // another counter carries no information about the run.
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "`depth_exceeded` still equals `sourcesRecovered`, which is what MD-03 " +
+        'is about: a health surface reading "12 sources rejected: ' +
+        'depth_exceeded" describes a bound working as designed as if it were ' +
+        "a refusal.",
+    ).not.toBe(counters.sourcemap.sourcesRecovered);
   });
 });
 
