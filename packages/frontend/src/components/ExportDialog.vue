@@ -22,6 +22,23 @@
 // object URL is revoked immediately after the click.
 //
 // ===========================================================================
+// ONE MECHANISM, TWO ENTRY POINTS, AND THE HEADING IS WHAT TELLS THEM APART
+// ===========================================================================
+// This component is opened from the toolbar's `Export inventory` CTA and from
+// the source drill-down's scoped `Export source manifest` CTA. It is the SAME
+// dialog: the same redaction ceremony, the same destructive confirmation, the
+// same format options and the same failure copy, all read from the one
+// `export-contract.ts` module. Nothing here is forked per table — forking a
+// security ceremony's copy per table is how ceremonies drift, and the shipped
+// raw-confirmation sentence remains true of the manifest.
+//
+// WHAT DOES VARY IS THE HEADING, and only the heading (U7-3): it is keyed on
+// `table` through `EXPORT_DIALOG_HEADINGS`, because a dialog headed for the
+// inventory opened from a source-manifest CTA is a small lie about what will
+// leave the tool. See `export-contract.ts` § the CTA constant for why the
+// second entry point exists at all (UI-SPEC Named Conflict 1).
+//
+// ===========================================================================
 // TWO DELIBERATE ACTS FOR A RAW EXPORT, AND NO WAY TO REMEMBER THE CHOICE
 // ===========================================================================
 // Redacted is PRE-SELECTED and FOCUSED. Raw requires actively choosing the
@@ -44,6 +61,7 @@
 import type {
   ExportFormat,
   ExportRedactionMode,
+  ExportTable,
   PageRequest,
 } from "@defminer/engine/contract";
 import {
@@ -55,14 +73,13 @@ import { computed, nextTick, ref, watch } from "vue";
 import type {
   ExportChunkOutcome,
   ExportChunkRequest,
-  InventoryTable,
   RpcResult,
 } from "../api/client";
 
 import {
   CANCEL_LABEL,
   DESTRUCTIVE_BUTTON_CLASS,
-  EXPORT_DIALOG_HEADING,
+  EXPORT_DIALOG_HEADINGS,
   EXPORT_EMPTY_BODY,
   EXPORT_FAILED_BODY,
   EXPORT_LABEL,
@@ -90,6 +107,7 @@ import { FOCUS_RING_CLASS } from "./table-contract";
 const {
   open,
   table,
+  scopeSha256,
   filter,
   sortKey,
   direction,
@@ -100,10 +118,26 @@ const {
   runExport,
   deliver = browserDownload,
 } = defineProps<{
-  /** Whether the dialog is on screen. The TOOLBAR owns this: its action opens
-   *  the dialog and never exports. */
+  /** Whether the dialog is on screen. THE PAGE owns this: an entry point's
+   *  action opens the dialog and never exports. */
   open: boolean;
-  table: InventoryTable;
+  /**
+   * Which table leaves the tool. THREE MEMBERS, NOT TWO — the third is the
+   * recovered-source manifest, which is scoped to one artifact rather than
+   * filtered.
+   *
+   * It is what {@link EXPORT_DIALOG_HEADINGS} is keyed on, which is U7-3's
+   * whole mechanism: the heading names what the CTA that opened this named.
+   */
+  table: ExportTable;
+  /**
+   * The ARTIFACT a manifest export is scoped to; `null` on the two inventory
+   * tables. A SCOPE, NOT A FILTER — the backend refuses a `sources` request
+   * with no scope with the shipped `empty` outcome rather than a new refusal
+   * reason, because a manifest with nothing in scope makes exactly the claim
+   * the zero-row path already makes.
+   */
+  scopeSha256: string | null;
   filter: PageRequest["filter"];
   sortKey: string;
   direction: "asc" | "desc";
@@ -160,6 +194,15 @@ const FIRST_REDACTION_RADIO_ID = redactionRadioId(EXPORT_REDACTION_MODES[0]);
 
 /** The confirmation's focused default is the way OUT of it. */
 const RAW_ESCAPE_BUTTON_ID = "defminer-export-raw-escape";
+
+/**
+ * The heading, and the dialog's accessible name (U7-3).
+ *
+ * READ THROUGH THE RECORD ON EVERY RENDER rather than captured at open: the
+ * table is a prop, and a heading frozen at mount would be a heading that
+ * outlived the entry point that set it.
+ */
+const heading = computed<string>(() => EXPORT_DIALOG_HEADINGS[table]);
 
 const nothingToExport = computed(() => reachableCount === 0);
 const exportCount = computed(() => reachableCount ?? 0);
@@ -232,6 +275,10 @@ async function assembleAndDeliver(
     const result = await runExport({
       projectId,
       table,
+      // FORWARDED, NEVER DERIVED FROM THE TABLE. The scope is a fact the entry
+      // point knows and this component does not: it is `null` for the two
+      // inventory tables and the browsed artifact's digest for the manifest.
+      scopeSha256,
       format: format.value,
       mode: chosen,
       filter,
@@ -330,10 +377,10 @@ const BUTTON_CLASS =
     class="flex flex-col gap-2 border border-surface-600 bg-surface-800 p-4 text-xs"
     role="dialog"
     aria-modal="true"
-    :aria-label="EXPORT_DIALOG_HEADING"
+    :aria-label="heading"
   >
     <h2 class="text-2xl font-semibold leading-tight">
-      {{ EXPORT_DIALOG_HEADING }}
+      {{ heading }}
     </h2>
 
     <!-- UI-09, BEFORE THE CONFIRMATION AND IN THE SAME WORDS THE FILE WILL

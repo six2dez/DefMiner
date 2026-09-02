@@ -78,10 +78,9 @@ import SourceBrowser from "./SourceBrowser.vue";
 // would pass unchanged the day somebody edited them.
 
 const LEAVE_LABEL = "Back to artifacts";
+const EXPORT_MANIFEST_LABEL = "Export source manifest";
 const EXPORT_PENDING_LABEL =
   "Export source manifest — counting the recovered sources";
-const EXPORT_UNAVAILABLE_LABEL =
-  "Export source manifest — not available in this build";
 
 const ARTIFACT_SHA = "a".repeat(64);
 const MAP_SHA = "b".repeat(64);
@@ -218,7 +217,7 @@ async function flush(wrapper: VueWrapper): Promise<void> {
 
 async function mountBrowser(
   client: Fake,
-  options: { analysisStoppedEarly?: boolean; canExport?: boolean } = {},
+  options: { analysisStoppedEarly?: boolean } = {},
 ): Promise<VueWrapper> {
   const wrapper = mount(SourceBrowser, {
     props: {
@@ -226,7 +225,6 @@ async function mountBrowser(
       artifactSha256: ARTIFACT_SHA,
       client,
       analysisStoppedEarly: options.analysisStoppedEarly ?? false,
-      canExport: options.canExport ?? false,
     },
     global: { stubs: { RecycleScroller: ScrollerStub } },
   });
@@ -260,7 +258,6 @@ const SplitBody = defineComponent({
             artifactSha256: ARTIFACT_SHA,
             client: props.client,
             analysisStoppedEarly: true,
-            canExport: false,
           }),
         ]),
         h("div", { class: "w-1/3 shrink-0" }, [
@@ -450,7 +447,6 @@ describe("drilldown-header / loading — it renders on ENTRY, before any read", 
         artifactSha256: ARTIFACT_SHA,
         client: fakeClient(),
         analysisStoppedEarly: false,
-        canExport: false,
       },
       global: { stubs: { RecycleScroller: ScrollerStub } },
     });
@@ -471,7 +467,6 @@ describe("drilldown-header / loading — it renders on ENTRY, before any read", 
         artifactSha256: ARTIFACT_SHA,
         client: fakeClient(),
         analysisStoppedEarly: false,
-        canExport: false,
       },
       global: { stubs: { RecycleScroller: ScrollerStub } },
     });
@@ -493,7 +488,6 @@ describe("drilldown-header / loading — it renders on ENTRY, before any read", 
         artifactSha256: ARTIFACT_SHA,
         client: fakeClient(),
         analysisStoppedEarly: false,
-        canExport: false,
       },
       global: { stubs: { RecycleScroller: ScrollerStub } },
     });
@@ -515,11 +509,35 @@ describe("drilldown-header / loading — it renders on ENTRY, before any read", 
     expect(button.textContent?.trim()).toBe(NOTHING_TO_EXPORT_LABEL);
   });
 
-  it("names the CTA and states the wiring gap once rows ARE known", async () => {
+  it("names the CTA and ENABLES it once rows ARE known", async () => {
+    // PLAN 07-10 CLOSED THE WIRING GAP plan 07-09 declared (ledger entry 117).
+    // Until this landed the control carried a third label — "… not available in
+    // this build" — and that constant is DELETED rather than repurposed: a
+    // transitional string kept past its transition is a stub with a new job.
     const wrapper = await mountBrowser(fakeClient());
     const button = exportButton(wrapper);
-    expect(button.disabled).toBe(true);
-    expect(button.textContent?.trim()).toBe(EXPORT_UNAVAILABLE_LABEL);
+    expect(button.disabled).toBe(false);
+    expect(button.textContent?.trim()).toBe(EXPORT_MANIFEST_LABEL);
+  });
+
+  it("emits export-manifest WITH THE COUNT, and only once rows are known", async () => {
+    // THE COUNT RIDES THE EVENT so the dialog's zero-row rule reads the number
+    // this button was enabled against, not a second count that could disagree
+    // with it. `ROWS` is the two-row fixture.
+    const wrapper = await mountBrowser(fakeClient());
+    exportButton(wrapper).click();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("export-manifest")).toEqual([[ROWS.length]]);
+  });
+
+  it("emits NOTHING from a resolved zero — the guard is at the handler too", async () => {
+    // The `disabled` attribute is what the operator sees; the handler's own
+    // guard is what holds when anything else calls in. Asserted by calling the
+    // click path directly, which a disabled attribute does not stop in jsdom.
+    const wrapper = await mountBrowser(fakeClient({ list: ok(page([])) }));
+    exportButton(wrapper).click();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.emitted("export-manifest")).toBeUndefined();
   });
 });
 
@@ -633,7 +651,7 @@ describe("drilldown-header / long-text — a property of the SHAPE", () => {
     walker(strip);
 
     expect([...texts].sort()).toEqual(
-      [ARTIFACT_SHA, LEAVE_LABEL, EXPORT_UNAVAILABLE_LABEL].sort(),
+      [ARTIFACT_SHA, LEAVE_LABEL, EXPORT_MANIFEST_LABEL].sort(),
     );
     // And the digest half of that set really is a fixed-length hex string.
     expect(ARTIFACT_SHA).toMatch(/^[0-9a-f]{64}$/);

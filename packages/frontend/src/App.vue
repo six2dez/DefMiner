@@ -13,6 +13,7 @@
 // file for no gain.
 
 import type {
+  ExportTable,
   PageRequest,
   ScanProgressPayload,
   ScanState,
@@ -595,15 +596,91 @@ async function loadContributingCounts(): Promise<void> {
   if (degraded.ok) contributingDegraded.value = degraded.value.visible;
 }
 
+// ---------------------------------------------------------------------------
+// THE SECOND ENTRY POINT — UI-SPEC NAMED CONFLICT 1, RESOLVED
+// ---------------------------------------------------------------------------
+//
+// `exportTable` above is BYTE-UNCHANGED and still derives from `activeTab`.
+// That is exactly why the drill-down needs its own entry point: the drill-down
+// is a STATE within the Artifacts tab, so `activeTab` is still `artifacts`
+// while the operator reads recovered source, and the toolbar CTA opened from
+// that screen would export the ARTIFACTS INVENTORY from a page showing
+// sources. Making the toolbar address it would mean deriving the export table
+// from something other than the active tab — a change to shipped, asserted
+// behaviour on the one control whose whole ceremony is about the operator
+// knowing exactly what leaves the tool.
+//
+// So: ONE export mechanism, ONE redaction ceremony, ONE destructive
+// confirmation, and TWO PLACES TO START IT, each naming what it will export.
+// The three refs below are what makes the second place possible WITHOUT
+// touching the first — `exportTable` is read through, never rewritten.
+
+/**
+ * The artifact a manifest export is scoped to, or `null` for an inventory
+ * export.
+ *
+ * IT IS ALSO THE DISCRIMINATOR. `null` means "the toolbar opened this", which
+ * is why the two computeds below can be derived rather than set: two flags for
+ * one fact is two flags that come to disagree.
+ */
+const exportScope = ref<string | null>(null);
+
+/**
+ * How many manifest rows the drill-down counted, or `null`.
+ *
+ * TAKEN FROM THE EVENT, not re-counted here. The drill-down already drew the
+ * whole bounded list to answer its own header, and a second count of one set
+ * is a second claim about it — the dialog would then disable against a number
+ * the button was not enabled against.
+ */
+const exportScopeRows = ref<number | null>(null);
+
+/**
+ * The table the OPEN dialog covers.
+ *
+ * A SEPARATE COMPUTATION FROM `exportTable`, deliberately, and it READS it
+ * rather than replacing it: the toolbar's meaning is untouched and the
+ * manifest's is stated once.
+ */
+const exportDialogTable = computed<ExportTable>(() =>
+  exportScope.value === null ? exportTable.value : "sources",
+);
+
+/** Rows the OPEN dialog covers. `null` is still not zero on either branch. */
+const exportDialogReachable = computed<number | null>(() =>
+  exportScope.value === null ? exportReachable.value : exportScopeRows.value,
+);
+
 /** The toolbar action. It OPENS THE DIALOG and refreshes the two floor numbers.
  *  It issues no export. */
 function openExport(): void {
+  // CLEARED ON EVERY TOOLBAR OPEN. A scope that survived from a previous
+  // drill-down export would point the shipped CTA at the manifest, which is
+  // the one failure this whole arrangement exists to prevent.
+  exportScope.value = null;
+  exportScopeRows.value = null;
+  exportOpen.value = true;
+  void loadContributingCounts();
+}
+
+/**
+ * The drill-down's scoped action. IT OPENS THE SAME DIALOG and issues no
+ * export, exactly as the toolbar's does — the ceremony in front of the raw
+ * option is the same ceremony, reached from a second door.
+ */
+function openManifestExport(rows: number): void {
+  const sha256 = browsingSources.value;
+  if (sha256 === null) return;
+  exportScope.value = sha256;
+  exportScopeRows.value = rows;
   exportOpen.value = true;
   void loadContributingCounts();
 }
 
 function closeExport(): void {
   exportOpen.value = false;
+  exportScope.value = null;
+  exportScopeRows.value = null;
 }
 
 /** One export chunk, routed through the typed client. Answers a VALUE on every
@@ -1106,12 +1183,13 @@ async function loadCompat(): Promise<void> {
     <div v-if="exportOpen" class="shrink-0 px-4 pt-4">
       <ExportDialog
         :open="exportOpen"
-        :table="exportTable"
+        :table="exportDialogTable"
+        :scope-sha256="exportScope"
         :filter="exportStore.filter.value"
         :sort-key="exportStore.sortKey.value"
         :direction="exportStore.direction.value"
         :project-id="SERVER_SCOPED_PROJECT"
-        :reachable-count="exportReachable"
+        :reachable-count="exportDialogReachable"
         :contributing-total="contributingTotal"
         :contributing-degraded="contributingDegraded"
         :run-export="runExport"
@@ -1151,10 +1229,10 @@ async function loadCompat(): Promise<void> {
             :artifact-sha256="browsingSources"
             :client="client"
             :analysis-stopped-early="browsedAnalysisStoppedEarly"
-            :can-export="false"
             @leave="leaveSourceBrowser"
             @open-health="openHealth"
             @open-evidence="artifacts.openPanel()"
+            @export-manifest="openManifestExport"
           />
 
           <ArtifactsTable

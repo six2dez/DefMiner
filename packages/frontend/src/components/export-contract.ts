@@ -44,6 +44,7 @@
 import type {
   ExportFormat,
   ExportRedactionMode,
+  ExportTable,
 } from "@defminer/engine/contract";
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,33 @@ import type {
  *  directly — the copy row says so in the same breath as the label, and
  *  `App.spec.ts` asserts the click issues no export call. */
 export const EXPORT_CTA = "Export inventory";
+
+/**
+ * The DRILL-DOWN's own scoped CTA — 07-UI-SPEC.md § "Copywriting Contract",
+ * row *Drill-down header — primary CTA*.
+ *
+ * ===========================================================================
+ * WHY A SECOND PLACE TO START ONE EXPORT (UI-SPEC Named Conflict 1)
+ * ===========================================================================
+ * The Phase 5 rule is *one export CTA, in the toolbar*. The shipped
+ * implementation derives {@link EXPORT_CTA}'s table from the ACTIVE TAB
+ * (`App.vue`'s `exportTable`), and the source drill-down is a STATE WITHIN the
+ * Artifacts tab rather than a tab of its own — `activeTab` is still `artifacts`
+ * while the operator is reading recovered source. So the toolbar CTA opened
+ * from that screen would export the ARTIFACTS INVENTORY from a page showing
+ * sources. Making the toolbar address it would mean deriving the export table
+ * from something other than the active tab: a change to shipped, asserted
+ * behaviour, on the one control whose entire ceremony is about the operator
+ * knowing exactly what leaves the tool.
+ *
+ * THE DIVERGENCE IS STATED RATHER THAN SMUGGLED. There is ONE export
+ * mechanism, ONE redaction ceremony and ONE destructive confirmation; there are
+ * now TWO PLACES TO START IT, and each names what it will export. The spirit of
+ * the Phase 5 rule — the operator always knows exactly which rows are leaving
+ * and in what form — is strengthened by that, not weakened, which is why
+ * {@link EXPORT_DIALOG_HEADINGS} exists directly below.
+ */
+export const EXPORT_MANIFEST_CTA = "Export source manifest";
 
 /** The destructive confirmation's heading. */
 export const RAW_EXPORT_CONFIRM_HEADING = "Export with raw values?";
@@ -91,8 +119,34 @@ export function rawExportConfirmLabel(count: number): string {
 // COPY — DEFMINER-AUTHORED, FOR THE STATES THE COPY TABLE DOES NOT ROW
 // ---------------------------------------------------------------------------
 
-/** The dialog's accessible name and heading. */
-export const EXPORT_DIALOG_HEADING = "Export inventory";
+/**
+ * The dialog's accessible name and heading, KEYED ON THE EXPORT TABLE (U7-3).
+ *
+ * ===========================================================================
+ * THE HEADING NAMES WHAT THE CTA NAMED
+ * ===========================================================================
+ * A dialog headed *Export inventory* opened from **Export source manifest** is
+ * a small lie about what will leave the tool, on the one control whose entire
+ * ceremony is about the operator knowing that. Both entry points render their
+ * own heading, and `ExportDialog.spec.ts` asserts each by exact comparison.
+ *
+ * A `Record` KEYED ON THE TABLE RATHER THAN A PROP, and that choice is the
+ * mechanism doing the work: `ExportTable` is the engine contract's closed list,
+ * so a FOURTH export table cannot ship without a heading — an incomplete record
+ * is a typecheck failure here rather than an `undefined` rendered as a blank
+ * `<h2>`. A prop would have put the property in every caller's discipline.
+ *
+ * THE FIRST TWO ENTRIES ARE THE SHIPPED STRING, BYTE-IDENTICAL. This is a
+ * widening and not a rewording: nothing an operator has already read changes.
+ * The third is {@link EXPORT_MANIFEST_CTA}, read from the constant rather than
+ * retyped, so the heading and the CTA cannot drift into two sentences.
+ */
+export const EXPORT_DIALOG_HEADINGS: Readonly<Record<ExportTable, string>> =
+  Object.freeze({
+    artifacts: "Export inventory",
+    observations: "Export inventory",
+    sources: EXPORT_MANIFEST_CTA,
+  });
 
 /** The redaction choice's group label. Named as a QUESTION about values, not as
  *  "mode": the operator is choosing what leaves the tool, not a setting. */

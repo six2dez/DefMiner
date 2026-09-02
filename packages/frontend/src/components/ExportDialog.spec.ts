@@ -26,10 +26,17 @@
 //      dialog whose next confirmation means something other than what the
 //      operator read.
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
-import type { ExportRedactionMode } from "@defminer/engine/contract";
-import { EXPORT_REDACTION_MODES } from "@defminer/engine/contract";
+import type {
+  ExportRedactionMode,
+  ExportTable,
+} from "@defminer/engine/contract";
+import {
+  EXPORT_REDACTION_MODES,
+  EXPORT_TABLES,
+} from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,10 +49,17 @@ import type {
 } from "../api/client";
 
 import {
+  CANCEL_LABEL,
   DESTRUCTIVE_BUTTON_CLASS,
+  EXPORT_CTA,
+  EXPORT_DIALOG_HEADINGS,
   EXPORT_FAILED_BODY,
   EXPORT_LABEL,
+  EXPORT_MANIFEST_CTA,
+  exportFloorLine,
   EXPORTING_LABEL,
+  FORMAT_GROUP_LABEL,
+  FORMAT_OPTION_LABELS,
   NOTHING_TO_EXPORT_LABEL,
   RAW_EXPORT_CONFIRM_BODY_TEMPLATE,
   RAW_EXPORT_CONFIRM_HEADING,
@@ -53,6 +67,8 @@ import {
   RAW_EXPORT_ESCAPE_LABEL,
   rawExportConfirmBody,
   rawExportConfirmLabel,
+  REDACTION_GROUP_LABEL,
+  REDACTION_OPTION_LABELS,
 } from "./export-contract";
 import type { ExportFile } from "./export-download";
 import { redactionRadioId } from "./export-download";
@@ -90,6 +106,12 @@ type Harness = {
 };
 
 type MountOptions = {
+  /** Which table the dialog was opened FOR. The toolbar's two entry points
+   *  supply an inventory table; the drill-down supplies the manifest. */
+  table?: ExportTable;
+  /** The artifact a manifest export is scoped to. `null` on the inventory
+   *  tables, which is what the toolbar sends. */
+  scopeSha256?: string | null;
   reachableCount?: number | null;
   contributingTotal?: number;
   contributingDegraded?: number;
@@ -129,7 +151,8 @@ function harness(options: MountOptions = {}): Harness {
     attachTo: document.body,
     props: {
       open: true,
-      table: "observations" as const,
+      table: options.table ?? ("observations" as const),
+      scopeSha256: options.scopeSha256 ?? null,
       filter: null,
       sortKey: "observed_at",
       direction: "desc" as const,
@@ -518,5 +541,378 @@ describe("the floor statement before the confirmation (UI-09)", () => {
     const line = h.wrapper.get("[data-defminer-export-floor]").text();
     expect(line).toContain("3 of 12 artifacts");
     expect(line).toContain("floor, not a total");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U7-3 — THE HEADING NAMES WHAT THE CTA NAMED
+// ---------------------------------------------------------------------------
+//
+// A dialog headed "Export inventory" opened from "Export source manifest" is a
+// small lie about what will leave the tool, on the one control whose entire
+// ceremony is about the operator knowing that. Two separate cases below,
+// because one case asserting a lookup would pass against a record with the
+// same string in every slot.
+
+describe("U7-3 — the dialog heading, keyed on the export table", () => {
+  it("keeps the two SHIPPED entries byte-identical to the string that shipped", () => {
+    // A WIDENING, NOT A REWORDING. Nothing an operator has already read
+    // changes, and the byte comparison is what says so.
+    expect(EXPORT_DIALOG_HEADINGS.artifacts).toBe("Export inventory");
+    expect(EXPORT_DIALOG_HEADINGS.observations).toBe("Export inventory");
+    expect(EXPORT_DIALOG_HEADINGS.sources).toBe(EXPORT_MANIFEST_CTA);
+  });
+
+  it("covers EVERY member of the contract's table list — a fourth cannot ship headless", () => {
+    // THE POINT OF A RECORD RATHER THAN A PROP. The key set is asserted
+    // against the engine contract's own frozen list, so a fourth export table
+    // is a failure here rather than a blank `<h2>` in front of an operator.
+    expect(Object.keys(EXPORT_DIALOG_HEADINGS).sort()).toEqual(
+      [...EXPORT_TABLES].sort(),
+    );
+    for (const table of EXPORT_TABLES) {
+      expect(EXPORT_DIALOG_HEADINGS[table].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("renders the INVENTORY heading when the toolbar opened it", () => {
+    const h = harness({ table: "observations", scopeSha256: null });
+    expect(h.wrapper.get("h2").text()).toBe("Export inventory");
+    expect(h.wrapper.get('[role="dialog"]').attributes("aria-label")).toBe(
+      "Export inventory",
+    );
+  });
+
+  it("renders the MANIFEST heading when the drill-down opened it", () => {
+    const h = harness({ table: "sources", scopeSha256: "a".repeat(64) });
+    expect(h.wrapper.get("h2").text()).toBe(EXPORT_MANIFEST_CTA);
+    expect(h.wrapper.get('[role="dialog"]').attributes("aria-label")).toBe(
+      EXPORT_MANIFEST_CTA,
+    );
+  });
+
+  it("carries the SCOPE on the manifest request and NULL on an inventory one", async () => {
+    // A SCOPE, NOT A FILTER, and it is forwarded rather than derived from the
+    // table — the entry point knows which artifact, and this component does
+    // not.
+    const scoped = harness({ table: "sources", scopeSha256: "b".repeat(64) });
+    await confirmButton(scoped.wrapper).trigger("click");
+    await vi.waitFor(() => expect(scoped.requests).toHaveLength(1));
+    expect(scoped.requests[0]?.table).toBe("sources");
+    expect(scoped.requests[0]?.scopeSha256).toBe("b".repeat(64));
+    scoped.wrapper.unmount();
+
+    const inventory = harness({ table: "observations" });
+    await confirmButton(inventory.wrapper).trigger("click");
+    await vi.waitFor(() => expect(inventory.requests).toHaveLength(1));
+    expect(inventory.requests[0]?.table).toBe("observations");
+    expect(inventory.requests[0]?.scopeSha256).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE TOOLBAR'S CTA IS BYTE-UNCHANGED
+// ---------------------------------------------------------------------------
+
+describe("UI-SPEC Named Conflict 1 — one mechanism, two entry points", () => {
+  it("leaves the toolbar CTA's label exactly as it shipped", () => {
+    // The resolution adds a SECOND place to start one export. It does not
+    // touch the first, and the assertion is a byte comparison rather than a
+    // description of one.
+    expect(EXPORT_CTA).toBe("Export inventory");
+  });
+
+  it("gives the drill-down its own scoped CTA, naming what it will export", () => {
+    expect(EXPORT_MANIFEST_CTA).toBe("Export source manifest");
+    expect(EXPORT_MANIFEST_CTA).not.toBe(EXPORT_CTA);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T-07-46 — THE SECURITY CEREMONY IS NOT FORKED PER TABLE
+// ---------------------------------------------------------------------------
+//
+// Forking a security ceremony's copy per table is how ceremonies drift: the
+// second copy is edited, the first is not, and two tables then make two
+// different promises about the same act. The scan below is over the SHIPPED
+// FRONTEND SOURCE TREE and reports the number of files it read, so a scan that
+// walked nothing cannot pass by finding nothing.
+
+/** Every file under `packages/frontend/src`, recursively. */
+function frontendSourceFiles(dir = "packages/frontend/src"): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...frontendSourceFiles(path));
+    else if (/\.(ts|vue)$/.test(entry.name)) out.push(path);
+  }
+  return out;
+}
+
+/** The four constants that carry the destructive confirmation's whole promise. */
+const RAW_CEREMONY_CONSTANTS: readonly [string, string][] = [
+  ["RAW_EXPORT_CONFIRM_HEADING", RAW_EXPORT_CONFIRM_HEADING],
+  ["RAW_EXPORT_CONFIRM_BODY_TEMPLATE", RAW_EXPORT_CONFIRM_BODY_TEMPLATE],
+  ["RAW_EXPORT_CONFIRM_LABEL_TEMPLATE", RAW_EXPORT_CONFIRM_LABEL_TEMPLATE],
+  ["RAW_EXPORT_ESCAPE_LABEL", RAW_EXPORT_ESCAPE_LABEL],
+];
+
+describe("the raw-export ceremony is declared ONCE and read from one module", () => {
+  it("declares each of the four constants exactly once, over a NON-VACUOUS scan", () => {
+    const files = frontendSourceFiles();
+    // NON-VACUITY FIRST. A repository search that walked an empty list would
+    // report "declared once" for a constant that does not exist at all.
+    expect(
+      files.length,
+      "the frontend source scan found no files at all",
+    ).toBeGreaterThan(40);
+    expect(files).toContain(
+      "packages/frontend/src/components/export-contract.ts",
+    );
+
+    const sources = files.map(
+      (path) => [path, readFileSync(path, "utf8")] as const,
+    );
+    for (const [name] of RAW_CEREMONY_CONSTANTS) {
+      const declaring = sources.filter(([, text]) =>
+        new RegExp(`(^|\\n)\\s*(export\\s+)?const\\s+${name}\\s*[=:]`).test(
+          text,
+        ),
+      );
+      expect(
+        declaring.map(([path]) => path),
+        `${name} is not declared exactly once under packages/frontend/src`,
+      ).toEqual(["packages/frontend/src/components/export-contract.ts"]);
+    }
+  });
+
+  it("writes each of the four SENTENCES in exactly one file — no second copy to drift", () => {
+    // THE STRONGER HALF: a fork does not have to reuse the constant NAME. It is
+    // the SENTENCE that would drift, so the sentence is what is counted.
+    //
+    // COMMENT LINES ARE EXCLUDED, and the exclusion is narrow rather than a
+    // comment-stripping parser: a line whose first non-space characters are
+    // `//`, `*` or `/*` is prose. `ExportDialog.vue`'s own header QUOTES the
+    // escape label while explaining what writes `mode`, and prose that quotes a
+    // sentence is not a second copy of it — a copy is what a template renders.
+    const isProse = (line: string): boolean => /^\s*(\/\/|\*|\/\*)/.test(line);
+
+    const sources = frontendSourceFiles().map(
+      (path) => [path, readFileSync(path, "utf8")] as const,
+    );
+    expect(sources.length).toBeGreaterThan(40);
+    for (const [name, sentence] of RAW_CEREMONY_CONSTANTS) {
+      const carrying = sources
+        .filter(([, text]) =>
+          text
+            .split("\n")
+            .some((line) => !isProse(line) && line.includes(sentence)),
+        )
+        .map(([path]) => path);
+      expect(
+        carrying,
+        `${name}'s text appears in more than one frontend file`,
+      ).toEqual(["packages/frontend/src/components/export-contract.ts"]);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// UI CONSIDERATIONS — manifest-export, five rows, one case each
+// ---------------------------------------------------------------------------
+
+describe("manifest-export / empty — the reason is ON the control", () => {
+  it("disables the action with the SHIPPED nothing-to-export label and produces no file", async () => {
+    const h = harness({
+      table: "sources",
+      scopeSha256: "c".repeat(64),
+      reachableCount: 0,
+    });
+    const button = confirmButton(h.wrapper);
+    expect((button.element as HTMLButtonElement).disabled).toBe(true);
+    expect(button.text()).toBe(NOTHING_TO_EXPORT_LABEL);
+
+    // AND THE HANDLER REFUSES TOO, not only the attribute. No request, no
+    // file, and no destructive confirmation opened behind a disabled control.
+    await chooseRaw(h.wrapper);
+    await button.trigger("click");
+    await h.wrapper.vm.$nextTick();
+    expect(h.requests).toHaveLength(0);
+    expect(h.delivered).toHaveLength(0);
+    expect(h.wrapper.find("[data-defminer-raw-confirm]").exists()).toBe(false);
+  });
+});
+
+describe("manifest-export / loading — legible without colour", () => {
+  it("renders the SHIPPED exporting label and mounts no progress element", async () => {
+    const h = harness({
+      table: "sources",
+      scopeSha256: "c".repeat(64),
+      manual: true,
+    });
+    await confirmButton(h.wrapper).trigger("click");
+    await vi.waitFor(() =>
+      expect(confirmButton(h.wrapper).text()).toBe(EXPORTING_LABEL),
+    );
+    // ITS OWN WORDS, not a colour and not a spinner: a disabled state legible
+    // in a screenshot and to a screen reader.
+    expect(
+      h.wrapper.findAll('[role="progressbar"], progress, [aria-busy="true"]'),
+    ).toEqual([]);
+    h.release();
+  });
+});
+
+describe("manifest-export / error — it does not claim a file was written", () => {
+  it("renders the SHIPPED failure body, and that body denies a file", async () => {
+    const h = harness({
+      table: "sources",
+      scopeSha256: "c".repeat(64),
+      outcomes: [{ ok: false, reason: "rpc-rejected", versions: null }],
+    });
+    await confirmButton(h.wrapper).trigger("click");
+    await vi.waitFor(() =>
+      expect(h.wrapper.find("[data-defminer-export-failure]").exists()).toBe(
+        true,
+      ),
+    );
+    const body = h.wrapper.get("[data-defminer-export-failure]").text();
+    expect(body).toBe(EXPORT_FAILED_BODY);
+    // THE WORDING IS THE ASSERTION, not just its identity: the sentence has to
+    // deny the file rather than merely omit a claim about it.
+    expect(body).toContain("no file was written");
+    expect(h.delivered).toHaveLength(0);
+  });
+});
+
+describe("manifest-export / zero-one-many — one sentence, substituted once", () => {
+  it("agrees between the body and the button at ONE and at MANY", async () => {
+    for (const count of [1, 4_211]) {
+      const h = harness({
+        table: "sources",
+        scopeSha256: "c".repeat(64),
+        reachableCount: count,
+      });
+      await chooseRaw(h.wrapper);
+      await confirmButton(h.wrapper).trigger("click");
+      await h.wrapper.vm.$nextTick();
+
+      // BOTH SENTENCES COME FROM THE SHIPPED FUNCTIONS, so the number cannot
+      // be right in one place and wrong in the other.
+      expect(h.wrapper.get("[data-defminer-raw-confirm-body]").text()).toBe(
+        rawExportConfirmBody(count),
+      );
+      expect(h.wrapper.get("#defminer-export-raw-confirm").text()).toBe(
+        rawExportConfirmLabel(count),
+      );
+      // AND THEY AGREE WITH EACH OTHER about the count, which is the property
+      // an independently-written second template would break.
+      expect(
+        h.wrapper.get("[data-defminer-raw-confirm-body]").text(),
+      ).toContain(String(count));
+      expect(h.wrapper.get("#defminer-export-raw-confirm").text()).toContain(
+        String(count),
+      );
+      h.wrapper.unmount();
+    }
+  });
+});
+
+describe("manifest-export / long-text — every rendered string is DefMiner's", () => {
+  it("renders NOTHING outside the union of the authored constants", async () => {
+    // A PROPERTY OF THE SHAPE. The dialog's whole text output is compared
+    // against the union of the copy constants; any other string — a `sources`
+    // label, a host, a backend message — fails, because there is nowhere for
+    // it to hide in a set equality.
+    const count = 7;
+    const h = harness({
+      table: "sources",
+      scopeSha256: "d".repeat(64),
+      reachableCount: count,
+      contributingDegraded: 2,
+      contributingTotal: 9,
+    });
+    await chooseRaw(h.wrapper);
+    await confirmButton(h.wrapper).trigger("click");
+    await h.wrapper.vm.$nextTick();
+
+    const allowed = new Set<string>([
+      EXPORT_MANIFEST_CTA,
+      REDACTION_GROUP_LABEL,
+      ...Object.values(REDACTION_OPTION_LABELS),
+      FORMAT_GROUP_LABEL,
+      ...Object.values(FORMAT_OPTION_LABELS),
+      EXPORT_LABEL,
+      EXPORTING_LABEL,
+      CANCEL_LABEL,
+      NOTHING_TO_EXPORT_LABEL,
+      RAW_EXPORT_CONFIRM_HEADING,
+      RAW_EXPORT_ESCAPE_LABEL,
+      rawExportConfirmBody(count),
+      rawExportConfirmLabel(count),
+      exportFloorLine(2, 9),
+    ]);
+
+    const texts: string[] = [];
+    const walk = (node: Node): void => {
+      if (node.nodeType === 3) {
+        const text = (node.nodeValue ?? "").trim();
+        if (text.length > 0) texts.push(text);
+        return;
+      }
+      for (const child of node.childNodes) walk(child);
+    };
+    walk(h.wrapper.element);
+
+    expect(texts.length, "the dialog rendered no text at all").toBeGreaterThan(
+      6,
+    );
+    for (const text of texts) {
+      // BARE DIGITS ARE PERMITTED and nothing else is: every count on this
+      // path is a DefMiner-computed integer, and no target byte is one.
+      if (/^[0-9]+$/.test(text)) continue;
+      expect(
+        allowed.has(text),
+        `unexpected string in the dialog: ${text}`,
+      ).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MAP-07 / CONCURRENCY — the two entry points do not cross
+// ---------------------------------------------------------------------------
+
+describe("an in-flight export names its OWN table", () => {
+  it("keeps the manifest heading for the whole life of a manifest export", async () => {
+    const h = harness({
+      table: "sources",
+      scopeSha256: "e".repeat(64),
+      manual: true,
+    });
+    await confirmButton(h.wrapper).trigger("click");
+    await vi.waitFor(() =>
+      expect(confirmButton(h.wrapper).text()).toBe(EXPORTING_LABEL),
+    );
+
+    // SINGLE-INSTANCE: one dialog element in the document, not one per entry
+    // point. Two dialogs would be two in-flight states with one visible
+    // heading between them.
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(h.wrapper.get("h2").text()).toBe(EXPORT_MANIFEST_CTA);
+    expect(h.requests[0]?.table).toBe("sources");
+    h.release();
+  });
+
+  it("keeps the inventory heading for the whole life of an inventory export", async () => {
+    const h = harness({ table: "artifacts", manual: true });
+    await confirmButton(h.wrapper).trigger("click");
+    await vi.waitFor(() =>
+      expect(confirmButton(h.wrapper).text()).toBe(EXPORTING_LABEL),
+    );
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(h.wrapper.get("h2").text()).toBe("Export inventory");
+    expect(h.requests[0]?.table).toBe("artifacts");
+    h.release();
   });
 });

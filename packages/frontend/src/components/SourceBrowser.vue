@@ -76,7 +76,10 @@ import type {
   SourceRef,
 } from "../api/client";
 
-import { NOTHING_TO_EXPORT_LABEL } from "./export-contract";
+import {
+  EXPORT_MANIFEST_CTA,
+  NOTHING_TO_EXPORT_LABEL,
+} from "./export-contract";
 import SourceTree from "./SourceTree.vue";
 import SourceViewer from "./SourceViewer.vue";
 import { FOCUS_RING_CLASS } from "./table-contract";
@@ -101,7 +104,7 @@ type BrowserClient = {
   ) => Promise<RpcResult<SourceMappingsResult>>;
 };
 
-const { projectId, artifactSha256, client, analysisStoppedEarly, canExport } =
+const { projectId, artifactSha256, client, analysisStoppedEarly } =
   defineProps<{
     projectId: string;
     /** The PARENT artifact. A fixed-length hex digest, DefMiner-computed, and
@@ -116,15 +119,6 @@ const { projectId, artifactSha256, client, analysisStoppedEarly, canExport } =
      * state what it knows, and the tree's empty state changes on it.
      */
     analysisStoppedEarly: boolean;
-    /**
-     * The mounting component can run a manifest export (plan 07-10).
-     *
-     * FALSE IS AN HONEST DEFAULT STATED AT THE CALL SITE, not a stub: the CTA
-     * is present with its own copy and DISABLED WITH ITS REASON, per the
-     * shipped rule that a disabled control states its own reason. Plan 07-10
-     * flips it and handles `export-manifest`.
-     */
-    canExport: boolean;
   }>();
 
 const emit = defineEmits<{
@@ -133,7 +127,16 @@ const emit = defineEmits<{
   leave: [];
   "open-health": [];
   "open-evidence": [];
-  "export-manifest": [];
+  /**
+   * Open the shipped export dialog against the sources table.
+   *
+   * THE PAGE'S TO PERFORM, exactly as `open-health` is — this component does
+   * not own the dialog and does not know what it is a state of. It carries the
+   * ROW COUNT, because the dialog's zero-row rule reads a number and the only
+   * component that has taken that number is this one. Emitting it beats having
+   * the page re-count: two counts of one set are two claims about it.
+   */
+  "export-manifest": [rows: number];
 }>();
 
 // ---------------------------------------------------------------------------
@@ -147,27 +150,28 @@ const emit = defineEmits<{
 // same structural invariant governs the shipped toolbar.
 
 const LEAVE_LABEL = "Back to artifacts";
-const EXPORT_MANIFEST_LABEL = "Export source manifest";
 
 /**
- * The two reasons a disabled export states.
+ * The ONE reason a disabled export states.
  *
  * THE SHIPPED PATTERN, NOT A NEW ONE: `ExportDialog.vue` puts
  * `NOTHING_TO_EXPORT_LABEL` ON THE BUTTON when the count is zero, rather than
  * in a tooltip, because a tooltip is not reachable by keyboard and is not read
- * aloud. Both reasons below NAME THE CTA first, so the operator can still tell
- * what the control is for while it is refusing to act.
+ * aloud. It NAMES THE CTA FIRST, so the operator can still tell what the
+ * control is for while it is refusing to act.
  *
  * The pending reason is not "loading": it is the honest statement that DefMiner
  * has not counted yet. A count that is still resolving and a count of zero are
  * different facts on this strip for the same reason they are different facts in
  * the `Sources` cell that led here.
+ *
+ * BUILT FROM {@link EXPORT_MANIFEST_CTA} RATHER THAN RETYPED, so the CTA's
+ * words exist in exactly one place. The third label this strip used to carry —
+ * *"… not available in this build"* — is DELETED rather than repurposed: plan
+ * 07-09 declared it as a transitional string for a wiring gap this plan closes,
+ * and a transitional string kept past its transition is a stub with a new job.
  */
-const EXPORT_COUNT_PENDING_LABEL =
-  "Export source manifest — counting the recovered sources";
-/** Present but not wired in this build. Plan 07-10 supplies `canExport`. */
-const EXPORT_UNAVAILABLE_LABEL =
-  "Export source manifest — not available in this build";
+const EXPORT_COUNT_PENDING_LABEL = `${EXPORT_MANIFEST_CTA} — counting the recovered sources`;
 
 // ---------------------------------------------------------------------------
 // THE EAGER, BOUNDED READ
@@ -303,12 +307,27 @@ function select(sourceIndex: number): void {
 const exportLabel = computed<string>(() => {
   if (rowCount.value === null) return EXPORT_COUNT_PENDING_LABEL;
   if (rowCount.value === 0) return NOTHING_TO_EXPORT_LABEL;
-  return canExport ? EXPORT_MANIFEST_LABEL : EXPORT_UNAVAILABLE_LABEL;
+  return EXPORT_MANIFEST_CTA;
 });
 
 const exportDisabled = computed<boolean>(
-  () => !canExport || rowCount.value === null || rowCount.value === 0,
+  () => rowCount.value === null || rowCount.value === 0,
 );
+
+/**
+ * Ask the page to open the export dialog for this artifact's manifest.
+ *
+ * THE GUARD IS HERE AND NOT ONLY ON `disabled`, the shipped double-submit
+ * shape: the attribute is what the operator sees, this is what holds when
+ * anything else calls in. And the count is READ ONCE AND EMITTED, so the
+ * number the dialog disables against is the number the button was enabled
+ * against — not a second read that could disagree with it.
+ */
+function requestManifestExport(): void {
+  const rows = rowCount.value;
+  if (rows === null || rows === 0) return;
+  emit("export-manifest", rows);
+}
 
 // A NEW ARTIFACT IS A NEW READ AND A CLEARED SELECTION. `immediate` because the
 // first read is the mount: a component that waited for a prop to CHANGE would
@@ -376,7 +395,7 @@ watch(
           'ml-4 shrink-0 border border-surface-600 px-2 py-1 text-xs font-semibold',
         ]"
         data-defminer-drilldown-export
-        @click="emit('export-manifest')"
+        @click="requestManifestExport()"
       >
         {{ exportLabel }}
       </button>

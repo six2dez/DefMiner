@@ -56,7 +56,7 @@ import {
   SURFACE_PRESENT,
   UNKNOWN_VERSION,
 } from "./components/compat-contract";
-import { EXPORT_CTA } from "./components/export-contract";
+import { EXPORT_CTA, EXPORT_MANIFEST_CTA } from "./components/export-contract";
 import {
   counterId,
   HEALTH_HEADING,
@@ -1680,6 +1680,68 @@ describe("App — the drill-down is a STATE inside the Artifacts tab", () => {
     expect(wrapper.find("[data-defminer-source-tree]").exists()).toBe(true);
     expect(wrapper.find("[data-defminer-source-viewer]").exists()).toBe(true);
     expect(wrapper.find("[data-defminer-drilldown-leave]").exists()).toBe(true);
+  });
+
+  it("opens the SHIPPED dialog from the scoped CTA, headed for the MANIFEST", async () => {
+    // NAMED CONFLICT 1's resolution on the real page: one export mechanism,
+    // two entry points, and the heading is what tells them apart. The toolbar
+    // CTA is untouched above; this is the second door.
+    const exports: ExportChunkRequest[] = [];
+    const wrapper = mountWith(browsePage({ exports }));
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    expect(wrapper.find("#defminer-export-dialog").exists()).toBe(false);
+    const cta = wrapper.get("[data-defminer-drilldown-export]");
+    expect(cta.text()).toBe(EXPORT_MANIFEST_CTA);
+    await cta.trigger("click");
+    await settle(wrapper);
+
+    // ONE DIALOG, and it names the table it will export.
+    expect(wrapper.findAll("#defminer-export-dialog")).toHaveLength(1);
+    expect(wrapper.get("#defminer-export-dialog").get("h2").text()).toBe(
+      EXPORT_MANIFEST_CTA,
+    );
+    // AND IT ISSUED NO EXPORT, exactly as the toolbar's CTA does not.
+    expect(exports).toHaveLength(0);
+  });
+
+  it("sends the SOURCES table scoped to the browsed artifact, redacted", async () => {
+    const exports: ExportChunkRequest[] = [];
+    const wrapper = mountWith(browsePage({ exports }));
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+    await wrapper.get("[data-defminer-drilldown-export]").trigger("click");
+    await settle(wrapper);
+    await wrapper.get("#defminer-export-confirm").trigger("click");
+    await settle(wrapper);
+
+    expect(exports).toHaveLength(1);
+    expect(exports[0]?.table).toBe("sources");
+    expect(exports[0]?.scopeSha256).toBe(BROWSED);
+    // THE SHIPPED DEFAULT, unchanged by the second entry point: redacted is
+    // pre-selected and raw still takes two deliberate acts.
+    expect(exports[0]?.mode).toBe("redacted");
+  });
+
+  it("returns the TOOLBAR's CTA to the inventory after a manifest export", async () => {
+    // THE TWO ENTRY POINTS DO NOT CROSS. A scope that survived from the
+    // drill-down would point the shipped toolbar CTA at the manifest — the one
+    // failure the whole arrangement exists to prevent.
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+    await wrapper.get("[data-defminer-drilldown-export]").trigger("click");
+    await settle(wrapper);
+    await wrapper.get("#defminer-export-cancel").trigger("click");
+    await settle(wrapper);
+
+    await wrapper.get("#defminer-export-open").trigger("click");
+    await settle(wrapper);
+    expect(wrapper.findAll("#defminer-export-dialog")).toHaveLength(1);
+    expect(wrapper.get("#defminer-export-dialog").get("h2").text()).toBe(
+      "Export inventory",
+    );
   });
 
   it("does NOT close the evidence panel and does NOT clear the selection", async () => {
