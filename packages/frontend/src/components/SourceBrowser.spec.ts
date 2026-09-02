@@ -631,7 +631,7 @@ describe("drilldown-header / long-text — a property of the SHAPE", () => {
         page([
           sourceRow({
             sourcesVerbatim:
-              "../../".repeat(40) + "‮evil <script>alert(1)</script>",
+              "../../".repeat(40) + "‮evil\u0000<script>alert(1)</script>",
           }),
         ]),
       ),

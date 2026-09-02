@@ -540,7 +540,7 @@ const ASSIGNING_OPERATORS: ReadonlySet<ts.SyntaxKind> = new Set([
 ]);
 
 /** The marker a callee chain carries when the walk could not read a link in it. */
-const UNREADABLE = " unreadable";
+const UNREADABLE = "\u0000unreadable";
 
 /**
  * Audit one source file.
@@ -1159,7 +1159,7 @@ describe("the gate's own failure paths, every one of them executed", () => {
     // Named individually because these four are the whole reason the corpus is
     // 23 measured strings rather than a handful of `../`. If any of them is
     // reworded upstream, this fails rather than quietly testing ASCII.
-    expect(LABEL_BY_ID.get("null-byte")).toContain(" ");
+    expect(LABEL_BY_ID.get("null-byte")).toContain("\u0000");
     expect(LABEL_BY_ID.get("unicode-rtl-override")).toContain("‮");
     expect(LABEL_BY_ID.get("unicode-fullwidth")).toContain("．");
     expect(LABEL_BY_ID.get("trailing-dots-spaces")).toContain("   ");
