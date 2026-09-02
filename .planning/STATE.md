@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-09-01T23:37:37.127Z"
+stopped_at: Completed 07-05-PLAN.md
+last_updated: "2026-09-02T00:26:28.518Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 3f3ed9ad1a5d6e4e20b485fe022d9c8c08b197cb
+state_head: 4f04f004868d6335cecae6b1ad7a86b1d4e3dfad
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 76
+  completed_plans: 77
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -361,6 +361,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P02 | 28 min | 3 tasks | 6 files |
 | Phase 07 P03 | 35m | 3 tasks | 5 files |
 | Phase 07 P04 | 20 min | 4 tasks | 11 files |
+| Phase 07 P05 | 37 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -697,6 +698,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: Plan 07-04: option A approved as specified (2026-09-02) — the FOURTH one-way EXPECTED_TABLES approval. Migration v8 adds `sources` and `source_sightings` with no content column in any encoding; the approval event is named in that array's own doc comment beside 01-01, 05-06 and 06-01. — The one-way half was put to the operator before the migration was written: reversing D-07 means adding a content column, which fires schema.spec.ts by design and re-opens D-24. The D-09 retention cost — one row per recovered source, no exemption, eviction met sooner here than on any other table — was stated as part of the approval and written into the code, not only into the summary.
 - [Phase 07]: SOURCES_LABEL_MAX = 4096 is the ONE place phase 7 bounds evidence. D-06's 'verbatim' means unsanitised and unnormalised, not unbounded; sources_verbatim is NOT redacted at write time, so its safety rests entirely on R1/R2 at render and on the O-08 display normaliser — a DISPLAY control, not a STORAGE control. — Declared in store/sources.ts with its own justification rather than inherited from URL_MAX. Above both 1,024-grapheme display caps so the truncation the operator sees is the display one, and exactly the size of map-fixture.ts's four-kilobyte-label case so the boundary is exercised by an existing fixture from both sides.
 - [Phase 07]: THE COUNT MAP CANNOT BE A GROUP BY. countRecoveredSourcesByArtifact is driven from `artifacts` and admits on two EXISTS grounds, because a GROUP BY over source_sightings can only emit artifacts that HAVE sightings — the resolved zero it exists to carry is precisely the row it cannot produce. — Caught during task 4 before the statement shipped. It would have returned plausible numbers while silently collapsing 'DefMiner looked and found none' into 'DefMiner has not looked' — the zero-versus-unknown distinction the Sources column exists for, inverted. `partial` and `failed` deliberately do not resolve a zero.
+- [Phase 07]: D-08's stage lands in analyseAndFinish AFTER walk() and BEFORE finishAnalysis, not at the visit seam: visit is synchronous (window) => void and every write in the stage is awaited. D-08's intent is preserved; only the insertion point differs.
+- [Phase 07]: O-05: DERIVED_REJECT_REASONS is a SIBLING vocabulary, not an extension of REJECT_REASONS. Extending admission would force a lying case in admit.spec.ts's gate, corrupt the ADMISSION counters, and touch 06-11's push-down proof.
+- [Phase 07]: DERIVED_SOURCE_MAX_BYTES = MAP_MAX_BYTES, as an equality: a source cannot exceed the map that carried it, and the probe's sources_materialise curve says no tighter bound is owed.
+- [Phase 07]: Pitfall 2 changes PHASE 1 MACHINERY: processedForSweep counts ROWS and the convergence inequality is restated as RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N. Both alternatives fail by construction.
+- [Phase 07]: The sweep-due test became a CROSSING test — a modulo landing test steps over boundaries once the counter advances by more than one, and would have scheduled the cadence pass never.
+- [Phase 07]: analyses.error reason codes are NAMESPACED at the point of writing (map:<reason>), because two vocabularies share too_large and empty and there is one error column.
 
 ### Known Risks Carried Forward
 
@@ -739,8 +746,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-01T23:37:37.006Z
-**Stopped at:** Completed 07-04-PLAN.md
+**Last session:** 2026-09-02T00:26:12.374Z
+**Stopped at:** Completed 07-05-PLAN.md
 **Resume file:** None
 
 ### Blockers
@@ -759,3 +766,4 @@ None.
 - UI-09 remains OPEN after plan 05-09, its only declarer. The degradation-marking components ship and are exercised, but packages/backend/src/store/reads.ts's paged statements carry no scan_state and no endpoint returns one, so no per-row Partial badge and no partial-view banner render on the running page. Closing UI-09 needs a backend read that carries the analysis state; a scan-state filter column is additionally needed before 'Show only affected artifacts' can narrow anything. Recorded in .planning/WINDOWS.md entries 56-58.
 - The retroactive-scan producer DRIVER has no owning plan: runScanProducer is fully built and specced and nothing calls it, because wiring it needs producer.ts and test/fixtures/fake-sdk.ts and no remaining Phase 6 plan names those together with index.ts.
 - PRE-EXISTING, NOT 06-06's: outbound-prohibition.spec.ts's byte-compare of the derived residual block in .planning/REQUIREMENTS.md fails at 532491a (06-07's close-out, the last commit to touch either input). The shipped block gained three blank lines the generator does not emit. Every close-out that runs requirements.mark-complete can re-introduce it. The spec prints the authoritative bytes; WINDOWS 85 carries the remedy.
+- Phase 7 deferred D1: store/retention.ts does not sweep sources or source_sightings. Plan 07-05's A8 measurement surfaced it; see .planning/phases/07-sourcemap-reconstruction/deferred-items.md. Retention is the only bound on this database and the two tables D-09 fills fastest are not swept.

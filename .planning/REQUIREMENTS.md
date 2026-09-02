@@ -205,8 +205,10 @@ authoritative and the shipped text is the defect.
 
 THE SURFACES THAT COMPARISON REACHES - 2, RENDERED FROM THE ONE
 DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:
+
   - packages/backend/src/outbound-prohibition.spec.ts
   - .planning/REQUIREMENTS.md
+
 NO OTHER FILE IN THIS REPOSITORY IS REACHED BY IT. A file that is not listed
 just above - including a file under the planning directory that is not listed
 just above - carries at most a POINTER to these two and is byte-compared to
@@ -215,6 +217,7 @@ with or renders into an unlisted file is FALSE, and the disposition for such
 a sentence is to DELETE it rather than to re-date it.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
+
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
@@ -835,12 +838,12 @@ MEASURED SILENCES - 26 entries.
 
 ### Sourcemaps (MAP)
 
-- [ ] **MAP-01**: Sourcemaps announced by `sourceMappingURL` comments, data URIs, and `SourceMap` response headers are discovered and consumed.
-- [ ] **MAP-02**: Source reconstruction from `sourcesContent` via `JSON.parse`, with no VLQ decoding on the primary path. *(Measured: 781 sources recovered from a 12.66 MB monaco map in 21 ms.)*
+- [x] **MAP-01**: Sourcemaps announced by `sourceMappingURL` comments, data URIs, and `SourceMap` response headers are discovered and consumed.
+- [x] **MAP-02**: Source reconstruction from `sourcesContent` via `JSON.parse`, with no VLQ decoding on the primary path. *(Measured: 781 sources recovered from a 12.66 MB monaco map in 21 ms.)*
 - [ ] **MAP-03**: VLQ decoding via `@jridgewell/sourcemap-codec` (1,961 bytes minified) only where position attribution is genuinely needed.
 - [ ] **MAP-04**: Reconstructed files are written to content-addressed safe paths. `sources` entries from the map are never used as filesystem paths. *(JSMiner's canonical-path defence cannot be copied — `llrt/fs` has no `realpath` and no `lstat`.)*
 - [ ] **MAP-05**: Malformed maps, decompression bombs, path traversal attempts, and reference cycles are bounded and survive a fixture suite.
-- [ ] **MAP-06**: Reconstructed sources are themselves analysed, once per content hash, with depth and aggregate limits.
+- [x] **MAP-06**: Reconstructed sources are themselves analysed, once per content hash, with depth and aggregate limits.
 - [ ] **MAP-07**: Reconstructed source is browsable in the plugin UI and exportable with a manifest.
 
 ### Chunk graph (CHUNK)
