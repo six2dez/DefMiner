@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-17-PLAN.md
-last_updated: "2026-09-02T11:03:36.327Z"
+stopped_at: Completed 07-12-PLAN.md
+last_updated: "2026-09-02T11:55:53.699Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: a3937a1aa31b24b837e6d817e7bbdd859bb969dc
+state_head: 6b1c2ef632a1f0234e5b72243cf7693aed6fdc9b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 85
+  completed_plans: 86
 ---
 
 # Project State
@@ -28,11 +28,43 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 13 of 17
+Plan: 14 of 17
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-12: THE COUNTERS ARE RIGHT AGAIN, AND NOTHING WAS
+> CORRECTED BY HAND.
+> `state.advance-plan` was invoked EXACTLY ONCE and moved the prose counter
+> 13 -> 14. It still INCREMENTS rather than recomputing, but the value it found
+> was the truth: 17 PLAN files and 14 SUMMARY files on disk. `completed_plans`
+> moved 85 -> 86 by its own recomputation. The next outstanding plans are
+> 07-13, 07-15 and 07-16.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the ELEVENTH consecutive occurrence across phases 05, 06 and 07. Steady
+> handler behaviour, not a transient. The `Progress:` line above still describes
+> PHASE 01 plan execution and is deliberately untouched.
+>
+> `.planning/REQUIREMENTS.md` WAS NOT TOUCHED, AND THAT IS THIS PLAN'S OWN
+> PROHIBITION RATHER THAN THE GATE. `requirements.ready-ids` reported
+> `1/3 ready` — UI-05 ready now that 07-12 has a SUMMARY, MAP-06 and MAP-07 still
+> blocked by 07-13, 07-15 and 07-16. `requirements.mark-complete` was NOT run:
+> 07-12 prohibits any change to that file, all three IDs are already `[x]` on
+> disk, and `outbound-prohibition.spec.ts` byte-compares a machine-owned
+> DERIVED RESIDUAL span in it (465 tests, green).
+>
+> THE W-2 CLASS DID NOT RECUR. Every one of the nine touched files plus the
+> SUMMARY was scanned for literal U+2028/U+2029/NUL/C0/C1/NBSP/BOM/zero-width
+> bytes before EACH of the seven commits. All clean, every time.
+>
+> SIX COMMITS FOR FOUR TASKS, ON PURPOSE. Task 1's first acceptance criterion
+> requires the approved option letter and date to be recorded in
+> `07-12-SUMMARY.md` BEFORE any edit to `migrations.ts`, so the decision was
+> written and committed (`1601983`) ahead of the migration, and both TDD tasks
+> carry their own RED and GREEN commits.
 
 > PHASE 07 PLAN 07-17: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
 > `state.advance-plan` was invoked EXACTLY ONCE and returned
@@ -448,6 +480,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P11 | 22 min | 3 tasks | 11 files |
 | Phase 07 P14 | 19 min | 3 tasks | 6 files |
 | Phase 07 P17 | 14 min | 3 tasks | 2 files |
+| Phase 07 P12 | 20 min | 4 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -824,6 +857,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-17 (MD-02): the display tree's interior-directory merge keys on Building.mergeKey — the RAW segment as resolveClimbs produced it — and never on the forCellText label. — The compared label was sanitised AND truncated at 256 graphemes, so two directory names agreeing for the whole of the cap and differing only past it became ONE node and the tree told the operator that two files in two different directories were siblings in one. A display value had been used as an identity. mergeKey is internal to one build and is deliberately not a field of the frozen SourceTreeNode, so the unsanitised target-controlled string cannot reach a title or a data-* attribute (T-07-73).
 - [Phase 07]: 07-17: the duplicate marker stays on the DISPLAY label and is NOT moved to the merge key. — The marker warns the operator that two rendered rows LOOK IDENTICAL, so the index beside them is the only thing telling them apart — which is exactly the situation MD-02's two directories are now in, both cut at the same cap. Counting mergeKey would leave that pair unmarked and the operator would read two identical rows as the renderer having drawn one directory twice. A marker that says 'these two look the same on screen' is defensible; one that claims 'these two ARE the same' is the defect.
 - [Phase 07]: 07-17: the review's 'at most one directory node per row' bound for T-07-74 is corrected — the bound that holds is the fully-unmerged ceiling, a function of the ROWS. — Measured: the two-row reproduction goes 3 -> 4 nodes, and the same pair with three shared segments below the divergence goes 6 -> 10, i.e. two added nodes per row. Every interior directory can newly fail to merge, not only the first. SOURCE_TREE_LOAD_MAX (contract.ts:317) bounds ROWS not nodes, and RecycleScroller takes a fixed item-size over scrollerItems (SourceTree.vue:236-238, :405-412), so the scroller holds no assumption relating node count to row count. T-07-74's accept disposition survives intact.
+- [Phase 07]: Option A approved at 07-12's blocking-human checkpoint (2026-09-02): source_sightings' PRIMARY KEY widened to (project_id, artifact_sha256, map_sha256, source_index) by migration v: 9 — the FIFTH one-way EXPECTED_TABLES approval, and the first that changes a KEY rather than a table set. — map_sha256 is content-addressed over the decoded map JSON and never over the bundle, so two bundles can share it at the target's discretion. Under the old key the second bundle's evidence was lost and its drill-down read a RESOLVED zero (W-3) — on the one column whose whole design is that a resolved zero cannot lie. The key had to span the bundle for the row to be about the bundle. EXPECTED_TABLES keeps its eight members; no table, column or type moved; sources is untouched.
+- [Phase 07]: The interim attribution guard and the sightingsDiscardedOtherArtifact counter were removed in the same plan that landed the key, not left to rot. — The guard became tautological once artifact_sha256 was a key column — a predicate a reader must evaluate in order to learn it can never be false is worse than no predicate — and the counter became a number that can never again be non-zero. Verified while removing it that the counter never reached the health payload: index.ts's SourcemapHealth projects six sourcemap fields and this was not one, so T-07-69's accepted cost is smaller than the register assumed and no RPC contract or frontend shape moves.
+- [Phase 07]: Migration v: 9's safety is re-runnability, never atomicity, and all three interruption states are EXECUTED against a real migrated fixture rather than argued in the step's JSDoc. — A BEGIN-less multi-statement exec is a SEQUENCE on this driver (TRANSACTION_PERSISTS_ACROSS_EXEC = false), and adding BEGIN would put a poisonable write transaction on the boot path. Step v: 7 already litigated this shape; v: 9 inherits it. migrations.spec.ts asserts the six statements positionally, because statement 5's rename cannot fail ONLY because statement 4 dropped the name one statement earlier.
 
 ### Known Risks Carried Forward
 
@@ -866,8 +902,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T11:03:36.161Z
-**Stopped at:** Completed 07-17-PLAN.md
+**Last session:** 2026-09-02T11:55:13.885Z
+**Stopped at:** Completed 07-12-PLAN.md
 **Resume file:** None
 
 ### Blockers
