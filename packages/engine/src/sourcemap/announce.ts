@@ -114,6 +114,40 @@ const COMMON_OFFSET = 4;
  */
 const URL_MAX = SOURCEMAP_TAIL_WINDOW_BYTES;
 
+/**
+ * The four line terminators ECMAScript recognises, each written as an ESCAPE.
+ *
+ * WHY U+2028 AND U+2029 ARE IN THE SET AND NOT JUST THE TWO OBVIOUS ONES. The
+ * spec's LineTerminator production is LF, CR, LINE SEPARATOR and PARAGRAPH
+ * SEPARATOR, and a bundler can and does emit the last two — they were legal
+ * inside string literals until ES2019 and still end a line everywhere else. The
+ * scan here used to look for `\n` alone, so a body delimited by a lone CR or by
+ * either separator let the announcement URL absorb the rest of the file
+ * (07-REVIEW.md LO-02). `String.trim()` does not save it: trim strips these only
+ * at the ENDS of a string, and the absorbed code is in the middle.
+ *
+ * CONTAINED BEFORE THE FIX, SAID PLAINLY: `isCanonicalBase64` refused the
+ * absorbed payload, so this was an UNBOUNDED SLICE rather than an unsound parse.
+ * It is what made LO-01's copy unbounded, which is why the two were fixed
+ * together.
+ *
+ * ESCAPES AND NEVER LITERAL BYTES, by the rule `map-fixture.ts` states in its own
+ * header: a literal separator is invisible in every diff and every review tool,
+ * and this phase already had to re-spell three literal NUL bytes for that reason
+ * (07-VERIFICATION.md W-2). It would also break THIS FILE into two lines for any
+ * tool that honours the very production the array declares.
+ *
+ * FROZEN, and read by four `indexOf` calls with the smallest offset winning —
+ * four linear scans and a minimum, which is the whole algorithm and stays inside
+ * this file's no-pattern rule.
+ */
+const LINE_TERMINATORS: readonly string[] = Object.freeze([
+  "\n",
+  "\r",
+  "\u2028",
+  "\u2029",
+]);
+
 /** Where an announcement is, and what it announces. */
 export type Announcement = {
   /** The offset of the MARKER, not of the URL. */
@@ -195,17 +229,24 @@ export function findAnnouncement(
   }
 
   const urlStart = at + MARKERS[0].length;
-  const newline = body.indexOf("\n", urlStart);
-  // THE SMALLER OF THE TERMINATOR AND THE BOUND. A body with no terminator after
-  // the marker is bounded by {@link URL_MAX} instead of by end-of-file, and a
-  // body with one is unaffected — every announcement in the corpus is a few
-  // dozen characters long.
-  const limit = urlStart + URL_MAX;
-  const end =
-    newline < 0 ? Math.min(body.length, limit) : Math.min(newline, limit);
+  // THE SMALLEST OFFSET ACROSS THE FOUR TERMINATORS, AND THE BOUND WHEN THERE IS
+  // NONE. Starting `end` at the bound is what makes a body with no terminator at
+  // all cost a bounded slice instead of a copy to end-of-file, and taking the
+  // minimum is what makes the FIRST terminator win rather than whichever one this
+  // loop happens to check last.
+  let end = Math.min(body.length, urlStart + URL_MAX);
+  for (const terminator of LINE_TERMINATORS) {
+    const found = body.indexOf(terminator, urlStart);
+    if (found >= 0 && found < end) end = found;
+  }
   const raw = body.slice(urlStart, end);
-  // Trimmed, so a `\r\n` line ending does not put a carriage return inside the
-  // URL. An announcement whose URL is the EMPTY STRING is still an announcement:
-  // this function reports what it found, and the caller decides it is unusable.
+  // THE TRIM STAYS, AND IT IS DOING A DIFFERENT JOB. The scan above ends the URL
+  // at the line terminator itself, so a `\r\n` ending no longer needs trimming to
+  // keep the carriage return out — but a minifier may still leave incidental
+  // whitespace around the URL, and removing the trim would change the answer for
+  // bodies that are correct today.
+  //
+  // An announcement whose URL is the EMPTY STRING is still an announcement: this
+  // function reports what it found, and the caller decides it is unusable.
   return { at, url: raw.trim() };
 }

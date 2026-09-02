@@ -38,6 +38,9 @@ const [MARKER_HASH, MARKER_AT] = MARKERS;
 /** A short, obviously-inline announcement URL. The payload is not the subject here. */
 const INLINE_URL = "data:application/json;base64,e30=";
 
+/** This spec's own path, for the literal-control-byte scan below. */
+const THIS_FILE = fileURLToPath(import.meta.url);
+
 describe("MARKERS is the shape the scan is built on", () => {
   it("is a FROZEN two-member array — the current spelling and the legacy one", () => {
     expect(Object.isFrozen(MARKERS)).toBe(true);
@@ -420,6 +423,132 @@ describe("the URL is BOUNDED even when nothing terminates the line", () => {
     expect(findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES)?.url).toBe(
       INLINE_URL,
     );
+  });
+});
+
+// ===========================================================================
+// FOUR LINE TERMINATORS, NOT ONE — LO-02
+// ===========================================================================
+// The scan used to look for `\n` and nothing else, so a body delimited by a lone
+// CR, a LINE SEPARATOR or a PARAGRAPH SEPARATOR let the `data:` URL absorb the
+// rest of the file. ECMASCRIPT TREATS ALL FOUR AS LINE TERMINATORS — a bundler
+// can and does emit U+2028 and U+2029, and `String.trim()` removes them only at
+// the ENDS of a string, never in the middle — so "runs to end-of-line" meant one
+// of four different things depending on how the target spelled its line endings.
+//
+// CONTAINED BEFORE THE FIX AND SAID SO PLAINLY: `isCanonicalBase64` refused the
+// absorbed payload, so this was an UNBOUNDED SLICE rather than an unsound parse.
+// It is what made LO-01's copy unbounded, which is why the two land together.
+//
+// EVERY CONTROL CHARACTER BELOW IS AN ESCAPE SEQUENCE. `map-fixture.ts` states
+// that rule in its own header and this phase already had to re-spell three
+// literal NUL bytes because of finding W-2 — a literal separator is invisible in
+// every diff and every review tool, and these cases are entirely about characters
+// that are invisible.
+
+/** The four line terminators ECMAScript recognises, each written as an escape. */
+const LINE_TERMINATOR_CASES: readonly (readonly [string, string])[] = [
+  ["LINE FEED U+000A", "\n"],
+  ["CARRIAGE RETURN U+000D", "\r"],
+  ["LINE SEPARATOR U+2028", "\u2028"],
+  ["PARAGRAPH SEPARATOR U+2029", "\u2029"],
+];
+
+describe.each(LINE_TERMINATOR_CASES)(
+  "the URL ends at %s",
+  (name, terminator) => {
+    it("returns exactly the payload, with nothing after the separator", () => {
+      const body =
+        `console.log(1);\n${MARKER_HASH}${INLINE_URL}` +
+        `${terminator}var next = 2;\n`;
+      const found = findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES);
+      expect(found).not.toBeNull();
+      expect(
+        found?.url,
+        `${name} did not end the announcement URL, so the code after it was ` +
+          `absorbed into the \`data:\` payload. ECMAScript recognises all four as ` +
+          `line terminators and \`String.trim()\` only strips them at the ends — so ` +
+          `a body delimited this way hands \`decodeInlineMap\` a URL that runs to ` +
+          `the next \\n or to EOF (07-REVIEW.md LO-02).`,
+      ).toBe(INLINE_URL);
+      expect(found?.url).not.toContain("var next");
+    });
+
+    it("and the payload still decodes — the cut is at the separator, not before it", () => {
+      // The control for the case above. Without it "ends at the separator" could
+      // just as well be "ends one character early", and a payload short by one
+      // base64 character is refused rather than decoded.
+      const body = `${MARKER_HASH}${INLINE_URL}${terminator}var next = 2;\n`;
+      const found = findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES);
+      const result = decodeInlineMap(found?.url ?? "", MAP_MAX_BYTES);
+      expect(result.kind).toBe("inline");
+      if (result.kind === "inline") expect(result.json).toBe("{}");
+    });
+  },
+);
+
+describe("the terminators that were already right stay right", () => {
+  it("CRLF still behaves exactly as it does today — the \\r never enters the URL", () => {
+    // Pinned rather than assumed. The shipped code got this right by TRIMMING a
+    // carriage return that had already been sliced into the URL; the scan now
+    // stops at the CR itself. Both spellings produce the same string, and this
+    // case exists so a future edit cannot change which one is true silently.
+    const body = `${MARKER_HASH}app.js.map\r\nconsole.log(1);\n`;
+    const found = findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES);
+    expect(found?.url).toBe("app.js.map");
+    expect(found?.url).not.toContain("\r");
+  });
+
+  it("a body whose ONLY terminator is \\n gives the byte-identical shipped answer", () => {
+    const body = `console.log(1);\n${MARKER_HASH}${INLINE_URL}\nvar next = 2;\n`;
+    expect(findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES)?.url).toBe(
+      INLINE_URL,
+    );
+  });
+
+  it("the FIRST terminator wins when several follow the marker", () => {
+    // The minimum across the four `indexOf` calls is the whole algorithm, and
+    // this is the case that distinguishes "smallest offset" from "whichever one
+    // the loop happened to check last".
+    const body = `${MARKER_HASH}${INLINE_URL}\u2028x\ry\nz`;
+    expect(findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES)?.url).toBe(
+      INLINE_URL,
+    );
+  });
+});
+
+describe("this file writes every adversarial character as an ESCAPE", () => {
+  it("contains no literal C0 or C1 control byte and no literal U+2028 / U+2029", () => {
+    // Finding W-2's class, asserted rather than remembered: three literal NUL
+    // bytes shipped into this phase's fixtures and were re-spelled in f6cbf07.
+    // A literal separator in a source file is invisible in every diff, every
+    // review tool and every terminal — and it would ALSO break the file into two
+    // lines for any tool that honours ECMAScript's own line-terminator set,
+    // which is precisely the defect the cases above are about.
+    const source = readFileSync(THIS_FILE, "utf8");
+    const offenders: string[] = [];
+    for (let i = 0; i < source.length; i += 1) {
+      const code = source.charCodeAt(i);
+      const permitted = code === 0x0a || code === 0x09;
+      const isControl =
+        (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) && !permitted;
+      const isSeparator = code === 0x2028 || code === 0x2029;
+      if (isControl || isSeparator) {
+        offenders.push(
+          `U+${code.toString(16).toUpperCase().padStart(4, "0")} at offset ${i}`,
+        );
+      }
+    }
+    expect(
+      offenders,
+      `these characters are written as LITERAL BYTES rather than as escape ` +
+        `sequences: ${offenders.join(", ")}. Write them as \\r, \\u2028 and ` +
+        `\\u2029 — a literal one is invisible in every diff and every review tool, ` +
+        `and this suite is entirely about characters that are invisible ` +
+        `(map-fixture.ts's header rule, 07-VERIFICATION.md W-2).`,
+    ).toEqual([]);
+    // Non-vacuity: the file really was read.
+    expect(source.length).toBeGreaterThan(1000);
   });
 });
 
