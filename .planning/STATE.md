@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-09-02T00:26:28.518Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-09-02T01:09:22.537Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 4f04f004868d6335cecae6b1ad7a86b1d4e3dfad
+state_head: d5cd5e09519948d4cd360ece5d524bd56a9a0208
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 77
+  completed_plans: 78
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -362,6 +362,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P03 | 35m | 3 tasks | 5 files |
 | Phase 07 P04 | 20 min | 4 tasks | 11 files |
 | Phase 07 P05 | 37 min | 3 tasks | 9 files |
+| Phase 07 P06 | 36min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -704,6 +705,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: Pitfall 2 changes PHASE 1 MACHINERY: processedForSweep counts ROWS and the convergence inequality is restated as RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N. Both alternatives fail by construction.
 - [Phase 07]: The sweep-due test became a CROSSING test — a modulo landing test steps over boundaries once the counter advances by more than one, and would have scheduled the cadence pass never.
 - [Phase 07]: analyses.error reason codes are NAMESPACED at the point of writing (map:<reason>), because two vocabularies share too_large and empty and there is one error column.
+- [Phase 07]: 07-06: deriveSource names a SIGHTING, not a request — the recorded digest D-24 compares against is read from source_sightings, because a caller that supplies both halves of the equality supplies the answer
+- [Phase 07]: 07-06: the derivation unavailable arm is a payload-free sentinel that writes NOTHING — a call that did not answer is never a tombstone
+- [Phase 07]: 07-06: the manifest is an artifact-SCOPED third export table (scopeSha256), so it rides export.ts unchanged instead of opening a second SQL surface
+- [Phase 07]: 07-06: CONTRACT_VERSION 5 -> 6, with client.spec.ts reading the backend spec off disk so the two constants cannot drift
 
 ### Known Risks Carried Forward
 
@@ -746,8 +751,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T00:26:12.374Z
-**Stopped at:** Completed 07-05-PLAN.md
+**Last session:** 2026-09-02T01:09:11.011Z
+**Stopped at:** Completed 07-06-PLAN.md
 **Resume file:** None
 
 ### Blockers
