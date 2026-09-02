@@ -43,9 +43,16 @@ const FIXTURE_MODULE = "packages/engine/src/sourcemap/map-fixture.ts";
 /** The one case whose value is LEGITIMATELY the empty string, named explicitly. */
 const DELIBERATELY_EMPTY = "empty";
 
-/** SPIKE-12's corpus is 22 rows; D-12 adds the 4 KB label SPIKE-12 does not cover. */
+/**
+ * SPIKE-12's corpus is 22 rows; TWO classes are added on top of it, and neither
+ * is one SPIKE-12 covers — D-12's 4 KB label and WR-03's loader-query label.
+ * DERIVED rather than written out, so the arithmetic stays legible when a third
+ * class arrives.
+ */
 const SPIKE_12_CASE_COUNT = 22;
-const SOURCES_LABEL_EXPECTED_COUNT = SPIKE_12_CASE_COUNT + 1;
+const CLASSES_SPIKE_12_DOES_NOT_COVER = 2;
+const SOURCES_LABEL_EXPECTED_COUNT =
+  SPIKE_12_CASE_COUNT + CLASSES_SPIKE_12_DOES_NOT_COVER;
 
 /** The 4 KB label's size, restated here so the boundary claim is checkable. */
 const FOUR_KILOBYTES = 4096;
@@ -167,14 +174,16 @@ describe("no case is silently empty, and every case says why it exists", () => {
   );
 });
 
-describe("the SPIKE-12 corpus is carried in full, plus the class it does not cover", () => {
-  it("has exactly 23 label cases — SPIKE-12's 22 and D-12's 4 KB label", () => {
+describe("the SPIKE-12 corpus is carried in full, plus the two classes it does not cover", () => {
+  it("has exactly 24 label cases — SPIKE-12's 22, D-12's 4 KB label and WR-03's loader-query label", () => {
     expect(
       SOURCES_LABEL_CASE_IDS.length,
       `${FIXTURE_MODULE}: SOURCES_LABEL_CASES has ${SOURCES_LABEL_CASE_IDS.length} ` +
         `members, not ${SOURCES_LABEL_EXPECTED_COUNT}. SPIKE-12's path_resolution corpus ` +
-        `is ${SPIKE_12_CASE_COUNT} rows and D-12 adds the ONE class it does not cover — ` +
-        `the 4 KB label. Dropping a case here silently narrows three downstream gates.`,
+        `is ${SPIKE_12_CASE_COUNT} rows and ${CLASSES_SPIKE_12_DOES_NOT_COVER} classes it ` +
+        `does not cover are added on top — D-12's 4 KB label and WR-03's loader-query ` +
+        `label, the relative label carrying a query axis. Dropping a case here silently ` +
+        `narrows three downstream gates.`,
     ).toBe(SOURCES_LABEL_EXPECTED_COUNT);
   });
 
