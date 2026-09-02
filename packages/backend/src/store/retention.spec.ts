@@ -174,6 +174,120 @@ function orphanCount(projectId: string): {
   return { observations: Number(obs.n), analyses: Number(ana.n) };
 }
 
+/** A 64-character digest from a short seed, so a case can name its rows. */
+function digest(seed: string): string {
+  return seed.padEnd(64, "0");
+}
+
+/** Seed `sources` rows directly, for the same reason `seedArtifacts` does: this
+ *  is arranging a database state, not exercising `upsertRecoveredSource`. */
+function seedSource(
+  projectId: string,
+  sourceSha256: string,
+  firstSeenAt: number,
+): void {
+  fx.raw
+    .prepare(
+      `INSERT INTO sources (project_id, source_sha256, byte_len, line_count, first_seen_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(projectId, sourceSha256, 100, 4, firstSeenAt);
+}
+
+/** Seed one `source_sightings` row directly. Every column is written, so a row
+ *  is a complete row and not a shape only this file's queries would accept.
+ *
+ *  THE KEY IS FOUR COLUMNS since migration v9 (plan 07-12), and the seed writes
+ *  all four: a sighting is "this bundle's view of this map at this index". */
+function seedSighting(
+  projectId: string,
+  artifactSha256: string,
+  mapSha256: string,
+  sourceIndex: number,
+  sourceSha256: string | null,
+  recoveredAt: number,
+): void {
+  fx.raw
+    .prepare(
+      `INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256,
+                                     request_id, source_sha256, sources_verbatim,
+                                     producibility, producibility_at, recovered_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'producible', NULL, ?)`,
+    )
+    .run(
+      projectId,
+      mapSha256,
+      sourceIndex,
+      artifactSha256,
+      "req-" + artifactSha256.slice(0, 8) + "-" + String(sourceIndex),
+      sourceSha256,
+      "src/" + String(sourceIndex) + ".ts",
+      recoveredAt,
+    );
+}
+
+/** A direct `COUNT(*)` over one of the two Phase 7 tables, so the assertions
+ *  about `retentionCounts` compare it against the database rather than against
+ *  itself. */
+function directCount(
+  table: "sources" | "source_sightings",
+  projectId: string,
+): number {
+  const row = fx.raw
+    .prepare("SELECT COUNT(*) AS n FROM " + table + " WHERE project_id = ?")
+    .get(projectId) as { n: number };
+  return Number(row.n);
+}
+
+/** How many sightings name this bundle. The cascade's claim is about this
+ *  number reaching zero for an artifact retention evicted. */
+function sightingsNaming(projectId: string, artifactSha256: string): number {
+  const row = fx.raw
+    .prepare(
+      "SELECT COUNT(*) AS n FROM source_sightings WHERE project_id = ? AND artifact_sha256 = ?",
+    )
+    .get(projectId, artifactSha256) as { n: number };
+  return Number(row.n);
+}
+
+/** The surviving `sources` digests, in a stable order. */
+function sourceIds(projectId: string): string[] {
+  return (
+    fx.raw
+      .prepare(
+        "SELECT source_sha256 FROM sources WHERE project_id = ? ORDER BY source_sha256 ASC",
+      )
+      .all(projectId) as { source_sha256: string }[]
+  ).map((r) => String(r.source_sha256));
+}
+
+/** Sightings whose bundle is already gone, and sources nothing sights any more
+ *  — the two orphan shapes this phase's tables can be left in. Counted
+ *  DIRECTLY, in `orphanCount`'s register, rather than inferred from the sweep. */
+function danglingSourceRows(projectId: string): {
+  orphanSightings: number;
+  unsightedSources: number;
+} {
+  const sightings = fx.raw
+    .prepare(
+      `SELECT COUNT(*) AS n FROM source_sightings s
+       WHERE s.project_id = ?
+         AND NOT EXISTS (SELECT 1 FROM artifacts a WHERE a.project_id = s.project_id AND a.sha256 = s.artifact_sha256)`,
+    )
+    .get(projectId) as { n: number };
+  const sources = fx.raw
+    .prepare(
+      `SELECT COUNT(*) AS n FROM sources x
+       WHERE x.project_id = ?
+         AND NOT EXISTS (SELECT 1 FROM source_sightings s WHERE s.project_id = x.project_id AND s.source_sha256 = x.source_sha256)`,
+    )
+    .get(projectId) as { n: number };
+  return {
+    orphanSightings: Number(sightings.n),
+    unsightedSources: Number(sources.n),
+  };
+}
+
 /** Run passes until the sweep reports no more work, with a hard stop so a
  *  non-converging implementation FAILS instead of hanging the suite. */
 async function sweepToConvergence(
@@ -1188,5 +1302,116 @@ describe("D-26 — the SUSPENDED STATE is exempt from the age bound, not the `sc
     // way `auditDeleted` is — `audit` earned one because it is the table with
     // no age bound at all, and `scans` has both bounds like everything else.
     expect(summary.rowCapDeleted).toBe(0);
+  });
+});
+
+describe("UAT gap 1 — the cascade reaches `sources` and `source_sightings`", () => {
+  // THE TWO TABLES PHASE 7 ADDED, AND THE ORDER THE OPERATOR CHOSE FOR THEM.
+  //
+  // Until plan 07-13 `retention.ts` named neither table and migration v8
+  // declares no foreign key and no `ON DELETE CASCADE`, so deleting an artifact
+  // ORPHANED its sightings and both tables grew with nothing able to delete from
+  // them (07-VERIFICATION.md W-5, deferred item D1). The eviction order is the
+  // operator's, decided at UAT: CASCADE — a source dies with its LAST sighting,
+  // by anti-join rather than by a foreign key.
+  //
+  // The sightings below carry a RECENT `recovered_at` on purpose. These three
+  // cases are about the CASCADE, so the sightings' own age bound must not be
+  // what removes them; the row cap evicts the ARTIFACT and the cascade has to do
+  // the rest. The per-bound coverage is the next describe block's subject.
+
+  const MAP_A = digest("aa");
+  const MAP_B = digest("bb");
+  const SRC_ONLY_A = digest("5a");
+  const SRC_ONLY_B = digest("5b");
+  const SRC_SHARED = digest("5c");
+
+  it("an artifact evicted by the row cap leaves NO sighting naming it, and its now-unsighted source goes too", async () => {
+    // Three artifacts against a row cap of two: the oldest goes. Exactly two
+    // sightings exist in total, so the sightings' OWN row cap cannot bind at
+    // `maxRows: 2` — `excess > 0` is false at the cap exactly — and anything
+    // that happens to them is the cascade.
+    const digests = seedArtifacts(P1, 3, NOW - 10_000, 1);
+    const evicted = digests[0];
+    const survivor = digests[1];
+    seedSource(P1, SRC_ONLY_A, NOW - 10_000);
+    seedSource(P1, SRC_ONLY_B, NOW - 10_000);
+    seedSighting(P1, evicted, MAP_A, 0, SRC_ONLY_A, NOW);
+    seedSighting(P1, survivor, MAP_B, 0, SRC_ONLY_B, NOW);
+
+    await sweepToConvergence(P1, {
+      maxRows: 2,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect((await retentionCounts(fx.db, P1)).artifacts).toBe(2);
+    expect(
+      sightingsNaming(P1, evicted),
+      "the evicted bundle still has sightings pointing at it. `retention.ts` " +
+        "named neither new table and migration v8 declares no foreign key, so " +
+        "deleting an artifact ORPHANED its sightings rather than removing them.",
+    ).toBe(0);
+    // The surviving bundle keeps its own evidence — a cascade is not a purge.
+    expect(sightingsNaming(P1, survivor)).toBe(1);
+    // And the source only the evicted bundle ever sighted dies with it.
+    expect(sourceIds(P1)).toEqual([SRC_ONLY_B]);
+    expect(danglingSourceRows(P1)).toEqual({
+      orphanSightings: 0,
+      unsightedSources: 0,
+    });
+  });
+
+  it("a source sighted from TWO bundles OUTLIVES the eviction of one", async () => {
+    // CONTENT-ADDRESSED DEDUPE SURVIVES THE SWEEP, and this is the case that
+    // says so. `sources` is keyed on the CONTENT digest, so two bundles
+    // shipping the same module produce ONE row with TWO sightings. The operator
+    // chose the anti-join over a blind delete for exactly this: a `sources` row
+    // dies with its LAST sighting and not with its first.
+    //
+    // It fails against a blind `DELETE FROM sources` driven off the evicted
+    // bundle's sightings — that would take the shared row out from under the
+    // bundle still sighting it.
+    const digests = seedArtifacts(P1, 3, NOW - 10_000, 1);
+    const evicted = digests[0];
+    const stillHere = digests[1];
+    seedSource(P1, SRC_SHARED, NOW - 10_000);
+    seedSighting(P1, evicted, MAP_A, 0, SRC_SHARED, NOW);
+    seedSighting(P1, stillHere, MAP_B, 0, SRC_SHARED, NOW);
+
+    await sweepToConvergence(P1, {
+      maxRows: 2,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect(sightingsNaming(P1, evicted)).toBe(0);
+    expect(sightingsNaming(P1, stillHere)).toBe(1);
+    expect(
+      sourceIds(P1),
+      "the shared source was deleted with the FIRST bundle that lost it. The " +
+        "eviction order is CASCADE — a source dies with its LAST sighting — and " +
+        "an anti-join is what makes that true rather than a delete driven off " +
+        "the evicted bundle's sightings.",
+    ).toEqual([SRC_SHARED]);
+  });
+
+  it("`retentionCounts` reports both new tables, each equal to a direct COUNT(*)", async () => {
+    // A table the sweep deletes from but no reader can count is a table whose
+    // bound nothing can be shown to hold — the reason `scans` was added to this
+    // function, applied to the two tables plan 07-13 gives the sweep.
+    seedArtifacts(P1, 2, NOW - 10_000, 1);
+    seedSource(P1, SRC_ONLY_A, NOW - 10_000);
+    seedSource(P1, SRC_ONLY_B, NOW - 10_000);
+    seedSighting(P1, digest("0"), MAP_A, 0, SRC_ONLY_A, NOW);
+    seedSighting(P1, digest("0"), MAP_A, 1, SRC_ONLY_B, NOW);
+    seedSighting(P1, digest("1"), MAP_B, 0, SRC_ONLY_A, NOW);
+
+    const counts = await retentionCounts(fx.db, P1);
+    expect(counts.sources).toBe(directCount("sources", P1));
+    expect(counts.source_sightings).toBe(directCount("source_sightings", P1));
+    // Non-vacuous: the numbers are the seeded ones, not two zeroes agreeing.
+    expect(counts.sources).toBe(2);
+    expect(counts.source_sightings).toBe(3);
   });
 });
