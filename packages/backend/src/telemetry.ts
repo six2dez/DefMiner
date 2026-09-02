@@ -278,6 +278,25 @@ export type SourcemapCounters = {
   /** `(map, index)` sightings written to `source_sightings`. */
   sightingsRecorded: number;
   /**
+   * Sightings DISCARDED because that `(map, index)` is already attributed to a
+   * DIFFERENT bundle (07-REVIEW.md HI-03).
+   *
+   * ITS OWN COUNTER BECAUSE IT IS THE ONLY SURFACE ON WHICH THE LOSS IS
+   * VISIBLE. `source_sightings` is keyed `(project_id, map_sha256,
+   * source_index)` and `map_sha256` is content-addressed over the decoded map,
+   * so two different bundles carrying a byte-identical map collide on it. The
+   * upsert's attribution guard keeps the FIRST bundle's row — which is what
+   * stops the first bundle's drill-down silently becoming a resolved zero — and
+   * the second bundle's sighting is dropped.
+   *
+   * A DROP THAT REPORTED SUCCESS AND COUNTED NOTHING would be indistinguishable
+   * from a write, and {@link sightingsRecorded} would keep climbing over rows
+   * that do not exist. This is the number an operator reads to know that a
+   * second bundle carried a map DefMiner had already recorded, and it is the
+   * number that goes to zero when the v9 key widening lands.
+   */
+  sightingsDiscardedOtherArtifact: number;
+  /**
    * Refusals on the DERIVED-ARTIFACT path, by reason.
    *
    * ITS OWN SUB-MAP AND NOT A WIDENING OF {@link Counters.rejected}, which is
@@ -433,6 +452,7 @@ function createCounters(): Counters {
       mapRefused: zeroedRejectCounters(MAP_PARSE_REASONS),
       sourcesRecovered: 0,
       sightingsRecorded: 0,
+      sightingsDiscardedOtherArtifact: 0,
       derivedRejected: zeroedRejectCounters(DERIVED_REJECT_REASONS),
       derivationsServed: 0,
       derivationsGoneNoRequest: 0,

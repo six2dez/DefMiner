@@ -1172,6 +1172,23 @@ export function startConsumer(
       if (!sighting.ok) {
         counters.storeErrors++;
         log("SIGHTING_WRITE_FAILED " + sighting.error);
+      } else if (sighting.changes === 0) {
+        // ===================================================================
+        // THE ATTRIBUTION GUARD DECLINED — COUNTED, NEVER SWALLOWED (HI-03)
+        // ===================================================================
+        // `(project_id, map_sha256, source_index)` is already attributed to a
+        // DIFFERENT bundle, and `store/sources.ts`'s upsert now refuses to move
+        // it. `map_sha256` is content-addressed over the decoded map rather
+        // than over the bundle, so this is reachable at will: the second bundle
+        // only has to carry a copy of the same map.
+        //
+        // `ok: true, changes: 0` IS NOT A SUCCESSFUL WRITE and must not be
+        // counted as one. `rowsInserted` feeds STORE-06's retention interval,
+        // so counting a discarded row there would advance the cadence for work
+        // that never landed; `sightingsRecorded` would report rows that do not
+        // exist. The loss gets its own counter instead, because it is a fact
+        // about the target's traffic that the operator can act on.
+        sm.sightingsDiscardedOtherArtifact++;
       } else {
         sm.sightingsRecorded++;
         rowsInserted += 1;

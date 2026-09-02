@@ -526,6 +526,212 @@ describe("nullability — the four shapes 07-RESEARCH.md § Pitfall 3 measured",
   });
 });
 
+describe("HI-03 — one map in TWO bundles never reattributes the first's evidence", () => {
+  // `source_sightings` is keyed `(project_id, map_sha256, source_index)` and
+  // `map_sha256` is content-addressed over the DECODED MAP JSON, never over the
+  // bundle. Two different bundles can therefore share a `map_sha256` — a CDN
+  // mirror with a different banner comment, a decoy stub carrying a copy, or
+  // the same library genuinely re-bundled — and the second ingest used to
+  // OVERWRITE the first's attribution rather than colliding with it.
+  //
+  // This is the executed form of the finding. It is target-triggerable at will:
+  // the second bundle only has to carry a copy of the same map.
+
+  it("keeps artifact A's attribution when artifact B carries the same map", async () => {
+    const fx = await migratedFixture();
+    try {
+      const first = await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        "src/secret.js",
+        2000,
+      );
+      expect(first).toEqual({ ok: true, changes: 1 });
+
+      // THE SECOND BUNDLE. Same project, same map digest, same index — a
+      // different artifact and a different request.
+      const second = await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_B,
+        "req-b",
+        SOURCE_A,
+        "src/secret.js",
+        8000,
+      );
+      // DISCARDED, AND IT SAYS SO. `changes: 0` is what the consumer branches
+      // on; before the guard this was `changes: 1` and the row had moved.
+      expect(second).toEqual({ ok: true, changes: 0 });
+
+      const row = fx.raw
+        .prepare(
+          "SELECT artifact_sha256, request_id, recovered_at FROM source_sightings WHERE source_index = 0",
+        )
+        .get() as {
+        artifact_sha256: string;
+        request_id: string;
+        recovered_at: number;
+      };
+      // ARTIFACT A'S DRILL-DOWN STILL FINDS THIS ROW. `listRecoveredSourcesPage`
+      // is scoped `WHERE sg.artifact_sha256 = ?`, and
+      // `countRecoveredSourcesByArtifact` reporting 0 for A on the
+      // `scan_state = 'done'` ground is the RESOLVED zero — the one the whole
+      // zero-versus-unknown design exists to make mean "DefMiner looked and
+      // there was nothing".
+      expect(row.artifact_sha256).toBe(ARTIFACT_A);
+      expect(row.request_id).toBe("req-a");
+      expect(row.recovered_at).toBe(2000);
+      expect(countRows(fx, "source_sightings")).toBe(1);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("still refreshes request_id when the SAME bundle is seen again", async () => {
+    // THE OTHER HALF, AND IT IS NOT A DETAIL. D-24 reloads `request_id` from
+    // Caido and re-verifies the body against `artifact_sha256`. Pinning the
+    // request to the first sighting would let Caido's history evict it while
+    // the bundle is still being served — and `no_request` mints a STICKY `gone`
+    // tombstone. Within one bundle the newest request is the right one; across
+    // bundles it is the defect above.
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-old",
+        SOURCE_A,
+        "src/app.js",
+        2000,
+      );
+      expect(
+        await recordSighting(
+          fx.db,
+          PROJECT,
+          MAP_A,
+          0,
+          ARTIFACT_A,
+          "req-new",
+          SOURCE_A,
+          "src/app.js",
+          8000,
+        ),
+      ).toEqual({ ok: true, changes: 1 });
+
+      const row = fx.raw
+        .prepare(
+          "SELECT artifact_sha256, request_id, recovered_at FROM source_sightings",
+        )
+        .get() as {
+        artifact_sha256: string;
+        request_id: string;
+        recovered_at: number;
+      };
+      expect(row.request_id).toBe("req-new");
+      expect(row.artifact_sha256).toBe(ARTIFACT_A);
+      // And `recovered_at` still does not move: this is the same sighting seen
+      // again, not a new recovery.
+      expect(row.recovered_at).toBe(2000);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("does not un-stick a tombstone by way of the declined arm", async () => {
+    // A discarded write must change NOTHING, including the one column whose
+    // stickiness D-23 guarantees. The guard fails the whole update rather than
+    // part of it.
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        "src/app.js",
+        2000,
+      );
+      await markProducibility(fx.db, PROJECT, MAP_A, 0, "gone", 5000);
+      expect(
+        await recordSighting(
+          fx.db,
+          PROJECT,
+          MAP_A,
+          0,
+          ARTIFACT_B,
+          "req-b",
+          SOURCE_A,
+          "src/app.js",
+          8000,
+        ),
+      ).toEqual({ ok: true, changes: 0 });
+      const row = fx.raw
+        .prepare(
+          "SELECT producibility, producibility_at, artifact_sha256 FROM source_sightings",
+        )
+        .get() as {
+        producibility: string;
+        producibility_at: number;
+        artifact_sha256: string;
+      };
+      expect(row.producibility).toBe("gone");
+      expect(row.producibility_at).toBe(5000);
+      expect(row.artifact_sha256).toBe(ARTIFACT_A);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("scopes the guard by PROJECT: another project's bundle is a separate row", async () => {
+    // The key leads on `project_id`, so this is a different partition entirely
+    // and the guard has nothing to decline. Non-vacuity for the case above:
+    // `changes: 0` there is about the ARTIFACT and not about the statement.
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        "src/app.js",
+        2000,
+      );
+      expect(
+        await recordSighting(
+          fx.db,
+          "p2",
+          MAP_A,
+          0,
+          ARTIFACT_B,
+          "req-b",
+          SOURCE_A,
+          "src/app.js",
+          8000,
+        ),
+      ).toEqual({ ok: true, changes: 1 });
+      expect(countRows(fx, "source_sightings")).toBe(2);
+    } finally {
+      fx.close();
+    }
+  });
+});
+
 describe("D-06 — the label round-trips BYTE-IDENTICALLY", () => {
   it("every SPIKE-12 label at or below the cap comes back exactly as it went in", async () => {
     // UNSANITISED AND UNNORMALISED, PROVEN OVER THE MEASURED CORPUS rather than

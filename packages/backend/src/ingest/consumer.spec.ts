@@ -1878,6 +1878,73 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
     expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length);
   });
 
+  it("does not let a SECOND bundle carrying the same map take the first's sightings", async () => {
+    // 07-REVIEW.md HI-03, end to end. `map_sha256` is content-addressed over the
+    // DECODED MAP JSON and the sighting key does not carry the artifact, so two
+    // bundles with a byte-identical map collide. Before the attribution guard
+    // the second ingest MOVED all N sightings onto artifact B, and artifact A's
+    // drill-down then reported a RESOLVED zero — "No recovered sources in this
+    // bundle" about a bundle DefMiner had recovered N sources from.
+    //
+    // The two bundles differ only in their lead comment, which is exactly the
+    // cheapest way a target reaches this: a CDN mirror with a different banner.
+    const doc = mapDocument(LABELS, CONTENTS);
+    const p = plan([
+      {
+        id: "r1",
+        url: "https://x.test/app.js",
+        bytes: bundleAnnouncingInline(doc, "// bundle A\nconsole.log(1);\n"),
+      },
+      {
+        id: "r2",
+        url: "https://x.test/mirror.js",
+        bytes: bundleAnnouncingInline(doc, "// bundle B\nconsole.log(1);\n"),
+      },
+    ]);
+    p.offer();
+    await runOnce(p.overrides);
+
+    // TWO artifacts, ONE map, ONE set of sightings — the collision is real and
+    // this case is not measuring two independent maps.
+    expect(await countTable("artifacts")).toBe(2);
+    expect(await countTable("source_sightings")).toBe(LABELS.length);
+    const maps = (
+      fx.raw
+        .prepare(
+          "SELECT DISTINCT map_sha256 AS m FROM source_sightings WHERE project_id = ?",
+        )
+        .all(PROJECT) as { m: string }[]
+    ).map((row) => row.m);
+    expect(maps).toHaveLength(1);
+
+    // EVERY SIGHTING STILL NAMES THE FIRST BUNDLE.
+    const artifacts = new Set(
+      (
+        fx.raw
+          .prepare(
+            "SELECT DISTINCT artifact_sha256 AS a FROM source_sightings WHERE project_id = ?",
+          )
+          .all(PROJECT) as { a: string }[]
+      ).map((row) => row.a),
+    );
+    expect(artifacts.size).toBe(1);
+    const firstDigest = (
+      fx.raw
+        .prepare(
+          "SELECT sha256 AS s FROM artifacts WHERE project_id = ? ORDER BY first_seen_at ASC, sha256 ASC",
+        )
+        .all(PROJECT) as { s: string }[]
+    )[0]?.s;
+    expect([...artifacts][0]).toBe(firstDigest);
+
+    // AND THE HEALTH COUNTERS DO NOT REPORT ROWS THAT DO NOT EXIST. Before the
+    // fix `sightingsRecorded` climbed to 2N over N rows.
+    expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length);
+    expect(counters.sourcemap.sightingsDiscardedOtherArtifact).toBe(
+      LABELS.length,
+    );
+  });
+
   it("finishes `done` with a NULL error — a recovered map is not a degradation", async () => {
     const bytes = bundleAnnouncingInline(mapDocument(LABELS, CONTENTS));
     const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
