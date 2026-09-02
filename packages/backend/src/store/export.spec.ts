@@ -42,10 +42,8 @@ import {
   HOSTILE_CASE_IDS,
   HOSTILE_CASES,
 } from "@defminer/engine/hostile.fixture";
-import {
-  BIDI_OVERRIDES_ISOLATES,
-  C0_C1_CONTROLS,
-} from "@defminer/engine/sanitise";
+import { BIDI_OVERRIDES_ISOLATES, C0_C1_CONTROLS } from "@defminer/engine/sanitise";
+import { SOURCES_LABEL_CASES } from "@defminer/engine/sourcemap/map-fixture";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { createFixtureDb } from "../../test/fixtures/sqlite-fixture";
@@ -773,6 +771,109 @@ describe("the manifest export table (D-20, MAP-07)", () => {
       `webpack://app/src/secret.ts${EXPORT_QUERY_REDACTION}`,
     );
     expect(text).not.toContain("hunter2");
+  });
+
+  // =========================================================================
+  // LO-04 — THE WITHHELD MARKER MUST MEAN WHAT IT SAYS
+  // =========================================================================
+  // The shipped URL redactor cuts at the first `?` OR `#`, because in a URL
+  // those characters BEGIN the query and the fragment. A `sources` label is a
+  // URL only when it is protocol-shaped; `src/components/Button#new.tsx` is a
+  // legal filename and has neither axis. Cutting it did two wrong things at
+  // once: it DISCARDED a legal path tail, and it printed a marker telling the
+  // reader a query had been withheld when there had never been one. An exported
+  // record that misdescribes its own redaction is a worse artifact than one
+  // that redacts nothing, because the reader cannot tell which claim to trust.
+
+  /** The manifest's one target-controlled field, exported and read back. JSON
+   *  rather than CSV so the assertion is on the VALUE and not on a substring of
+   *  a quoted cell. */
+  const manifestLabelField = (
+    label: string,
+    mode: "redacted" | "raw",
+  ): string | null => {
+    const parsed = JSON.parse(
+      serialiseRows({
+        table: "sources",
+        format: "json",
+        mode,
+        rows: [manifestRow({ sources_verbatim: label })],
+        chunkIndex: 0,
+        lastChunk: true,
+        counts: NO_DEGRADATION,
+      }),
+    ) as { rows: Record<string, string | null>[] };
+    return parsed.rows[0]?.sources_verbatim ?? null;
+  };
+
+  it.each([
+    // A BARE PATH HAS NO QUERY AXIS. Nothing is withheld, so nothing is claimed.
+    ["relative, legal `#` in the filename", "src/components/Button#new.tsx"],
+    ["relative, legal `?` in the filename", "src/gen/what?.ts"],
+    ["absolute-posix, legal `#`", "/srv/app/src/Button#new.tsx"],
+    ["windows-drive, legal `#`", "C:\\Temp\\Button#new.tsx"],
+    ["windows-unc, legal `#`", "\\\\server\\share\\Button#new.tsx"],
+    // A `/` BEFORE the `://` is not an authority separator — this is a path
+    // segment that merely contains a colon, and the frontend classifier reads
+    // it as `relative` for the same reason.
+    ["relative segment containing `://`", "src/a://b#c.ts"],
+  ])(
+    "leaves a NON-URL label whole in redacted mode — %s",
+    (_why, label: string) => {
+      expect(manifestLabelField(label, "redacted")).toBe(label);
+      expect(manifestLabelField(label, "redacted")).not.toContain(
+        EXPORT_QUERY_REDACTION,
+      );
+    },
+  );
+
+  it.each([
+    [
+      "webpack:// with a real query",
+      "webpack:///./src/app.js?v=2",
+      `webpack:///./src/app.js${EXPORT_QUERY_REDACTION}`,
+    ],
+    [
+      "webpack:// with a real fragment",
+      "webpack:///./src/app.js#L5",
+      `webpack:///./src/app.js${EXPORT_QUERY_REDACTION}`,
+    ],
+    [
+      "http:// with a credential-shaped query",
+      "http://evil.example/app.js?token=hunter2",
+      `http://evil.example/app.js${EXPORT_QUERY_REDACTION}`,
+    ],
+    [
+      "webpack: with no authority separator, still a scheme",
+      "webpack:app.js?v=2",
+      `webpack:app.js${EXPORT_QUERY_REDACTION}`,
+    ],
+    // A URL-SHAPED LABEL WITH NOTHING TO WITHHOLD IS ALSO LEFT WHOLE. The
+    // marker is a statement about this value, not about this column.
+    [
+      "file:// with no query and no fragment",
+      "file:///etc/defminer-escape.txt",
+      "file:///etc/defminer-escape.txt",
+    ],
+  ])(
+    "still withholds a URL-shaped label's query axis in redacted mode — %s",
+    (_why, label: string, expected: string) => {
+      expect(manifestLabelField(label, "redacted")).toBe(expected);
+    },
+  );
+
+  it("returns EVERY hostile-corpus label byte-identical in BOTH modes — none of them has a query axis", () => {
+    // The 23-entry corpus is the measured set of shapes a real `sources` array
+    // carries, and not one of its entries has a query or a fragment. So the
+    // redacted manifest and the raw manifest agree on all of them, and a future
+    // corpus entry that does carry a query fails here loudly rather than
+    // acquiring a marker nobody expected.
+    for (const c of SOURCES_LABEL_CASES) {
+      expect(
+        manifestLabelField(c.value, "redacted"),
+        `corpus case ${c.id} acquired or lost bytes in redacted mode`,
+      ).toBe(manifestLabelField(c.value, "raw"));
+    }
   });
 
   it("returns the label BYTE-IDENTICAL in raw mode — what the raw option is for", () => {
