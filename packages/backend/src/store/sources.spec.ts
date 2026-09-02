@@ -196,7 +196,9 @@ describe("the recovered-source tables round-trip (MAP-02, D-05)", () => {
   it("counts a map's sightings, so the caller can hold SOURCE_ROWS_PER_MAP_MAX", async () => {
     const fx = await migratedFixture();
     try {
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBe(0);
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        0,
+      );
       await recordSighting(
         fx.db,
         PROJECT,
@@ -219,9 +221,80 @@ describe("the recovered-source tables round-trip (MAP-02, D-05)", () => {
         "b.js",
         1,
       );
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBe(2);
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        2,
+      );
       // SCOPED. A different project's map is a different map.
-      expect(await countSourcesForMap(fx.db, "p2", MAP_A)).toBe(0);
+      expect(await countSourcesForMap(fx.db, "p2", ARTIFACT_A, MAP_A)).toBe(0);
+    } finally {
+      fx.close();
+    }
+  });
+
+  // =========================================================================
+  // THE COUNT IS SCOPED BY BUNDLE, BECAUSE AFTER v9 A SIGHTING BELONGS TO ONE
+  // =========================================================================
+  // MAP-06's aggregate bound asks what ONE MAP-BEARING ARTIFACT writes. Before
+  // migration v9 that question had no answer in this table: `(map, index)` was
+  // the key, a second bundle carrying the same map could not record its own
+  // sighting at all, and a map-scoped count was therefore the only count there
+  // was. Now the same map genuinely has two independent sets of sightings, and
+  // a map-scoped count would hand the caller the SUM of both — refusing bundle
+  // B for rows bundle A wrote.
+  it("counts by BUNDLE: the same map in a second artifact starts from zero", async () => {
+    const fx = await migratedFixture();
+    try {
+      for (let i = 0; i < 3; i += 1) {
+        await recordSighting(
+          fx.db,
+          PROJECT,
+          MAP_A,
+          i,
+          ARTIFACT_A,
+          "req-a",
+          SOURCE_A,
+          "a" + String(i) + ".js",
+          1,
+        );
+      }
+
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        3,
+      );
+
+      // THE SAME MAP, A DIFFERENT BUNDLE. A CDN mirror with a different banner
+      // comment is the cheapest way a target reaches this, and it is
+      // target-triggerable at will.
+      expect(
+        await countSourcesForMap(fx.db, PROJECT, ARTIFACT_B, MAP_A),
+        "the count is still map-scoped: bundle B is being charged for the " +
+          "rows bundle A wrote, which would refuse a bundle that has written " +
+          "nothing (07-REVIEW.md MD-04).",
+      ).toBe(0);
+
+      // And once B writes its own, the two counts are independent rather than
+      // shared.
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_B,
+        "req-b",
+        SOURCE_A,
+        "a0.js",
+        1,
+      );
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_B, MAP_A)).toBe(
+        1,
+      );
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        3,
+      );
+      // A different map in the same bundle is a different count.
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_B)).toBe(
+        0,
+      );
     } finally {
       fx.close();
     }

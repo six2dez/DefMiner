@@ -48,6 +48,7 @@ import {
   RETENTION_SWEEP_MAX_PASSES,
   RETENTION_SWEEP_MAX_ROWS,
   ROWS_INSERTED_PER_ARTIFACT_MAX,
+  SOURCE_ROWS_PER_MAP_MAX,
 } from "@defminer/engine/thresholds";
 import ts from "typescript";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -2620,6 +2621,243 @@ describe("D-13 — a recovered source enters the pipeline once, and never twice"
         'depth_exceeded" describes a bound working as designed as if it were ' +
         "a refusal.",
     ).not.toBe(counters.sourcemap.sourcesRecovered);
+  });
+});
+
+// ===========================================================================
+// MAP-06's AGGREGATE HALF, WHICH UNTIL PLAN 07-15 WAS ENFORCED NOWHERE
+// ===========================================================================
+//
+// 07-REVIEW.md MD-04: `countSourcesForMap`'s docblock asserted that "plan
+// 07-05's ingest path compares the count and refuses with a reason", and the
+// ingest path did not call it. `knip` could not see the gap because
+// `src/**/*.spec.ts` is an entry glob, so a spec-only consumer counts as usage.
+//
+// WHAT THE SECOND ENFORCEMENT POINT IS FOR, because it is NOT the only bound.
+// `parseSourceMap` already refuses a map whose DECLARED sources project past
+// `SOURCE_ROWS_PER_MAP_MAX` rows, so no map reaching the consumer can exceed
+// the bound on its own recovered count. This check is taken in the STORE's unit
+// against WHAT IS ACTUALLY ON DISK, and it catches the divergence between what
+// the parse gate projected and what the write path produced — rows written by
+// an earlier build under a different gate, most obviously. The cases below seed
+// exactly that divergence, because it is the only way to reach the refusal.
+//
+// THE ARITHMETIC IS THE FRAGILE PART AND IT IS PINNED HERE. The comparison is
+// on the PROJECTED POST-WRITE total, `max(existing, recovered)`, never on
+// `existing + recovered`.
+
+describe("MAP-06's aggregate bound has a production caller (MD-04)", () => {
+  /** The `(artifact, map)` pair a completed ingest recorded, read back out of
+   *  the table rather than recomputed, so the seeding below names the same pair
+   *  the consumer will count. */
+  async function pairFromStore(): Promise<{ artifact: string; map: string }> {
+    const row = fx.raw
+      .prepare(
+        "SELECT artifact_sha256 AS a, map_sha256 AS m FROM source_sightings " +
+          "WHERE project_id = ? LIMIT 1",
+      )
+      .get(PROJECT) as { a: string; m: string } | undefined;
+    if (row === undefined) throw new Error("no sighting was recorded");
+    return await Promise.resolve({ artifact: row.a, map: row.m });
+  }
+
+  /** Seed `count` extra sightings for one `(artifact, map)` at indices no map
+   *  declares, standing in for rows an earlier build wrote under a gate that no
+   *  longer ships. Written past the store module on purpose: the point is rows
+   *  the CURRENT write path would not produce. */
+  function seedSightings(
+    artifact: string,
+    map: string,
+    from: number,
+    count: number,
+  ): void {
+    const stmt = fx.raw.prepare(
+      "INSERT OR REPLACE INTO source_sightings (project_id, map_sha256, " +
+        "source_index, artifact_sha256, request_id, source_sha256, " +
+        "sources_verbatim, producibility, producibility_at, recovered_at) " +
+        "VALUES (?, ?, ?, ?, ?, NULL, NULL, 'producible', NULL, 1)",
+    );
+    for (let i = 0; i < count; i += 1) {
+      stmt.run(PROJECT, map, from + i, artifact, "seed");
+    }
+  }
+
+  /** The whole-map ingest both boundary cases start from: four sources, well
+   *  inside every gate, completing `done`. */
+  const SMALL = mapDocument(
+    ["a.ts", "b.ts", "c.ts", "d.ts"],
+    ["const a = 1;\n", "const b = 2;\n", "const c = 3;\n", "const d = 4;\n"],
+  );
+
+  async function analysisRow(hash: string) {
+    const rows = await listObservations(fx.db, PROJECT);
+    return await getAnalysis(fx.db, PROJECT, rows[0].sha256, hash);
+  }
+
+  it("REFUSES past the bound with a NAMED reason, and the artifact finishes partial", async () => {
+    const bytes = bundleAnnouncingInline(SMALL);
+    const first = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+    const { artifact, map } = await pairFromStore();
+    expect(await countTable("source_sightings")).toBe(4);
+
+    // ONE ROW PAST THE BOUND. `SOURCE_ROWS_PER_MAP_MAX` is 2,048 rows and one
+    // recovered source costs two, so 1,024 sightings is exactly the bound and
+    // 1,025 is 2,050 rows. The four the ingest wrote are at indices 0-3, so the
+    // seed starts at 100 and adds 1,021.
+    seedSightings(artifact, map, 100, SOURCE_ROWS_PER_MAP_MAX / 2 + 1 - 4);
+    expect(await countTable("source_sightings")).toBe(
+      SOURCE_ROWS_PER_MAP_MAX / 2 + 1,
+    );
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/app.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides, { detectorSetHash: "corpus-v2" });
+
+    const row = await analysisRow("corpus-v2");
+    expect(
+      row?.scan_state,
+      "the artifact finished `" +
+        String(row?.scan_state) +
+        "`. A map whose projected post-write row cost exceeds " +
+        "SOURCE_ROWS_PER_MAP_MAX must be refused BEFORE the per-source loop, " +
+        "and D-11 records that refusal as `partial` with a reason rather than " +
+        "stopping quietly (07-REVIEW.md MD-04).",
+    ).toBe("partial");
+    expect(row?.error).toBe("map:too_many_sources");
+    expect(counters.sourcemap.mapRefused.too_many_sources).toBe(1);
+
+    // NOT ONE NEW ROW. The refusal is before the loop, so the second pass
+    // wrote nothing.
+    expect(await countTable("source_sightings")).toBe(
+      SOURCE_ROWS_PER_MAP_MAX / 2 + 1,
+    );
+  });
+
+  it("ACCEPTS at exactly the bound", async () => {
+    const bytes = bundleAnnouncingInline(SMALL);
+    const first = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+    const { artifact, map } = await pairFromStore();
+
+    // EXACTLY 1,024 sightings = exactly 2,048 rows. The comparison is strictly
+    // greater-than, so this is admitted; the case above is the same fixture one
+    // row further on.
+    seedSightings(artifact, map, 100, SOURCE_ROWS_PER_MAP_MAX / 2 - 4);
+    expect(await countTable("source_sightings")).toBe(
+      SOURCE_ROWS_PER_MAP_MAX / 2,
+    );
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/app.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides, { detectorSetHash: "corpus-v2" });
+
+    const row = await analysisRow("corpus-v2");
+    expect(row?.scan_state).toBe("done");
+    expect(row?.error).toBeNull();
+    expect(counters.sourcemap.mapRefused.too_many_sources).toBe(0);
+  });
+
+  // =========================================================================
+  // THE CASE THAT PINS `max` RATHER THAN `+`
+  // =========================================================================
+  // Re-analysis is reachable at EVERY detector-set change — `isAnalysed` is
+  // keyed on `detectorSetHash`, and Phase 3 landing is exactly that event. So
+  // "the same artifact reaches the reconstruction stage twice" is the ordinary
+  // path, not a corner.
+  it("ACCEPTS a re-analysis of an unchanged artifact, because the upsert adds no rows", async () => {
+    // THE PARSE GATE'S OWN CEILING: 1,024 declared sources is 2,048 rows, the
+    // largest map `parseSourceMap` admits. Under `existing + recovered` the
+    // second pass would compute 2,048 sightings = 4,096 rows and refuse
+    // `too_many_sources`, writing `partial` on an artifact that was accepted
+    // whole minutes earlier and adds not one row. Under
+    // `max(existing, recovered)` it projects the 1,024 it already holds.
+    const N = SOURCE_ROWS_PER_MAP_MAX / 2;
+    const labels = Array.from(
+      { length: N },
+      (_, i) => "src/mod" + String(i) + ".ts",
+    );
+    const contents = Array.from(
+      { length: N },
+      (_, i) => "export const m" + String(i) + " = " + String(i) + ";\n",
+    );
+    const bytes = bundleAnnouncingInline(mapDocument(labels, contents));
+
+    const first = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    first.offer();
+    await runOnce(first.overrides);
+    const firstRow = await analysisRow(DETECTOR_CORPUS_VERSION);
+    expect(firstRow?.scan_state).toBe("done");
+    const afterFirst = await countTable("source_sightings");
+    expect(afterFirst).toBe(N);
+
+    resetConsumerForTest();
+    const second = plan([{ id: "r2", url: "https://x.test/app.js", bytes }]);
+    second.offer();
+    await runOnce(second.overrides, { detectorSetHash: "corpus-v2" });
+
+    const secondRow = await analysisRow("corpus-v2");
+    expect(
+      secondRow?.scan_state,
+      "the re-analysis finished `" +
+        String(secondRow?.scan_state) +
+        "`. The aggregate comparison is still ADDITIVE: `existing + " +
+        "recovered` double-counts rows the v9 four-column upsert overwrites " +
+        "in place, so any map already holding more than half the bound is " +
+        "refused on its next pass and an artifact previously accepted whole " +
+        "is written `partial`. The projected post-write total is " +
+        "`max(existing, recovered)`.",
+    ).toBe("done");
+    expect(secondRow?.error).toBeNull();
+    expect(counters.sourcemap.mapRefused.too_many_sources).toBe(0);
+
+    // THE CLAUSE THAT PROVES THE ACCEPTANCE CAME FROM THE UPSERT AND NOT FROM
+    // A SMALL FIXTURE: the row count is identical across the two passes.
+    expect(await countTable("source_sightings")).toBe(afterFirst);
+  });
+
+  it("runs the count ONCE per map-bearing artifact, not once per source", async () => {
+    // INSTRUMENTED THROUGH THE DATABASE HANDLE rather than through a counter:
+    // a counter would be a new production symbol whose only consumer is this
+    // case, which is the shape MD-04 is about.
+    const prepared: string[] = [];
+    const spyDb = {
+      exec: (sql: string) => fx.db.exec(sql),
+      prepare: async (sql: string): Promise<unknown> => {
+        prepared.push(sql);
+        return await fx.db.prepare(sql);
+      },
+    } as unknown as typeof fx.db;
+
+    const bytes = bundleAnnouncingInline(SMALL);
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    await runOnce(p.overrides, { db: spyDb });
+
+    expect(await countTable("source_sightings")).toBe(4);
+    // NARROWED to the aggregate statement rather than to every COUNT on the
+    // table: `retention.ts`'s `COUNT_SIGHTINGS_SQL` is a project-wide count
+    // prepared once per sweep, and matching it too would make this case pass or
+    // fail for the retention cadence's reasons instead of this one's. The
+    // discriminator is `map_sha256` in the predicate.
+    const counts = prepared.filter(
+      (sql) =>
+        sql.includes("FROM source_sightings") &&
+        sql.includes("COUNT(*)") &&
+        sql.includes("map_sha256"),
+    );
+    expect(
+      counts.length,
+      "the aggregate count was prepared " +
+        String(counts.length) +
+        " times for one map-bearing artifact carrying four sources. It " +
+        "belongs above the per-source loop; one COUNT per source is the cost " +
+        "MD-04's fix must not introduce.",
+    ).toBe(1);
   });
 });
 
