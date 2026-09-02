@@ -66,6 +66,7 @@ import {
   copyToClipboard,
   forCellText,
   forSourceLine,
+  sourceLineCounts,
   sourceLineTruncated,
 } from "../safety/display";
 
@@ -391,14 +392,22 @@ function select(key: number): void {
 
 /**
  * The two integers the truncation notice needs, computed ONCE for the line the
- * operator asked about.
+ * operator asked about — and IN ONE UNIT (07-REVIEW.md HI-02).
  *
  * `total` is a grapheme count and there is no way to have one without walking
  * the value — which is exactly why `display.ts` keeps that walk OUT of the
  * per-row predicate and puts the cost here, deliberately, on one line, on
- * demand. It is spelled with a spread rather than reached for through
- * `forDisplay`, because importing the walking wrapper is the one thing this
- * module's named-import equality forbids.
+ * demand.
+ *
+ * IT NO LONGER SPELLS THE COUNT WITH A SPREAD, AND THAT IS THE FIX. Two spreads
+ * over two DIFFERENT strings counted `shown` after tab expansion and after both
+ * strips and `total` before all three, in code points rather than in the
+ * graphemes the cap is enforced in — three unit mismatches, which rendered
+ * "Line 1 truncated at 1,024 of 601 characters" on a line of 600 tabs. Both
+ * numbers now come out of ONE `display.ts` call over ONE prepared string, so
+ * `shown <= total` holds by construction. The named-import equality is
+ * satisfied the way it was always meant to be: the walking wrapper stays out of
+ * this module and the cost is paid behind a SURFACE-NAMED wrapper.
  *
  * NEITHER NUMBER IS THE LINE. The untruncated line never leaves this component.
  */
@@ -407,11 +416,9 @@ const truncation = computed<{ shown: number; total: number } | null>(() => {
   const index = selectedLine.value;
   if (state.kind !== "content" || index === null) return null;
   const line = state.lines[index];
-  if (line === undefined || !sourceLineTruncated(line)) return null;
-  return {
-    shown: [...forSourceLine(line)].length,
-    total: [...line].length,
-  };
+  if (line === undefined) return null;
+  const counts = sourceLineCounts(line);
+  return counts.shown >= counts.total ? null : counts;
 });
 
 /**

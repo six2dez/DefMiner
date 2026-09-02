@@ -59,6 +59,7 @@ import {
   forSourceLine,
   HIGHLIGHT_CLASS,
   SOURCE_LINE_TAB_SPACES,
+  sourceLineCounts,
   sourceLineTruncated,
   TABLE_ROW_HEIGHT_PX,
   truncationNotice,
@@ -499,6 +500,63 @@ describe("forSourceLine — the third cap, bound in the name", () => {
     expect(padded.length).toBeGreaterThan(SOURCE_LINE_MAX_GRAPHEMES * 2);
     expect(sourceLineTruncated(padded)).toBe(true);
     expect(forSourceLine(padded).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+  });
+
+  // -------------------------------------------------------------------------
+  // 07-REVIEW.md HI-02 — ONE UNIT FOR BOTH INTEGERS
+  // -------------------------------------------------------------------------
+  //
+  // `shown` was counted after tab expansion and after both strips, `total`
+  // before all three, and both in CODE POINTS against a cap enforced in
+  // GRAPHEMES. The sentence the strip renders from them claimed
+  // "truncated at 1,024 of 601 characters" — `shown` above `total`.
+
+  it("never reports SHOWN above TOTAL on a tab-indented line", () => {
+    // The reviewer's executed reproduction: 600 tabs and one character. Each
+    // tab expands to SOURCE_LINE_TAB_SPACES, so the prepared line is 1,201
+    // graphemes and the cap cuts it to 1,024 — both counted on the SAME string.
+    const tabs = "\u0009".repeat(600) + "x";
+    const counts = sourceLineCounts(tabs);
+    expect(counts.shown).toBeLessThanOrEqual(counts.total);
+    expect(counts.shown).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(counts.total).toBe(600 * SOURCE_LINE_TAB_SPACES.length + 1);
+  });
+
+  it("agrees with the predicate on every case, in both directions", () => {
+    // THE TWO ANSWERS ARE ONE ANSWER. The strip renders the sentence when
+    // `shown < total` and the row renders the marker when the predicate is
+    // true; a disagreement is a line marked truncated with no sentence to
+    // explain it, or a sentence on a line with no marker.
+    const cases = [
+      "",
+      "const a = 1;\r",
+      "\u202Ex",
+      "a\u001Bb",
+      "\u0009".repeat(600) + "x",
+      "e".repeat(SOURCE_LINE_MAX_GRAPHEMES),
+      "e".repeat(SOURCE_LINE_MAX_GRAPHEMES + 1),
+      "\u0009".repeat(SOURCE_LINE_MAX_GRAPHEMES),
+    ];
+    for (const value of cases) {
+      const counts = sourceLineCounts(value);
+      expect(counts.shown <= counts.total, JSON.stringify(value)).toBe(true);
+      expect(sourceLineTruncated(value), JSON.stringify(value)).toBe(
+        counts.shown < counts.total,
+      );
+    }
+  });
+
+  it("counts SHOWN as exactly what forSourceLine rendered", () => {
+    // Non-vacuity for the unit claim: `shown` is a grapheme count of the
+    // rendered string, so a combining-mark line cannot report more characters
+    // than the operator can see.
+    const combining = "e\u0301".repeat(SOURCE_LINE_MAX_GRAPHEMES + 10);
+    const counts = sourceLineCounts(combining);
+    expect(counts.shown).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(counts.total).toBe(SOURCE_LINE_MAX_GRAPHEMES + 10);
+    expect([...forSourceLine(combining)].length).toBe(
+      SOURCE_LINE_MAX_GRAPHEMES * 2,
+    );
   });
 
   it("is a DIFFERENT cap from both shipped wrappers, observably", () => {

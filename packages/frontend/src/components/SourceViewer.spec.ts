@@ -722,8 +722,15 @@ describe("SourceViewer.vue imports EXACTLY these modules", () => {
       "copyToClipboard",
       "forCellText",
       "forSourceLine",
+      "sourceLineCounts",
       "sourceLineTruncated",
     ]);
+    // `sourceLineCounts` JOINED THE SET on 2026-09-02 (07-REVIEW.md HI-02) and
+    // it does not weaken the equality. It is a SURFACE-NAMED wrapper in the
+    // family this case is about — the cap is bound in its name, it is called
+    // once per SELECTED line and never per row, and it returns two integers
+    // rather than text. What the equality forbids is the WALKING wrapper on the
+    // row path, and the loop below still asserts every one of them is absent.
     // AND WHAT THE EQUALITY PROVES, SAID OUT LOUD. `copyToClipboard` is not a
     // wrapper at all — it is the sanctioned escape R2's absolute names, and
     // reusing it is why this file has no structural DOM host of its own. Every
@@ -906,6 +913,32 @@ describe("source-viewer / truncation — a CRLF file is not a truncated file", (
     expect(
       wrapper.find("[data-defminer-source-viewer-no-line-structure]").exists(),
     ).toBe(false);
+  });
+});
+
+describe("source-viewer / truncation — SHOWN and TOTAL are one unit", () => {
+  it("never renders a sentence whose SHOWN exceeds its TOTAL", async () => {
+    // The reviewer's second reproduction: 600 tabs and one character, which
+    // rendered "Line 1 truncated at 1,024 of 601 characters" — `shown` above
+    // `total`, arithmetically impossible for the claim the sentence makes.
+    // `shown` was counted after tab expansion and after both strips, `total`
+    // before all three, and both in code points against a grapheme cap.
+    const tabs = "\u0009".repeat(600) + "x";
+    const wrapper = await mountViewer(clientReturning(ok(contentArm(tabs))));
+    await wrapper.findAll("[data-defminer-source-line]")[0]?.trigger("click");
+    await flush();
+
+    // 600 tabs expand to 1,200 spaces, plus one character: 1,201 graphemes of
+    // the PREPARED line, cut to the cap. Both numbers off the same walk.
+    // `toContain` rather than `toBe`: the strip also carries the "Copy full
+    // line" affordance in this state, which the shipped case above asserts.
+    expect(wrapper.find(STRIP).text()).toContain(
+      `Line 1 truncated at ${groupThousands(SOURCE_LINE_MAX_GRAPHEMES)} of ` +
+        `${groupThousands(1201)} characters.`,
+    );
+    // AND THE IMPOSSIBLE SENTENCE IS GONE, named so a regression reads as the
+    // finding rather than as an arithmetic surprise.
+    expect(wrapper.find(STRIP).text()).not.toContain("of 601 characters");
   });
 });
 

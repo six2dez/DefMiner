@@ -253,6 +253,47 @@ export function sourceLineTruncated(value: string): boolean {
 }
 
 /**
+ * The two integers the truncation sentence interpolates, IN ONE UNIT
+ * (07-REVIEW.md HI-02).
+ *
+ * ===========================================================================
+ * THE UNIT IS GRAPHEMES OF THE PREPARED, SANITISED LINE — THE CAP'S OWN UNIT
+ * ===========================================================================
+ * The viewer used to compute these as `[...forSourceLine(line)].length` and
+ * `[...line].length`, which is THREE different units in five lines: `shown` was
+ * measured after tab expansion and after both strips, `total` before all three,
+ * and both were CODE POINTS while `SOURCE_LINE_MAX_GRAPHEMES` is enforced by
+ * the engine as a GRAPHEME count. A line of 600 tabs followed by one character
+ * rendered, verbatim, "Line 1 truncated at 1,024 of 601 characters" — `shown`
+ * above `total`, which is arithmetically impossible for the claim the sentence
+ * makes. Observed.
+ *
+ * ONE PREPARED STRING, ONE WALK, ONE UNIT. Both numbers come out of the same
+ * `forDisplay` call over the same value, so `shown <= total` holds by
+ * construction and both count what the cap counts. The unit is stated here
+ * because the sentence says "characters": a grapheme is what an operator means
+ * by a character on a monospace line, and it is what DefMiner actually cut at.
+ *
+ * PER SELECTED LINE, ONCE — never per row. `total` needs the whole value
+ * walked and that cost is the reason {@link sourceLineTruncated} exists
+ * separately; this is the call the viewer's own docblock says it pays for
+ * deliberately, for the one line the operator asked about.
+ *
+ * NEITHER NUMBER IS THE LINE. Two integers leave this function and nothing
+ * else does.
+ */
+export function sourceLineCounts(value: string): {
+  shown: number;
+  total: number;
+} {
+  const measured = forDisplay(
+    withTabsExpanded(value),
+    SOURCE_LINE_MAX_GRAPHEMES,
+  );
+  return { shown: measured.shown, total: measured.total };
+}
+
+/**
  * Thousands separators without `Intl`.
  *
  * `toLocaleString` would read differently under a different locale, and this
