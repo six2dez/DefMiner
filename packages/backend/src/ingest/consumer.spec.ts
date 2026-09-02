@@ -2664,7 +2664,14 @@ describe("MAP-06's aggregate bound has a production caller (MD-04)", () => {
   /** Seed `count` extra sightings for one `(artifact, map)` at indices no map
    *  declares, standing in for rows an earlier build wrote under a gate that no
    *  longer ships. Written past the store module on purpose: the point is rows
-   *  the CURRENT write path would not produce. */
+   *  the CURRENT write path would not produce.
+   *
+   *  `recovered_at` IS NOW AND NOT A LOW SENTINEL, and that is load-bearing
+   *  rather than tidy. Plan 07-13 gave `source_sightings` both ordinary
+   *  retention bounds, so rows stamped at the epoch are swept by
+   *  `SIGHTINGS_OVER_AGE_SQL` on the very next pass — the seed would vanish
+   *  mid-case and the assertion would fail for retention's reasons instead of
+   *  this case's. */
   function seedSightings(
     artifact: string,
     map: string,
@@ -2675,10 +2682,11 @@ describe("MAP-06's aggregate bound has a production caller (MD-04)", () => {
       "INSERT OR REPLACE INTO source_sightings (project_id, map_sha256, " +
         "source_index, artifact_sha256, request_id, source_sha256, " +
         "sources_verbatim, producibility, producibility_at, recovered_at) " +
-        "VALUES (?, ?, ?, ?, ?, NULL, NULL, 'producible', NULL, 1)",
+        "VALUES (?, ?, ?, ?, ?, NULL, NULL, 'producible', NULL, ?)",
     );
+    const at = Date.now();
     for (let i = 0; i < count; i += 1) {
-      stmt.run(PROJECT, map, from + i, artifact, "seed");
+      stmt.run(PROJECT, map, from + i, artifact, "seed", at);
     }
   }
 

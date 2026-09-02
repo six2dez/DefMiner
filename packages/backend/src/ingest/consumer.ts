@@ -96,7 +96,11 @@ import { upsertArtifact } from "../store/artifacts";
 import { recordObservation } from "../store/observations";
 import { sweepRetention } from "../store/retention";
 import { getRetentionBounds } from "../store/settings";
-import { recordSighting, upsertRecoveredSource } from "../store/sources";
+import {
+  countSourcesForMap,
+  recordSighting,
+  upsertRecoveredSource,
+} from "../store/sources";
 // THE counter object, and `recordSlice` — the two halves of CORE-10's wiring.
 // Imported rather than injected: there is exactly one counter object in this
 // plugin (plan 01-05), and a dependency-injected one would be a second.
@@ -1154,6 +1158,86 @@ export function startConsumer(
     // bundles is one `map_sha256` with two sets of sightings.
     const mapSha256 = sha256Hex(Buffer.from(inline.json, "utf8"));
     mark(sliceStart);
+
+    // --- MAP-06's AGGREGATE HALF, ENFORCED (07-REVIEW.md MD-04) -------------
+    // ONE INDEXED COUNT PER MAP-BEARING ARTIFACT, above the per-source loop and
+    // never inside it. `countSourcesForMap`'s docblock asserted a caller in
+    // "plan 07-05's ingest path" since Phase 7 shipped and there was none, so
+    // the aggregate half of MAP-06 — the bound across repeated ingests of one
+    // map — was enforced nowhere. A docblock that describes a caller which does
+    // not exist is worse than no docblock, because it is the thing a verifier
+    // cites.
+    //
+    // MAP-01/T-07-09: the epoch is re-checked IMMEDIATELY BEFORE the read, in
+    // the idiom the five shipped `stillCurrent()` sites use. A count taken under
+    // one project and acted on under another is exactly the class of thing those
+    // five sites exist to prevent.
+    if (!stillCurrent()) {
+      counters.abandonedOnProjectChange++;
+      log("project changed mid-reconstruction; not counting this map's rows");
+      return done(null);
+    }
+    const existingSightings = await countSourcesForMap(
+      deps.db,
+      projectId,
+      input.artifactSha256,
+      mapSha256,
+    );
+
+    // THE PROJECTED POST-WRITE TOTAL, AND IT IS A MAXIMUM RATHER THAN A SUM.
+    // READ THIS BEFORE "SIMPLIFYING" IT TO `existing + recovered`.
+    //
+    // Since migration v9 `recordSighting` upserts on `(project_id,
+    // artifact_sha256, map_sha256, source_index)`, so re-ingesting the same
+    // artifact writes ZERO new rows — it updates in place. And `map_sha256` is
+    // content-addressed over the DECODED map JSON, so the stored index set for
+    // this `(artifact, map)` is drawn from the same `sources` array this parse
+    // is reading: the stored set is a SUBSET of the set about to be written.
+    // The new-row count is therefore exactly `max(0, recovered - existing)` and
+    // the projected total exactly `max(existing, recovered)`.
+    //
+    // WHAT THE ADDITIVE FORM DOES, so a reviewer recognises it. The bound is
+    // 2,048 rows, so `existing + recovered` refuses any `(artifact, map)`
+    // already holding more than 1,024 sightings — well inside what the parse
+    // gate admits — on its very next pass, writing `scan_state = 'partial'` on
+    // an artifact that was previously accepted whole and that adds not one row.
+    // Re-analysis is reachable at EVERY `detectorSetHash` change (see
+    // `isAnalysed`'s short-circuit), which Phase 3 landing is, so that is the
+    // ordinary path rather than a corner. The real monaco 781-source case is
+    // squarely in the band.
+    const projectedSightings = Math.max(
+      existingSightings,
+      parsed.recovered.length,
+    );
+    // TWO ROWS PER RECOVERED SOURCE, the same relationship `parse.ts`'s
+    // `ROWS_PER_RECOVERED_SOURCE` names and plan 07-14's gate uses: one
+    // `sources` row per new content hash and one `source_sightings` row per
+    // `(map, index)`. It is a WORST CASE in the `sources` half — a source whose
+    // content hash is already stored writes no `sources` row — and it is stated
+    // as such rather than left to read as exact. The literal lives here because
+    // that constant is module-private to the engine's parser and this plan does
+    // not widen the engine's surface.
+    const projectedRows = 2 * projectedSightings;
+    if (projectedRows > SOURCE_ROWS_PER_MAP_MAX) {
+      // THE SHIPPED REASON, THROUGH THE SHIPPED PATH. `MAP_PARSE_REASONS` is a
+      // closed vocabulary with an every-reason-has-a-case gate, and
+      // `too_many_sources` already means exactly this. D-11 puts the namespaced
+      // code in `analyses.error` and turns `scan_state` to `partial`, so the
+      // operator gets a refusal they can read rather than a map that stopped.
+      noteMapRefusal("too_many_sources");
+      log(
+        "sourcemap refused: " +
+          mapRefusalCode("too_many_sources") +
+          " (" +
+          String(projectedRows) +
+          " projected rows against a bound of " +
+          String(SOURCE_ROWS_PER_MAP_MAX) +
+          "; " +
+          String(existingSightings) +
+          " already recorded)",
+      );
+      return done(mapRefusalCode("too_many_sources"));
+    }
 
     // --- the per-source stretches -------------------------------------------
     // A MAP THAT PARSED AND CARRIED NO `sourcesContent` IS A SUCCESS. It writes

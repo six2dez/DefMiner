@@ -616,15 +616,21 @@ describe("nullability — the four shapes 07-RESEARCH.md § Pitfall 3 measured",
       };
 
       await write(MAP_A, []);
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBe(0);
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        0,
+      );
 
       // THE CONTROL, through the identical path.
       await write(MAP_B, [{ index: 0, label: "src/app.js" }]);
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_B)).toBe(1);
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_B)).toBe(
+        1,
+      );
 
       // And the empty map is still empty after the control wrote — the two are
       // separate partitions, not one table that happened to be empty.
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBe(0);
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
+        0,
+      );
       expect(countRows(fx, "source_sightings")).toBe(1);
     } finally {
       fx.close();
@@ -1443,7 +1449,7 @@ describe("MAP-06 — recording the same sighting twice leaves one row", () => {
       for (let i = 0; i < SOURCE_ROWS_PER_MAP_MAX; i += 1) {
         stmt.run(PROJECT, MAP_A, i, ARTIFACT_A, SOURCE_PRODUCIBILITY_STATES[0]);
       }
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBe(
+      expect(await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A)).toBe(
         SOURCE_ROWS_PER_MAP_MAX,
       );
 
@@ -1456,9 +1462,9 @@ describe("MAP-06 — recording the same sighting twice leaves one row", () => {
         ARTIFACT_A,
         SOURCE_PRODUCIBILITY_STATES[0],
       );
-      expect(await countSourcesForMap(fx.db, PROJECT, MAP_A)).toBeGreaterThan(
-        SOURCE_ROWS_PER_MAP_MAX,
-      );
+      expect(
+        await countSourcesForMap(fx.db, PROJECT, ARTIFACT_A, MAP_A),
+      ).toBeGreaterThan(SOURCE_ROWS_PER_MAP_MAX);
     } finally {
       fx.close();
     }

@@ -228,18 +228,29 @@ WHERE project_id = ? AND artifact_sha256 = ?
 // the shape is safe is visible in the statement itself rather than in the
 // caller: it is guarded, single-row and idempotent.
 
-// DELIBERATELY MAP-SCOPED AND DELIBERATELY NOT WIDENED BY PLAN 07-11. This is
-// the third and last statement in the backend that names sightings by map, and
-// unlike the two above it does NOT name ONE sighting — it is MAP-06's aggregate
-// over every sighting of a map, which is the count 07-05's refusal compares
-// against, so a bundle predicate would change what it counts rather than
-// disambiguate it. It also has NO production caller today (07-REVIEW.md MD-04),
-// and plan 07-15 owns both its wiring and the artifact scope its bound needs.
-// Widening it here would be guessing that plan's answer.
+// NAMES THE BUNDLE, AND PLAN 07-11 DELIBERATELY LEFT THAT TO THIS ONE. Plan
+// 07-11 widened the two statements that name ONE sighting and stopped here,
+// because this is MAP-06's AGGREGATE — the count a refusal compares against —
+// and the scope its bound needs is a question about what the bound MEANS rather
+// than about disambiguating a row. Plan 07-15 answers it: the bound is about
+// what ONE MAP-BEARING ARTIFACT writes, so the count is scoped by artifact.
+//
+// WHY THAT IS THE ONLY SCOPE THAT WORKS AFTER MIGRATION v9. `map_sha256` is
+// content-addressed over the DECODED MAP and never over the bundle, so two
+// bundles can share one — a CDN mirror with a different banner comment reaches
+// it at will. Since v9 the primary key is `(project_id, artifact_sha256,
+// map_sha256, source_index)` and those two bundles are two independent sets of
+// sightings. A map-scoped count would hand the caller the SUM of both and
+// refuse bundle B for rows bundle A wrote, which is a self-inflicted refusal on
+// ordinary traffic.
+//
+// `project_id` STAYS FIRST in the predicate (STORE-07), and the three-column
+// prefix is exactly `idx_source_sightings_artifact`'s leading columns, so this
+// is an indexed count rather than a scan.
 const COUNT_SOURCES_FOR_MAP_SQL = `
 SELECT COUNT(*) AS n
 FROM source_sightings
-WHERE project_id = ? AND map_sha256 = ?
+WHERE project_id = ? AND artifact_sha256 = ? AND map_sha256 = ?
 `;
 
 // D-24's INTEGRITY READ. The recorded digest a derivation re-verifies against
@@ -511,23 +522,64 @@ export async function markProducibility(
 }
 
 /**
- * How many sightings one map already has, so the caller can hold
- * `SOURCE_ROWS_PER_MAP_MAX`.
+ * How many sightings one `(artifact, map)` pair already has, so the caller can
+ * hold `SOURCE_ROWS_PER_MAP_MAX`.
  *
  * THE BOUND IS ENFORCED BY THE CALLER, AND THE REFUSAL IS NAMED. This function
- * only counts; plan 07-05's ingest path compares the count and refuses with a
- * reason rather than stopping quietly, because a map that silently wrote 2,048
- * of its 2,049 sources and said nothing is indistinguishable from a map that had
- * 2,048. `SOURCE_ROWS_PER_MAP_MAX` bounds MAP-06's aggregate limit and Pitfall
- * 2's convergence fix with the SAME constant — two constants for one quantity is
- * how a retention sweep comes to bound nothing while running exactly as designed.
+ * only counts. The caller is `ingest/consumer.ts`'s reconstruction stage: it
+ * takes this count once per map-bearing artifact, immediately after the map
+ * parses and BEFORE the per-source loop, compares the PROJECTED POST-WRITE ROW
+ * total against `SOURCE_ROWS_PER_MAP_MAX`, and refuses with the shipped
+ * `too_many_sources` reason through the `map:`-namespaced path — so the artifact
+ * records `partial` with a reason an operator can read rather than stopping
+ * quietly. A map that silently wrote 2,048 of its 2,049 sources and said nothing
+ * is indistinguishable from a map that had 2,048.
+ *
+ * THE UNIT OF THE COMPARISON IS ROWS, NOT SIGHTINGS, and the caller does the
+ * conversion. `SOURCE_ROWS_PER_MAP_MAX` bounds MAP-06's aggregate limit and
+ * Pitfall 2's convergence fix with the SAME constant — two constants for one
+ * quantity is how a retention sweep comes to bound nothing while running exactly
+ * as designed — and plan 07-14 settled that the constant is expressed in rows.
+ * One recovered source costs at most two rows, so the caller compares
+ * `2 * max(existing, recovered)` against it. The maximum rather than the sum is
+ * load-bearing and is argued at the call site.
+ *
+ * =====================================================================
+ * THIS IS THE SECOND ENFORCEMENT POINT, NOT THE ONLY ONE — SAID PLAINLY
+ * =====================================================================
+ * Under the four-column key a `(project, artifact, map)` can hold at most as
+ * many sightings as the map declares distinct source indices, and
+ * `parseSourceMap`'s row gate already bounds that at parse time. So this check
+ * is not the only bound and it is not a bound the parse gate lacks — it is the
+ * SECOND enforcement point, taken in the store's unit against what is actually
+ * on disk. It catches divergence between what the parse gate projected and what
+ * the write path produced, including rows written by an earlier build under a
+ * different gate, and it is what makes MAP-06's aggregate half a thing a
+ * verifier can execute rather than a sentence a docblock asserts.
+ *
+ * IT IS A DEFENCE-IN-DEPTH CHECK AND SAYING SO IS THE POINT. Until plan 07-15
+ * this paragraph claimed a caller in "plan 07-05's ingest path" that did not
+ * exist, and `knip` could not see the gap because the spec glob in `knip.json`
+ * is an ENTRY glob, so a spec-only consumer counted as usage (07-REVIEW.md
+ * MD-04). A
+ * docblock claiming to be the sole enforcer of a bound something else already
+ * enforces is the same defect one layer over, so it is not claimed here.
+ *
+ * SCOPED BY BUNDLE. After migration v9 a sighting belongs to an artifact, and
+ * the bound MAP-06 states is about what ONE MAP-BEARING ARTIFACT writes; the
+ * same map delivered in a second bundle legitimately starts from zero.
  */
 export async function countSourcesForMap(
   db: Database,
   projectId: string,
+  artifactSha256: string,
   mapSha256: string,
 ): Promise<number> {
   const stmt = await db.prepare(COUNT_SOURCES_FOR_MAP_SQL);
-  const row = await stmt.get<{ n: number }>(projectId, mapSha256);
+  const row = await stmt.get<{ n: number }>(
+    projectId,
+    artifactSha256,
+    mapSha256,
+  );
   return row?.n ?? 0;
 }
