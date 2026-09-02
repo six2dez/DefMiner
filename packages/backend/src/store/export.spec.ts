@@ -1053,18 +1053,32 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     //
     // THE CEILING DID NOT MOVE, and the arithmetic is worth stating exactly,
     // because the obvious invariant — "redacted is never longer than raw" — is
-    // FALSE and was false before this plan: the marker is APPENDED, so
+    // FALSE and was false before LO-04: the marker is APPENDED, so
     // `webpack:///./src/app.js?v=2` (27) redacts to 39. What actually holds,
-    // before AND after LO-04, is `redacted <= raw + EXPORT_QUERY_REDACTION`:
+    // before LO-04, after it, and after WR-03 too, is
+    // `redacted <= raw + EXPORT_QUERY_REDACTION`. With L = raw length:
     //
-    //   before  min(cut, L) + 17   where L = raw length, cut = first `?`/`#`
-    //   after   L, or cut + 17 when the label is URL-shaped
-    //   both    <= L + 17
+    //   before LO-04   L when there is no `?`/`#`, else cut + 16
+    //   after  LO-04   L, unless the label is URL-shaped and carries one of
+    //                  those two, in which case cut + 16
+    //   after  WR-03   L, unless there is a cut — the first `?`/`#` on a
+    //                  URL-shaped label, the first `?` on any other
+    //   all three      <= L + 16, because cut < L whenever there is one
     //
     // And `store/sources.ts` caps the STORED label at SOURCES_LABEL_MAX (4,096
-    // code points) at write time, so the per-field ceiling is 4,113 in both the
-    // old behaviour and the new one. LO-04 redistributes bytes inside a bound it
-    // does not raise: a bare path gets its tail back and gives up the marker.
+    // code points) at write time, so the per-field ceiling is 4,112 across all
+    // three behaviours. Both changes redistribute bytes inside a bound neither
+    // raises: LO-04 gave a bare path its tail back and gave up the marker, and
+    // WR-03 hands the marker back on the query axis alone.
+    //
+    // SIXTEEN, NOT THE SEVENTEEN THIS COMMENT CARRIED UNTIL WR-03.
+    // `EXPORT_QUERY_REDACTION` is `<query-redacted>` — sixteen characters, which
+    // is why the worked example above lands on 39 (23 + 16) rather than 40, and
+    // why the stored-cap ceiling is 4,112 rather than the 4,113 stated here
+    // before. The ASSERTION was never wrong: it reads
+    // `EXPORT_QUERY_REDACTION.length` rather than a literal. Only the prose
+    // beside it was, and a round that closes four false comments does not get to
+    // leave a fifth standing in a file it is already editing.
     //
     // Asserted over the corpus plus the shapes this plan added, because an
     // arithmetic argument nobody executes is an argument that rots.
