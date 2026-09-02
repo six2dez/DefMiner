@@ -34,6 +34,7 @@ import { readFileSync } from "node:fs";
 import {
   BIDI_OVERRIDES_ISOLATES as BIDI,
   C0_C1_CONTROLS as CONTROLS,
+  TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
 import {
   SOURCES_LABEL_CASE_IDS,
@@ -42,6 +43,7 @@ import {
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
+import { forCellText } from "../safety/display";
 import {
   buildSourceTree,
   expandableKeys,
@@ -538,6 +540,188 @@ describe("step 5 — duplicates keep their distinction", () => {
     expect(tree[0]?.children.length).toBe(2);
     // The directory carries the FIRST row that created it.
     expect(tree[0]?.sourcesIndex).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MD-02 — THE MERGE KEY IS THE VERBATIM SEGMENT, NOT THE RENDERED LABEL
+// ---------------------------------------------------------------------------
+//
+// `07-REVIEW.md` MD-02, EXECUTED BEFORE THE FIX AND RECORDED: two directory
+// names agreeing for the whole of the display cap and differing only past it
+// were merged into ONE node, because the comparison read the post-`forCellText`
+// label — sanitised AND truncated at TABLE_CELL_MAX_GRAPHEMES. The observed
+// pre-fix output was
+//
+//   roots: 1
+//   [{ kind: "directory", labelLen: 256, notes: ["label-truncated"],
+//      kids: [ { kind: "source", label: "secret.js" },
+//              { kind: "source", label: "x.js" } ] }]
+//
+// The tree told the operator that `secret.js` and `x.js` were siblings in one
+// directory. They are not; they are in two directories whose names differ. The
+// `label-truncated` note DID render, but it says the LABEL was cut — not that
+// two directories were merged — and `duplicate` did not fire, because the two
+// LEAVES have different labels.
+//
+// THE TWO SIDES ARE ASSERTED SEPARATELY, and they must not be confused:
+//   * the MERGE reads the raw segment — byte identity, nothing weaker (no
+//     truncation, no sanitisation) and nothing stronger (no case folding, no
+//     Unicode normalisation);
+//   * the LABEL is still `forCellText`'s output and still carries its note. The
+//     assertions below pin the rendered label to `forCellText` BY CALLING IT,
+//     so a change to what reaches the DOM fails here rather than in review.
+//
+// EVERY NON-ASCII CODEPOINT BELOW IS WRITTEN AS AN ESCAPE, never as a literal.
+// A NUL byte and a combining acute are invisible in a diff, and this phase has
+// already repaired one spec that carried invisible separators as literal bytes.
+
+describe("MD-02 — a directory merges on the VERBATIM segment", () => {
+  /** The review's reproduction length: 300 characters, so two names agree for
+   *  the whole of the cap and first differ at character 301. Written against
+   *  the constant rather than as a literal so a cap change moves it. */
+  const PAST_THE_CAP = "A".repeat(TABLE_CELL_MAX_GRAPHEMES + 44);
+
+  it("keeps two directories differing only PAST the cap as TWO nodes", () => {
+    // THE EXECUTED REPRODUCTION. Pre-fix this reported 1 root where it wants 2.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/secret.js` },
+      { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}evil/x.js` },
+    ]);
+
+    expect(tree.length).toBe(2);
+    expect(tree.map((node) => node.kind)).toEqual(["directory", "directory"]);
+    expect(tree.map((node) => node.sourcesIndex)).toEqual([0, 1]);
+    expect(tree.map((node) => node.children.length)).toEqual([1, 1]);
+    expect(
+      tree.map((node) => node.children.map((child) => child.label)),
+    ).toEqual([["secret.js"], ["x.js"]]);
+    expect(
+      tree.map((node) => node.children.map((child) => child.kind)),
+    ).toEqual([["source"], ["source"]]);
+  });
+
+  it("still renders the SANITISED, TRUNCATED label on both of them", () => {
+    // The fix changes what is COMPARED, never what is DISPLAYED. Nothing here
+    // may put an untruncated segment on a node.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/secret.js` },
+      { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}evil/x.js` },
+    ]);
+
+    expect(tree[0]?.label).toBe(forCellText(`${PAST_THE_CAP}bank`));
+    expect(tree[1]?.label).toBe(forCellText(`${PAST_THE_CAP}evil`));
+    for (const node of tree) {
+      expect(node.label.length).toBe(TABLE_CELL_MAX_GRAPHEMES);
+      expect(node.notes).toContain("label-truncated");
+      expect(node.degraded).toBe(true);
+    }
+    // AND THE RAW SEGMENT IS NOWHERE ON EITHER NODE.
+    for (const node of everyNode(tree)) {
+      expect(node.label).not.toBe(`${PAST_THE_CAP}bank`);
+      expect(node.label).not.toBe(`${PAST_THE_CAP}evil`);
+    }
+  });
+
+  it("marks BOTH of them duplicate — the marker is about the SCREEN", () => {
+    // THE `duplicate` MARKER STAYS ON THE DISPLAY LABEL, deliberately. Its job
+    // is to warn the operator that two rendered rows look identical, which is
+    // exactly the situation these two are now in: two distinct directories
+    // whose labels were both cut at the same cap. Moving the marker onto the
+    // merge key would leave the pair UNMARKED, and the operator would read two
+    // identical rows as the renderer having drawn one directory twice.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/secret.js` },
+      { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}evil/x.js` },
+    ]);
+    expect(tree[0]?.label).toBe(tree[1]?.label);
+    expect(tree.map((node) => node.duplicate)).toEqual([true, true]);
+  });
+
+  it("keeps two directories differing only in a STRIPPED codepoint as TWO nodes", () => {
+    // The same leak in its other spelling: sanitisation, not truncation. A NUL
+    // byte is removed from the LABEL, so `lib\u0000` and `lib` render
+    // identically — and they are two directories the target shipped.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: "src/lib\u0000/a.js" },
+      { sourceIndex: 1, sourcesVerbatim: "src/lib/b.js" },
+    ]);
+    expect(tree.length).toBe(1);
+    const kids = tree[0]?.children ?? [];
+    expect(kids.length).toBe(2);
+    expect(kids.map((node) => node.kind)).toEqual(["directory", "directory"]);
+    expect(kids.map((node) => node.label)).toEqual(["lib", "lib"]);
+    expect(kids.map((node) => node.duplicate)).toEqual([true, true]);
+    expect(kids.map((node) => node.sourcesIndex)).toEqual([0, 1]);
+  });
+
+  it("STILL merges two byte-identical long segments into ONE node", () => {
+    // The other half of the equality. A fix that stopped merging entirely would
+    // pass every assertion above and be a different bug.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/secret.js` },
+      { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}bank/x.js` },
+    ]);
+    expect(tree.length).toBe(1);
+    expect(tree[0]?.kind).toBe("directory");
+    expect(tree[0]?.children.length).toBe(2);
+    // The directory carries the FIRST row that created it, unchanged.
+    expect(tree[0]?.sourcesIndex).toBe(0);
+  });
+
+  it("STILL merges two byte-identical short segments into ONE node", () => {
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: "src/deep/a.js" },
+      { sourceIndex: 1, sourcesVerbatim: "src/deep/b.js" },
+    ]);
+    expect(tree.length).toBe(1);
+    expect(tree[0]?.children.length).toBe(1);
+    expect(tree[0]?.children[0]?.children.length).toBe(2);
+  });
+
+  it("does not strengthen the merge into a CASE-FOLDING one, at interior depth", () => {
+    // The existing case-only assertion is over two ROOT-level directories. This
+    // one is over an INTERIOR pair, which is the comparison this fix touched.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: "src/srcdir/a.js" },
+      { sourceIndex: 1, sourcesVerbatim: "src/SRCDIR/b.js" },
+    ]);
+    expect(tree.length).toBe(1);
+    const kids = tree[0]?.children ?? [];
+    expect(kids.map((node) => node.label)).toEqual(["srcdir", "SRCDIR"]);
+    expect(kids.map((node) => node.kind)).toEqual(["directory", "directory"]);
+  });
+
+  it("does not strengthen the merge into a NORMALISING one, at interior depth", () => {
+    // NFC beside NFD. They render identically and are different strings; the
+    // merge must see two, exactly as step 5's header refuses by name.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: "src/caf\u00e9/a.js" }, // NFC
+      { sourceIndex: 1, sourcesVerbatim: "src/cafe\u0301/b.js" }, // NFD
+    ]);
+    expect(tree.length).toBe(1);
+    const kids = tree[0]?.children ?? [];
+    expect(kids.length).toBe(2);
+    expect(kids[0]?.label).not.toBe(kids[1]?.label);
+    expect(kids[0]?.label.normalize("NFC")).toBe(
+      kids[1]?.label.normalize("NFC"),
+    );
+  });
+
+  it("leaves the ROOT merge alone — it already keyed on the raw label", () => {
+    // `buildSourceTree`'s `rootByLabel` reads `classify`'s RAW `rootLabel` and
+    // applies `forCellText` only when the node is built, so the synthetic roots
+    // never had MD-02. Confirmed by reading, and pinned here so a later edit
+    // cannot introduce it.
+    const tree = buildSourceTree([
+      { sourceIndex: 0, sourcesVerbatim: "webpack:///./src/a.js" },
+      { sourceIndex: 1, sourcesVerbatim: "webpack:///./src/b.js" },
+      { sourceIndex: 2, sourcesVerbatim: "file:///etc/c.js" },
+    ]);
+    expect(tree.map((node) => node.label)).toEqual(["webpack:", "file:"]);
+    expect(tree.map((node) => node.kind)).toEqual(["root", "root"]);
+    expect(tree[0]?.children.length).toBe(1);
+    expect(tree[0]?.children[0]?.children.length).toBe(2);
   });
 });
 
