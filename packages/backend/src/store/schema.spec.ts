@@ -28,7 +28,7 @@ import {
 
 import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
 
-/** The eight tables the operator approved, across FOUR one-way checkpoints.
+/** The eight tables the operator approved, across FIVE one-way checkpoints.
  *  Exactly these, in this order.
  *
  *  - `analyses`, `artifacts`, `observations`, `settings` — plan 01-01's one-way
@@ -49,13 +49,47 @@ import { migrate, MIGRATIONS, SCHEMA_VERSION } from "./migrations";
  *    row per recovered source under the normal retention caps, so a 781-source
  *    map is 781 rows in each table against a `DEFAULT_RETENTION_MAX_ROWS` of
  *    50,000, and eviction is met sooner here than on any other table.
+ *  - NO TABLE — plan 07-12's `blocking-human` checkpoint (option A,
+ *    approve-as-specified, 2026-09-02). THE FIRST APPROVAL IN THIS FILE'S
+ *    HISTORY THAT CHANGES A KEY RATHER THAN A TABLE SET, named here because it
+ *    is one-way on exactly the terms adding a table is, and stated that way so a
+ *    later reader does not scan the array below for a ninth member that was
+ *    never added. `source_sightings`' PRIMARY KEY moved from
+ *    `(project_id, map_sha256, source_index)` to
+ *    `(project_id, artifact_sha256, map_sha256, source_index)` in migration v9.
+ *    The operator was shown, before the step was written: both affected column
+ *    lists in full — `source_sightings`' ten columns, none of which change type,
+ *    nullability or CHECK, and `sources`' five, which this step does not touch
+ *    at all; the old key and the new key side by side; the migration version
+ *    (v9); the transient table name the rebuild uses (`source_sightings_v9`,
+ *    which does not survive the step and is therefore not a member here, the
+ *    same shape `audit_v6` has in step v7); the row-volume cost for the
+ *    duplicated-map case — where the interim guard wrote one set of sightings
+ *    for two bundles this writes two, so D-09's accepted one-row-per-recovered
+ *    -source cost now applies PER BUNDLE and a 781-source map seen in two
+ *    bundles is 1,562 rows rather than 781; and the irreversible half — the
+ *    ladder is forward-only, so undoing this is another forward step that
+ *    rebuilds under a narrower key and WOULD lose rows, because two bundles'
+ *    sightings collapse onto one key going back. A sighting's published identity
+ *    became "this bundle's view of this map at this index" rather than "this map
+ *    at this index", and later work inherits the wider identity.
  *
- *  ALL FOUR approval events are named on purpose. A comment reading "five"
+ *  ALL FIVE approval events are named on purpose. A comment reading "five"
  *  above an array holding six is the exact drift shape this repo keeps catching,
  *  and it would have been introduced here by the edit that added the sixth
  *  entry — and again by the edit that added the seventh and eighth, which is
  *  why the count in the first line above was rewritten in the same commit as
- *  the array. `listTables()` orders `name ASC`, which is why `scans` lands
+ *  the array.
+ *
+ *  THE FIFTH EVENT IS THE ONE WHERE THE ARRAY DID NOT MOVE, and it is the drift
+ *  shape in the direction the paragraph above did not anticipate. Plan 07-12
+ *  approved a KEY change, so the approval count in the first line advanced while
+ *  the array kept its eight members and every line inside the literal below
+ *  stayed byte-identical. The rule survives with its scope corrected: the count
+ *  is rewritten in the same commit as the EVENT it counts, which is the array
+ *  only when the event is a table. Rewriting `eight` to `nine` here would have
+ *  introduced exactly the drift this paragraph exists to catch.
+ *  `listTables()` orders `name ASC`, which is why `scans` lands
  *  between `observations` and `settings`, and why `source_sightings` precedes
  *  `sources`: `_` (0x5F) sorts before `s` (0x73). */
 const EXPECTED_TABLES = [
