@@ -75,6 +75,13 @@ import {
 import { getArtifact } from "../store/artifacts";
 import { migrate } from "../store/migrations";
 import { listObservations } from "../store/observations";
+// THE DRILL-DOWN'S OWN TWO READS. W-3 is a claim about what the operator SEES
+// after an ingest, so the regression makes the same two calls SourceBrowser.vue
+// makes rather than reading the table behind them.
+import {
+  countRecoveredSourcesByArtifact,
+  listRecoveredSourcesPage,
+} from "../store/reads";
 import { retentionCounts } from "../store/retention";
 import { GLOBAL_PROJECT_ID, putSetting } from "../store/settings";
 import { counters, resetTelemetryForTest, slimStatus } from "../telemetry";
@@ -1951,13 +1958,19 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
     expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length);
   });
 
-  it("does not let a SECOND bundle carrying the same map take the first's sightings", async () => {
-    // 07-REVIEW.md HI-03, end to end. `map_sha256` is content-addressed over the
-    // DECODED MAP JSON and the sighting key does not carry the artifact, so two
-    // bundles with a byte-identical map collide. Before the attribution guard
-    // the second ingest MOVED all N sightings onto artifact B, and artifact A's
-    // drill-down then reported a RESOLVED zero — "No recovered sources in this
-    // bundle" about a bundle DefMiner had recovered N sources from.
+  it("gives a SECOND bundle carrying the same map its OWN recovered-source evidence", async () => {
+    // 07-VERIFICATION.md W-3 and 07-REVIEW.md HI-03, end to end, and this case
+    // is the executed form of the finding rather than a description of it.
+    //
+    // `map_sha256` is content-addressed over the DECODED MAP JSON and the v8
+    // sighting key did not carry the artifact, so two bundles with a
+    // byte-identical map collided. Before the interim guard the second ingest
+    // MOVED all N sightings onto artifact B. With the interim guard artifact A
+    // kept them and artifact B's were DISCARDED — so B's drill-down reported a
+    // RESOLVED zero, "No recovered sources in this bundle", about a bundle
+    // DefMiner had recovered N sources from. Migration v9 put `artifact_sha256`
+    // in the key, and the assertion this case exists to make is the one the
+    // product could not make before it: BOTH artifacts report N.
     //
     // The two bundles differ only in their lead comment, which is exactly the
     // cheapest way a target reaches this: a CDN mirror with a different banner.
@@ -1977,10 +1990,9 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
     p.offer();
     await runOnce(p.overrides);
 
-    // TWO artifacts, ONE map, ONE set of sightings — the collision is real and
-    // this case is not measuring two independent maps.
+    // TWO artifacts, ONE map — the collision is real and this case is not
+    // measuring two independent maps.
     expect(await countTable("artifacts")).toBe(2);
-    expect(await countTable("source_sightings")).toBe(LABELS.length);
     const maps = (
       fx.raw
         .prepare(
@@ -1990,7 +2002,12 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
     ).map((row) => row.m);
     expect(maps).toHaveLength(1);
 
-    // EVERY SIGHTING STILL NAMES THE FIRST BUNDLE.
+    // TWICE THE SIGHTINGS, ONE PER BUNDLE PER SOURCE. This is the row-volume
+    // cost the operator accepted at 07-12's checkpoint, asserted rather than
+    // assumed: it is the visible shape of "both bundles kept their evidence".
+    expect(await countTable("source_sightings")).toBe(LABELS.length * 2);
+
+    // EVERY SIGHTING NAMES ITS OWN BUNDLE, and both bundles are present.
     const artifacts = new Set(
       (
         fx.raw
@@ -2000,22 +2017,51 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
           .all(PROJECT) as { a: string }[]
       ).map((row) => row.a),
     );
-    expect(artifacts.size).toBe(1);
-    const firstDigest = (
+    expect(artifacts.size).toBe(2);
+    const digests = (
       fx.raw
         .prepare(
           "SELECT sha256 AS s FROM artifacts WHERE project_id = ? ORDER BY first_seen_at ASC, sha256 ASC",
         )
         .all(PROJECT) as { s: string }[]
-    )[0]?.s;
-    expect([...artifacts][0]).toBe(firstDigest);
+    ).map((row) => row.s);
+    expect([...artifacts].sort()).toEqual([...digests].sort());
 
-    // AND THE HEALTH COUNTERS DO NOT REPORT ROWS THAT DO NOT EXIST. Before the
-    // fix `sightingsRecorded` climbed to 2N over N rows.
-    expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length);
-    expect(counters.sourcemap.sightingsDiscardedOtherArtifact).toBe(
-      LABELS.length,
+    // ===================================================================
+    // THE STATEMENT W-3 SAYS THE PRODUCT COULD NOT MAKE
+    // ===================================================================
+    // Each artifact's drill-down returns its OWN N rows, and the column the
+    // operator reads reports N for BOTH. A zero here would be a RESOLVED zero —
+    // the one whose whole design is that it means "DefMiner looked and there was
+    // nothing" — and before v9 one of these two was exactly that.
+    const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
+    for (const digest of digests) {
+      const page = await listRecoveredSourcesPage(fx.db, PROJECT, digest, null, 50);
+      expect(
+        page.rows,
+        `artifact ${digest.slice(0, 12)} drilled down to ${String(page.rows.length)} rows`,
+      ).toHaveLength(LABELS.length);
+      expect(
+        counts.get(digest),
+        `artifact ${digest.slice(0, 12)} reported ${String(counts.get(digest))} on the Sources column`,
+      ).toBe(LABELS.length);
+    }
+
+    // AND THE HEALTH COUNTERS REPORT WHAT WAS ACTUALLY WRITTEN. `sightingsRecorded`
+    // is 2N because 2N rows exist — before v9 it was N over N rows under the
+    // guard, and 2N over N rows before the guard, which is the defect in the
+    // other direction (MD-03's shape).
+    expect(counters.sourcemap.sightingsRecorded).toBe(LABELS.length * 2);
+    // NO COUNTER REPORTS A DISCARD, because the loss can no longer happen. The
+    // retired member is asserted ABSENT rather than asserted zero: a permanently
+    // zero number beside numbers that move is a number carrying no information.
+    expect(Object.keys(counters.sourcemap)).not.toContain(
+      "sightingsDiscardedOtherArtifact",
     );
+    // AND NOTHING WAS RECORDED AS A STORE ANOMALY. `changes: 0` is now a store
+    // anomaly rather than an attribution discard, so a non-zero here would mean
+    // the upsert neither inserted nor updated.
+    expect(counters.storeErrors).toBe(0);
   });
 
   it("finishes `done` with a NULL error — a recovered map is not a degradation", async () => {

@@ -297,6 +297,26 @@ describe("counters.sourcemap — Phase 7 attribution inside the ONE object", () 
     expect(counters.rejected.too_large).toBe(0);
   });
 
+  it("no longer carries the retired attribution-discard counter (07-12)", () => {
+    // ASSERTED ABSENT, NOT ASSERTED ZERO, and the difference is the point.
+    // `sightingsDiscardedOtherArtifact` counted sightings dropped because a
+    // `(map, index)` was already attributed to a DIFFERENT bundle — plan 07-05's
+    // interim mitigation for 07-REVIEW.md HI-03. Migration v9 put
+    // `artifact_sha256` in `source_sightings`' PRIMARY KEY, so a conflicting row
+    // necessarily agrees on the bundle and the discard cannot happen. A number
+    // that can never again be non-zero, sitting beside numbers that move, is a
+    // number carrying no information — the same defect MD-03 records in the
+    // other direction — so it was removed rather than pinned at zero.
+    //
+    // This case exists so the removal is ASSERTED. Nothing in this file pinned
+    // the member list, so a re-added member would otherwise be merely tolerated,
+    // and re-adding it is what a reader of an old SUMMARY naming the counter is
+    // most likely to try.
+    expect(Object.keys(counters.sourcemap)).not.toContain(
+      "sightingsDiscardedOtherArtifact",
+    );
+  });
+
   it("starts every sourcemap member at zero", () => {
     for (const [name, value] of Object.entries(counters.sourcemap)) {
       if (name === "mapRefused" || name === "derivedRejected") continue;
