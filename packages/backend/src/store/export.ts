@@ -244,19 +244,55 @@ export function isProtocolShapedLabel(label: string): boolean {
  * The redacted form of one manifest `sources` label.
  *
  * ===========================================================================
- * THIS IS NOT A PER-COLUMN EXEMPTION. IT IS REDACTION APPLIED WHERE ITS
- * SUBJECT EXISTS (LO-04)
+ * THIS IS NOT A PER-COLUMN EXEMPTION. IT IS EACH AXIS REDACTED WHERE THAT AXIS
+ * EXISTS (LO-04, THEN WR-03)
  * ===========================================================================
  * The `sources` entry below used to argue that "NO PER-COLUMN EXEMPTION IS
  * INVENTED", and that argument STILL STANDS — nothing here withholds less of a
  * URL than `observations.url` withholds, and the raw option remains the only
  * route to the unredacted bytes. What changed is narrower than an exemption:
  * {@link redactUrlForExport} cuts at the first `?` or `#` because in a URL
- * those characters BEGIN the query and the fragment. A label that is not a URL
- * has neither axis, so there is no query to withhold and the marker would be a
- * FALSE STATEMENT in an exported artifact — plus a legal filename tail thrown
- * away with it. `src/components/Button#new.tsx` exported as
- * `src/components/Button<query-redacted>`: two wrong claims in one field.
+ * those characters BEGIN the query and the fragment, and a `sources` label is a
+ * URL only when it is protocol-shaped.
+ *
+ * THE TWO AXES ARE NOT THE SAME QUESTION. That is what LO-04 got right and
+ * what 07-16 then overshot by collapsing them back into one shape test.
+ *
+ * THE FRAGMENT AXIS, UNMOVED. `#` is a legal filename character;
+ * `src/components/Button#new.tsx` is a real name. Cutting it did two wrong
+ * things at once: it DISCARDED a legal path tail, and it printed a marker
+ * telling the reader a query had been withheld when there had never been one —
+ * `src/components/Button<query-redacted>`, two wrong claims in one field. So
+ * the fragment axis is still cut only on a label that is actually a URL.
+ *
+ * THE QUERY AXIS, RESTORED. 07-16's premise — that a label which is not a URL
+ * has neither axis — was FALSE for the commonest shape there is.
+ * `src/App.vue?vue&type=script&lang.ts` is the ordinary vite and webpack loader
+ * query, and `sourcePathShape()` puts it in `relative`, so between 07-16 and
+ * WR-03 it exported VERBATIM in the mode an operator picks BECAUSE the artifact
+ * is going to be shared. `map-fixture.ts` carries that shape as `loader-query`,
+ * and `export.spec.ts` pins both of its modes by that id.
+ *
+ * WHY THE ASYMMETRY IS DEFENSIBLE, AND WHAT KIND OF CLAIM IT IS. `?` is a
+ * reserved delimiter in URI syntax (RFC 3986) and the Win32 API rejects it in a
+ * path, so a `?` inside a BUNDLER-EMITTED `sources` label is overwhelmingly a
+ * loader or URL artifact rather than part of a source name. That is a claim
+ * about the population of labels a bundler produces. It is deliberately NOT the
+ * stronger claim that a `?` cannot be part of a name — that stronger claim is
+ * untrue, and this comment does not make it. On the population that reaches
+ * this function, a marker beside a cut `?` is a TRUE statement, which is the
+ * constraint LO-04 established and the only one that governs here.
+ *
+ * AND THE PREMISE IS THE OPERATOR'S, NOT THIS MODULE'S. It was put to them at a
+ * blocking checkpoint on 2026-09-02 (WR-03, `07-22-PLAN.md` task 1), against the
+ * stated alternative of correcting the sentence and SANCTIONING the disclosure
+ * instead, with the note that the alternative was the right answer if they
+ * judged a `?` could legitimately be part of a source name. They accepted it.
+ * What a redacted manifest label is now promised to withhold, in the words the
+ * decision was made against:
+ *
+ *   "A non-protocol label is cut at the first `?` only, with the SHIPPED marker
+ *   appended, and keeps its `#` tail."
  *
  * A redaction that reports withholding something that was never there is not a
  * stronger redaction. It is an unreliable one, and an operator who finds one
@@ -271,7 +307,14 @@ export function isProtocolShapedLabel(label: string): boolean {
  * @internal
  */
 export function redactSourceLabelForExport(label: string): string {
-  return isProtocolShapedLabel(label) ? redactUrlForExport(label) : label;
+  if (isProtocolShapedLabel(label)) return redactUrlForExport(label);
+  // NOT a URL, so only the query axis applies: `#` here is a filename
+  // character, and `redactUrlForExport` would cut on it. Hence the first `?`
+  // by hand rather than delegating — the SAME marker, a narrower cut.
+  const query = label.indexOf("?");
+  return query === -1
+    ? label
+    : `${label.slice(0, query)}${EXPORT_QUERY_REDACTION}`;
 }
 
 /**
