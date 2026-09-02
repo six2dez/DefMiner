@@ -98,3 +98,7 @@ which is where the operator will first see the two tables growing unbounded.
   no gate. 07-13 touches no frontend file — its three changed files are all under
   `packages/backend/src` — so the baseline cannot have grown. Unchanged and still out
   of scope.
+
+## From 07-21 (2026-09-02)
+
+- **`.planning/REQUIREMENTS.md:842` (MAP-05) says "the 39-entry hostile corpus in `map-fixture.ts`".** That figure matched neither corpus arithmetic BEFORE this plan (`HOSTILE_MAP_CASES` 13 + `SOURCES_LABEL_CASES` 23 + `sizeBoundaryCases` 2 = 38) and is out of `07-21-PLAN.md`'s `files_modified`, so it was NOT edited here. Recorded rather than fixed: it is a pre-existing prose figure, not drift this plan introduced. Whoever reconciles it should decide which arrays the sentence means before changing the number — that is the actual ambiguity.

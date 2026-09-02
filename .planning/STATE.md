@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-20-PLAN.md
-last_updated: "2026-09-02T20:16:33.062Z"
+stopped_at: Completed 07-21-PLAN.md
+last_updated: "2026-09-02T20:31:30.049Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: ac2a193cd14706ad29e252218c0f808d9b0ddfa8
+state_head: ce2db42f4ddcbec10f058a54453630d24aab8ecc
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 97
-  completed_plans: 92
+  completed_plans: 93
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 20 of 22
-Status: Executing gap-closure round 2 — 20 of 22 plans complete, 07-21 next
-Last activity: 2026-09-02 — 07-20 complete; G-07-2 / WR-02 and IN-03 closed
+Plan: 21 of 22
+Status: Executing gap-closure round 2 — 21 of 22 plans complete, 07-22 next
+Last activity: 2026-09-02 — 07-21 complete; G-07-3 / WR-03 first half closed
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -646,6 +646,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P18 | 8 min | 2 tasks | 2 files |
 | Phase 07 P19 | 7 min | 2 tasks | 2 files |
 | Phase 07 P20 | 6 min | 3 tasks | 2 files |
+| Phase 07 P21 | 13 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -1042,6 +1043,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: A stage abandoned on project change now emits NO depth refusal at all, because the two stillCurrent() re-checks return done(null) from inside the loop and never reach the emission below it. — Correct and deliberate: a stage that was abandoned did not decline to recurse, it stopped. It is a visible behaviour change, so it is stated in the code beside the emission rather than left to be rediscovered.
 - [Phase 07]: Option A (2026-09-02, operator): put `source_sightings` into `deleteDigest`'s cascade rather than scope the module header's claim down to two children — The operator confirmed verbatim that no foreign key, no `ON DELETE CASCADE`, no new migration, no new index and no change to `SCHEMA_VERSION` (still 9) is implied. `retention.spec.ts:1320-1330` already recorded the UAT eviction choice as CASCADE by anti-join, which is why A makes the header true rather than smaller.
 - [Phase 07]: `SIGHTING_KEYS_FOR_DIGEST_SQL` orders by `map_sha256 ASC, source_index ASC` — the key's own tail, total inside the bound `(project_id, artifact_sha256)` scope — so a capped cascade enumeration resumes deterministically without a synthetic tie-break column — The PK has been all four columns since migration `v: 9`, so the two selected columns are unique within the two bound ones. The ordering is an index-ordered prefix scan rather than a sort, and it matches the tie-break rule every other candidate statement in `retention.ts` follows.
+- [Phase 07]: 07-21: the 24th corpus case is APPENDED, never inserted — the RED commit is 20 insertions / 0 deletions, which PROVES the first 23 are byte-unchanged rather than asserting it — Every consumer's index-ordered assertion is undisturbed, and the byte-unchanged claim becomes a diffstat a reviewer can read in one line.
+- [Phase 07]: 07-21: tree.spec.ts's CORPUS_OUTLINE gains one MEASURED line and the pre/post merge-key comparison's own 47-over-21 is PRESERVED as its record rather than overwritten — That comparison was made over the 23-label corpus and cannot honestly be restated as covering 24. The loader-query label MERGES into the src directory benign-control already creates: node count 47 -> 48, root count unchanged at 21.
+- [Phase 07]: 07-21: export.spec.ts:909's title and its stated tripwire are now BOTH false while its assertion still passes — disclosed and left standing, owned by 07-22 — The redaction DIRECTION is 07-22's decision at a blocking checkpoint. Correcting either sentence in 07-21 would have decided it silently. The untripped tripwire is itself the direct evidence for WR-03.
 
 ### Known Risks Carried Forward
 
@@ -1084,8 +1088,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T20:16:32.898Z
-**Stopped at:** Completed 07-20-PLAN.md
+**Last session:** 2026-09-02T20:31:17.525Z
+**Stopped at:** Completed 07-21-PLAN.md
 **Resume file:** None
 
 ### Blockers

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 86
+open_count: 88
 waived_count: 0
 fixed_count: 33
-total_count: 119
-last_updated: 2026-09-02T10:20:46.543Z
+total_count: 121
+last_updated: 2026-09-02T20:32:28.953Z
 ---
 
 # Broken Windows Ledger
@@ -155,6 +155,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 117 | 07 | stub | packages/frontend/src/components/SourceBrowser.vue |  | The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export="false" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10. | fixed |  | 2026-09-02T03:09:47.676Z | 2026-09-02T03:52:49.051Z |
 | 118 | 07 | deviation | .planning/REQUIREMENTS.md |  | WINDOWS 85's stated risk FIRED AGAIN in 07-10: requirements.mark-complete inserted three blank lines into the MACHINE-OWNED DERIVED RESIDUAL span while ticking MAP-07/UI-05, which outbound-prohibition.spec.ts byte-compares. 07-10 captured the span's sha256 BEFORE running the verb, restored it byte-for-byte after, and re-ran the gate green (465 tests) before committing. The tool defect is in gsd-tools' markdown handling, not in this repository, so it is NOT fixed here and entry 85 stays open. THE PROCEDURE THAT WORKS, for whoever runs the next docs close-out: snapshot the span, run mark-complete, diff, restore, re-run packages/backend/src/outbound-prohibition.spec.ts. OWNER: whoever next runs requirements.mark-complete. | open |  | 2026-09-02T03:52:49.140Z |  |
 | 119 | 07 | deviation | packages/backend/src/store/sources.spec.ts |  | 07-11: the two-bundle disambiguation cases run on a spec-local re-keyed source_sightings, because the shipped v:8 primary key makes the pair unrepresentable. Delete widerKeyFixture() and rebuild on the real table once plan 07-12 widens the key. | open |  | 2026-09-02T10:20:46.543Z |  |
+| 120 | 07 | deviation | packages/frontend/src/sourcemap/tree.spec.ts |  | 07-21 deviation: tree.spec.ts required four AUTHORED expectations (recorded outline, node/root counts, corpus-index coverage), not the prose numeral the plan predicted. Absorbed by measuring, not by loosening. | open |  | 2026-09-02T20:32:28.865Z |  |
+| 121 | 07 | deviation | packages/backend/src/store/export.spec.ts |  | 07-21 disclosure: export.spec.ts:909's title and :910-914's tripwire comment are now FALSE while the assertion still passes. Left standing deliberately; owned by plan 07-22. | open |  | 2026-09-02T20:32:28.953Z |  |
 
 ````json
 [
@@ -1584,6 +1586,30 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-02T10:20:46.543Z",
+    "resolved_at": null
+  },
+  {
+    "id": 120,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/frontend/src/sourcemap/tree.spec.ts",
+    "line": null,
+    "description": "07-21 deviation: tree.spec.ts required four AUTHORED expectations (recorded outline, node/root counts, corpus-index coverage), not the prose numeral the plan predicted. Absorbed by measuring, not by loosening.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T20:32:28.865Z",
+    "resolved_at": null
+  },
+  {
+    "id": 121,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/backend/src/store/export.spec.ts",
+    "line": null,
+    "description": "07-21 disclosure: export.spec.ts:909's title and :910-914's tripwire comment are now FALSE while the assertion still passes. Left standing deliberately; owned by plan 07-22.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T20:32:28.953Z",
     "resolved_at": null
   }
 ]
