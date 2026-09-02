@@ -1,532 +1,314 @@
 ---
 phase: 07-sourcemap-reconstruction
-reviewed: 2026-09-02T06:20:00Z
-depth: deep
-files_reviewed: 28
+reviewed: 2026-09-02T14:00:00Z
+depth: standard
+round: 2
+files_reviewed: 31
 files_reviewed_list:
-  - packages/engine/src/sourcemap/announce.ts
-  - packages/engine/src/sourcemap/parse.ts
-  - packages/engine/src/sourcemap/map-fixture.ts
-  - packages/engine/src/decode.ts
-  - packages/engine/src/sanitise.ts
-  - packages/engine/src/thresholds.ts
-  - packages/engine/src/contract.ts
-  - packages/engine/src/csv.ts
-  - packages/backend/src/index.ts
+  - packages/backend/src/a8-measure.spec.ts
   - packages/backend/src/api/spec.ts
-  - packages/backend/src/telemetry.ts
+  - packages/backend/src/index.spec.ts
+  - packages/backend/src/index.ts
+  - packages/backend/src/ingest/consumer.spec.ts
   - packages/backend/src/ingest/consumer.ts
-  - packages/backend/src/sourcemap/derive.ts
-  - packages/backend/src/store/sources.ts
-  - packages/backend/src/store/reads.ts
+  - packages/backend/src/store/export.spec.ts
   - packages/backend/src/store/export.ts
+  - packages/backend/src/store/migrations.spec.ts
   - packages/backend/src/store/migrations.ts
+  - packages/backend/src/store/retention.spec.ts
   - packages/backend/src/store/retention.ts
-  - packages/backend/src/sources-sink-prohibition.spec.ts
-  - packages/frontend/src/App.vue
+  - packages/backend/src/store/schema.spec.ts
+  - packages/backend/src/store/sources.spec.ts
+  - packages/backend/src/store/sources.ts
+  - packages/backend/src/telemetry.spec.ts
+  - packages/backend/src/telemetry.ts
+  - packages/engine/src/sourcemap/announce.spec.ts
+  - packages/engine/src/sourcemap/announce.ts
+  - packages/engine/src/sourcemap/parse.spec.ts
+  - packages/engine/src/sourcemap/parse.ts
+  - packages/engine/src/thresholds.spec.ts
+  - packages/engine/src/thresholds.ts
+  - packages/frontend/src/api/client.spec.ts
   - packages/frontend/src/api/client.ts
-  - packages/frontend/src/safety/display.ts
-  - packages/frontend/src/sourcemap/tree.ts
-  - packages/frontend/src/components/SourceViewer.vue
-  - packages/frontend/src/components/SourcePositionStrip.vue
-  - packages/frontend/src/components/SourceTree.vue
+  - packages/frontend/src/components/SourceBrowser.spec.ts
   - packages/frontend/src/components/SourceBrowser.vue
-  - packages/frontend/src/components/source-filename.ts
+  - packages/frontend/src/components/SourcePositionStrip.spec.ts
+  - packages/frontend/src/components/SourceViewer.spec.ts
+  - packages/frontend/src/sourcemap/tree.spec.ts
+  - packages/frontend/src/sourcemap/tree.ts
 findings:
-  critical: 4
-  warning: 4
-  info: 5
-  total: 13
-severity_breakdown:
-  CRITICAL: 0
-  HIGH: 4
-  MEDIUM: 4
-  LOW: 5
+  critical: 0
+  warning: 3
+  info: 4
+  total: 7
 status: issues_found
 ---
 
-# Phase 7: Code Review Report
+# Phase 7: Code Review Report (round 2 — gap-closure verification)
 
-**Reviewed:** 2026-09-02T06:20:00Z
-**Depth:** deep (cross-file: import graph, RPC contract boundary, SQL key/statement analysis, empirical execution of three suspect paths)
-**Files Reviewed:** 28 source files across `packages/engine`, `packages/backend`, `packages/frontend`, plus `scripts/phase7/` and `knip.json`
+**Reviewed:** 2026-09-02T14:00:00Z
+**Depth:** standard (per-file read of every changed production module, plus targeted cross-file tracing of the retention cascade, the v9 rebuild's interruption states, the D-24 argument chain and the two convergence inequalities)
+**Files Reviewed:** 31
 **Status:** issues_found
 
 ## Summary
 
-The eight security invariants the phase names hold. I checked each one against the code rather than against its docblock, and I say so specifically in **What I Verified** below — including the announce fast-path equivalence argument, which I proved rather than accepted.
+**Every round-1 finding is genuinely closed.** I checked each one against the shipped property rather than against the commit that claims it, and I say which check I ran in **Closures Verified** below — including the two the executors asked to be adjudicated, and the `NOT IN` NULL hazard, which I traced through the DDL rather than through the comment.
 
-What does not hold is a different class of thing: **four numeric/derived claims that the code asserts but does not deliver.** Three of them are in the render path and produce a visibly wrong sentence on ordinary, non-hostile input; one is a retention-convergence inequality that was "restated" in this phase and is not a convergence proof. There is also one schema key that is one column too narrow, which lets a target-controlled value silently reattribute another bundle's evidence.
+**The `NOT IN` is safe, plainly.** `UNSIGHTED_SOURCES_SQL`'s subquery carries `AND source_sha256 IS NOT NULL`, so no NULL can enter the probe list; and the outer `sources.source_sha256` is `NOT NULL` and PK ordinal 2 in migration `v: 8`, so the left-hand side cannot be NULL either. Both halves of SQL's `NOT IN` trap are closed, the closure of the dangerous half is executed by `retention.spec.ts:1648` rather than asserted, and the statement text itself is pinned (`expect(sql).toContain("IS NOT NULL")`). I ran the suite: 31 in-scope spec files green, `tsc --build` green, `eslint` green, `knip` clean apart from the repo's standing `@internal` tag hints.
 
-The pattern across all four HIGH findings is the same and worth naming: **a predicate or an inequality was written to be cheap, and its cheapness changed what it means.** `sourceLineTruncated` avoids a grapheme walk by comparing strings — and so answers "was this string changed?" instead of "was this string cut?". The retention inequality avoids a per-map row cap by counting rows — and so compares the wrong two quantities. `SOURCE_ROWS_PER_MAP_MAX` is derived as rows and spent as sources. In each case the docblock states the intended property in capitals and the code states a weaker one.
+What I did find is one defect **introduced by this round** and two that the round's own edits made reachable:
 
-I executed the three frontend findings against the shipped modules under vitest before filing them; the observed outputs are quoted inline. The probe file was removed and the working tree is clean.
+- **WR-01** is the round's own arithmetic. Plan 07-14 retired the `2 *` factor from `ROWS_INSERTED_PER_ITERATION_MAX` and wrote the new number down — `(2,179, exact)` — in one docblock of `thresholds.ts` while leaving the *neighbouring* docblock, the one that derives `RETENTION_SWEEP_MAX_PASSES = 16`, computing `4,227` in three places. `retention.ts` gets it right and `thresholds.ts` contradicts it. The constant that convergence now hangs on no longer has a derivation that evaluates.
+- **WR-02** is the shape of the new cascade. `deleteDigest` still cascades `observations` and `analyses` only, so an artifact eviction now deletes the parent and leaves its sightings behind — which is the exact state `retention.ts`'s header says three times the cascade cannot create. It converges, because step 3d and `workRemains` catch it; it converges *across passes*, which is not what the invariant says.
+- **WR-03** is LO-04's blast radius. The narrowing is right in principle, but its stated premise — "a label that is not a URL has neither axis" — is false for the vite/webpack loader-query shape (`src/App.vue?vue&type=script`), which is relative, real and absent from the 23-label corpus. The redacted export mode now emits those tails verbatim where it used to suppress them, and nothing tests it.
+
+No finding in this round lets a target-controlled byte reach a filename, a template, a path sink, a command or the DOM; none defeats D-24's fail-closed arm; none is a data-loss risk. **There is no BLOCKER.**
+
+*(No `<structural_findings>` block was supplied for this review, so there is no fallow-substrate section.)*
 
 ---
 
 ## Critical Issues
 
-*(None. No finding in this review lets a target-controlled byte reach a filename, a template, a path sink, or the DOM unsanitised, and none defeats D-24's fail-closed arm.)*
+*(None.)*
 
 ---
 
-## HIGH
+## Warnings
 
-### HI-01: `sourceLineTruncated` answers "was this string changed?", not "was this line cut?" — every CRLF source line is marked truncated and the position readout becomes permanently unreachable
+### WR-01: plan 07-14 retired the `2 *` factor and left `RETENTION_SWEEP_MAX_PASSES`'s derivation computing the pre-retirement insert side — 16's justification now evaluates to 8, and `thresholds.ts` contradicts `retention.ts`
 
+**Classification:** WARNING
 **Files:**
-- `packages/frontend/src/safety/display.ts:230-233`
-- `packages/frontend/src/components/SourceViewer.vue:357-362` (`noLineStructureLine`), `:405-414` (`truncation`), `:676` (per-row marker)
-- `packages/frontend/src/components/SourcePositionStrip.vue:321`
+- `packages/engine/src/thresholds.ts:154-197` (the `RETENTION_SWEEP_MAX_PASSES` docblock), against `:490-491` (`ROWS_INSERTED_PER_ITERATION_MAX`) and `:215` (`RETENTION_SWEEP_EVERY_N`)
+- `packages/backend/src/store/retention.ts:183-184` (the same arithmetic, correct)
 
-**Issue:**
+**Issue:** after this round `ROWS_INSERTED_PER_ITERATION_MAX = ROWS_INSERTED_PER_ARTIFACT_MAX + SOURCE_ROWS_PER_MAP_MAX = 3 + 2048 = 2051`, so the inequality's right-hand side is `RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX = 128 + 2051 = 2179`. The docblock that *derives the constant* still reads the pre-07-14 value in three separate sentences:
+
+```
+ *   8,192 >= 4,227, which is ~1.9x headroom.
+ * ... Raising RETENTION_SWEEP_MAX_ROWS to 4,227 breaks the 1024-row cost cap ...
+ * SIXTEEN, AND NOT NINE. Nine is the smallest integer that satisfies the
+ * inequality (4,227 / 512 = 8.26).
+```
+
+`4,227` is `128 + 3 + 2 * 2048` — the sum with the compensating factor plan 07-14 deleted. The true figures are `8,192 >= 2,179` (**3.76x**, not 1.9x) and `2,179 / 512 = 4.26`, so the smallest satisfying integer is **5** and "the next power of two" is **8**, not 16. The constant 16 is safe — it over-satisfies — but its stated derivation no longer produces it, which is the one thing this repository's threshold discipline exists to prevent.
+
+The contradiction is inside one round and across two files. `ROWS_INSERTED_PER_ITERATION_MAX`'s own new paragraph (`:483`) writes *"the factor was retired second (2,179, exact)"*, and `retention.ts:183` writes *"512 x 16 = 8,192 against 128 + 2,051 = 2,179"*. Only the constant's own derivation was left behind.
+
+`thresholds.spec.ts:260-281, 335-341` asserts the inequality **computed from the constants**, so nothing fails and nothing will: the spec is exactly the gate that cannot catch this class of drift.
+
+**Fix:** rewrite the three numbers in the `RETENTION_SWEEP_MAX_PASSES` docblock and re-derive the choice of 16 from the real quotient — either as "8 is the next power of two above 4.26 and 16 is one doubling of margin, stated as margin", or by lowering the constant. Then make the arithmetic executable so it cannot drift a third time:
 
 ```ts
-export function sourceLineTruncated(value: string): boolean {
-  const prepared = withTabsExpanded(value);
-  return forDisplayText(prepared, SOURCE_LINE_MAX_GRAPHEMES) !== prepared;
-}
+// thresholds.spec.ts — pin the headroom the docblock claims, not just the sign.
+const deleteSide = T.RETENTION_SWEEP_MAX_ROWS * T.RETENTION_SWEEP_MAX_PASSES;
+const insertSide = T.RETENTION_SWEEP_EVERY_N + T.ROWS_INSERTED_PER_ITERATION_MAX;
+expect(insertSide, "the docblock's right-hand side").toBe(2179);
+expect(
+  T.RETENTION_SWEEP_MAX_PASSES,
+  "RETENTION_SWEEP_MAX_PASSES is derived as the next power of two at or above " +
+    "ceil(insertSide / RETENTION_SWEEP_MAX_ROWS); update the derivation with it.",
+).toBe(nextPowerOfTwo(Math.ceil(insertSide / T.RETENTION_SWEEP_MAX_ROWS)));
+expect(deleteSide).toBeGreaterThanOrEqual(insertSide);
 ```
-
-`forDisplayText` does **three** things: strip C0/C1, strip bidi, then grapheme-truncate (`packages/engine/src/sanitise.ts:347-353`). The string inequality is therefore true whenever *any* of the three fired — but the docblock and every caller read it as "the grapheme truncation fired". The docblock's justification ("the engine's grapheme truncation keeps a PREFIX, so the output is the whole prepared line when nothing was cut") is only valid if the two strips are no-ops, which is exactly what target-controlled source cannot be assumed to be.
-
-`C0_C1_CONTROLS` is `/[\u0000-\u001F\u007F-\u009F]/g`, which includes **`\r` (U+000D)**. Lines are produced by `content.split("\n")` (`SourceViewer.vue:255`), so **every line of a CRLF-authored source file ends in a `\r`** and every one of them answers `true`.
-
-**Failure scenario (executed):** a `sourcesContent` entry authored on Windows — a completely ordinary case, not a hostile one — e.g. one line `const a = 1;\r`:
-
-```
-CRLF sourceLineTruncated = true
-  shown 12 total 13
-```
-
-Three consequences, all visible to the operator:
-
-1. **Every visible row renders the `…truncated` marker** (`SourceViewer.vue:676`) on a file where nothing was truncated.
-2. **The position strip is dead for the whole file.** `SourcePositionStrip.vue:321` gives truncation absolute precedence: `if (truncation !== null && selectedLine !== null) return "truncated";`. Since `truncation` is non-null for *every* line, `view` never reaches `"mapped"`, and MAP-03's entire position readout — the feature the codec relocation, D-16, D-17 and the codec-prohibition gate all exist to deliver — is unreachable for any CRLF source. The strip's own comment says the position "is one keystroke away — deselect and reselect after copying"; it is not, because the next selection is also "truncated".
-3. **A one-line CRLF file gets the false O-02 sentence.** `noLineStructureLine` (`:357-362`) fires on `lines.length === 1 && sourceLineTruncated(only)` and renders *"This file has no line structure — it is one line of 13 bytes. It is minified code that the map declared as a source. The line is truncated at 1,024 characters."* about a 13-byte line of readable code.
-
-`\r` is the cheapest trigger, but any stripped C0/C1 or bidi character does it: a legitimate source containing a raw `U+001B` (ESC) byte in a string literal, or a hostile label-adjacent line containing `U+202E`, produces the same false state.
-
-**Fix:** ask the truncation question of the truncation step only, by comparing against the *sanitised* value rather than the *prepared* one:
-
-```ts
-export function forSourceLine(value: string): string {
-  return forDisplayText(withTabsExpanded(value), SOURCE_LINE_MAX_GRAPHEMES);
-}
-
-export function sourceLineTruncated(value: string): boolean {
-  const prepared = withTabsExpanded(value);
-  // Strip FIRST, compare AFTER: the two strips are not truncation, and a line
-  // that lost a \r is not a line that was cut.
-  const stripped = stripForDisplay(prepared); // export the strip from the engine
-  return forDisplayText(stripped, SOURCE_LINE_MAX_GRAPHEMES) !== stripped;
-}
-```
-
-This needs one new export from `packages/engine/src/sanitise.ts` (the two `.replace` calls that `forDisplayText`/`forDisplay`/`forEvidence` already share); `forDisplayText(strip(x), cap) === forDisplayText(x, cap)` is idempotent, so no rendering behaviour changes. Add a spec case with `"const a = 1;\r"` asserting `false`, and one with a lone `U+202E` followed by `x` asserting `false`.
 
 ---
 
-### HI-02: `truncation.shown` and `truncation.total` are counted in three different units; the strip can report "truncated at 1,024 of 601 characters"
+### WR-02: the artifact cascade still deletes only `observations` and `analyses`, so every eviction now creates orphan sightings by construction — which `retention.ts` states three times it cannot do
 
-**File:** `packages/frontend/src/components/SourceViewer.vue:405-414`, rendered by `packages/frontend/src/components/SourcePositionStrip.vue:147-153, 348`
-
-**Issue:**
-
-```ts
-return {
-  shown: [...forSourceLine(line)].length,
-  total: [...line].length,
-};
-```
-
-Three separate unit mismatches in five lines:
-
-- `shown` is measured **after tab expansion** (`forSourceLine` replaces each `	` with two spaces before truncating). `total` is measured on the **raw** line. So a tab-indented line inflates `shown` relative to `total`.
-- `shown` is measured **after** the C0/C1 and bidi strips; `total` is measured **before** them. That is the same conflation as HI-01, arriving at the numbers rather than at the boolean.
-- Both are **code-point** counts (`[...s].length`), while the cap they are being compared against — `SOURCE_LINE_MAX_GRAPHEMES` — is enforced by `cappedText` as a **grapheme** count via `Intl.Segmenter` (`packages/engine/src/sanitise.ts:293-306`). An emoji-heavy or combining-mark-heavy line truncated at exactly 1,024 graphemes yields a `shown` well above 1,024, and the sentence claims characters.
-
-**Failure scenario (executed):** a source line of 600 tabs followed by one character — a deeply-indented generated file, or a map that declares one:
-
-```
-TAB sourceLineTruncated = true
-  shown 1024 total 601
-```
-
-The strip renders, verbatim: **"Line 1 truncated at 1,024 of 601 characters."** `shown > total` is arithmetically impossible for the sentence's own claim, and the whole point of `truncationSentence` is that both interpolations are "DefMiner-computed integers" the operator can trust.
-
-Note that `SourcePositionStrip.vue:87-90` explicitly documents these as "Two DefMiner-computed integers for the selected line" — they are computed, but they are not measurements of the same thing.
-
-**Fix:** measure both numbers on the same prepared, sanitised string, in the same unit the cap uses:
-
-```ts
-const truncation = computed<{ shown: number; total: number } | null>(() => {
-  const state = body.value;
-  const index = selectedLine.value;
-  if (state.kind !== "content" || index === null) return null;
-  const line = state.lines[index];
-  if (line === undefined) return null;
-  // ONE prepared string, ONE unit. `forDisplay` walks it once and returns
-  // { shown, total } already in graphemes — which is what the cap counts.
-  const { shown, total } = forSourceLineCounted(line); // new: forDisplay(prepared, CAP)
-  return shown === total ? null : { shown, total };
-});
-```
-
-`display.ts` already argues that the walking wrapper is too expensive **per row**; this call site is per *selected line*, once, and the file's own docblock at `:395-403` says that cost is deliberately paid here. Use `forDisplay` here and keep `forDisplayText` on the row path.
-
----
-
-### HI-03: `source_sightings`' primary key omits `artifact_sha256`, so a second bundle carrying the same map silently reattributes the first bundle's sightings — and the first bundle then reports a *resolved* zero
-
+**Classification:** WARNING
 **Files:**
-- `packages/backend/src/store/migrations.ts:820-832` (v8 DDL)
-- `packages/backend/src/store/sources.ts:112-124` (`RECORD_SIGHTING_SQL`)
+- `packages/backend/src/store/retention.ts:1092-1155` (`deleteDigest`)
+- `packages/backend/src/store/retention.ts:42-45` (the header's invariant), `:392-395` (`ORPHAN_OBSERVATIONS_SQL`'s "the cascade below cannot create one")
+- `packages/backend/src/store/retention.ts:905-951` (step 3d, where the orphans are collected instead)
 
-**Issue:** the table is keyed `PRIMARY KEY (project_id, map_sha256, source_index)` and the upsert's conflict arm rewrites the artifact:
+**Issue:** the module's central ordering claim is stated in the header —
 
-```sql
-ON CONFLICT (project_id, map_sha256, source_index) DO UPDATE SET
-  artifact_sha256 = excluded.artifact_sha256,
-  request_id      = excluded.request_id,
-  source_sha256   = excluded.source_sha256,
-  sources_verbatim = excluded.sources_verbatim
+> *"the cascade is therefore explicit and runs in dependency order — a digest's observations and analyses go BEFORE the artifact itself, so a pass that runs out of budget halfway leaves a parent with fewer children and never a child with no parent"*
+
+— and restated at `ORPHAN_OBSERVATIONS_SQL`: *"The cascade below cannot create one — children go first."* Plan 07-13 added a **third** child table without adding it to the cascade. `deleteDigest` enumerates `OBSERVATION_KEYS_FOR_DIGEST_SQL` and `ANALYSIS_KEYS_FOR_DIGEST_SQL`, then deletes `DELETE_ARTIFACT_SQL`. It never touches `source_sightings`. So the sequence for every evicted map-bearing bundle is: delete its observations, delete its analyses, **delete the artifact row while its sightings still name it**, and only later — in step 3d, in the same pass *if the budget survives* — collect those rows through `ORPHAN_SIGHTINGS_SQL`.
+
+That is not a crash-recovery path. It is the ordinary path, taken on every eviction of a bundle that carried a map.
+
+**Failure scenario (reachable, not contrived):** a pass whose budget is consumed by the artifact loop. 512 evictable artifacts with no observations and no analyses cost exactly 512 deletes; the loop ends with `budget() === 0` and `moreWork` unset, step 2 and step 3d are skipped by their `budget() > 0` guards, and the pass returns having orphaned every one of those bundles' sightings. `workRemains` then sets `moreWork` via `ORPHAN_SIGHTINGS_SQL`, so the state is repaired on a later pass or a later cadence — but between them the database holds children with no parent, which is precisely the state the module says it never produces. `retention.spec.ts:1337`'s cascade case drives `sweepToConvergence`, i.e. repeated passes, so the single-pass property is not the one under test.
+
+Impact is consistency and documentation, not loss: `readSightingOrigin` LEFT JOINs `artifacts` and answers `byte_len: null` for the window, and the anti-join is protected in the safe direction (an unswept sighting keeps its `sources` row alive). But a reader who takes the header's invariant at face value — and one will, because it is the module's most emphatic paragraph — will reason wrongly about it.
+
+**Fix:** either put the sightings inside the cascade, in dependency order like the other two children:
+
+```ts
+// deleteDigest, between the analyses arm and DELETE_ARTIFACT_SQL
+const sightLimit = Math.min(left(), CANDIDATE_SCAN_LIMIT);
+const sightStmt = await db.prepare(SIGHTING_KEYS_FOR_DIGEST_SQL); // new: WHERE project_id=? AND artifact_sha256=?
+const sights = sightLimit <= 0 ? [] : await sightStmt.all(projectId, sha256, sightLimit);
+examined += sights.length;
+for (const s of sights) {
+  if (left() <= 0) return { examined, deleted, capped: true, artifactRemoved: false };
+  deleted += await remove(DELETE_SIGHTING_SQL, [projectId, sha256, String(s.map_sha256), Number(s.source_index)]);
+}
+if (obs.length >= obsLimit || ana.length >= anaLimit || sights.length >= sightLimit) {
+  return { examined, deleted, capped: true, artifactRemoved: false };
+}
 ```
 
-`map_sha256` is content-addressed over the *decoded map JSON* (`ingest/consumer.ts:1086`), not over the bundle. Two different bundles can therefore share a `map_sha256` while having different `artifact_sha256`. When that happens the second ingest does not create a second set of sightings — it **overwrites the first bundle's**, moving `artifact_sha256` and `request_id` to the newer bundle.
-
-The v8 docblock anticipates the sibling case ("Two different bundles carrying the same *source* therefore produce ONE `sources` row and TWO sighting rows") and `reads.ts:1766` anticipates "one artifact can carry MORE THAN ONE map" — but nothing anticipates *one map in more than one artifact*, which the key makes lossy.
-
-**Failure scenario:** target serves `app.js` (artifact A) with an inline map M. DefMiner records 400 sightings keyed `(pid, sha(M), 0..399)` with `artifact_sha256 = A`. Later the target serves any second in-scope script — a decoy stub, a CDN mirror with a different banner comment, or genuinely the same library re-bundled — carrying the byte-identical map M as artifact B. The 400 rows flip to `artifact_sha256 = B`. Now:
-
-- `listRecoveredSourcesPage` is scoped `WHERE sg.artifact_sha256 = ?` (`reads.ts:1783`), so **artifact A's drill-down returns zero rows**.
-- `countRecoveredSourcesByArtifact` (`reads.ts:1817-1829`) admits A on the `analyses.scan_state = 'done'` ground and reports **`0`** — the *resolved* zero, which the entire zero-versus-unknown design exists to make mean "DefMiner looked and there was nothing".
-- `SourceTree.vue` then renders `EMPTY_HEADING` / `EMPTY_BODY`: *"No recovered sources in this bundle — DefMiner recovers source only from sourcemaps embedded in the bundle it already has."* That is a false statement about a bundle DefMiner did recover 400 sources from.
-- `sm.sightingsRecorded` still increments 400 times (`consumer.ts:1177`), so the health counter reports work that produced no net rows.
-- D-24's `readSightingOrigin` now returns B's `request_id` and B's digest for a sighting the operator reached from a context describing A. The re-verification still *succeeds* (it verifies against B), so the fail-closed control does not catch it — the attribution is simply the wrong bundle's, silently.
-
-This is target-triggerable at will: the second bundle only has to carry a copy of the same map.
-
-**Fix:** widen the natural key so a sighting is `(project, artifact, map, index)`:
-
-```sql
-CREATE TABLE IF NOT EXISTS source_sightings (
-  ...
-  PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)
-);
-```
-
-and update `RECORD_SIGHTING_SQL`'s conflict target to match (dropping `artifact_sha256` and `request_id` from the `DO UPDATE SET` list, since they become key columns). `SIGHTING_ORIGIN_SQL` and `MARK_PRODUCIBILITY_SQL` must then take `artifact_sha256` too — which means `SourceRef` grows an `artifactSha256` field. **That does not reopen the D-24 tautology**: the caller would be naming which *sighting* it means, not which *digest to compare against*; `artifact_sha256` would still be read back out of the row and compared against `sha256Hex(raw)`. `SourceBrowser.vue:279-290` already has the artifact digest in scope.
-
-If a v9 migration is judged too expensive right now, the minimum acceptable interim is to **stop the upsert from moving the attribution**: drop `artifact_sha256` and `request_id` from the `DO UPDATE SET` arm so first-writer-wins, and add a counter for the discarded second sighting. That still loses B's evidence, but it stops A's from being silently taken away.
+(the keyset prefix `(project_id, artifact_sha256, …)` is exactly `idx_source_sightings_artifact`'s leading columns, so it is an indexed enumeration) — **or**, if the operator's CASCADE ordering deliberately wants sightings swept in the 3d phase, amend the header and the `ORPHAN_OBSERVATIONS_SQL` paragraph to say so: that `source_sightings` is reaped as an orphan **by design**, that the "never a child with no parent" invariant is scoped to `observations` and `analyses`, and that the orphan window closes at the next pass. Silence on which of the two is intended is the defect.
 
 ---
 
-### HI-04: the restated retention convergence inequality is not a convergence proof — the sweep still cannot keep up with the workload the restatement was written for
+### WR-03: LO-04's narrowing removes redaction from a real relative-label shape its own premise denies exists — the vite/webpack loader query — and the corpus that "proves" the change safe contains no `?` at all
 
+**Classification:** WARNING
 **Files:**
-- `packages/engine/src/thresholds.ts:112-146` (`RETENTION_SWEEP_MAX_ROWS` derivation), `:148`, `:160`
-- `packages/backend/src/ingest/consumer.ts:476-512` (the restatement), `:1363-1377` (the crossing test), `:513-530` (`runRetentionPass` docblock)
-- `packages/engine/src/thresholds.spec.ts:236-250`
+- `packages/backend/src/store/export.ts:245-274` (`isProtocolShapedLabel`, `redactSourceLabelForExport`), applied at `:385`
+- `packages/backend/src/store/export.spec.ts:908-925` (the corpus assertion)
+- `packages/engine/src/sourcemap/map-fixture.ts:220-345` (`SOURCES_LABEL_CASES` — 23 entries, none containing `?`)
 
-**Issue:** Pitfall 2's fix changed `processedForSweep` to count **rows** and restated the inequality as `RETENTION_SWEEP_MAX_ROWS >= RETENTION_SWEEP_EVERY_N` — `512 >= 128` — with the claim, in three places, that it "holds INDEPENDENTLY of how many rows any single artifact produces."
+**Issue:** the fix is right about `src/components/Button#new.tsx`, and the drift gate against `sourcePathShape` is a good control. The premise it rests on is not sound:
 
-It does not establish convergence, because it compares the wrong two quantities. Convergence requires
+> *"A label that is not a URL has neither axis, so there is no query to withhold and the marker would be a FALSE STATEMENT in an exported artifact"*
 
-```
-rows deleted per sweep pass  >=  rows inserted per sweep interval
-```
+A `sources` entry is not a URL, but it is also not only a path: the webpack/vite ecosystem routinely emits **relative** labels carrying a loader query — `src/App.vue?vue&type=script&setup=true&lang.ts`, `assets/worker.ts?worker`, `img/logo.svg?url`. `classify()` puts every one of those in `relative`, `isProtocolShapedLabel` returns `false`, and `redactSourceLabelForExport` now returns them **whole**. The redacted export mode therefore discloses strictly more of the phase's one target-controlled at-rest column than it did before this round, on a shape that is ordinary rather than hostile.
 
-The delete side is `RETENTION_SWEEP_MAX_ROWS = 512` (hard-capped; `retention.ts:151, 448` bound one pass at exactly that). The insert side is **not** `RETENTION_SWEEP_EVERY_N`. `RETENTION_SWEEP_EVERY_N` is only the *threshold at which the pass becomes due*; the sweep runs between drain iterations, so the actual rows inserted before a pass fires is the rows inserted by the iteration that **crossed** the threshold — which the same comment block says can be 1,565 for monaco's map, and which `SOURCE_ROWS_PER_MAP_MAX` bounds at 2,048 declared sources → up to **4,096** rows (see MD-01) from a single artifact.
+The change is not covered by anything. `SOURCES_LABEL_CASES` has 23 entries and not one carries a `?` — `export.spec.ts:908` asserts exactly that ("none of them has a query axis"), which is why every corpus case passes identically in both modes and why the regression is invisible. The six `extra` labels added at `:891-898` for the drift gate include query-bearing *protocol* shapes and one relative `#` case, but no relative `?` case.
 
-**Failure scenario (arithmetic, from the code's own example):** sustained ingest of map-bearing artifacts, each carrying monaco's 781-source map.
+Two honest counterweights, stated so this is not overread: the value still goes through `stripForExport` and `csvField`'s formula neutralisation, so there is no injection here; and the residual `redactUrlForExport` was written for — a credential pasted into a query *name* — is a property of observed HTTP URLs and is not something a bundler's loader query carries. So this is a **coverage narrowing on the safe mode**, not an exposure of a known secret class. It is still the safe mode disclosing more than it did, justified by a sentence that is factually wrong, with no test.
 
-| iteration | rows inserted | `due`? | rows deleted | net |
-|---|---|---|---|---|
-| 1 | 1,565 | yes (Δ=1,565 ≥ 128) | ≤512 | **+1,053** |
-| 2 | 1,565 | yes | ≤512 | **+1,053** |
-| … | … | yes | ≤512 | **+1,053** |
+**Fix:** decide which claim is being made, and make the corpus carry it either way.
 
-The database grows monotonically past the retention ceiling while the sweep runs exactly as designed — which is, verbatim, the failure the comment says the inequality exists to prevent. The break-even point is *rows inserted per iteration* ≤ 512, and the phase's own headline workload is 3× past it. Raising `RETENTION_SWEEP_MAX_ROWS` to 4,096 to fix it would break the 1,024 cost cap that `thresholds.spec.ts:286-292` asserts — so the restatement did not solve the problem, it moved where the problem is invisible.
-
-Two secondary defects fall out of the same edit:
-
-- **`runRetentionPass`'s docblock still asserts the removed inequality.** `consumer.ts:521-523` reads *"RETENTION_SWEEP_MAX_ROWS >= ROWS_INSERTED_PER_ARTIFACT_MAX * RETENTION_SWEEP_EVERY_N **by assertion**"*. `thresholds.spec.ts:253-275` now asserts the exact opposite — that the convergence check *no longer reads* `ROWS_INSERTED_PER_ARTIFACT_MAX`. The one function whose correctness turns on the inequality cites an assertion that was deleted in the same phase.
-- **The cadence now fires far more often than designed.** With the interval counting rows, every map-bearing artifact triggers a sweep (Δ ≥ 128 after one artifact). Each pass costs `getRetentionBounds` + three `COUNT(*)` + candidate scans, on the single thread. It also multiplies the D-08 coupling's sampling rate: `if (summary.rowCapDeleted > 0)` now gets evaluated per artifact rather than per 128.
-
-This is distinct from, and compounds, the already-recorded D1 gap (`retention.ts` sweeps neither `sources` nor `source_sightings`): D1 means the unbounded tables are not swept *at all*, and this finding means that even once D1 is closed the sweep will not converge.
-
-**Fix:** state the real inequality and make the pass satisfy it. Either
+- If a loader query is analytic content the operator should see (defensible), say so instead of saying non-URL labels have no query axis, and add the shape to `SOURCES_LABEL_CASES` so `export.spec.ts:908`'s "none of them has a query axis" becomes a statement somebody re-checked:
 
 ```ts
-// the honest bound: a pass must delete at least what one artifact can insert
-RETENTION_SWEEP_MAX_ROWS >= 2 * SOURCE_ROWS_PER_MAP_MAX + ROWS_INSERTED_PER_ARTIFACT_MAX
+{ why: "a vite loader query on a RELATIVE label — a query axis on a non-URL",
+  value: "src/App.vue?vue&type=script&setup=true&lang.ts" },
 ```
 
-(which needs the 1,024 cost cap re-derived, or a per-map row cap D-09 rejected), **or** keep the 512 cap and let the pass repeat within one cadence while yielding:
+- If it is a residual, apply the shipped redactor whenever a query axis is *present* rather than whenever the label is protocol-shaped, and keep the "never claim a redaction that did not happen" property by construction:
 
 ```ts
-// bounded per SLICE, not per cadence: loop while there is a backlog and the
-// interval says work is due, yielding between passes so ingest is not starved.
-while (due() && (await runRetentionPass(projectId)).moreWork) {
-  await yieldToLoop();
+export function redactSourceLabelForExport(label: string): string {
+  // The marker is appended only when there was something to withhold, so it
+  // can never be a false statement — which is LO-04's real requirement.
+  return label.search(/[?#]/) === -1 ? label : redactUrlForExport(label);
 }
 ```
 
-`sweepRetention` already returns `moreWork` (`retention.ts:133`) and the drain loop already has `yieldToLoop`. Whichever is chosen, `thresholds.spec.ts:236-250` must assert the inequality that is actually load-bearing, and `consumer.ts:521-523` must stop citing the deleted one.
+Note that the second form also fixes the `Button#new.tsx` case's *marker* problem only if `#` is excluded; if the intent is "queries yes, fragments no for paths", split the two characters and say which is which.
 
 ---
 
-## MEDIUM
+## Info
 
-### MD-01: `SOURCE_ROWS_PER_MAP_MAX` is derived and documented as a ROW bound but enforced as a declared-SOURCES bound — the real ceiling is 2× the stated one
+### IN-01: the hoisted depth refusal is counted and logged for a stage in which nothing could have recursed, and the number beside it is the wrong count — adjudicated
 
-**Files:** `packages/engine/src/thresholds.ts:355-386`; `packages/engine/src/sourcemap/parse.ts:328-334`
+**Classification:** WARNING (low) — accepted trade-off, but the corner is real and nothing pins it
+**File:** `packages/backend/src/ingest/consumer.ts:1272-1287`
 
-**Issue:** the derivation is explicit that the unit is rows:
-
-> *"MAP-06's aggregate limit, expressed as a ROW bound. A ROW BOUND AND NOT A SOURCE-COUNT BOUND, deliberately… a map at MAP_MAX_BYTES carries roughly 471 sources and 942 rows. 2,048 is the next power of two above that, giving ~2.2x headroom."*
-
-The gate compares against the **declared source count**:
+**Issue:** the executors flagged this and asked for adjudication. My verdict: the fix is correct and the residual is real but small, and it is *two* inaccuracies rather than the one recorded.
 
 ```ts
-acc.declared += sources.length;
-if (acc.declared > limits.maxSourceRows) return "too_many_sources";
-```
-
-Under D-05 each recovered source writes **two** rows — one `sources` (per new content hash) and one `source_sightings` (per `(map, index)`). So a map declaring 2,048 distinct sources writes up to 4,096 rows, not 2,048. The "~2.2x headroom" over the projected 942 rows is really ~4.3x, and the number feeding HI-04's insert side is 4,096 rather than 2,048.
-
-**Failure scenario:** a legal map with 2,048 distinct one-line sources — well under `MAP_MAX_BYTES` — passes `parseSourceMap` and inserts 4,096 rows in one consumer iteration, against a `DEFAULT_RETENTION_MAX_ROWS` of 50,000 and a 512-row sweep cap.
-
-**Fix:** either halve the constant to make the enforced unit match the derivation, or (better) enforce it in the unit it is derived in:
-
-```ts
-// rows, not sources: one `sources` row and one sighting row per recovered index
-if (acc.declared * 2 > limits.maxSourceRows) return "too_many_sources";
-```
-
-and add a `thresholds.spec.ts` assertion tying `SOURCE_ROWS_PER_MAP_MAX` to the `2 *` factor by name, so the unit cannot drift again silently. Whichever is chosen, the docblock's "471 sources and 942 rows" arithmetic should be the thing the gate executes.
-
-### MD-02: the display tree merges directories on the **truncated** label, collapsing two genuinely distinct directories into one node
-
-**File:** `packages/frontend/src/sourcemap/tree.ts:493-511` (directory merge) with `:373-376` (`displaySegment`)
-
-**Issue:** `tree.ts`'s own header spends a paragraph refusing weaker-than-byte-identical merges:
-
-> *"directory nodes merge on a BYTE-IDENTICAL label and nothing weaker… Collapsing either pair merges TWO GENUINELY DISTINCT SOURCE FILES into one node and loses the fact that the target shipped both."*
-
-But the label compared at `:498-500` is the **post-`forCellText`** label — sanitised *and truncated at 256 graphemes* — not the verbatim segment. Two directory segments that differ only past character 256 become one node.
-
-**Failure scenario (executed):** a map declaring
-
-```
-"A"×300 + "bank/secret.js"
-"A"×300 + "evil/x.js"
-```
-
-produces **one** root directory (label length 256) with two children:
-
-```
-roots: 1
-[{ "kind": "directory", "labelLen": 256,
-   "kids": [ {"kind":"source","label":"secret.js…len9"},
-             {"kind":"source","label":"x.js…len4"} ] }]
-```
-
-The tree tells the operator that `secret.js` and `x.js` are siblings in one directory. They are not; they are in two directories whose names differ. The `label truncated` note is rendered, but it says the *label* was cut, not that two directories were merged — and the `duplicate` marker does not fire, because the two leaves have different labels.
-
-Mitigating: `sourcesVerbatim` is untouched at rest, and the viewer header shows the verbatim entry for whichever leaf is opened, so the evidence is recoverable. This is a display-integrity defect, not data loss.
-
-**Fix:** key the merge on the verbatim segment and carry the display label separately:
-
-```ts
-type Building = { key: string; label: string; mergeKey: string; /* … */ };
-// …
-let directory = siblings.find(
-  (candidate) =>
-    candidate.kind === "directory" && candidate.mergeKey === rawSegment,
-);
-```
-
-`resolved.segments` already holds the raw segments beside `display`, so `mergeKey` costs one extra field and no extra walk. Add a `tree.spec.ts` case over two 300-character sibling directories asserting two roots.
-
-### MD-03: D-13's depth gate fires once per recovered source — N log lines through the SDK and N counter increments per map-bearing artifact
-
-**File:** `packages/backend/src/ingest/consumer.ts:1013-1026` reached from `:1199-1216`
-
-**Issue:** `reconstruct` is re-entered at `depth + 1` for **every** recovered source, and the depth gate refuses **every** one of them, incrementing a counter and emitting an SDK log line each time:
-
-```ts
-const depthGate = admitDerivedDepth(input.depth);
-if (!depthGate.ok) {
-  sm.derivedRejected[depthGate.reason]++;
-  log("reconstruction refused at depth " + String(input.depth) + ": " + …);
-  return done(null);
-}
-```
-
-`DERIVED_MAX_DEPTH` is 1 and the gate refuses at `depth >= 1`, so this is not an anomaly — it is the guaranteed outcome for every source, always.
-
-**Failure scenario:** one artifact carrying monaco's 781-source map emits **781 identical `sdk.console.log` lines** on the proxy thread in a single consumer iteration, and drives `counters.sourcemap.derivedRejected.depth_exceeded` to exactly `sourcesRecovered`. A counter that is by construction equal to another counter carries no information, and a health surface reading "781 sources rejected: depth_exceeded" describes a bound working as designed as if it were a refusal.
-
-**Fix:** the depth gate belongs at the **call site** — where the decision to recurse is made — not inside the callee's preamble where it must be re-taken per source:
-
-```ts
-// ONCE per stage, before the per-source loop. The bound is a property of THIS
-// stage's depth, and it does not change between sources.
 const nextDepth = admitDerivedDepth(input.depth + 1);
-// …
-if (nextDepth.ok) {
-  const derived = await reconstruct(projectId, { …, depth: input.depth + 1 }, stillCurrent);
-  rowsInserted += derived.rowsInserted;
-} // else: counted and logged once, above the loop
-```
-
-Keep the gate inside `reconstruct` as well (it is the real bound), but stop it being the path every source takes: log and count at the call site, once per stage.
-
-### MD-04: `countSourcesForMap` has no production caller, and its docblock asserts one that does not exist
-
-**File:** `packages/backend/src/store/sources.ts:353-378`
-
-**Issue:** the docblock states MAP-06's enforcement as fact:
-
-> *"THE BOUND IS ENFORCED BY THE CALLER, AND THE REFUSAL IS NAMED. This function only counts; **plan 07-05's ingest path compares the count and refuses with a reason** rather than stopping quietly, because a map that silently wrote 2,048 of its 2,049 sources and said nothing is indistinguishable from a map that had 2,048."*
-
-`grep -rn "countSourcesForMap" packages/` returns exactly two hits: the declaration, and `sources.spec.ts`. The ingest path does not call it. The bound is enforced only in `parseSourceMap` on the **declared** count of a single parse (see MD-01) — which means the *aggregate* half of MAP-06, across repeated ingests of the same map, is not enforced anywhere.
-
-`knip` does not catch this because `src/**/*.spec.ts` is an entry glob, so a spec-only consumer counts as usage.
-
-**Failure scenario:** the situation the docblock describes as prevented is not prevented. Because the sighting upsert is idempotent on `(project, map, index)`, re-ingesting the same map does not multiply rows — so the practical exposure today is low. But the claim in the comment is false, and the deferred entity pass will read it as a discharged requirement.
-
-**Fix:** either wire it (compare `countSourcesForMap(...)` against `SOURCE_ROWS_PER_MAP_MAX` before the per-source loop in `consumer.ts:1093` and refuse with a named reason), or delete the function and rewrite the paragraph to state where the bound actually lives. A docblock that describes a caller which does not exist is worse than no docblock, because it is the thing a verifier will cite.
-
----
-
-## LOW
-
-### LO-01: `decodeInlineMap` materialises the whole payload string before the size gate, contradicting its own docblock
-
-**Files:** `packages/engine/src/sourcemap/parse.ts:180-193`; `packages/engine/src/sourcemap/announce.ts:163-170`
-
-**Issue:** the docblock says *"THE ENCODED-LENGTH GATE FIRES FIRST, BEFORE ANYTHING IS ALLOCATED… the refusal costs a comparison rather than a multi-megabyte allocation on the proxy thread (T-07-02)."* The claim is true of the **decoded buffer** and false of the string:
-
-```ts
-payload = url.slice(prefix.length);   // <- full copy, up to ~8 MiB
-// …
-if (payload.length > encodedCeiling(maxBytes)) return refused("too_large");
-```
-
-`findAnnouncement` has already materialised the URL: `body.slice(urlStart)` runs to end-of-line, and a body with no `\n` after the marker slices to EOF (`announce.ts:165-167`). So an 8 MiB single-line body with an oversized inline map costs two full-length string copies on the QuickJS thread before the "cheap comparison" refuses it.
-
-**Fix:** gate on the offset before slicing, in both places.
-
-```ts
-// parse.ts — the length is knowable without a copy
-for (const prefix of B64_PREFIXES) {
-  if (head.startsWith(prefix)) {
-    if (url.length - prefix.length > encodedCeiling(maxBytes)) {
-      return refused("too_large");
-    }
-    payload = url.slice(prefix.length);
-    break;
-  }
+if (!nextDepth.ok && parsed.recovered.length > 0) {
+  sm.derivedRejected[nextDepth.reason]++;
+  log("reconstruction of the " + String(parsed.recovered.length) + " source(s) …");
 }
 ```
 
-and in `announce.ts`, bound the URL slice at `ANNOUNCEMENT_PREFIX_MAX + encodedCeiling(MAP_MAX_BYTES)` rather than at EOF. Alternatively, correct the docblock to say "before the decoded buffer is allocated", which is what it actually delivers.
+1. **The recorded one:** the message names `parsed.recovered.length`, which over-states when `admitDerived` refuses some sources below.
+2. **The one the comment does not name:** the *counter* fires on the same condition. If **every** recovered source is refused by `admitDerived` (all empty, or all over `DERIVED_SOURCE_MAX_BYTES` — both reachable from one hostile map), no recursion would have been attempted at any depth, so the bound did not fire — and `derivedRejected.depth_exceeded` says it did. The telemetry docblock at `telemetry.ts:314-341` states the unit as "one reconstruction stage that DECLINED TO RECURSE" and that "a non-zero value here always means at least one map-bearing artifact reached the bound", which is exactly the claim this corner breaks.
 
-### LO-02: `announce.ts` treats only `\n` as a line terminator, so a `data:` URL absorbs the rest of a `\r`- or `U+2028`-delimited file
+Magnitude is one increment per map-bearing artifact against the 781 the fix removed, and no health surface carries the counter (`SOURCEMAP_COUNTERS` names six sourcemap fields and this is not one). So the fix is a large net improvement and this is not a reason to reopen MD-03.
 
-**File:** `packages/engine/src/sourcemap/announce.ts:163-170`
-
-**Issue:** `const newline = body.indexOf("\n", urlStart)`. Bodies delimited by lone `\r` (classic Mac) or by `U+2028`/`U+2029` (which JavaScript treats as line terminators) yield a URL that runs past the announcement into subsequent code. `String.trim()` removes `U+2028`/`U+2029` only at the ends.
-
-**Failure scenario:** a body ending `//# sourceMappingURL=data:application/json;base64,AAAA` followed by a `U+2028` and then `console.log(1)` produces a `url` that contains the `U+2028` and everything after it. `isCanonicalBase64` rejects it, so the outcome is `malformed_base64` — a named refusal — rather than a silent miss. Correctness impact is therefore contained, but it is what makes LO-01's slice unbounded.
-
-**Fix:** scan for the first of `\n`, `\r`, `U+2028`, `U+2029` with a bounded `indexOf` per character (four `indexOf` calls, no pattern — consistent with this file's ReDoS rule).
-
-### LO-03: `sources_verbatim` is truncated by UTF-16 code unit and can store a lone surrogate
-
-**File:** `packages/backend/src/store/sources.ts:306-313`
-
-**Issue:** `sourcesVerbatim.slice(0, SOURCES_LABEL_MAX)` cuts at code unit 4,096. If code unit 4,095 is a high surrogate, the stored value ends in an unpaired surrogate — an invalid UTF-8 sequence in a SQLite `TEXT` column, which round-trips through the driver and the RPC boundary unpredictably. Separately, the docblock argues the bound "exactly as `observations.url` is bounded at `URL_MAX`" and reasons about 4,096 relative to the 1,024-grapheme display caps — but 4,096 code units is up to ~16 KB of stored bytes for a label of astral characters, so the "at rest" bound is not the bound the argument computes.
-
-**Fix:** cut on a code-point boundary and state the unit:
+**Fix (exact, and still one refusal per stage):** decide at the top, report at the bottom, from what actually happened.
 
 ```ts
-sourcesVerbatim === null
-  ? null
-  // Code POINTS, so the stored prefix is never half a surrogate pair. The
-  // cap is a byte-budget argument; spell the unit it is enforced in.
-  : [...sourcesVerbatim].slice(0, SOURCES_LABEL_MAX).join("")
+const nextDepth = admitDerivedDepth(input.depth + 1);
+let admittedForRecursion = 0;
+// … inside the loop, after `admitted.ok`: admittedForRecursion += 1;
+// … after the loop:
+if (!nextDepth.ok && admittedForRecursion > 0) {
+  sm.derivedRejected[nextDepth.reason]++;
+  log("reconstruction of the " + String(admittedForRecursion) + " admitted source(s) …");
+}
 ```
 
-Add a `sources.spec.ts` case whose 4,096th code unit is a high surrogate.
+and add the pinning case `consumer.spec.ts` currently lacks: a map whose every `sourcesContent` entry is the empty string, asserting `derivedRejected.depth_exceeded === 0`.
 
-### LO-04: `redactUrlForExport` cuts `sources_verbatim` at the first `#`, which is a legal character in a path label
+### IN-02: `DERIVED_MAX_DEPTH` is imported by `consumer.ts` and referenced only inside comments — an unused import both gates miss
 
-**File:** `packages/backend/src/store/export.ts:196-201`, applied at `:301`
+**Classification:** WARNING (low)
+**File:** `packages/backend/src/ingest/consumer.ts:87`
 
-**Issue:** the redactor was written for URLs, where `?`/`#` begin the query and fragment. A `sources` entry is not a URL in general — the argument at `:290-300` says it is "URL-SHAPED BY CONSTRUCTION", which holds for `webpack://…` prefixes and not for the path body. `src/components/Button#new.tsx` exports as `src/components/Button<query-redacted>` in redacted mode, silently discarding a legal filename tail and telling the reader a query was withheld when there was none.
+**Issue:** the binding appears at the import and then only at `:980`, `:1083` and `:1500`, all of which are `{@link}` prose. It is dead as a value. It is **pre-existing** (unchanged by this round) but it sits in the file MD-03 rewrote, and neither automated gate reports it: `knip` sees `derive.ts`'s export as consumed and stops there, and `eslint packages/backend/src/ingest/consumer.ts` exits 0 with no output, so `@typescript-eslint/no-unused-vars` is not reporting unused import bindings in this configuration. `tsconfig.base.json` sets no `noUnusedLocals` either.
 
-**Fix:** if the intent is genuinely "withhold the query of a URL-shaped label", apply the cut only when `sourcePathShape(value) === "protocol"`; otherwise leave the label whole (it has no query axis) or introduce a manifest-specific redactor. Either way, do not report `<query-redacted>` for a value that had no query.
-
-### LO-05: `snapshotCounters` deep-copies arrays into plain objects
-
-**File:** `packages/backend/src/telemetry.ts` (`snapshotCounters`)
-
-**Issue:**
+**Fix:** drop it from the import list (the `{@link}` references resolve through TypeDoc without a value import). If the intent is the "referenced so the derivation is not merely a comment" trick `retention.ts:194-197` uses for `ROWS_INSERTED_PER_ARTIFACT_MAX`, do it the same way and say so:
 
 ```ts
-const copy = (value: unknown): unknown => {
-  if (value === null || typeof value !== "object") return value;
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = copy(v);
-  return out;
-};
+// Referenced so a build where DERIVED_MAX_DEPTH stopped existing fails here.
+const _DEPTH_BOUND = DERIVED_MAX_DEPTH;
 ```
 
-`Object.entries` of an array yields index keys, so an array-valued counter is silently converted to `{ "0": …, "1": … }` and the cast `as Counters` hides it. No current member of `Counters` is an array, so nothing is broken today — but the function is generic, and the failure would be a health payload whose field is the wrong JSON type with no error anywhere.
+Separately worth deciding: enabling `noUnusedLocals` repo-wide, since this class currently passes lint, typecheck and knip together.
 
-**Fix:** handle the array case explicitly, or replace the hand-rolled walk with `structuredClone(counters)` (available on this runtime for plain data).
+### IN-03: `ORPHAN_SIGHTINGS_SQL`'s comment says it selects "the four key columns"; it selects three
+
+**Classification:** WARNING (low)
+**File:** `packages/backend/src/store/retention.ts:496-497`
+
+**Issue:** *"The four key columns are selected because the key IS four columns since migration `v: 9`, and every delete below binds all four."* The statement selects `artifact_sha256, map_sha256, source_index` — three. `project_id` is a bound parameter, not a selected column. The second half of the sentence is correct (`DELETE_SIGHTING_SQL` binds all four). Ordinary elsewhere; in this file, where a reader is invited to verify key arity from the comment, it is one word that has to be re-checked against the SQL.
+
+**Fix:** *"The three non-scope key columns are selected; `project_id` is the bound scope, and every delete below binds all four."*
+
+### IN-04: the spec-only cross-package import pulls a frontend module into the backend's TypeScript program, which is compiled without the DOM lib — adjudicated as safe today, fragile tomorrow
+
+**Classification:** WARNING (low)
+**Files:** `packages/backend/src/store/export.spec.ts:56`; `packages/backend/tsconfig.json`; `packages/backend/package.json`
+
+**Issue:** the executors asked whether anything shipped depends on it. **It does not, and I verified rather than assumed:** `packages/backend/package.json`'s `dependencies` is `{"@defminer/engine": "workspace:*"}` and is unchanged by this round; `sourcePathShape` appears in exactly one backend file and that file is a spec; the drift gate at `export.spec.ts:883` is the only consumer. `tsc --build` is green at HEAD and `knip` reports nothing new. The import is correct and the gate it enables is worth having.
+
+The residual is a build-graph one. `packages/backend/tsconfig.json` has `include: ["src/**/*.ts", "test/**/*.ts"]`, no `references` to the frontend project, `types: ["node", "@caido/quickjs-types", "@caido/sdk-backend"]` and inherits `lib: ["es2023"]` — no DOM. The relative import therefore drags `packages/frontend/src/sourcemap/tree.ts` (and transitively `safety/display.ts`) into the *backend's* program under those settings. It typechecks only because `display.ts`'s single import is `@defminer/engine/sanitise` and neither module touches a DOM type. The day either one gains an `HTMLElement`, a `document` or a `Node`, `pnpm typecheck` fails **in the backend project**, pointing at a frontend file, for a reason no reader of either package will connect to a spec-only drift gate.
+
+**Fix:** keep the import and cap the cost, either by stating the constraint where it can be checked —
+
+```ts
+// packages/frontend/src/sourcemap/tree.ts (header)
+// NO DOM TYPES IN THIS MODULE OR IN `safety/display.ts`. `packages/backend`'s
+// `store/export.spec.ts` imports `sourcePathShape` as a drift gate and compiles
+// under `lib: es2023` with no DOM, so a DOM reference here breaks the BACKEND
+// typecheck. It is pure string work today and must stay so.
+```
+
+— or by moving `sourcePathShape` (nine lines of pure string classification, no Vue, no DOM) into `@defminer/engine`, which both packages already depend on. That would delete the second implementation in `export.ts` and the drift gate with it, rather than keeping two of each.
 
 ---
 
-## What I Verified (and therefore am not reporting)
+## Closures Verified (and therefore not reported)
 
-Stated positively, because "no finding" is only useful if it says what was checked.
+Stated positively, because "closed" is only useful if it says what was checked.
 
-**1. D-07 — nothing at rest.** Read the v8 DDL directly (`migrations.ts:820-836`). `sources` is five columns (`project_id`, `source_sha256`, `byte_len`, `line_count`, `first_seen_at`); `source_sightings` is ten, none of which is content in any encoding. Every column declares `TEXT` or `INTEGER` — no BLOB, no untyped column. `toRecoveredSourceRow` (`index.ts:~590`) maps field by field rather than spreading, so a future column cannot leak across the RPC by accident. `RecoveredSourceRow` on the contract carries no content field. **Holds.**
+**HI-01 / HI-02 — closed before this round, verified by reading.** `display.ts:248-253` now calls `forDisplayTextTruncated(withTabsExpanded(value), SOURCE_LINE_MAX_GRAPHEMES)` — the truncation question is asked of the truncation step, not of the string inequality, so a CRLF line no longer answers `true`. `sourceLineCounts` (`:285-291`) takes both integers from **one** `forDisplay` call over the same prepared, sanitised string, in the cap's own unit. Landed in `9b5f7d0` and `affc693`, both ancestors of the gap-closure round, so outside my diff but confirmed present at HEAD.
 
-**2. R6 — target strings never become filenames.** `source-filename.ts` is a matcher, not a sanitiser: the output is `sha256.slice(0,16)` plus one of ten DefMiner literals, and `SHA256_PATTERN = /^[0-9a-f]{64}$/` returns `null` (no save affordance) for any digest it cannot vouch for. The label's only influence is `folded.endsWith(extension)` — the *allowlist's* literal is returned, never a slice of the label. `DOWNLOAD_CONTENT_TYPE` is a hard-coded `text/plain;charset=utf-8`, never derived from the extension. `exportFilename` interpolates only `ExportTable` members, a mode, a format and a timestamp. **Holds.**
+**HI-03 / W-3 — closed, and the closure is structural.** Migration `v: 9` (`migrations.ts:963-1002`) rebuilds `source_sightings` with `PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)`; `RECORD_SIGHTING_SQL`'s conflict target names all four (`sources.ts:172`); `MARK_PRODUCIBILITY_SQL` and `SIGHTING_ORIGIN_SQL` both carry `artifact_sha256` in key order; `SourceRef` grew the field at all four hops (`contract.ts:284`, `api/spec.ts:446`, `client.ts:845`, `SourceBrowser.vue:311`) with `CONTRACT_VERSION` 6→7 on both sides. **D-24 is not reopened:** `reloadVerifiedBundle` (`index.ts:394-401, 493`) still reads `origin.request_id` and `origin.artifact_sha256` out of the matched row and compares the row's digest against `sha256Hex(raw)` — never against the caller's `artifactSha256`. A ref naming a bundle that never carried the `(map, index)` matches no row, is answered `unavailable`, and writes no producibility row.
 
-**3. `node:path` prohibited on the tree-normalisation path.** `grep` over `packages/*/src` for `node:path` / `from "path"` / `require("path")` returns only prose in `map-fixture.ts` and `tree.ts`'s own header. `tree.ts`'s entire import list is one line: `import { forCellText } from "../safety/display";`. `forCell` appears nowhere in the module except in comments. **Holds.**
+**The v9 rebuild is lossless in all three interruption states, checked by construction rather than by the docblock.** Widening a key can only separate rows the narrower key already separated, so `INSERT OR IGNORE` has nothing to skip. Statement 1's `CREATE TABLE IF NOT EXISTS source_sightings` is the recovery for the interrupted-after-drop state (statement 3 always has a table to read); the completed-but-unversioned re-entry copies every row out and back because the two shapes have identical columns; statement 6 restores the index `DROP TABLE` took with it. `migrations.spec.ts:1063, 1123, 1191, 1232, 1261` executes the statement order positionally and all three states against a real migrated fixture. The interim attribution guard and `sightingsDiscardedOtherArtifact` are gone, and `telemetry.spec.ts` asserts the counter's absence.
 
-**4. D-24 fail-closed.** `reloadVerifiedBundle` (`index.ts:346-472`) reads the origin from the database via `readSightingOrigin` — the caller supplies only `(mapSha256, sourceIndex)`, and `projectId` is overridden by `currentProjectId()` before any `await`, so the caller cannot supply both halves of the equality. The digest is taken over `toRaw()` bytes, and on mismatch the function returns the `changed` arm, which has **no `content` key in the type at all** (`contract.ts` `SourceDerivationFailure`). Nothing downstream can re-derive from the new body because `reload.ok === false` short-circuits before `announcedMap` is reached. `announcedMap` then re-checks the map's own digest against the recorded `mapSha256`, so serving a different map from a verified bundle is also closed. **Holds.**
+**HI-04 — closed pre-round; the shipped loop is what makes it true.** `consumer.ts:1626-1633` repeats the bounded pass while it is making progress, capped at `RETENTION_SWEEP_MAX_PASSES`, `yieldToLoop()` between passes, `stopped` re-checked every time round, and `runRetentionPass` returns `summary.moreWork && summary.deleted > 0` — a spin guard that makes a failing sweep cost one pass per cadence rather than sixteen. The `due` test is a **crossing** test (`processedForSweep - lastSweptAtProcessedCount >= N`), not a modulo, which is correct for an interval that steps over boundaries. Measured at HEAD by `a8-measure.spec.ts`: Run B drained a 20,000-row backlog against a ceiling of 100 in 77 passes. Only WR-01 above is left of it, and that is the arithmetic in the comment, not the behaviour.
 
-**5. A failed call is never a tombstone.** `DERIVATION_UNAVAILABLE` is returned from six distinct sites and none of them calls `markProducibility`. `tombstone()` is reachable only from the three arms that carry positive evidence (`no_request`, `no_response`, digest mismatch). On the frontend, `derive()` maps `!result.ok` to `{ kind: "unavailable" }`, and `fromResult` is a total switch over the four arms with no default. `SourcePositionStrip` maps its own `!result.ok` to `unreadable` and never renders a producibility word. **Holds.**
+**W-5 / deferred D1 — closed.** `source_sightings` now takes **both** ordinary bounds (`SIGHTINGS_OVER_AGE_SQL`, `SIGHTINGS_OLDEST_SQL`, with age-arm-first de-duplication in the artifact cascade's shape) plus the orphan arm; `sources` takes the inherited edge via the anti-join, sightings-before-sources with `sightingsCapped` enforcing it in every pass; `workRemains` asks about all three so the multi-pass drain does not stop one pass early; `retentionCounts` reports both tables. The `NOT IN` NULL hazard is closed on both sides and executed, as set out in the Summary. I also checked the failure direction of the `sightingsCapped` guard: a delete that *fails* leaves its sighting present, which protects its `sources` row — the anti-join can only ever delete too few, never too many.
 
-**6. `mappings` never enters the DOM.** `readSourceMappings` returns the string as data; `SourcePositionStrip` passes it straight to `decode()` inside a `try`, and only `generatedLine` / `generatedColumn` / `count` integers survive into `positions`. Every rendered string on the strip is a copy constant or `positionSentence`/`truncationSentence`, whose interpolations are integers through `groupThousands`. The `catch` sets `{ kind: "unreadable" }` and discards the thrown value; the viewer body above is a sibling subtree and is untouched. `@jridgewell/sourcemap-codec` is imported by exactly one module. **Holds.**
+**MD-01 / LO-01 / LO-02 — closed.** `absorb` compares `acc.declared * ROWS_PER_RECOVERED_SOURCE > limits.maxSourceRows` (`parse.ts:378`), so 1,024 sources are accepted at exactly 2,048 rows and 1,025 refused at 2,050 — the unit the constant is derived in. `ROWS_INSERTED_PER_ITERATION_MAX` dropped the compensating `2 *` (and one *iteration* really is bounded at 2,051: `recovered ≤ declared ≤ 1024`, two rows each, plus three base rows). `decodeInlineMap` refuses on `url.length - prefix.length` **before** `url.slice` — I checked the `toLowerCase()` prefix-offset hazard again under the new arithmetic, and it is unreachable, because every single-code-unit character whose lowercase is ASCII stays one unit and the expanding cases insert non-ASCII combining marks that cannot match either ASCII prefix. `announce.ts` recognises all four ECMAScript line terminators and bounds the slice at `URL_MAX`; I verified the "nothing reachable is cut" claim arithmetically — a URL cut at `URL_MAX` leaves a payload of at least `encodedCeiling(MAP_MAX_BYTES) + 85`, so a truncated URL is always a `too_large` refusal and never a mis-parse.
 
-**7. Sanitisation.** `SourceTree.vue` renders `node.label` (already through `forCellText`, one segment at a time). `SourceViewer.vue` renders `forCellText(label ?? "")` in the header and `forSourceLine(item.text)` per row. `grep` for `title=` / `:title` / `v-html` / `innerHTML` across all Phase 7 components returns nothing; the only `data-*` attributes are DefMiner-authored test hooks with no interpolated value. `forCell` is not imported anywhere on this path. **Holds** — noting that HI-01/HI-02 are defects in the *predicates about* the sanitiser's output, not in the sanitiser's coverage.
+**MD-02 — closed, and the root merge really was already safe.** The interior merge compares `candidate.mergeKey === segment.raw` (`tree.ts:563-566`); `mergeKey` is the raw segment, is never a field of the frozen `SourceTreeNode`, and the `duplicate` marker deliberately still counts display labels so the two-directories-that-render-alike case is *marked* rather than silently merged. `rootByLabel` is keyed on `classify`'s raw `rootLabel` with `forCellText` applied only at construction, which I confirmed by reading rather than accepting.
 
-**8. `sources_verbatim` render-time safety and the CSV sink.** The one at-rest target-controlled column reaches: the tree (segment-wise `forCellText`), the viewer header (`forCellText`), the download-name matcher (ten literals), and the CSV/JSON export. On the export path `projectRow` applies `redactUrlForExport` then `stripForExport` (C0/C1 + bidi), and `csvField` in `@defminer/engine/csv` applies formula neutralisation over `DANGEROUS_LEADS = ["=", "+", "-", "@", TAB, CR]` **after** the control strip — so a `=HYPERLINK(...)` label is apostrophe-prefixed and a `\t=cmd|…` lead cannot hide behind the strip. **Holds.**
+**MD-03 / MD-04 / LO-03 — closed.** The depth question is asked once per stage at the recursion call site with the in-callee gate retained as a backstop (the residual is IN-01). `countSourcesForMap` has a production caller at `consumer.ts:1180`, scoped `(project, artifact, map)` — which after v9 is the only scope that does not refuse bundle B for rows bundle A wrote — behind an `stillCurrent()` re-check, above the per-source loop, refusing through the shipped `too_many_sources` reason; the docblock now says it is a second enforcement point rather than the only one, which is what MD-04 actually asked for. `truncateToCodePoints` (`sources.ts:120-129`) is correct at every boundary I traced: `charCodeAt(unit + 1)` past the end yields `NaN` and falls to the one-unit branch, the loop is bounded by the cap rather than by the input, and it returns the value itself when it fits.
 
-**9. The announce fast path is equivalent to the two-full-scan reference.** I proved it rather than trusting the spec. Let `M = max(body.lastIndexOf(m))` over both markers.
-- Every marker occurrence at `m` implies `COMMON` at `m + 4`; since `common` is the *last* `COMMON`, `m + 4 <= common`, hence **`M <= candidate`** for `candidate = common - 4`.
-- `common < 0` ⟹ no marker ⟹ both return null. ✓
-- `candidate < windowStart` ⟹ `M <= candidate < windowStart` ⟹ both return null. ✓
-- `markerAt(candidate)` ⟹ `M >= candidate` and `M <= candidate` ⟹ `M = candidate`, and it is in window. ✓
-- otherwise the fallback *is* the reference, with `at = -1 < windowStart` handled (`windowStart >= 0` always). ✓
+**LO-04 / LO-05 — closed, with WR-03 as the residual.** `redactUrlForExport` is untouched and `observations.url`'s output is byte-identical; `isProtocolShapedLabel` agrees with `sourcePathShape` on every corpus label plus six extras, and I diffed the two implementations by hand as well — they are the same two tests in the same order, and `classify`'s later windows-drive branch cannot disagree because `C://x` reaches the authority test first in both. `snapshotCounters` handles arrays with `value.map(copy)`; the `structuredClone` alternative is correctly rejected (SPIKE-07 measured it absent on Caido 0.57.1).
 
-Boundary cases: empty body → `null` before anything; marker at offset 0 → `candidate = 0`, `windowStart = 0`, `0 < 0` is false, `markerAt(0)` true. ✓ `COMMON` has no self-overlap, so overlapping occurrences cannot arise. `windowBytes` is compared against `body.length` in UTF-16 code units while the constant is named in bytes — but `text.length <= byteLength` for every UTF-8 decode, so the window is conservatively *wider* in bytes, never narrower. **Holds.**
-
-**10. The base64 primitive is deliberate and validation precedes decoding.** `decodeBase64` uses `Buffer.from(payload, "base64")` and `decode.ts` records the measurement that `atob` returns a Latin-1 binary string and diverged at all four ladder points. `isCanonicalBase64` runs **before** `decodeBase64` and checks alphabet, `length % 4 === 0` and `pad <= 2` — closing the "lenient decoder silently returns a shorter buffer" hole the docblock names. The post-decode gate is `Buffer.byteLength(json, "utf8") > maxBytes`, in bytes rather than code units. I also checked the `toLowerCase()` prefix compare at `parse.ts:180-188` for a length-expansion misalignment (U+0130 → `i̇`): the expansion inserts U+0307, which cannot appear in either ASCII prefix, so no offset shift is reachable. **Holds.**
-
-**11. `scripts/phase7/`.** `fetch-maps.sh` runs `set -euo pipefail`, pins every fetch to an immutable versioned jsDelivr path, verifies a committed SHA-256 and `rm -f`s + exits non-zero on mismatch. `map-bytes.sh` disables `errexit` deliberately (documented: a probe that kills its host is a result) and restores it after sourcing. `assemble.py` calls `subprocess.run` with an argument **list** and no `shell=True`. No `eval`, no `pickle`, no unquoted expansion into a command. **No findings.**
+**Project invariants re-checked.** `schema.spec.ts`'s `EXPECTED_TABLES` literal is byte-identical — the fifth one-way approval changed a key, not a table set, and the count in the prose moved without the array moving, which is the right way round. No content column arrives anywhere: `source_sightings` still holds ten columns, none of them content in any encoding, and `sources` five. `outbound-prohibition.spec.ts` and `sources-sink-prohibition.spec.ts` are untouched by this round and green.
 
 ---
 
-_Reviewed: 2026-09-02T06:20:00Z_
+_Reviewed: 2026-09-02T14:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: deep_
+_Depth: standard_
