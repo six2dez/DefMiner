@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 84
+open_count: 85
 waived_count: 0
-fixed_count: 31
-total_count: 115
-last_updated: 2026-09-02T02:31:39.016Z
+fixed_count: 32
+total_count: 117
+last_updated: 2026-09-02T03:09:47.676Z
 ---
 
 # Broken Windows Ledger
@@ -150,7 +150,9 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 112 | 07 | deviation | packages/engine/src/sourcemap/parse.ts |  | isCanonicalBase64 REQUIRES padding: a payload with length % 4 of 2 or 3 is refused malformed_base64 even though it is legal unpadded base64. Deliberate and fail-closed — requiring padding is what makes 'a truncated final quantum' distinguishable from 'a short last group', and Buffer.from(x, base64) silently returns a SHORTER buffer for both. Every emitter that matters here pads (Buffer.toString(base64) and btoa both do). If the field shows unpadded inline maps, relax to accept 2 and 3 and update the doc comment. | open |  | 2026-09-01T21:29:51.659Z |  |
 | 113 | 07 | unrun-verify | packages/engine/src/sourcemap/parse.spec.ts |  | The too_deep branch's TRIGGER cannot be produced on the test runtime. V8's JSON.parse is iterative and parses two million nested levels without throwing, so no document drives the RangeError catch from the front door on Node; SPIKE-06 measured Caido's QuickJS failing at 710 brackets with catchable-stack-throw. The MAPPING is executed directly against a real RangeError via the exported reasonForParseError, and the CATCH is executed by the malformed-JSON cases — but the two have never been executed TOGETHER. Plan 07-04 or a Tier-1 probe running inside Caido is where that composition can be proven. | open |  | 2026-09-01T21:29:51.747Z |  |
 | 114 | 07 | deviation | packages/frontend/src/sourcemap/tree.ts |  | displaySegment detects truncation by a one-character probe; a segment of EXACTLY TABLE_CELL_MAX_GRAPHEMES over-reports as 'label truncated'. Bounded, safe-direction, stated at the declaration — revisit if a second named import from safety/display ever becomes acceptable | open |  | 2026-09-02T01:48:15.177Z |  |
-| 115 | 07 | deviation | packages/frontend/src/components/table-contract.ts |  | formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope) | open |  | 2026-09-02T02:31:39.016Z |  |
+| 115 | 07 | deviation | packages/frontend/src/components/table-contract.ts |  | formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope) | fixed |  | 2026-09-02T02:31:39.016Z | 2026-09-02T03:09:47.585Z |
+| 116 | 07 | deviation | packages/frontend/src/components/ObservationsTable.vue | 68 | SUPERSEDES entry 115, which named TWO byte-identical private copies of formatTimestamp. Plan 07-09 deleted ArtifactsTable.vue's — that file is in its files_modified for the Sources column, so it is the plan entry 115's suggested owner named — and it now imports table-contract.ts's exported one. ONE copy remains, in ObservationsTable.vue, which is outside 07-09's scope and is not reachable from any 07-09 module. Two copies of a date format is still how one comes to disagree with the other about a timezone. OWNER: any plan that touches ObservationsTable.vue. | open |  | 2026-09-02T03:09:38.158Z |  |
+| 117 | 07 | stub | packages/frontend/src/components/SourceBrowser.vue |  | The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export="false" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10. | open |  | 2026-09-02T03:09:47.676Z |  |
 
 ````json
 [
@@ -1529,9 +1531,33 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/frontend/src/components/table-contract.ts",
     "line": null,
     "description": "formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-02T02:31:39.016Z",
+    "resolved_at": "2026-09-02T03:09:47.585Z"
+  },
+  {
+    "id": 116,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/frontend/src/components/ObservationsTable.vue",
+    "line": 68,
+    "description": "SUPERSEDES entry 115, which named TWO byte-identical private copies of formatTimestamp. Plan 07-09 deleted ArtifactsTable.vue's — that file is in its files_modified for the Sources column, so it is the plan entry 115's suggested owner named — and it now imports table-contract.ts's exported one. ONE copy remains, in ObservationsTable.vue, which is outside 07-09's scope and is not reachable from any 07-09 module. Two copies of a date format is still how one comes to disagree with the other about a timezone. OWNER: any plan that touches ObservationsTable.vue.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T03:09:38.158Z",
+    "resolved_at": null
+  },
+  {
+    "id": 117,
+    "kind": "stub",
+    "phase": "07",
+    "file": "packages/frontend/src/components/SourceBrowser.vue",
+    "line": null,
+    "description": "The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export=\"false\" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T03:09:47.676Z",
     "resolved_at": null
   }
 ]

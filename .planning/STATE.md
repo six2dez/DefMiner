@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-08-PLAN.md
-last_updated: "2026-09-02T02:31:38.905Z"
+stopped_at: Completed 07-09-PLAN.md
+last_updated: "2026-09-02T03:09:17.418Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: fb18a878448d226db14fc462bd35d54fb97f31d8
+state_head: b424ce1be030976d04c975d1f48acdd21d44ade3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 80
+  completed_plans: 81
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -365,6 +365,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P06 | 36min | 3 tasks | 13 files |
 | Phase 07 P07 | 31 min | 3 tasks | 15 files |
 | Phase 07 P08 | 34 min | 3 tasks | 9 files |
+| Phase 07 P09 | 25min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -719,6 +720,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: P7-D08-3 — the source download's content type is text/plain ALWAYS, never derived from the matched extension. text/html on a recovered source is a stored-XSS primitive delivered by DefMiner.
 - [Phase 07]: P7-D08-4 — the position sentence renders both its numbers one-based, in one named function, because the sourcemap spec counts from zero and the gutter counts from one. Decoded integers are held verbatim in state.
 - [Phase 07]: P7-D08-6 — copyFullLine reuses safety/display.ts's shipped copyToClipboard rather than a fourth structural DOM host; the named-import equality now also asserts every walking wrapper absent by name.
+- [Phase 07]: P7-D09-1 — the Sources cell's third state is the ABSENCE of two v-fors, not a v-else: there is nowhere for a later edit to put a 0 or a spinner
+- [Phase 07]: P7-D09-2 — entering the drill-down selects the row and opens the panel from App.vue with @click.stop, rather than winning a bubbling race
+- [Phase 07]: P7-D09-3 — canExport is a required prop stated false at the call site, not a stub: the manifest CTA is disabled with its reason and 07-10 flips one boolean
+- [Phase 07]: P7-D09-4 — O-07 requirement 2's non-vacuity finds a presentation-map LABEL, not a badge marker, because EvidencePanel deliberately carries no data-* attribute; both forms are searched in both directions
+- [Phase 07]: P7-D09-5 — the source-count map is re-read on applyPending() and on no other event, so a number never changes under a reader mid-triage
+- [Phase 07]: P7-D09-6 — the Sources cell's accessible name uses counted, so it agrees with its noun at one; the UI-SPEC's own zero-one-many rule outranks its copy-table literal
 
 ### Known Risks Carried Forward
 
@@ -761,8 +768,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T02:31:25.352Z
-**Stopped at:** Completed 07-08-PLAN.md
+**Last session:** 2026-09-02T03:09:17.287Z
+**Stopped at:** Completed 07-09-PLAN.md
 **Resume file:** None
 
 ### Blockers

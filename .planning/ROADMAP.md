@@ -488,7 +488,7 @@ Plans:
   5. Reconstructed sources are themselves analysed once per content hash, and the FP corpora are extended to include reconstructed source as an input class
   6. Reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest
 
-**Plans**: 8/10 plans executed in 9 waves
+**Plans**: 9/10 plans executed in 9 waves
 
 *The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-10 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
 
@@ -525,7 +525,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 — mounts `07-08`'s components for real, and O-07's replacement needs both regions on screen at once)*
 
-- [ ] 07-09-PLAN.md — The navigation surface: D-21's drill-down shell inside the Artifacts tab with the tab list byte-unchanged, the `Sources` column as its only entry point with a resolved zero and an unresolved count never the same pixel, and O-07's replacement separation mechanism asserted in both directions (UI-05, MAP-07)
+- [x] 07-09-PLAN.md — The navigation surface: D-21's drill-down shell inside the Artifacts tab with the tab list byte-unchanged, the `Sources` column as its only entry point with a resolved zero and an unresolved count never the same pixel, and O-07's replacement separation mechanism asserted in both directions (UI-05, MAP-07)
 
 **Wave 9** *(blocked on Wave 8 — edits `SourceBrowser.vue`)*
 
