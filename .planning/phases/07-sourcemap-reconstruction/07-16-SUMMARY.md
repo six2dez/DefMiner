@@ -20,7 +20,7 @@ affects: [export, telemetry, health, sourcemap, phase-08]
 actuals:
   tokens: 6456
   tasks: 3
-  commits: 5
+  commits: 6
 
 tech-stack:
   added: []
@@ -329,3 +329,16 @@ None - no external service configuration required.
 ---
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-02*
+
+## Requirement MAP-07 — Already Complete, and Deliberately Not Re-Marked
+
+`requirements.ready-ids` reports `MAP-07` as `1/1 ready`, and `.planning/REQUIREMENTS.md:844` **already** carries it as `- [x]`, marked when plan 07-06 shipped the manifest. `requirements.mark-complete` was therefore **not** run.
+
+That is not a shortcut. This plan's prohibitions include "No change to `.planning/REQUIREMENTS.md`", and Task 3's own `<verify>` names the gate that enforces it: `outbound-prohibition.spec.ts` byte-compares that file and its `fails_when` reads *"a failure means `.planning/REQUIREMENTS.md` was touched, which this plan prohibits"*. Running a mutation whose only possible effect is to touch a byte-pinned file, for a checkbox already in the state it would set, would have turned 465 green assertions red for nothing. The ledger is correct on disk without the write.
+
+## Self-Check: PASSED
+
+- All four modified files exist on disk.
+- All six commits (`e714672`, `a901b9e`, `9e1d686`, `7057450`, `0a5bd69`, `922460f`) resolve in `git log --oneline --all`.
+- Every `<verify>` command in the plan was re-run at close-out and every one exits 0.
+- Every `<acceptance_criteria>` item across the three tasks is satisfied by an assertion recorded in the Verification table above.

@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-12-PLAN.md
-last_updated: "2026-09-02T11:55:53.699Z"
+stopped_at: Completed 07-16-PLAN.md
+last_updated: "2026-09-02T12:19:29.911Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 6b1c2ef632a1f0234e5b72243cf7693aed6fdc9b
+state_head: 922460f6799f61799ace5abcf511b7e9d436cce3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 86
+  completed_plans: 87
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 14 of 17
+Plan: 15 of 17
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 07 execution started
 
@@ -481,6 +481,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P14 | 19 min | 3 tasks | 6 files |
 | Phase 07 P17 | 14 min | 3 tasks | 2 files |
 | Phase 07 P12 | 20 min | 4 tasks | 9 files |
+| Phase 07 P16 | 18 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -860,6 +861,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: Option A approved at 07-12's blocking-human checkpoint (2026-09-02): source_sightings' PRIMARY KEY widened to (project_id, artifact_sha256, map_sha256, source_index) by migration v: 9 — the FIFTH one-way EXPECTED_TABLES approval, and the first that changes a KEY rather than a table set. — map_sha256 is content-addressed over the decoded map JSON and never over the bundle, so two bundles can share it at the target's discretion. Under the old key the second bundle's evidence was lost and its drill-down read a RESOLVED zero (W-3) — on the one column whose whole design is that a resolved zero cannot lie. The key had to span the bundle for the row to be about the bundle. EXPECTED_TABLES keeps its eight members; no table, column or type moved; sources is untouched.
 - [Phase 07]: The interim attribution guard and the sightingsDiscardedOtherArtifact counter were removed in the same plan that landed the key, not left to rot. — The guard became tautological once artifact_sha256 was a key column — a predicate a reader must evaluate in order to learn it can never be false is worse than no predicate — and the counter became a number that can never again be non-zero. Verified while removing it that the counter never reached the health payload: index.ts's SourcemapHealth projects six sourcemap fields and this was not one, so T-07-69's accepted cost is smaller than the register assumed and no RPC contract or frontend shape moves.
 - [Phase 07]: Migration v: 9's safety is re-runnability, never atomicity, and all three interruption states are EXECUTED against a real migrated fixture rather than argued in the step's JSDoc. — A BEGIN-less multi-statement exec is a SEQUENCE on this driver (TRANSACTION_PERSISTS_ACROSS_EXEC = false), and adding BEGIN would put a poisonable write transaction on the boot path. Step v: 7 already litigated this shape; v: 9 inherits it. migrations.spec.ts asserts the six statements positionally, because statement 5's rename cannot fail ONLY because statement 4 dropped the name one statement earlier.
+- [Phase 07]: LO-04 closed by NARROWED APPLICATION, not a second redaction vocabulary: `redactSourceLabelForExport` calls the unchanged `redactUrlForExport` only when the manifest label is protocol-shaped — A bare path has no query axis, so the appended marker was a false statement in an exported artifact and a legal filename tail was discarded with it. The `NO PER-COLUMN EXEMPTION IS INVENTED` argument survives — same redactor, same marker, same raw-mode escape hatch; only `URL-SHAPED BY CONSTRUCTION` did not, because four of the five measured `sources` shapes are paths.
+- [Phase 07]: The `sources` shape classifier is RESTATED in packages/backend rather than imported from packages/frontend, with a spec-only drift gate diffing the two — packages/backend declares `@defminer/engine` as its only dependency; adding `@defminer/frontend` would run a Vue import graph through the one package permitted to touch the Caido SDK. The drift gate lives in export.spec.ts, so nothing cross-package reaches the shipped bundle.
+- [Phase 07]: LO-05 closed with an explicit `Array.isArray` branch in `snapshotCounters`, NOT with `structuredClone` — SPIKE-07 measured `typeof structuredClone === "undefined"` on Caido 0.57.1 — this module runs in QuickJS, not Node — recorded in three places in this repo. A `typeof` guard falling back to the walk would ship two implementations and exercise one.
 
 ### Known Risks Carried Forward
 
@@ -902,8 +906,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T11:55:13.885Z
-**Stopped at:** Completed 07-12-PLAN.md
+**Last session:** 2026-09-02T12:19:29.741Z
+**Stopped at:** Completed 07-16-PLAN.md
 **Resume file:** None
 
 ### Blockers
