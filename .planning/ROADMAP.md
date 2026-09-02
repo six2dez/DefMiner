@@ -481,16 +481,27 @@ Plans:
 **Requirements**: MAP-01 … MAP-07, UI-05
 **Success Criteria** (what must be TRUE):
 
-  1. Sources are reconstructed from `sourcesContent` via `JSON.parse` with no VLQ decoding on the primary path, and a real large map completes within the Phase 0 budget
+  1. **RESTATED 2026-09-02 by plan 07-10 — the original is preserved two lines below.** Sources are reconstructed from `sourcesContent` via `JSON.parse` with no VLQ decoding on the primary path, and **a real inline map at `MAP_MAX_BYTES` completes within the per-slice budget (`MAX_SYNC_SLICE_MS`) and the artifact deadline (`ARTIFACT_DEADLINE_MS`), or records the partial state.**
+     *Original, superseded:* "…and a real large map completes within the Phase 0 budget". **Two things were wrong with it.** "The Phase 0 budget" had no referent for this operation — every Phase 0 threshold is a parse number or a hash number and none of them is a `JSON.parse`-of-a-map number, which is precisely why D-10 made this phase take its own measurement (`results/map-bytes.json`, `MAP_MAX_BYTES = 2,621,440` shipped against 2,954,422 measured). And "a real large map" meant the 12.66 MB monaco case, which **cannot arise on the inline path at all**: an inline map's decoded JSON cannot exceed three-quarters of the admitted body ceiling, so the structural bound is 6,291,456 bytes before the measured bound is even reached.
   2. VLQ decoding via `@jridgewell/sourcemap-codec` is used only where position attribution is genuinely needed
   3. A malicious-`sources` fixture suite — traversal, absolute paths, UNC, drive letters, reserved names, `webpack://` — writes nothing outside the output directory on macOS, Linux, and Windows
+     *— ANNOTATED 2026-09-02 by plan 07-10 (D-12), not deleted.* **The subject changed and the platform count with it.** There is no output directory: D-17's shipped filesystem gate bans path access outright, so the fixtures are retained as a STANDING PROOF THAT A `sources` ENTRY NEVER REACHES A PATH-LIKE SINK — a proof of unreachability, not a test of a defence. One platform, because the thing the three platforms disagreed about is the filesystem, and the filesystem is not reachable.
   4. Malformed maps, decompression bombs, absent `sourcesContent`, indexed maps, and reference cycles all stay within limits and record a partial state rather than crashing
   5. Reconstructed sources are themselves analysed once per content hash, and the FP corpora are extended to include reconstructed source as an input class
+     *— ANNOTATED 2026-09-02 by plan 07-10 (D-15), not deleted.* **Met in the first half and NOT MEASURED in the second, recorded rather than passed silently.** The reconstructed-source corpus FIXTURES ship. The false-positive RATE does not, because no detector exists yet — Phase 3 has not landed and `visit` is a no-op — and a rate cannot exist without a detector. Recorded the way Phase 6's D-23 recorded an unreachable matrix leg.
   6. Reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest
+     *— ANNOTATED 2026-09-02 by plan 07-10 (D-20), not deleted.* Met in two mechanisms and the phase says which: **browsable** is the D-21 drill-down (07-07 … 07-09), **exportable with a manifest** is the third `EXPORT_COLUMNS` entry (07-06) reached through the scoped **Export source manifest** CTA (07-10), riding the shipped export ceremony unchanged. Single-file content is a browser download from what the viewer already holds.
 
-**Plans**: 9/10 plans executed in 9 waves
+**Plans**: 10/10 plans executed in 9 waves
 
-*The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. Two of them no longer describe what ships: `07-02`'s "content-addressed safe writing" has no writing in it, because `07-CONTEXT.md` D-07 holds nothing at rest and derives content on demand; and `07-03`'s "hostile-map fixture suite across three platforms" has ONE platform and a different subject, because D-12 retains the traversal fixtures as a standing proof that a `sources` entry never reaches a path-like sink rather than as a test of a defence, and the filesystem those three platforms differed about is banned outright. The one thing that got BIGGER is the measurement: D-10 turns SC1's borrowed "Phase 0 budget" into a probe this phase owns, and D-08 makes its result load-bearing rather than informational. **Plan 07-10 owns the full amendment — the divergence paragraph, SC1's restatement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not.***
+**THE DIVERGENCE, AMENDED 2026-09-02 BY PLAN 07-10 RATHER THAN SHIPPED UNDER.** This entry is the place a later reader learns what Phase 7 was for, so an entry describing a phase that was not built is worse than no entry. The same instruction Phase 6 gave itself about `06-03`, honoured here.
+
+*The four plan titles this entry carried until 2026-09-01 are SUPERSEDED and are preserved in git history rather than shipped under. The nine plans that shipped are listed below with their waves.* **Two of the four retired titles no longer describe anything that exists:**
+
+- **`07-02`'s "content-addressed safe writing" — THERE IS NO WRITING.** D-07 stores nothing at rest: a recovered source's content is derived ON DEMAND by reloading the originating request and re-parsing its map, and D-24 re-verifies the reloaded body's digest before any content is returned. What is content-addressed is the IDENTITY — the `sha256` a source is keyed and deduplicated by, and the download name R6 builds from it — not a file. The plan that shipped in that slot is the engine parser.
+- **`07-03`'s "hostile-map fixture suite across three platforms" — ONE PLATFORM, AND A DIFFERENT SUBJECT.** D-12 retains the traversal fixtures as a standing proof that a `sources` entry NEVER REACHES A PATH-LIKE SINK — a proof of unreachability, not a test of a defence — because the filesystem those three platforms differed about is banned outright by D-17's shipped gate. Running the original three-platform matrix would be expensive theatre in a codebase that is lint-banned from touching paths.
+
+**The one thing that got BIGGER is the measurement.** D-10 turned SC1's borrowed "Phase 0 budget" into a probe this phase OWNS — `results/map-bytes.json`, four ladder points on a version-pinned Caido, one fresh instance per size point — and D-08 made its result load-bearing rather than informational: `MAP_MAX_BYTES` is a binding refusal boundary, not a note. SC1 is restated above against that measurement, and the two `REQUIREMENTS.md` parentheticals that read as Caido measurements and are not are amended in that file, each with its original preserved as dated history.
 
 Plans:
 
@@ -529,7 +540,7 @@ Plans:
 
 **Wave 9** *(blocked on Wave 8 — edits `SourceBrowser.vue`)*
 
-- [ ] 07-10-PLAN.md — Close-out: the scoped **Export source manifest** CTA resolving UI-SPEC Named Conflict 1, the D-03 counter surfaced, `05-UI-SPEC.md` amendments A5/A6/A7, and this roadmap entry plus `REQUIREMENTS.md` amended (MAP-07, UI-05)
+- [x] 07-10-PLAN.md — Close-out: the scoped **Export source manifest** CTA resolving UI-SPEC Named Conflict 1, the D-03 counter surfaced, `05-UI-SPEC.md` amendments A5/A6/A7, and this roadmap entry plus `REQUIREMENTS.md` amended (MAP-07, UI-05)
 
 ### Phase 8: Active Retrieval & Crash Survivability
 

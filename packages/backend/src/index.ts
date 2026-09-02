@@ -91,6 +91,7 @@ import {
   type RetryOutcome,
   type ScanCommandOutcome,
   type ScanHistoryRow,
+  type SourcemapHealth,
   type StatusPayload,
 } from "./api/spec";
 import {
@@ -1634,6 +1635,10 @@ export async function init(sdk: PluginSdk): Promise<void> {
           // FIELD BY FIELD, NEVER SPREAD — the rule every projection in this
           // file follows, so a counter added to the sub-map tomorrow does not
           // arrive on an operator-facing surface without anybody choosing it.
+          //
+          // ANNOTATED WITH THE CONTRACT TYPE rather than left to infer from the
+          // return position: a projection that names its own shape fails HERE
+          // when the contract moves, instead of somewhere downstream.
           sourcemap: {
             announcedInline: map.announcedInline,
             announcedExternal: map.announcedExternal,
@@ -1641,7 +1646,7 @@ export async function init(sdk: PluginSdk): Promise<void> {
             mapMalformed: map.mapMalformed,
             sourcesRecovered: map.sourcesRecovered,
             sightingsRecorded: map.sightingsRecorded,
-          },
+          } satisfies SourcemapHealth,
         },
       };
     });
