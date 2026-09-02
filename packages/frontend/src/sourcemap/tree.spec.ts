@@ -727,6 +727,206 @@ describe("MD-02 — a directory merges on the VERBATIM segment", () => {
 });
 
 // ---------------------------------------------------------------------------
+// THE TWENTY-THREE HOSTILE LABELS, UNMOVED BY MD-02
+// ---------------------------------------------------------------------------
+//
+// THE BLAST RADIUS IS PINNED AGAINST THE CORPUS THAT ALREADY EXISTS rather than
+// against cases invented for the fix. A merge-key change is exactly the kind of
+// edit that moves a structure somewhere nobody looked, and the twenty-three
+// measured labels are where "somewhere nobody looked" lives in this module.
+//
+// EXPLICIT EXPECTATIONS RATHER THAN AN OPAQUE SNAPSHOT, deliberately. A
+// `toMatchSnapshot()` would absorb precisely the change this assertion exists
+// to detect — the first run after a regression rewrites the file and the suite
+// goes green. Every line below is readable, and a reader can decide whether it
+// is right without running anything.
+//
+// The lines were MEASURED, not transcribed: the pre-fix module and the post-fix
+// module were both driven over the corpus in one process and their outlines
+// compared. Both produced 47 nodes over 21 roots and the two outlines were
+// equal line for line.
+//
+// EVERY LABEL IS ESCAPED TO PRINTABLE ASCII. A combining acute, a fullwidth
+// full stop and a stripped control byte are invisible in a diff, and an
+// expectation a reviewer cannot see is an expectation a reviewer cannot check.
+
+/** Every codepoint outside printable ASCII as `\uXXXX`, so an expectation is
+ *  always readable and never carries an invisible byte. */
+function asciiLabel(value: string): string {
+  let out = "";
+  for (const unit of value) {
+    const code = unit.codePointAt(0) ?? 0;
+    out +=
+      code >= 0x20 && code <= 0x7e
+        ? unit
+        : `\\u${code.toString(16).padStart(4, "0")}`;
+  }
+  return out;
+}
+
+/**
+ * One node per line: everything the frozen node exposes except its children,
+ * whose position is carried by the depth and the ordering.
+ *
+ * `depth|kind|label|sourcesIndex|climbs|clampedClimbs|notes|duplicate`
+ */
+function outline(nodes: readonly SourceTreeNode[]): string[] {
+  const lines: string[] = [];
+  const walk = (list: readonly SourceTreeNode[], depth: number): void => {
+    for (const node of list) {
+      lines.push(
+        [
+          String(depth),
+          node.kind,
+          asciiLabel(node.label),
+          String(node.sourcesIndex),
+          String(node.climbs),
+          String(node.clampedClimbs),
+          node.notes.join("+"),
+          node.duplicate ? "dup" : "-",
+        ].join("|"),
+      );
+      walk(node.children, depth + 1);
+    }
+  };
+  walk(nodes, 0);
+  return lines;
+}
+
+/** The measured pre-fix structure of the whole corpus, which is also its
+ *  post-fix structure. 47 lines, one per node. */
+const CORPUS_OUTLINE: readonly string[] = [
+  "0|directory|etc|0|0|0||-",
+  "1|source|defminer-escape.txt|0|6|6|path-clamped|dup",
+  "1|source|defminer-escape.txt|11|3|2|path-clamped|dup",
+  "0|source|..%2f..%2f..%2fdefminer-escape.txt|1|0|0||-",
+  "0|root|/|2|0|0||-",
+  "1|directory|tmp|2|0|0||-",
+  "2|source|defminer-absolute-escape.txt|2|0|0||-",
+  "1|directory|etc|3|0|0||-",
+  "2|source|defminer-escape.txt|3|0|0||-",
+  "0|root|C:|4|0|0||-",
+  "1|directory|Windows|4|0|0||-",
+  "2|directory|Temp|4|0|0||-",
+  "3|source|defminer-escape.txt|4|0|0||-",
+  "0|root|\\\\|5|0|0||-",
+  "1|directory|server|5|0|0||-",
+  "2|directory|share|5|0|0||-",
+  "3|source|defminer-escape.txt|5|0|0||-",
+  "0|source|CON|6|0|0||-",
+  "0|source|NUL.js|7|0|0||-",
+  "0|root|webpack:|8|0|0||-",
+  "1|directory|src|8|0|0||-",
+  "2|source|app.js|8|0|0||-",
+  "0|root|file:|9|0|0||-",
+  "1|directory|etc|9|0|0||-",
+  "2|source|defminer-escape.txt|9|0|0||-",
+  "0|root|http:|10|0|0||-",
+  "1|directory|evil.example|10|0|0||-",
+  "2|source|app.js|10|0|0||-",
+  "0|directory|caf\\u00e9|12|0|0||-",
+  "1|source|app.js|12|0|0||-",
+  "0|directory|cafe\\u0301|13|0|0||-",
+  "1|source|app.js|13|0|0||-",
+  "0|directory|srcdir|14|0|0||-",
+  "1|source|app.js|14|0|0||-",
+  "0|directory|SRCDIR|15|0|0||-",
+  "1|source|app.js|15|0|0||-",
+  "0|directory|\\uff0e\\uff0e|16|0|0||-",
+  "1|directory|\\uff0e\\uff0e|16|0|0||-",
+  "2|source|defminer-escape.txt|16|0|0||-",
+  "0|source|defminer-escape.txt|17|2|0|path-clamped|-",
+  "0|source|defminer-escape.txt   |18|2|1|path-clamped|-",
+  "0|source||19|0|0||dup",
+  "0|source||20|0|0||dup",
+  "0|directory|src|21|0|0||-",
+  "1|directory|app|21|0|0||-",
+  "2|source|index.js|21|0|0||-",
+  `0|source|${"L".repeat(TABLE_CELL_MAX_GRAPHEMES)}|22|0|0|label-truncated|-`,
+];
+
+/** The measured node count of the corpus tree, before and after the fix. */
+const CORPUS_NODE_COUNT = 47;
+/** The measured root count of the corpus tree, before and after the fix. */
+const CORPUS_ROOT_COUNT = 21;
+
+/** Every string the frozen node EXPOSES, discovered rather than listed, so a
+ *  field added to {@link SourceTreeNode} later is checked without anyone
+ *  remembering to add it here. */
+function exposedStrings(node: SourceTreeNode): string[] {
+  const out: string[] = [];
+  for (const [name, value] of Object.entries<unknown>(node)) {
+    if (name === "children") continue;
+    if (typeof value === "string") out.push(value);
+    else if (Array.isArray(value)) {
+      for (const item of value as readonly unknown[]) {
+        if (typeof item === "string") out.push(item);
+      }
+    }
+  }
+  return out;
+}
+
+describe("the hostile corpus builds the tree it built before the merge changed", () => {
+  it("produces the recorded structure, node for node", () => {
+    expect(outline(buildSourceTree(LABEL_ROWS))).toEqual(CORPUS_OUTLINE);
+  });
+
+  it("is 47 nodes over 21 roots — the counts the equality is made of", () => {
+    const tree = buildSourceTree(LABEL_ROWS);
+    expect(everyNode(tree).length).toBe(CORPUS_NODE_COUNT);
+    expect(everyNode(tree).length).toBe(CORPUS_OUTLINE.length);
+    expect(tree.length).toBe(CORPUS_ROOT_COUNT);
+  });
+
+  it("covers every corpus case — a dropped case cannot buy the equality", () => {
+    // THE GATE THAT MAKES THE EQUALITY MEAN SOMETHING. An outline that stopped
+    // covering a case would pass the assertion above by covering less, so every
+    // declared index must appear in it and the id set must still be whole.
+    expect([...SOURCES_LABEL_CASE_IDS].sort()).toEqual(
+      SOURCES_LABEL_CASES.map((labelCase) => labelCase.id).sort(),
+    );
+    const indices = new Set(
+      CORPUS_OUTLINE.map((line) => Number(line.split("|")[3])),
+    );
+    expect([...indices].sort((a, b) => a - b)).toEqual(
+      SOURCES_LABEL_CASES.map((_, index) => index),
+    );
+  });
+
+  it("puts no RAW segment into any field the node EXPOSES", () => {
+    // T-07-73. `mergeKey` is internal to one build and is deliberately not a
+    // field of the frozen node. A rendered field equal to the raw segment would
+    // be the untruncated, unsanitised, target-controlled string arriving at a
+    // `title` or a `data-*` — the leak `safety/hostile.spec.ts` asserts against
+    // from the render side, asserted here from the build side.
+    const dirty = new Set<string>();
+    for (const labelCase of SOURCES_LABEL_CASES) {
+      for (const bySlash of labelCase.value.split("/")) {
+        for (const raw of bySlash.split("\\")) {
+          if (raw !== "" && forCellText(raw) !== raw) dirty.add(raw);
+        }
+      }
+    }
+    // NON-VACUITY, both halves. A corpus with no dirty segment would pass by
+    // having nothing to look for, and a walk that read no field would pass by
+    // looking at nothing.
+    expect(dirty.size).toBeGreaterThanOrEqual(3);
+
+    let inspected = 0;
+    for (const node of everyNode(buildSourceTree(LABEL_ROWS))) {
+      const strings = exposedStrings(node);
+      expect(strings.length).toBeGreaterThanOrEqual(3);
+      for (const value of strings) {
+        inspected++;
+        expect(dirty.has(value)).toBe(false);
+      }
+    }
+    expect(inspected).toBeGreaterThan(CORPUS_NODE_COUNT);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ORDERING AND DEPTH
 // ---------------------------------------------------------------------------
 
