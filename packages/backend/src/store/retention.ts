@@ -159,6 +159,25 @@ export type RetentionSweepSummary = {
  *
  * The constants are still READ rather than hard-coded, so this file and
  * `thresholds.ts` cannot drift.
+ *
+ * AND THE INEQUALITY NOW BOUNDS SOMETHING REAL (07-VERIFICATION.md W-5).
+ * `ROWS_INSERTED_PER_ITERATION_MAX` — the INSERT side — is
+ * `ROWS_INSERTED_PER_ARTIFACT_MAX + SOURCE_ROWS_PER_MAP_MAX`, and that second
+ * term is rows written into `sources` and `source_sightings`. Until plan 07-13
+ * this module named NEITHER table and migration `v: 8` declares no foreign key
+ * and no `ON DELETE CASCADE`, so the DELETE side could not reach either one:
+ * the inequality was satisfied numerically while the property it claims — that
+ * the database does not grow monotonically past the retention ceiling — did not
+ * hold, because once the swept tables reached their floor those two kept
+ * growing with nothing able to delete from them. HI-04's own failure narrative
+ * is "the form was true and it bounded nothing", and this was a narrower copy of
+ * it inside the fix. Both tables are now swept — `source_sightings` by BOTH
+ * ordinary bounds, `sources` by the anti-join that inherits them — so every row
+ * the insert side counts is a row the delete side can reach.
+ *
+ * NO CONSTANT MOVED for this. The delete side already dominated: 512 x 16 =
+ * 8,192 against 128 + 2,051 = 2,179. What changed is that the tables the 2,051
+ * describes are now reachable.
  */
 const MAX_ROWS_PER_PASS = RETENTION_SWEEP_MAX_ROWS;
 
@@ -435,6 +454,30 @@ DELETE FROM analyses WHERE project_id = ? AND sha256 = ? AND detector_set_hash =
 // bound on suspended `scans`). This is a table whose ceiling comes from an edge
 // rather than from a cap — bounded, not exempt — so the paragraph the exemption
 // block asks for is not owed here.
+
+// `source_sightings` TAKES BOTH BOUNDS, AND BOTH STATEMENTS THEREFORE EXIST.
+//
+// Said explicitly because the block above `AUDIT_OLDEST_SQL` says the opposite
+// about `audit` in the same register: there the ABSENCE of an over-age statement
+// IS the decision. Here there is no decision to express by an absence, and a
+// reader arriving from that paragraph should not have to infer which kind of
+// table this is. The cascade is not a substitute for either bound — a bundle
+// that is never evicted accumulates sightings for ever, and that is the shape
+// real traffic produces: the artifact row is UPSERTED on every re-serve while
+// each map-bearing re-serve writes a fresh row per (bundle, map, index).
+const SIGHTINGS_OVER_AGE_SQL = `
+SELECT artifact_sha256, map_sha256, source_index FROM source_sightings
+WHERE project_id = ? AND recovered_at < ?
+ORDER BY recovered_at ASC, artifact_sha256 ASC, map_sha256 ASC, source_index ASC
+LIMIT ?
+`;
+
+const SIGHTINGS_OLDEST_SQL = `
+SELECT artifact_sha256, map_sha256, source_index FROM source_sightings
+WHERE project_id = ?
+ORDER BY recovered_at ASC, artifact_sha256 ASC, map_sha256 ASC, source_index ASC
+LIMIT ?
+`;
 
 // Sightings whose BUNDLE is already gone. This is the cascade: the artifact
 // sweep above removes the `artifacts` row, and the sighting rows that named it
@@ -861,6 +904,83 @@ export async function sweepRetention(
       sightingsCapped = true;
     }
 
+    // The per-table half: BOTH ordinary bounds on `source_sightings` itself.
+    //
+    // `trimChildTable` WAS NOT GENERALISED, AND THE DECISION IS RECORDED RATHER
+    // THAN IMPLIED. That helper's `ChildTableSpec` describes a table keyed on
+    // `(project_id, sha256, secondKey)` — a three-element delete tuple over a
+    // closed union of two column names — and `source_sightings` is keyed on FOUR
+    // columns since migration `v: 9`, the last of them an INTEGER. Widening it
+    // would mean a variadic key, a variadic delete tuple and a `secondKey` union
+    // that no longer describes anything, for the benefit of ONE more caller,
+    // while `observations` and `analyses` depend on the current shape. The cost
+    // of the loop below is that the de-duplication and the age-arm-first
+    // ordering are written twice; the cost of the widening would be borne by two
+    // tables that asked for nothing. `audit` and `scans` are here for the same
+    // reason and in the same shape.
+    if (budget() > 0 && !sightingsCapped) {
+      const sightingVictims: {
+        artifact: string;
+        map: string;
+        index: number;
+      }[] = [];
+      const sightingSeen = new Set<string>();
+      const pushSightings = (
+        rows: {
+          artifact_sha256: string;
+          map_sha256: string;
+          source_index: number;
+        }[],
+      ): void => {
+        for (const r of rows) {
+          const artifact = String(r.artifact_sha256);
+          const map = String(r.map_sha256);
+          const index = Number(r.source_index);
+          const id = artifact + "\u0000" + map + "\u0000" + String(index);
+          if (sightingSeen.has(id)) continue;
+          sightingSeen.add(id);
+          sightingVictims.push({ artifact, map, index });
+        }
+      };
+
+      // THE AGE ARM FIRST, THEN THE ROW ARM, and a key already seen is skipped —
+      // the same `pushVictims` de-duplication the artifact cascade uses and for
+      // the same reason: a row eligible under BOTH bounds must be deleted once
+      // and counted once, or the pass misreports itself to the one caller whose
+      // job is deciding whether the sweep is keeping up.
+      const sightOverAge = await db.prepare(SIGHTINGS_OVER_AGE_SQL);
+      pushSightings(
+        await sightOverAge.all(projectId, cutoff, CANDIDATE_SCAN_LIMIT),
+      );
+
+      const sightingTotal = await countRows(db, COUNT_SIGHTINGS_SQL, projectId);
+      const sightingExcess = sightingTotal - bounds.maxRows;
+      if (sightingExcess > 0) {
+        const sightOldest = await db.prepare(SIGHTINGS_OLDEST_SQL);
+        pushSightings(
+          await sightOldest.all(
+            projectId,
+            Math.min(sightingExcess, CANDIDATE_SCAN_LIMIT),
+          ),
+        );
+      }
+
+      examined += sightingVictims.length;
+      for (const v of sightingVictims) {
+        if (budget() <= 0) {
+          moreWork = true;
+          sightingsCapped = true;
+          break;
+        }
+        deleted += await remove(DELETE_SIGHTING_SQL, [
+          projectId,
+          v.artifact,
+          v.map,
+          v.index,
+        ]);
+      }
+    }
+
     // The anti-join half: `sources` rows no surviving sighting names.
     if (budget() > 0 && !sightingsCapped) {
       const unsightedStmt = await db.prepare(UNSIGHTED_SOURCES_SQL);
@@ -911,10 +1031,7 @@ export async function sweepRetention(
 /** One recorded delete. `sweepRetention` supplies it; the helpers below take it
  *  rather than reaching for `deleteOne` themselves, so no delete on this path can
  *  fail without being counted. */
-type DeleteFn = (
-  sql: string,
-  params: DeleteParams,
-) => Promise<number>;
+type DeleteFn = (sql: string, params: DeleteParams) => Promise<number>;
 
 /** The bound parameters of one fully-bound single-row delete, `project_id`
  *  FIRST in every arm.
@@ -1171,6 +1288,12 @@ async function workRemains(
   // pass whose budget ran out inside the sightings work would report "nothing
   // remains" and the consumer would wait for a cadence boundary that sustained
   // ingest never yields (07-REVIEW.md HI-04's failure shape, one table over).
+  const oldSightings = await db.prepare(SIGHTINGS_OVER_AGE_SQL);
+  if ((await oldSightings.all<object>(projectId, cutoff, 1)).length > 0)
+    return true;
+  if ((await countRows(db, COUNT_SIGHTINGS_SQL, projectId)) > bounds.maxRows)
+    return true;
+
   const orphanSightings = await db.prepare(ORPHAN_SIGHTINGS_SQL);
   if ((await orphanSightings.all<object>(projectId, 1)).length > 0) return true;
 
