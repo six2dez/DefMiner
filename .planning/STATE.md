@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-09-02T01:09:22.537Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-09-02T01:48:04.227Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: d5cd5e09519948d4cd360ece5d524bd56a9a0208
+state_head: 67f8fcf9600a733ce438a723b1f1330fd3ec6a55
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 78
+  completed_plans: 79
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -363,6 +363,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P04 | 20 min | 4 tasks | 11 files |
 | Phase 07 P05 | 37 min | 3 tasks | 9 files |
 | Phase 07 P06 | 36min | 3 tasks | 13 files |
+| Phase 07 P07 | 31 min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -709,6 +710,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-06: the derivation unavailable arm is a payload-free sentinel that writes NOTHING — a call that did not answer is never a tombstone
 - [Phase 07]: 07-06: the manifest is an artifact-SCOPED third export table (scopeSha256), so it rides export.ts unchanged instead of opening a second SQL surface
 - [Phase 07]: 07-06: CONTRACT_VERSION 5 -> 6, with client.spec.ts reading the backend spec off disk so the two constants cannot drift
+- [Phase 07]: P7-D07-1 — The climb count is recorded on the LEAF, and ANY resolved `..` marks the node degraded, not only one refused at the root — The RTL-override fixture pops exactly to the root and never past it, so clamp-only accounting reported zero on the one fixture the plan singled out. A directory is shared between rows, so a climb recorded there attributes one row's history to another row's ancestor or is lost when the directory already exists. Both cases are the same fact for the operator: the node's position was COMPUTED from a climb rather than read off the string. `clampedClimbs` is carried separately for the harder half.
+- [Phase 07]: P7-D07-2 — Segment truncation is detected by a one-character PROBE, not by comparing against the cap — Reaching for the cap would mean a second named import from safety/display, and the named-import set pinned to exactly ["forCellText"] is what proves forCell unreachable (T-07-12). A segment of exactly the cap over-reports as truncated; the error direction is safe and is stated at the declaration.
+- [Phase 07]: P7-D07-3 — table-contract.ts's throwing IIFE was FACTORED into an exported rowHeightClass(px) rather than copied for the second height — Two copies of one eight-line error message stop matching the moment either is edited, and the message is the load-bearing part — it is what tells the next author the class must be a LITERAL. Exporting it means the failing path is executed by a spec rather than only described.
+- [Phase 07]: P7-D07-4 — SourceTree.vue is built against InventoryTable.vue, not ArtifactsTable.vue; PrimeVue's Tree is available and deliberately not used — D-18 named the wrong file: ArtifactsTable.vue declares a column list and mounts the shared shell, and the actual RecycleScroller invocation is InventoryTable.vue:473-531. A themed tree cannot guarantee the fixed 32px geometry every other list uses, nor that every node label goes through safety/display.ts per segment.
 
 ### Known Risks Carried Forward
 
@@ -751,8 +756,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T01:09:11.011Z
-**Stopped at:** Completed 07-06-PLAN.md
+**Last session:** 2026-09-02T01:48:04.099Z
+**Stopped at:** Completed 07-07-PLAN.md
 **Resume file:** None
 
 ### Blockers

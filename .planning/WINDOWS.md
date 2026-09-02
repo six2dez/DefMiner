@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 82
+open_count: 83
 waived_count: 0
 fixed_count: 31
-total_count: 113
-last_updated: 2026-09-01T21:29:51.747Z
+total_count: 114
+last_updated: 2026-09-02T01:48:15.177Z
 ---
 
 # Broken Windows Ledger
@@ -149,6 +149,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 111 | 07 | deviation | packages/engine/src/sourcemap/announce.ts |  | The A2 prefilter is SHIPPED but MAP_MAX_BYTES was NOT raised. 07-01 measured announce_scan at 3.80 ms/MB (43% of the inline path) and recorded that the prefilter would move the bound up by roughly 75%. That projection is not evidence: the ladder in .../results/map-bytes.json was taken against the TWO-FULL-SCAN implementation, and thresholds.spec.ts asserts shipped <= measured. Raising the constant requires re-running scripts/phase7/map-bytes.sh with the prefiltered scan in tier1/mapbytes/src/index.ts, which is a Caido-touching operation plan 07-02 (the SDK-free half) may not perform. Until that re-run lands, MAP_MAX_BYTES stays at 2,621,440 and UI-09 must still speak loudly about refused maps. | open |  | 2026-09-01T21:29:51.570Z |  |
 | 112 | 07 | deviation | packages/engine/src/sourcemap/parse.ts |  | isCanonicalBase64 REQUIRES padding: a payload with length % 4 of 2 or 3 is refused malformed_base64 even though it is legal unpadded base64. Deliberate and fail-closed — requiring padding is what makes 'a truncated final quantum' distinguishable from 'a short last group', and Buffer.from(x, base64) silently returns a SHORTER buffer for both. Every emitter that matters here pads (Buffer.toString(base64) and btoa both do). If the field shows unpadded inline maps, relax to accept 2 and 3 and update the doc comment. | open |  | 2026-09-01T21:29:51.659Z |  |
 | 113 | 07 | unrun-verify | packages/engine/src/sourcemap/parse.spec.ts |  | The too_deep branch's TRIGGER cannot be produced on the test runtime. V8's JSON.parse is iterative and parses two million nested levels without throwing, so no document drives the RangeError catch from the front door on Node; SPIKE-06 measured Caido's QuickJS failing at 710 brackets with catchable-stack-throw. The MAPPING is executed directly against a real RangeError via the exported reasonForParseError, and the CATCH is executed by the malformed-JSON cases — but the two have never been executed TOGETHER. Plan 07-04 or a Tier-1 probe running inside Caido is where that composition can be proven. | open |  | 2026-09-01T21:29:51.747Z |  |
+| 114 | 07 | deviation | packages/frontend/src/sourcemap/tree.ts |  | displaySegment detects truncation by a one-character probe; a segment of EXACTLY TABLE_CELL_MAX_GRAPHEMES over-reports as 'label truncated'. Bounded, safe-direction, stated at the declaration — revisit if a second named import from safety/display ever becomes acceptable | open |  | 2026-09-02T01:48:15.177Z |  |
 
 ````json
 [
@@ -1506,6 +1507,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-01T21:29:51.747Z",
+    "resolved_at": null
+  },
+  {
+    "id": 114,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/frontend/src/sourcemap/tree.ts",
+    "line": null,
+    "description": "displaySegment detects truncation by a one-character probe; a segment of EXACTLY TABLE_CELL_MAX_GRAPHEMES over-reports as 'label truncated'. Bounded, safe-direction, stated at the declaration — revisit if a second named import from safety/display ever becomes acceptable",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T01:48:15.177Z",
     "resolved_at": null
   }
 ]
