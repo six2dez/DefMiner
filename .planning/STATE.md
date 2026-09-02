@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-09-02T01:48:04.227Z"
+stopped_at: Completed 07-08-PLAN.md
+last_updated: "2026-09-02T02:31:38.905Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: 67f8fcf9600a733ce438a723b1f1330fd3ec6a55
+state_head: fb18a878448d226db14fc462bd35d54fb97f31d8
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 79
+  completed_plans: 80
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Ready to execute
 Last activity: 2026-09-01 — Phase 07 execution started
 
@@ -364,6 +364,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P05 | 37 min | 3 tasks | 9 files |
 | Phase 07 P06 | 36min | 3 tasks | 13 files |
 | Phase 07 P07 | 31 min | 3 tasks | 15 files |
+| Phase 07 P08 | 34 min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -714,6 +715,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: P7-D07-2 — Segment truncation is detected by a one-character PROBE, not by comparing against the cap — Reaching for the cap would mean a second named import from safety/display, and the named-import set pinned to exactly ["forCellText"] is what proves forCell unreachable (T-07-12). A segment of exactly the cap over-reports as truncated; the error direction is safe and is stated at the declaration.
 - [Phase 07]: P7-D07-3 — table-contract.ts's throwing IIFE was FACTORED into an exported rowHeightClass(px) rather than copied for the second height — Two copies of one eight-line error message stop matching the moment either is edited, and the message is the load-bearing part — it is what tells the next author the class must be a LITERAL. Exporting it means the failing path is executed by a spec rather than only described.
 - [Phase 07]: P7-D07-4 — SourceTree.vue is built against InventoryTable.vue, not ArtifactsTable.vue; PrimeVue's Tree is available and deliberately not used — D-18 named the wrong file: ArtifactsTable.vue declares a column list and mounts the shared shell, and the actual RecycleScroller invocation is InventoryTable.vue:473-531. A themed tree cannot guarantee the fixed 32px geometry every other list uses, nor that every node label goes through safety/display.ts per segment.
+- [Phase 07]: P7-D08-2 — sourceDownloadName returns string|null rather than throwing: it runs on a render path, and a best-effort name is a name that does not match R6's pattern. No valid digest means no save affordance is offered.
+- [Phase 07]: P7-D08-3 — the source download's content type is text/plain ALWAYS, never derived from the matched extension. text/html on a recovered source is a stored-XSS primitive delivered by DefMiner.
+- [Phase 07]: P7-D08-4 — the position sentence renders both its numbers one-based, in one named function, because the sourcemap spec counts from zero and the gutter counts from one. Decoded integers are held verbatim in state.
+- [Phase 07]: P7-D08-6 — copyFullLine reuses safety/display.ts's shipped copyToClipboard rather than a fourth structural DOM host; the named-import equality now also asserts every walking wrapper absent by name.
 
 ### Known Risks Carried Forward
 
@@ -756,8 +761,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T01:48:04.099Z
-**Stopped at:** Completed 07-07-PLAN.md
+**Last session:** 2026-09-02T02:31:25.352Z
+**Stopped at:** Completed 07-08-PLAN.md
 **Resume file:** None
 
 ### Blockers

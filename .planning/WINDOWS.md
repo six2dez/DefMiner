@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 83
+open_count: 84
 waived_count: 0
 fixed_count: 31
-total_count: 114
-last_updated: 2026-09-02T01:48:15.177Z
+total_count: 115
+last_updated: 2026-09-02T02:31:39.016Z
 ---
 
 # Broken Windows Ledger
@@ -150,6 +150,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 112 | 07 | deviation | packages/engine/src/sourcemap/parse.ts |  | isCanonicalBase64 REQUIRES padding: a payload with length % 4 of 2 or 3 is refused malformed_base64 even though it is legal unpadded base64. Deliberate and fail-closed — requiring padding is what makes 'a truncated final quantum' distinguishable from 'a short last group', and Buffer.from(x, base64) silently returns a SHORTER buffer for both. Every emitter that matters here pads (Buffer.toString(base64) and btoa both do). If the field shows unpadded inline maps, relax to accept 2 and 3 and update the doc comment. | open |  | 2026-09-01T21:29:51.659Z |  |
 | 113 | 07 | unrun-verify | packages/engine/src/sourcemap/parse.spec.ts |  | The too_deep branch's TRIGGER cannot be produced on the test runtime. V8's JSON.parse is iterative and parses two million nested levels without throwing, so no document drives the RangeError catch from the front door on Node; SPIKE-06 measured Caido's QuickJS failing at 710 brackets with catchable-stack-throw. The MAPPING is executed directly against a real RangeError via the exported reasonForParseError, and the CATCH is executed by the malformed-JSON cases — but the two have never been executed TOGETHER. Plan 07-04 or a Tier-1 probe running inside Caido is where that composition can be proven. | open |  | 2026-09-01T21:29:51.747Z |  |
 | 114 | 07 | deviation | packages/frontend/src/sourcemap/tree.ts |  | displaySegment detects truncation by a one-character probe; a segment of EXACTLY TABLE_CELL_MAX_GRAPHEMES over-reports as 'label truncated'. Bounded, safe-direction, stated at the declaration — revisit if a second named import from safety/display ever becomes acceptable | open |  | 2026-09-02T01:48:15.177Z |  |
+| 115 | 07 | deviation | packages/frontend/src/components/table-contract.ts |  | formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope) | open |  | 2026-09-02T02:31:39.016Z |  |
 
 ````json
 [
@@ -1519,6 +1520,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-02T01:48:15.177Z",
+    "resolved_at": null
+  },
+  {
+    "id": 115,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/frontend/src/components/table-contract.ts",
+    "line": null,
+    "description": "formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T02:31:39.016Z",
     "resolved_at": null
   }
 ]
