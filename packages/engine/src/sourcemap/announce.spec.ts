@@ -22,11 +22,15 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { MAP_MAX_BYTES, SOURCEMAP_TAIL_WINDOW_BYTES } from "../thresholds";
+import {
+  ANNOUNCEMENT_PREFIX_MAX,
+  MAP_MAX_BYTES,
+  SOURCEMAP_TAIL_WINDOW_BYTES,
+} from "../thresholds";
 
 import type { Announcement } from "./announce";
 import { findAnnouncement, MARKERS } from "./announce";
-import { decodeInlineMap } from "./parse";
+import { decodeInlineMap, encodedCeiling } from "./parse";
 
 /** The current spelling, and the legacy one. Read off the module, never retyped. */
 const [MARKER_HASH, MARKER_AT] = MARKERS;
@@ -350,6 +354,76 @@ describe("the URL runs to end-of-line, and to EOF when there is none", () => {
 });
 
 // ===========================================================================
+// THE URL IS BOUNDED, NOT MERELY TERMINATED — LO-01
+// ===========================================================================
+// A body with no line terminator after the marker used to hand back a URL that
+// ran to END OF FILE. On an 8 MiB single-line body that is a full-length copy of
+// target-controlled bytes on the QuickJS thread, made so that `decodeInlineMap`
+// can then refuse it with a comparison — the expensive half done first, for the
+// cheap half's benefit (07-REVIEW.md LO-01, T-07-58).
+//
+// THE BOUND IS NOT A NEW NUMBER. `SOURCEMAP_TAIL_WINDOW_BYTES` is already
+// `ceil(MAP_MAX_BYTES * 4/3) + ANNOUNCEMENT_PREFIX_MAX` — the width of the window
+// this scan reads — and it is comfortably above the longest URL this build can
+// accept: a 43-byte `data:` prefix plus `encodedCeiling(MAP_MAX_BYTES)`. So
+// cutting there costs nothing that was reachable.
+
+/** The longest announcement URL that could still decode to a map this build accepts. */
+const LONGEST_ACCEPTABLE_URL =
+  ANNOUNCEMENT_PREFIX_MAX + encodedCeiling(MAP_MAX_BYTES);
+
+describe("the URL is BOUNDED even when nothing terminates the line", () => {
+  it("the bound is above the longest URL that could decode — nothing reachable is cut", () => {
+    // Stated first, because a bound BELOW a legal URL would silently lose maps
+    // and every case after this would still pass.
+    const longestLegal =
+      "data:application/json;charset=utf-8;base64,".length +
+      encodedCeiling(MAP_MAX_BYTES);
+    expect(SOURCEMAP_TAIL_WINDOW_BYTES).toBeGreaterThan(longestLegal);
+    expect(SOURCEMAP_TAIL_WINDOW_BYTES).toBeLessThanOrEqual(
+      LONGEST_ACCEPTABLE_URL,
+    );
+  });
+
+  it("a body with NO terminator after the marker does not run to EOF", () => {
+    // The window is passed as `body.length` on purpose: the window is what makes
+    // an announcement FINDABLE and is not what bounds the URL. Without that
+    // distinction this case could pass by the announcement falling out of the
+    // window, which proves nothing about the slice.
+    const oversizedPayload = "A".repeat(LONGEST_ACCEPTABLE_URL + 4096);
+    const body = `${MARKER_HASH}data:application/json;base64,${oversizedPayload}`;
+    const found = findAnnouncement(body, body.length);
+    expect(found).not.toBeNull();
+    expect(
+      found?.url.length ?? 0,
+      `the announcement URL came back ${found?.url.length ?? 0} characters long ` +
+        `against a bound of ${LONGEST_ACCEPTABLE_URL}. A URL longer than that ` +
+        `cannot decode to a map this build accepts, so every character past it is ` +
+        `a copy of target-controlled bytes made on the proxy thread for a refusal ` +
+        `that is arithmetic (07-REVIEW.md LO-01).`,
+    ).toBeLessThanOrEqual(LONGEST_ACCEPTABLE_URL);
+  });
+
+  it("and what comes back is still REFUSED — the cut loses nothing that decoded", () => {
+    const oversizedPayload = "A".repeat(LONGEST_ACCEPTABLE_URL + 4096);
+    const body = `${MARKER_HASH}data:application/json;base64,${oversizedPayload}`;
+    const found = findAnnouncement(body, body.length);
+    const result = decodeInlineMap(found?.url ?? "", MAP_MAX_BYTES);
+    expect(result.kind).toBe("refused");
+    if (result.kind === "refused") expect(result.reason).toBe("too_large");
+  });
+
+  it("a SHORT body is untouched by the bound — byte-identical to the shipped answer", () => {
+    // The control. Without it "bounded" could just as well mean "truncated", and
+    // every ordinary announcement in the corpus is a few dozen bytes long.
+    const body = `console.log(1);\n${MARKER_HASH}${INLINE_URL}`;
+    expect(findAnnouncement(body, SOURCEMAP_TAIL_WINDOW_BYTES)?.url).toBe(
+      INLINE_URL,
+    );
+  });
+});
+
+// ===========================================================================
 // THE A2 PREFILTER IS EQUIVALENT TO THE TWO FULL SEARCHES — PROVEN, NOT ASSUMED
 // ===========================================================================
 // `announce.ts` runs one `lastIndexOf` for the 16-byte substring both markers
@@ -363,7 +437,19 @@ describe("the URL runs to end-of-line, and to EOF when there is none", () => {
 // every body in this file. An optimisation asserted only by the cases somebody
 // thought to write is an optimisation nobody has checked.
 
-/** The two-full-scan reference. Deliberately the slow, obvious implementation. */
+/**
+ * The two-full-scan reference. Deliberately the slow, obvious implementation.
+ *
+ * ITS SUBJECT IS THE MARKER SEARCH, NOT THE URL SLICE, and its slice is
+ * deliberately the pre-07-14 one: a single `indexOf("\n")` and no bound. Every
+ * body in `DIFFERENTIAL_BODIES` is a few dozen characters long and terminated by
+ * `\n` or by nothing, so the two slices agree on all of them by construction —
+ * which is what keeps this an honest differential over the FAST PATH rather than
+ * a second copy of the shipped implementation comparing itself to itself. A body
+ * added below that carries a lone CR, a U+2028 or a U+2029, or one longer than
+ * `URL_MAX`, is testing the SLICE and belongs in the terminator or bound cases
+ * above instead.
+ */
 function naiveFindAnnouncement(
   body: string,
   windowBytes: number,

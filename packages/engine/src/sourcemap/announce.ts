@@ -28,7 +28,10 @@
 // ---------------------------------------------------------------------------
 // This module is pure: a string in, an offset and a string out. No Caido
 // surface, no filesystem, no network. That is why every boundary case runs under
-// plain vitest on Node, in CI, on every commit, with no Caido present.
+// plain vitest on Node, in CI, on every commit, with no Caido present. The one
+// import below is a NUMBER from the policy set — no surface comes with it.
+
+import { SOURCEMAP_TAIL_WINDOW_BYTES } from "../thresholds";
 
 /**
  * The two announcement spellings, current first and legacy second.
@@ -84,6 +87,33 @@ export const MARKERS: readonly string[] = Object.freeze([
 const COMMON = "sourceMappingURL";
 const COMMON_OFFSET = 4;
 
+/**
+ * The longest an announcement URL is allowed to be, in characters.
+ *
+ * WHY THE SLICE NEEDS A BOUND AT ALL (07-REVIEW.md LO-01, T-07-58). Without one
+ * a body carrying NO line terminator after the marker — an 8 MiB minified bundle
+ * on one line is the ordinary shape, not a contrived one — hands back a URL that
+ * runs to end of file. That is a full-length copy of target-controlled bytes,
+ * made on the QuickJS thread that also serves live browsing, so that
+ * `decodeInlineMap` can then refuse it with a comparison. The expensive half ran
+ * for the cheap half's benefit.
+ *
+ * IMPORTED RATHER THAN RE-DERIVED, and that is the point of taking
+ * {@link SOURCEMAP_TAIL_WINDOW_BYTES} specifically: `thresholds.ts` already
+ * computes it as `ceil(MAP_MAX_BYTES * 4/3) + ANNOUNCEMENT_PREFIX_MAX`, which is
+ * the width of the window this scan reads. Restating that arithmetic here would
+ * be a second copy of one derivation, and the second copy is the one that stops
+ * tracking `MAP_MAX_BYTES` the first time the D-10 ladder is re-run.
+ *
+ * NOTHING REACHABLE IS CUT. The longest URL this build can accept is a 43-byte
+ * `data:application/json;charset=utf-8;base64,` prefix plus
+ * `encodedCeiling(MAP_MAX_BYTES)` — some 81 characters INSIDE this bound, since
+ * `ANNOUNCEMENT_PREFIX_MAX` is 128. A URL longer than the bound could not have
+ * decoded to a map, so cutting it loses a refusal and never a map.
+ * `announce.spec.ts` asserts that relation rather than trusting it.
+ */
+const URL_MAX = SOURCEMAP_TAIL_WINDOW_BYTES;
+
 /** Where an announcement is, and what it announces. */
 export type Announcement = {
   /** The offset of the MARKER, not of the URL. */
@@ -113,6 +143,10 @@ function markerAt(body: string, index: number): boolean {
  * than surprised by it: the URL runs to end-of-line, so a swallowed file makes
  * the URL match no `data:` prefix and the map is reported external and decoded
  * not at all.
+ *
+ * AND TO {@link URL_MAX} WHEN THE LINE NEVER ENDS, which is the only way that
+ * sentence could otherwise mean "to end of file" on the 8 MiB single-line bodies
+ * this scanner exists for (07-REVIEW.md LO-01).
  *
  * THE WINDOW IS APPLIED AS AN OFFSET TEST, NOT AS A SLICE. `lastIndexOf` has no
  * "stop at" parameter, so a genuinely windowed backwards search would have to
@@ -162,8 +196,14 @@ export function findAnnouncement(
 
   const urlStart = at + MARKERS[0].length;
   const newline = body.indexOf("\n", urlStart);
-  const raw =
-    newline < 0 ? body.slice(urlStart) : body.slice(urlStart, newline);
+  // THE SMALLER OF THE TERMINATOR AND THE BOUND. A body with no terminator after
+  // the marker is bounded by {@link URL_MAX} instead of by end-of-file, and a
+  // body with one is unaffected — every announcement in the corpus is a few
+  // dozen characters long.
+  const limit = urlStart + URL_MAX;
+  const end =
+    newline < 0 ? Math.min(body.length, limit) : Math.min(newline, limit);
+  const raw = body.slice(urlStart, end);
   // Trimmed, so a `\r\n` line ending does not put a carriage return inside the
   // URL. An announcement whose URL is the EMPTY STRING is still an announcement:
   // this function reports what it found, and the caller decides it is unusable.

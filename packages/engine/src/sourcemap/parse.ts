@@ -162,10 +162,21 @@ function isCanonicalBase64(payload: string): boolean {
 /**
  * The payload of an inline announcement, decoded — or a tag saying why not.
  *
- * THE ENCODED-LENGTH GATE FIRES FIRST, BEFORE ANYTHING IS ALLOCATED. That is the
- * whole shape of this function: a map that will be refused for size never has
- * its decoded buffer materialised, so the refusal costs a comparison rather than
- * a multi-megabyte allocation on the proxy thread (T-07-02).
+ * THE ENCODED-LENGTH GATE FIRES FIRST, BEFORE EITHER ALLOCATION — AND THE TWO
+ * ARE NAMED SEPARATELY, because until 07-14 this sentence was true of one of
+ * them and false of the other (07-REVIEW.md LO-01).
+ *
+ *   THE PAYLOAD STRING. The gate is offset arithmetic over `url.length` and the
+ *   matched prefix's length, and it runs BEFORE `url.slice`. A refused map never
+ *   has its payload substring created at all.
+ *
+ *   THE DECODED BUFFER. `decodeBase64` runs only after both the size gate and
+ *   the alphabet check have passed, so nothing over the ceiling is ever expanded
+ *   4:3 into memory (T-07-02).
+ *
+ * The refusal therefore costs a comparison rather than a multi-megabyte
+ * allocation on the proxy thread — which is what the whole shape of this
+ * function is for.
  *
  * REFUSE, NEVER TRUNCATE. A truncated map decodes to WRONG POSITIONS rather
  * than to an error, which is the quiet-wrongness class every gate in this
@@ -184,6 +195,15 @@ export function decodeInlineMap(
   let payload: string | null = null;
   for (const prefix of B64_PREFIXES) {
     if (head.startsWith(prefix)) {
+      // ON THE OFFSETS, BEFORE THE COPY (07-REVIEW.md LO-01). The payload length
+      // is `url.length - prefix.length` EXACTLY, so an oversized inline map is
+      // refused by subtraction rather than by measuring a string that had to be
+      // materialised first. On an 8 MiB single-line body that is the difference
+      // between a comparison and a multi-megabyte copy of target-controlled
+      // bytes on the QuickJS thread that also serves live browsing.
+      if (url.length - prefix.length > encodedCeiling(maxBytes)) {
+        return refused("too_large");
+      }
       payload = url.slice(prefix.length);
       break;
     }
@@ -193,8 +213,9 @@ export function decodeInlineMap(
   // nothing was decoded.
   if (payload === null) return EXTERNAL;
 
+  // The size gate has already run, above the slice. What is left here are the
+  // checks that need the payload's CONTENT rather than its length.
   if (payload.length === 0) return refused("empty");
-  if (payload.length > encodedCeiling(maxBytes)) return refused("too_large");
   if (!isCanonicalBase64(payload)) return refused("malformed_base64");
 
   const json = decodeBase64(payload);

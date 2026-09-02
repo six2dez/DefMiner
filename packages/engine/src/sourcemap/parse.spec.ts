@@ -6,6 +6,9 @@
 // each one of them need a fake SDK, and a hostile-input suite nobody can afford
 // to run is a suite that stops being run.
 
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { sha256Hex } from "../digest";
@@ -614,6 +617,83 @@ describe("MAP-05 — the decoded ceiling, from both sides, at MAP_MAX_BYTES", ()
     expect([...exercisedBoundaryIds].sort()).toEqual(
       [...SIZE_BOUNDARY_CASE_IDS].sort(),
     );
+  });
+});
+
+// ===========================================================================
+// LO-01 — THE GATE FIRES ON THE OFFSETS, BEFORE THE PAYLOAD IS COPIED
+// ===========================================================================
+// `decodeInlineMap`'s docblock has always claimed the encoded-length gate fires
+// "BEFORE ANYTHING IS ALLOCATED", and it was true of the DECODED BUFFER and
+// false of the payload STRING: the prefix loop ran `url.slice(prefix.length)`
+// first, so an 8 MiB single-line body cost a full-length copy on the QuickJS
+// thread to reach a comparison (07-REVIEW.md LO-01, T-07-58).
+//
+// STRUCTURAL, BECAUSE THE OUTCOME DOES NOT CHANGE. Both orders refuse the same
+// URL with the same reason; only the cost differs, and a behavioural assertion
+// cannot see cost. So this reads the shipped function and asserts the ORDER of
+// its two statements — the same move `announce.spec.ts` makes for the no-pattern
+// property, and for the same reason: a property no input can expose has to be
+// asserted against the source or not at all.
+
+/** `parse.ts` as shipped, resolved the way the pattern audit resolves it. */
+const PARSE_SOURCE = readFileSync(
+  fileURLToPath(new URL("./parse.ts", import.meta.url)),
+  "utf8",
+);
+
+/** The body of one top-level function, from its signature to the closing brace in column 0. */
+function functionBody(source: string, signature: string): string {
+  const start = source.indexOf(signature);
+  expect(start, `${signature} was renamed or removed`).toBeGreaterThan(-1);
+  const end = source.indexOf("\n}", start);
+  expect(end, `no closing brace found after ${signature}`).toBeGreaterThan(
+    start,
+  );
+  return source.slice(start, end);
+}
+
+describe("LO-01 — the size refusal is arithmetic, not a copy", () => {
+  const body = functionBody(PARSE_SOURCE, "export function decodeInlineMap(");
+
+  it("the walk actually READ the function — the order assertion is not vacuous", () => {
+    // Without this a resolution slip returning "" would make every indexOf below
+    // return -1 and the ordering assertion would compare two -1s and pass.
+    expect(body.length).toBeGreaterThan(200);
+    expect(body).toContain("encodedCeiling(maxBytes)");
+    expect(body).toContain('refused("too_large")');
+  });
+
+  it("compares `url.length - prefix.length` BEFORE it slices the payload", () => {
+    const gate = body.indexOf("url.length - prefix.length");
+    const copy = body.indexOf("url.slice(prefix.length)");
+    expect(
+      gate,
+      "decodeInlineMap no longer measures the payload by OFFSET ARITHMETIC. The " +
+        "length is knowable without a copy: `url.length - prefix.length` is the " +
+        "payload length exactly, and computing it from the sliced string means the " +
+        "copy already happened.",
+    ).toBeGreaterThan(-1);
+    expect(copy, "the payload slice was renamed").toBeGreaterThan(-1);
+    expect(
+      gate,
+      `the size gate appears at offset ${gate} and the payload slice at ${copy}, ` +
+        `so the slice runs FIRST. That is LO-01: an oversized inline map costs a ` +
+        `full-length copy of target-controlled bytes on the QuickJS thread before ` +
+        `the "cheap comparison" refuses it, which is the opposite of what this ` +
+        `function's docblock promises.`,
+    ).toBeLessThan(copy);
+  });
+
+  it("one byte UNDER the ceiling is not refused for SIZE either", () => {
+    // The boundary from below, in the idiom the at-ceiling case above uses: a
+    // payload of this length is not a multiple of four, so reaching
+    // `malformed_base64` proves the size gate ran and LET IT THROUGH.
+    const under = decode(
+      B64_PREFIXES[0] + "A".repeat(encodedCeiling(MAP_MAX_BYTES) - 1),
+    );
+    expect(under.kind).toBe("refused");
+    if (under.kind === "refused") expect(under.reason).toBe("malformed_base64");
   });
 });
 
