@@ -824,10 +824,39 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     return parsed.rows[0]?.sources_verbatim ?? null;
   };
 
+  /** One corpus label, looked up BY ID. A spec that repeated the label string
+   *  would keep passing if the case were renamed or deleted, which is precisely
+   *  the silent un-covering this lookup exists to turn into a failure. Same
+   *  idiom as `tree.spec.ts`'s `rowOf`. */
+  const labelCaseValue = (id: string): string => {
+    const found = SOURCES_LABEL_CASES.find((labelCase) => labelCase.id === id);
+    if (found === undefined) {
+      throw new Error(
+        `map-fixture.ts no longer exports a case with id "${id}". This spec ` +
+          `asserts WR-03's direction over the corpus by NAME, so a rename must ` +
+          `fail here rather than silently un-cover the branch 07-16 narrowed.`,
+      );
+    }
+    return found.value;
+  };
+
+  /** The corpus ids whose redacted and raw forms are expected to DIFFER, named
+   *  rather than claimed to be empty. Under the operator's option A that is
+   *  exactly the corpus labels carrying a `?`, and `loader-query` is the only
+   *  one. Stated as a list so the two-mode sweep below can say what it covers
+   *  instead of implying it. */
+  const CORPUS_IDS_CUT_IN_REDACTED_MODE = ["loader-query"] as const;
+
   it.each([
-    // A BARE PATH HAS NO QUERY AXIS. Nothing is withheld, so nothing is claimed.
+    // NONE OF THESE HAS A QUERY AXIS TO WITHHOLD, so nothing is withheld and
+    // nothing is claimed. The `#` tails survive because `#` is a legal filename
+    // character — LO-04's finding, and this list is where it is pinned.
+    //
+    // `src/gen/what?.ts` USED TO BE IN THIS LIST and is not any more: WR-03
+    // moved it, because under the operator's option A a `?` on a non-protocol
+    // label IS cut. Its new home is the direction block below, asserted in both
+    // modes rather than merely asserted whole.
     ["relative, legal `#` in the filename", "src/components/Button#new.tsx"],
-    ["relative, legal `?` in the filename", "src/gen/what?.ts"],
     ["absolute-posix, legal `#`", "/srv/app/src/Button#new.tsx"],
     ["windows-drive, legal `#`", "C:\\Temp\\Button#new.tsx"],
     ["windows-unc, legal `#`", "\\\\server\\share\\Button#new.tsx"],
@@ -880,6 +909,77 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     },
   );
 
+  // =========================================================================
+  // WR-03 — THE QUERY AXIS EXISTS ON A LABEL THAT IS NOT A URL
+  // =========================================================================
+  // 07-16 narrowed this column's redaction to protocol-shaped labels on the
+  // premise that a label which is not a URL has NEITHER axis. Half of that
+  // premise was false. `src/App.vue?vue&type=script&lang.ts` is the ordinary
+  // vite/webpack loader-query shape, `classify()` puts it in `relative`, and
+  // between 07-16 and this plan it exported VERBATIM in the mode an operator
+  // picks precisely because the artifact is going to be shared.
+  //
+  // The operator chose option A on 2026-09-02 — split the two axes. The query
+  // axis is cut on EVERY label; the fragment axis only on URL-shaped ones,
+  // because `#` is a legal filename character and LO-04's fix for that stands.
+  // What follows pins BOTH halves, so neither can slide back without a failure.
+
+  it("cuts the CORPUS's loader-query label at its `?` in redacted mode, and returns it whole in raw — WR-03, by id", () => {
+    const label = labelCaseValue("loader-query");
+    const cut = label.indexOf("?");
+    expect(
+      cut,
+      "the loader-query case no longer carries a query axis, so this pin covers nothing",
+    ).toBeGreaterThan(-1);
+    expect(manifestLabelField(label, "redacted")).toBe(
+      `${label.slice(0, cut)}${EXPORT_QUERY_REDACTION}`,
+    );
+    // The raw option remains the only route to the unredacted bytes, and it is
+    // asserted separately: "redacted leaked" and "raw withheld" are different
+    // failures and must not be able to mask one another.
+    expect(manifestLabelField(label, "raw")).toBe(label);
+  });
+
+  it.each([
+    // 1 — RELATIVE, QUERY AND NO FRAGMENT. WR-03's shape in its generic form.
+    //     Cut at the `?`, marker appended, tail withheld. This label was in the
+    //     "leaves a NON-URL label whole" list until this plan.
+    [
+      "relative, a loader query on the filename",
+      "src/gen/what?.ts",
+      `src/gen/what${EXPORT_QUERY_REDACTION}`,
+    ],
+    // 2 — RELATIVE, FRAGMENT AND NO QUERY. LO-04's fix, UNMOVED. `#` is a legal
+    //     filename character, so there is nothing to withhold and the marker
+    //     would be a false statement about this field.
+    [
+      "relative, a legal `#` in the filename and no query",
+      "src/components/Button#new.tsx",
+      "src/components/Button#new.tsx",
+    ],
+    // 3 — RELATIVE DESPITE A COLON-SLASH-SLASH. The `/` before the `://` makes
+    //     this a path segment, not an authority; both classifiers agree. Its
+    //     `#` tail stays for exactly the reason case 2's does.
+    [
+      "relative segment containing `://`, fragment only",
+      "src/a://b#c.ts",
+      "src/a://b#c.ts",
+    ],
+    // 4 — PROTOCOL-SHAPED, WITH A QUERY. Untouched by WR-03: a URL-shaped label
+    //     still delegates to the shared redactor, which cuts on EITHER axis.
+    [
+      "protocol-shaped, a credential-shaped query",
+      "http://evil.example/app.js?token=hunter2",
+      `http://evil.example/app.js${EXPORT_QUERY_REDACTION}`,
+    ],
+  ])(
+    "pins WR-03's direction per shape, in BOTH modes — %s",
+    (_why, label: string, redacted: string) => {
+      expect(manifestLabelField(label, "redacted")).toBe(redacted);
+      expect(manifestLabelField(label, "raw")).toBe(label);
+    },
+  );
+
   it("agrees with the FRONTEND classifier on every corpus label — the two implementations, diffed", () => {
     // THE DRIFT GATE FOR A CLASSIFICATION THAT EXISTS TWICE.
     // `isProtocolShapedLabel` restates `sourcePathShape`'s `"protocol"` branch
@@ -906,13 +1006,38 @@ describe("the manifest export table (D-20, MAP-07)", () => {
     }
   });
 
-  it("returns EVERY hostile-corpus label byte-identical in BOTH modes — none of them has a query axis", () => {
-    // The 23-entry corpus is the measured set of shapes a real `sources` array
-    // carries, and not one of its entries has a query or a fragment. So the
-    // redacted manifest and the raw manifest agree on all of them, and a future
-    // corpus entry that does carry a query fails here loudly rather than
-    // acquiring a marker nobody expected.
+  it("returns every hostile-corpus label byte-identical in BOTH modes EXCEPT the ids that carry a query axis, which it NAMES", () => {
+    // WHAT THIS TEST USED TO SAY, AND WHY IT WAS REWRITTEN RATHER THAN DELETED.
+    // Until 07-22 its title ended "none of them has a query axis" and its
+    // comment promised that "a future corpus entry that does carry a query
+    // fails here loudly rather than acquiring a marker nobody expected".
+    //
+    // 07-21 added exactly such an entry — `loader-query`, the ordinary vite and
+    // webpack shape — and it did NOT fail loudly. 07-16's narrowing let it
+    // through both modes identically, so the title and the promise were both
+    // false while the assertion underneath them still passed. That is not a
+    // defect in the corpus; it is the direct evidence for WR-03, and a blanket
+    // property is what let it hide.
+    //
+    // So the exception set is NAMED. It is stated explicitly whether or not it
+    // is empty, and it is checked against the corpus first, so this test says
+    // what it covers instead of implying it — and a renamed or deleted case
+    // fails here rather than quietly widening the byte-identity claim.
+    const differing = new Set<string>(CORPUS_IDS_CUT_IN_REDACTED_MODE);
+    for (const id of differing) {
+      expect(
+        SOURCES_LABEL_CASES.some((c) => c.id === id),
+        `the exception set names "${id}", which the corpus no longer contains`,
+      ).toBe(true);
+    }
     for (const c of SOURCES_LABEL_CASES) {
+      if (differing.has(c.id)) {
+        expect(
+          manifestLabelField(c.value, "redacted"),
+          `corpus case ${c.id} is named as cut in redacted mode but came back byte-identical to raw`,
+        ).not.toBe(manifestLabelField(c.value, "raw"));
+        continue;
+      }
       expect(
         manifestLabelField(c.value, "redacted"),
         `corpus case ${c.id} acquired or lost bytes in redacted mode`,
