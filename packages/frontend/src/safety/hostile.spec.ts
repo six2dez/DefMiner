@@ -62,6 +62,21 @@
 //       `overflow-y-auto` column, which is a `covered` row and not this one.
 //       NO PLAN OWES A SECOND HALF FOR IT EITHER.
 //
+//   `long-text / source-tree` (07-UI-SPEC.md) — ADDED BY PLAN 07-07, and the
+//       reason this file grew a FOURTH surface. Every `sources` label the tree
+//       renders is target-controlled and the hostile set here is REAL rather
+//       than imagined: 4 KB labels, RTL overrides, NUL bytes, NFD/NFC
+//       collisions, case-only collisions and parent-directory climbs past the
+//       root, all measured by SPIKE-12 and retained verbatim in
+//       `map-fixture.ts`. Sanitisation through `forCellText` (one SEGMENT at a
+//       time, in `sourcemap/tree.ts`), inertness against an explicit allowed-tag
+//       set, the absence of any `title` and of any `data-*` carrying the
+//       untruncated label, and the BYTE-IDENTICAL ROUND TRIP at the component
+//       boundary are asserted HERE. THE LAYOUT HALF — that a 4 KB label does
+//       not grow the fixed 32px row — is carried by `tests/frontend-load.spec.ts`
+//       in a real browser, for the same measured reason as the rows above:
+//       jsdom reports every box as 0x0 because it never laid one out.
+//
 // A BACKSTOP ROW WITH NO EXECUTED EVIDENCE RESOLVES TO HUMAN-NEEDED, NEVER TO A
 // SILENT PASS (`05-VALIDATION.md § "Manual-Only Verifications"`). So a reader
 // who finds this file green must not conclude ALL SIX rows are signed off in
@@ -81,20 +96,32 @@
 // types. A payload that parsed fails loudly.
 //
 // ===========================================================================
-// FIVE SURFACES HERE, SEVEN IN THE END
+// SIX SURFACES HERE, EIGHT IN THE END
 // ===========================================================================
-// `hostile.fixture.ts`'s header names four surfaces this one corpus is for, and
-// Phase 6 adds three. The five covered here are the FINDINGS TABLE CELL
+// `hostile.fixture.ts`'s header names four surfaces this one corpus is for,
+// Phase 6 adds three and Phase 7 adds one. The five covered here are the
+// FINDINGS TABLE CELL
 // (`forCell`, 256), the EVIDENCE PANEL (`forPanel`, 2,048), the SCAN START
 // FORM's operator clause (`forCellText`, 256, rendered through the real
 // component), the SCAN HISTORY ROW (`forCellText`, 256) and the SCAN DETAIL
 // DISCLOSURE (`forPanel`, 2,048) — the last two added by plan 06-13, both
-// through the real `ScanHistoryList`. The remaining two — the SUPPRESSIONS LIST
-// and the FINDINGS PROJECTION PREVIEW — are blocked on Phase 4 defining the
-// entities they list. When Phase 4 unblocks them the extension is an ADDITION
-// to the loops below, not a rediscovery: import the same corpus, assert the
-// same id-set exhaustiveness, extend the fixture rather than forking it. Plans
-// 06-12 and 06-13 did exactly that and are the worked examples.
+// through the real `ScanHistoryList`. The SIXTH is the RECOVERED-SOURCE TREE
+// (`forCellText`, 256, one SEGMENT at a time, through the real `SourceTree`),
+// added by plan 07-07. The remaining two — the SUPPRESSIONS LIST and the
+// FINDINGS PROJECTION PREVIEW — are blocked on Phase 4 defining the entities
+// they list. When Phase 4 unblocks them the extension is an ADDITION to the
+// loops below, not a rediscovery: import the same corpus, assert the same
+// id-set exhaustiveness, extend the fixture rather than forking it. Plans
+// 06-12, 06-13 and 07-07 did exactly that and are the worked examples.
+//
+// TWO CORPORA, AND THE SECOND IS NOT A FORK. The tree's loops drive
+// `map-fixture.ts`'s `SOURCES_LABEL_CASES` AS WELL AS the shared
+// `HOSTILE_CASES`, and both exhaustiveness assertions are made. That is not a
+// second adversarial corpus competing with the first: the tree's INPUT is a
+// `sources` LABEL, `SOURCES_LABEL_CASES` is SPIKE-12's measured label corpus
+// held verbatim in the engine and already consumed by three engine and backend
+// specs, and forking either one into this file is exactly what both fixture
+// modules' headers forbid. Importing both is what covers this surface honestly.
 
 import type { ScanStatusPayload } from "@defminer/engine/contract";
 import { SCAN_KIND_CLAUSE } from "@defminer/engine/contract";
@@ -105,9 +132,16 @@ import {
 import {
   BIDI_OVERRIDES_ISOLATES,
   C0_C1_CONTROLS,
+  TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
+import {
+  SOURCES_LABEL_CASE_IDS,
+  SOURCES_LABEL_CASES,
+} from "@defminer/engine/sourcemap/map-fixture";
 import { flushPromises, mount } from "@vue/test-utils";
+import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import { defineComponent } from "vue";
 
 import type {
   RpcResult,
@@ -122,6 +156,7 @@ import {
 } from "../components/scan-contract";
 import ScanHistoryList from "../components/ScanHistoryList.vue";
 import ScanPanel from "../components/ScanPanel.vue";
+import SourceTree from "../components/SourceTree.vue";
 
 import { forCell, forCellText, forPanel, TABLE_ROW_HEIGHT_PX } from "./display";
 import HighlightSlices from "./HighlightSlices.vue";
@@ -732,5 +767,238 @@ describe("hostile corpus rendered inert — scan history row (forCellText, 256) 
 
   it("exercised EVERY case in the shared corpus", () => {
     expect([...exercised].sort()).toEqual([...HOSTILE_CASE_IDS].sort());
+  });
+});
+
+// ===========================================================================
+// THE SIXTH SURFACE — THE RECOVERED-SOURCE TREE (PLAN 07-07)
+// ===========================================================================
+// AN ADDITION TO THE LOOPS ABOVE, NOT A FORK, and it drives the REAL component
+// rather than the display function. The claim being tested is about a SURFACE:
+// that a target-controlled `sources` label reaches the DOM only through the
+// display path, only inside its own `font-mono` element, never into a `title`
+// or a `data-*` anywhere in the subtree — and that the STORED STRING IS
+// BYTE-IDENTICAL after the component has rendered it. A test of `forCellText`
+// alone would prove the sanitiser and say nothing about the tree that has to
+// call it, once per SEGMENT, without ever writing back.
+//
+// The round trip is asserted a second time HERE, at the component boundary,
+// although `sourcemap/tree.spec.ts` already asserts it at the function
+// boundary. That is deliberate and not duplication: losslessness is the
+// property D-06 exists to preserve, the component is where a future edit would
+// plausibly introduce a `.normalize()` or a `.toLowerCase()` "to make selection
+// work", and the two assertions fail in different files for different reasons.
+
+/** Every tag `SourceTree` renders in its populated state. Anything else in the
+ *  subtree came out of the payload. A WHITELIST, for the reason the two sets
+ *  above are whitelists: a blacklist is a list of the payloads somebody thought
+ *  of, and this corpus exists precisely because that list is never complete. */
+const SOURCE_TREE_ALLOWED_TAGS = new Set(["DIV", "H2", "P", "BUTTON", "SPAN"]);
+
+type TreeRow = {
+  readonly sourceIndex: number;
+  readonly sourcesVerbatim: string | null;
+  readonly producibility: "producible";
+};
+
+const treeScrollerStub = defineComponent({
+  name: "RecycleScroller",
+  props: {
+    items: { type: Array, required: true },
+    itemSize: { type: Number, required: true },
+    keyField: { type: String, required: true },
+    buffer: { type: Number, default: 0 },
+  },
+  template: `<div><template v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></template></div>`,
+});
+
+const mountTreeOver = (rows: readonly TreeRow[]): VueWrapper =>
+  mount(SourceTree, {
+    props: {
+      loadState: "ready" as const,
+      rows,
+      total: rows.length,
+      returned: rows.length,
+      bound: 2000,
+    },
+    global: { stubs: { RecycleScroller: treeScrollerStub } },
+  });
+
+/** The corpus the TREE takes as input, plus the shared one — both driven, both
+ *  asserted exhaustive. See this file's header for why that is not a fork. */
+const TREE_CORPORA = [
+  {
+    name: "sources-label corpus (SPIKE-12, map-fixture.ts)",
+    cases: SOURCES_LABEL_CASES.map((c) => ({ id: c.id, value: c.value })),
+    ids: SOURCES_LABEL_CASE_IDS,
+  },
+  {
+    name: "shared adversarial corpus (hostile.fixture.ts)",
+    cases: HOSTILE_CASES.map((c) => ({ id: c.id, value: c.value })),
+    ids: HOSTILE_CASE_IDS,
+  },
+];
+
+for (const corpus of TREE_CORPORA) {
+  describe(`hostile labels rendered inert — source tree, ${corpus.name}`, () => {
+    const exercised: string[] = [];
+
+    it.each(corpus.cases.map((c) => [c.id, c.value] as const))(
+      "%s renders inert and lossless",
+      (id, value) => {
+        const startedAt = Date.now();
+
+        const rows: readonly TreeRow[] = [
+          {
+            sourceIndex: 0,
+            sourcesVerbatim: value,
+            producibility: "producible",
+          },
+        ];
+        const wrapper = mountTreeOver(rows);
+        const root = wrapper.element;
+        const nodes = [root, ...root.querySelectorAll("*")];
+
+        // 1. NO ELEMENT CAME OUT OF THE PAYLOAD. Tag names against the explicit
+        //    allowed set — a payload that PARSED fails here, where a check on
+        //    escaped-looking text would not.
+        for (const node of nodes) {
+          expect(
+            SOURCE_TREE_ALLOWED_TAGS.has(String(node.tagName).toUpperCase()),
+            `case ${id} produced a <${String(node.tagName)}> element — the payload PARSED`,
+          ).toBe(true);
+        }
+
+        // 2. NOTHING IN A TOOLTIP, AND NO DATA ATTRIBUTE CARRYING THE LABEL.
+        //    The tree DOES use `data-*` markers, so the assertion cannot be
+        //    "no data attribute exists" the way the HighlightSlices loop's is.
+        //    It is the stronger, honest form: no data attribute may carry more
+        //    than the cell cap, and none may carry a run of the payload. R2
+        //    states both prohibitions as absolutes (threat T-07-38).
+        for (const node of nodes) {
+          expect(
+            node.hasAttribute("title"),
+            `case ${id} put a title attribute on a rendered node`,
+          ).toBe(false);
+          for (const attribute of [...node.attributes]) {
+            if (!String(attribute.name).startsWith("data-")) continue;
+            expect(
+              attribute.value.length,
+              `case ${id} put ${String(attribute.value.length)} characters into ${String(attribute.name)}`,
+            ).toBeLessThanOrEqual(TABLE_CELL_MAX_GRAPHEMES);
+            const run = probe(value);
+            if (run !== null) {
+              expect(
+                attribute.value.includes(run),
+                `case ${id} put the payload into the data attribute ${String(attribute.name)}`,
+              ).toBe(false);
+            }
+          }
+          expect(
+            node.getAttribute("style"),
+            `case ${id} set a style attribute from the value`,
+          ).toBeNull();
+        }
+
+        // 3. NO CONTROL CHARACTER AND NO BIDI CHARACTER SURVIVED INTO A LABEL.
+        //    The patterns are IMPORTED from the engine, never restated —
+        //    `noInlineConfig` is on for packages/frontend, so a
+        //    control-character regex literal cannot be written in this package
+        //    at all.
+        for (const label of wrapper.findAll(
+          "[data-defminer-source-tree-label]",
+        )) {
+          const text = label.text();
+          expect(
+            stripsToNothing(text, C0_C1_CONTROLS),
+            `case ${id} rendered a C0/C1 control character in a tree label`,
+          ).toBe(true);
+          expect(
+            stripsToNothing(text, BIDI_OVERRIDES_ISOLATES),
+            `case ${id} rendered a bidi override or isolate in a tree label — a tree of paths is exactly what a reversal spoofs`,
+          ).toBe(true);
+          expect(
+            hasLoneSurrogate(text),
+            `case ${id} left a split character in a tree label`,
+          ).toBe(false);
+          // 4. THE CAP HELD, PER SEGMENT. The 4 KB label is the case this is
+          //    about; every segment is bounded by the CELL cap, which is
+          //    strictly below the source-line cap the viewer uses.
+          expect(
+            [...text].length,
+            `case ${id} rendered a label past the cell cap`,
+          ).toBeLessThanOrEqual(TABLE_CELL_MAX_GRAPHEMES);
+          // 5. EVERY LABEL IS THE SANITISER'S OWN OUTPUT — asserted by CALLING
+          //    it rather than by reimplementing what it does (T-07-38).
+          expect(forCellText(text)).toBe(text);
+          // 6. AND IT CANNOT GROW THE FIXED ROW. jsdom lays nothing out, so the
+          //    MECHANISM is what is checkable here: pre-formatted and clipped,
+          //    in the mandatory mono face. The measured height is the browser
+          //    spec's half (assumption A8).
+          const className = String(label.element.className);
+          expect(className).toContain("whitespace-pre");
+          expect(className).toContain("overflow-hidden");
+          expect(className).toContain("font-mono");
+        }
+
+        // 7. THE ROW STILL RENDERS. A node is never hidden because part of it
+        //    is hostile, any more than because part of it is missing.
+        expect(
+          wrapper.findAll('[role="treeitem"]').length,
+          `case ${id} rendered no tree row at all`,
+        ).toBeGreaterThan(0);
+
+        // 8. THE BYTE-IDENTICAL ROUND TRIP, AT THE COMPONENT BOUNDARY.
+        expect(
+          rows[0]?.sourcesVerbatim,
+          `case ${id} was rewritten by the component`,
+        ).toBe(value);
+        expect(String(rows[0]?.sourcesVerbatim).length).toBe(value.length);
+
+        // 9. AND IT DID NOT FREEZE.
+        expect(
+          Date.now() - startedAt,
+          `case ${id} exceeded the per-case freeze budget on the source tree`,
+        ).toBeLessThan(PER_CASE_BUDGET_MS);
+
+        wrapper.unmount();
+        exercised.push(id);
+      },
+    );
+
+    it("exercised EVERY case in the corpus", () => {
+      expect([...exercised].sort()).toEqual([...corpus.ids].sort());
+    });
+  });
+}
+
+describe("source tree — the whole corpus at once, still lossless", () => {
+  it("renders all twenty-three labels in one tree and rewrites none of them", () => {
+    // The loops above build one row at a time; this is the shape the drill-down
+    // actually calls, and it is where a duplicate-label collision, a shared
+    // directory node and a clamped climb all coexist.
+    const rows: readonly TreeRow[] = SOURCES_LABEL_CASES.map(
+      (labelCase, index) => ({
+        sourceIndex: index,
+        sourcesVerbatim: labelCase.value,
+        producibility: "producible" as const,
+      }),
+    );
+    const before = rows.map((r) => r.sourcesVerbatim);
+    const wrapper = mountTreeOver(rows);
+
+    expect(wrapper.findAll('[role="treeitem"]').length).toBeGreaterThanOrEqual(
+      SOURCES_LABEL_CASES.length,
+    );
+    expect(rows.map((r) => r.sourcesVerbatim)).toEqual(before);
+
+    // No `title` anywhere in the whole subtree, on the whole corpus at once.
+    for (const node of [
+      wrapper.element,
+      ...wrapper.element.querySelectorAll("*"),
+    ]) {
+      expect(node.hasAttribute("title")).toBe(false);
+    }
+    wrapper.unmount();
   });
 });

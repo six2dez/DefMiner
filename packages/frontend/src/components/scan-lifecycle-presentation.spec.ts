@@ -34,6 +34,22 @@
 //
 // NO COLLISION EXISTS TODAY, which is precisely why the guard is widened now
 // rather than after one is introduced.
+//
+// ===========================================================================
+// AND IT WALKS THREE VOCABULARIES AS OF PLAN 07-07, NOT TWO
+// ===========================================================================
+// EXTENDED HERE RATHER THAN FORKED. Phase 7 adds `producibility` — CAN DEFMINER
+// STILL SHOW YOU THESE BYTES — beside the analysis state (DID DEFMINER FINISH
+// LOOKING AT THEM) and the backfill lifecycle. Its words are **Gone** and
+// **Changed**, and *Missing*, *Lost* and *Incomplete* were rejected against the
+// analysis vocabulary's **Partial**.
+//
+// A SECOND GUARD IN A SECOND FILE WOULD HAVE BEEN THE WRONG SHAPE. The relation
+// this file checks is over the UNION, and two guards over overlapping unions is
+// how one of them comes to cover a word the other one dropped with neither
+// owner noticing. So the union grows and the assertion does not move — which is
+// also why the non-vacuity case below counts the members per vocabulary rather
+// than only the total.
 
 import { SCAN_LIFECYCLE_STATES } from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
@@ -51,6 +67,7 @@ import {
 import { SCAN_LIFECYCLE_PRESENTATION } from "./scan-lifecycle-presentation";
 import { SCAN_STATE_PRESENTATION } from "./scan-state-presentation";
 import ScanLifecycleBadge from "./ScanLifecycleBadge.vue";
+import { SOURCE_PRODUCIBILITY_PRESENTATION } from "./source-producibility-presentation";
 
 // ---------------------------------------------------------------------------
 // THE GUARD
@@ -58,7 +75,7 @@ import ScanLifecycleBadge from "./ScanLifecycleBadge.vue";
 
 /** One operator-facing word and which vocabulary it belongs to. */
 type VocabularyWord = {
-  readonly vocabulary: "analysis" | "lifecycle";
+  readonly vocabulary: "analysis" | "lifecycle" | "producibility";
   readonly word: string;
 };
 
@@ -100,6 +117,20 @@ const LIFECYCLE_COMPUTED_WORDS: readonly string[] = [
   SCAN_STATUS_NOT_ADVANCING,
 ];
 
+/**
+ * The producibility words that are ACTUALLY RENDERED.
+ *
+ * The ordinary member's row is `{ label: null, toneClass: null }` — it renders
+ * NOTHING AT ALL — so it contributes no word to the union. Filtering rather than
+ * mapping a placeholder in is deliberate: a `null` coerced to a string would put
+ * "null" in a collision check as though it were a word an operator reads.
+ */
+function producibilityWords(): string[] {
+  return Object.values(SOURCE_PRODUCIBILITY_PRESENTATION)
+    .map((presentation) => presentation.label)
+    .filter((label): label is string => label !== null);
+}
+
 function everyOperatorWord(
   extraLifecycleWords: readonly string[] = [],
 ): VocabularyWord[] {
@@ -116,10 +147,14 @@ function everyOperatorWord(
       vocabulary: "lifecycle" as const,
       word,
     })),
+    ...producibilityWords().map((word) => ({
+      vocabulary: "producibility" as const,
+      word,
+    })),
   ];
 }
 
-describe("the two status vocabularies cannot be confused (06-UI-SPEC mechanism 4)", () => {
+describe("the THREE status vocabularies cannot be confused (06-UI-SPEC mechanism 4, 07-UI-SPEC mechanism 3)", () => {
   it("no word in either vocabulary is a case-insensitive prefix of one in the other", () => {
     const collisions = prefixCollisions(everyOperatorWord());
     expect(
@@ -130,19 +165,61 @@ describe("the two status vocabularies cannot be confused (06-UI-SPEC mechanism 4
     ).toEqual([]);
   });
 
-  it("walks at least nine words — the map members AND the computed ones", () => {
+  it("walks at least eleven words — three maps AND the computed ones", () => {
     // NON-VACUITY. A guard whose union quietly shrank to one vocabulary would
     // pass for ever while covering nothing, which is the failure mode a
-    // source-level assertion is most prone to.
+    // source-level assertion is most prone to. Counted PER VOCABULARY, so a
+    // union that lost a whole map fails here rather than passing on the two
+    // that remained.
     const words = everyOperatorWord();
-    expect(words.length).toBeGreaterThanOrEqual(9);
+    expect(words.length).toBeGreaterThanOrEqual(11);
     expect(words.filter((w) => w.vocabulary === "analysis").length).toBe(5);
     expect(
       words.filter((w) => w.vocabulary === "lifecycle").length,
     ).toBeGreaterThanOrEqual(4);
+    expect(words.filter((w) => w.vocabulary === "producibility").length).toBe(
+      2,
+    );
     // The computed words are IN the union, not merely declared beside it.
     expect(words.map((w) => w.word)).toContain(SCAN_STATUS_WAITING_FOR_QUEUE);
     expect(words.map((w) => w.word)).toContain(SCAN_STATUS_NOT_ADVANCING);
+    // And so are the two producibility words.
+    expect(words.map((w) => w.word)).toContain("Gone");
+    expect(words.map((w) => w.word)).toContain("Changed");
+  });
+
+  it("clears all nine shipped words in BOTH directions", () => {
+    // Stated as its own case because the claim 07-UI-SPEC.md makes is
+    // directional and a reader will want to see it exercised: neither
+    // producibility word is a prefix of any of the nine, and none of the nine
+    // is a prefix of either.
+    const nine = everyOperatorWord()
+      .filter((w) => w.vocabulary !== "producibility")
+      .map((w) => w.word);
+    expect(nine.length).toBeGreaterThanOrEqual(9);
+    for (const shipped of nine) {
+      for (const word of producibilityWords()) {
+        expect(
+          word.toLowerCase().startsWith(shipped.toLowerCase()),
+          `the producibility word ${word} is prefixed by the shipped word ${shipped}`,
+        ).toBe(false);
+        expect(
+          shipped.toLowerCase().startsWith(word.toLowerCase()),
+          `the shipped word ${shipped} is prefixed by the producibility word ${word}`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("turns red on a scratch word that prefixes a PRODUCIBILITY word", () => {
+    // THE THIRD MAP'S NEGATIVE FIXTURE. "Gon" is a prefix of "Gone" and a
+    // set-disjointness check would pass it — the same shape as Complete beside
+    // Completed, one vocabulary further along. Introduced into the LIFECYCLE
+    // vocabulary rather than into producibility's own, because a collision
+    // WITHIN a vocabulary is not a collision and the rule must not fire there.
+    const collisions = prefixCollisions(everyOperatorWord(["Gon"]));
+    expect(collisions.length).toBeGreaterThan(0);
+    expect(collisions.some((c) => c.a === "Gon" && c.b === "Gone")).toBe(true);
   });
 
   it("turns red when a deliberately colliding word is introduced", () => {

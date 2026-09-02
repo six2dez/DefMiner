@@ -35,3 +35,13 @@ territory.
 
 **Suggested owner:** a Phase 7 follow-up plan, or the D-25 footprint readout,
 which is where the operator will first see the two tables growing unbounded.
+
+## From plan 07-07 (2026-09-02)
+
+- **`pnpm --filter @defminer/frontend typecheck` (vue-tsc) reports 5 PRE-EXISTING errors** in
+  `ExportDialog.vue:232` (`ExportChunkRequest.scopeSha256` missing at the call site) and
+  `SettingsPanel.vue:430,446,461,481` (`FieldCopy` record indexed with the wider settings-key
+  union). Neither file is touched by 07-07 and neither error is reachable from any 07-07 module.
+  The repo gate is `pnpm typecheck` (`tsc --build`), which is green; `vue-tsc` is not wired into
+  any script and is therefore not a gate today. Out of scope for this plan under the executor's
+  scope boundary; recorded rather than fixed.
