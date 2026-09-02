@@ -205,10 +205,8 @@ authoritative and the shipped text is the defect.
 
 THE SURFACES THAT COMPARISON REACHES - 2, RENDERED FROM THE ONE
 DECLARATION THE TWO READERS RESOLVE THEIR OWN PATHS FROM:
-
   - packages/backend/src/outbound-prohibition.spec.ts
   - .planning/REQUIREMENTS.md
-
 NO OTHER FILE IN THIS REPOSITORY IS REACHED BY IT. A file that is not listed
 just above - including a file under the planning directory that is not listed
 just above - carries at most a POINTER to these two and is byte-compared to
@@ -217,7 +215,6 @@ with or renders into an unlisted file is FALSE, and the disposition for such
 a sentence is to DELETE it rather than to re-date it.
 
 WHAT THIS TEXT ESTABLISHES, AND WHAT IT DOES NOT.
-
 1. Each entry below is verified by EXECUTION, at TWO granularities. Its probe
    and its counter-probe are run through auditSource and asserted against the
    rule identifiers recorded here; and every branch the entry's CLAUSE NAMES
@@ -844,7 +841,7 @@ MEASURED SILENCES - 26 entries.
 - [ ] **MAP-04**: Reconstructed files are written to content-addressed safe paths. `sources` entries from the map are never used as filesystem paths. *(JSMiner's canonical-path defence cannot be copied — `llrt/fs` has no `realpath` and no `lstat`.)*
 - [ ] **MAP-05**: Malformed maps, decompression bombs, path traversal attempts, and reference cycles are bounded and survive a fixture suite.
 - [x] **MAP-06**: Reconstructed sources are themselves analysed, once per content hash, with depth and aggregate limits.
-- [x] **MAP-07**: Reconstructed source is browsable in the plugin UI and exportable with a manifest.
+- [ ] **MAP-07**: Reconstructed source is browsable in the plugin UI and exportable with a manifest.
 
 ### Chunk graph (CHUNK)
 
@@ -884,7 +881,7 @@ MEASURED SILENCES - 26 entries.
 - [x] **UI-02**: Filterable, sortable tables with keyset pagination and virtualised scrolling, usable at thousands of rows.
 - [ ] **UI-03**: Every entity links back to its source request, artifact version, and byte offsets.
 - [ ] **UI-04**: Each finding shows a score explanation — which signals fired and why it scored as it did.
-- [x] **UI-05**: Reconstructed-source viewer.
+- [ ] **UI-05**: Reconstructed-source viewer.
 - [x] **UI-06**: JSON and CSV export, redacted by default with an explicit opt-in to include raw values.
 - [x] **UI-07**: Backend-to-frontend events are coalesced so a heavy browsing session cannot flood the UI.
 - [x] **UI-08**: A settings surface for every toggle, threshold, and budget.
