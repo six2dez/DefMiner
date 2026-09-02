@@ -76,59 +76,19 @@ function countRows(fx: SqliteFixture, table: string): number {
   ).n;
 }
 
-/**
- * A migrated fixture whose `source_sightings` has been RE-KEYED to the wider key
- * — `(project_id, artifact_sha256, map_sha256, source_index)`.
- *
- * WHY THIS EXISTS AND WHY IT IS NOT A MIGRATION. The shipped `v: 8` key is
- * `(project_id, map_sha256, source_index)`, so two sightings that share a map
- * and an index while naming different bundles are not merely unwritten by
- * `recordSighting`'s attribution guard — they are UNREPRESENTABLE, and a direct
- * `INSERT` is refused by the primary key itself. The two-bundle disambiguation
- * these cases assert therefore cannot be constructed against the shipped table
- * at all, and plan 07-11 is forbidden from touching `store/migrations.ts`: the
- * widening is 07-12's, behind an operator checkpoint.
- *
- * So the wider world is built HERE, in the spec, against a table this fixture
- * owns. That buys the property the widened statements exist for — a read and a
- * write that each name ONE sighting — proven BEFORE the key moves, which is the
- * whole reason 07-11 ships ahead of 07-12: there must be no commit at which
- * `readSightingOrigin` can match two rows and `stmt.get` returns whichever one
- * SQLite reaches first.
- *
- * THE DDL IS READ OUT OF `sqlite_master` AND REWRITTEN, never restated. The
- * producibility-vocabulary case above reads its `CHECK` constraint the same way
- * and for the same reason: a second copy of the DDL in a spec is a second
- * declaration that drifts the day the first one is edited. Only the `PRIMARY
- * KEY` clause is substituted, and the substitution is asserted to have changed
- * something — so the day 07-12 widens the shipped key, this helper turns red
- * naming the clause it could not find rather than silently testing nothing.
- */
-async function widerKeyFixture(): Promise<SqliteFixture> {
-  const fx = await migratedFixture();
-  const ddl = (
-    fx.raw
-      .prepare(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'source_sightings'",
-      )
-      .get() as { sql: string }
-  ).sql;
-  const wider = ddl.replace(
-    "PRIMARY KEY (project_id, map_sha256, source_index)",
-    "PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)",
-  );
-  expect(
-    wider,
-    "the shipped PRIMARY KEY clause was not found in the source_sightings DDL, " +
-      "so this fixture re-keyed nothing and every case built on it is vacuous",
-  ).not.toBe(ddl);
-  fx.raw.exec("DROP TABLE source_sightings");
-  fx.raw.exec(wider);
-  return fx;
-}
-
 /** Two sightings of ONE `(map, index)` naming two different bundles, each with
- *  its own request. Only representable against {@link widerKeyFixture}. */
+ *  its own request.
+ *
+ *  BUILT ON THE REAL TABLE SINCE MIGRATION v9. Plan 07-11 could not do that: the
+ *  shipped `(project_id, map_sha256, source_index)` key made this pair
+ *  UNREPRESENTABLE — the second `INSERT` was refused by the primary key itself,
+ *  not merely by `recordSighting`'s attribution guard — so it seeded against a
+ *  `widerKeyFixture()` helper that read the shipped DDL out of `sqlite_master`
+ *  and substituted only the `PRIMARY KEY` clause, asserting the substitution had
+ *  changed something so it would turn RED rather than vacuous the day the real
+ *  key moved. That day is plan 07-12 and the helper is retired here as designed:
+ *  `migratedFixture()` now ships the wider key, so the pair needs no scaffolding
+ *  and the cases below assert it against the schema operators actually run. */
 function seedTwoBundleSighting(fx: SqliteFixture): void {
   const stmt = fx.raw.prepare(
     `INSERT INTO source_sightings (project_id, map_sha256, source_index,
@@ -1073,7 +1033,7 @@ describe("W-3 — a sighting is READ by a key that names its bundle", () => {
     // that binds only map and index would hand back whichever row SQLite
     // reached first. Measured against the pre-widening statement this case
     // returned `req-a` for BOTH asks.
-    const fx = await widerKeyFixture();
+    const fx = await migratedFixture();
     try {
       seedTwoBundleSighting(fx);
 
@@ -1147,10 +1107,10 @@ describe("W-3 — a sighting is WRITTEN by a key that names its bundle", () => {
     // sequence of later calls moves it back. Measured against the pre-widening
     // statement this call reported `changes: 2` and marked BOTH bundles `gone`.
     //
-    // The pair is built on {@link widerKeyFixture} for the reason that helper
+    // The pair is built on {@link seedTwoBundleSighting} for the reason that helper
     // gives: under the shipped key the second row cannot exist, so the damage is
     // latent rather than live — and plan 07-12 is what makes it live.
-    const fx = await widerKeyFixture();
+    const fx = await migratedFixture();
     try {
       seedTwoBundleSighting(fx);
 
@@ -1187,7 +1147,7 @@ describe("W-3 — a sighting is WRITTEN by a key that names its bundle", () => {
     // trailing `AND producibility = ?`, which the bundle predicate sits in front
     // of rather than replaces, so a second call for the SAME four-part key still
     // matches nothing.
-    const fx = await widerKeyFixture();
+    const fx = await migratedFixture();
     try {
       seedTwoBundleSighting(fx);
       expect(

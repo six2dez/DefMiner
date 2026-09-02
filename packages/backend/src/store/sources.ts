@@ -114,7 +114,7 @@ INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha
                               request_id, source_sha256, sources_verbatim,
                               producibility, producibility_at, recovered_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-ON CONFLICT (project_id, map_sha256, source_index) DO UPDATE SET
+ON CONFLICT (project_id, artifact_sha256, map_sha256, source_index) DO UPDATE SET
   request_id = excluded.request_id,
   source_sha256 = excluded.source_sha256,
   sources_verbatim = excluded.sources_verbatim

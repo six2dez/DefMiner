@@ -836,6 +836,171 @@ CREATE INDEX IF NOT EXISTS idx_sources_seen
   ON sources (project_id, first_seen_at, source_sha256);
 `,
   },
+  /**
+   * Step v9 — plan 07-12. `source_sightings`' PRIMARY KEY LEARNS THE BUNDLE.
+   * Approved at that plan's `blocking-human` checkpoint (option A, 2026-09-02) —
+   * the FIFTH one-way `EXPECTED_TABLES` approval, named in that array's own doc
+   * comment beside the four before it.
+   *
+   * NO TABLE IS ADDED AND NO COLUMN MOVES. `EXPECTED_TABLES` still holds eight
+   * members; the same ten columns keep the same types, the same CHECK
+   * constraints and the same closed producibility vocabulary, and `project_id`
+   * is still at PRIMARY KEY ordinal 1 (STORE-02). One line of DDL changes:
+   *
+   *   was  PRIMARY KEY (project_id, map_sha256, source_index)
+   *   now  PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)
+   *
+   * `sources` is UNTOUCHED. Its `(project_id, source_sha256)` key is
+   * content-addressed dedupe across bundles, which is exactly what that table is
+   * for, and this step does not weaken it. Two bundles carrying the same source
+   * still produce ONE `sources` row.
+   *
+   * WHY THE KEY HAD TO SPAN THE BUNDLE (07-VERIFICATION.md W-3, 07-REVIEW.md
+   * HI-03). `map_sha256` is content-addressed over the DECODED MAP JSON and
+   * never over the bundle, so two different bundles can share it at the target's
+   * discretion — a CDN mirror with a different banner comment is enough. Under
+   * the v8 key the second bundle's sightings collided with the first's. Plan
+   * 07-05's interim guard stopped the second bundle STEALING the first's
+   * attribution; it could not give the second bundle its evidence back, and that
+   * bundle's drill-down then read a RESOLVED ZERO — on the one column whose
+   * whole design is that a resolved zero means "DefMiner looked and there was
+   * nothing". The key must span the bundle for the row to be about the bundle.
+   *
+   * NO ROW IS LOST BY THE COPY. Every existing row has a distinct
+   * `(project_id, map_sha256, source_index)`, so it necessarily has a distinct
+   * `(project_id, artifact_sha256, map_sha256, source_index)`: the new key is a
+   * SUPERSET of the old one's columns, so it can only ever separate rows that
+   * were already separate. `OR IGNORE` never has anything to skip.
+   *
+   * THE ROW-VOLUME COST, ACCEPTED AT THE CHECKPOINT AND STATED HERE SO IT IS NOT
+   * REDISCOVERED. Volume goes UP for the duplicated-map case, which is the
+   * point: where the interim guard wrote one set of sightings for two bundles,
+   * this writes two. D-09's accepted cost — one row per recovered source under
+   * the NORMAL retention caps, no exemption — now applies per bundle, so a
+   * 781-source map seen in two bundles is 1,562 rows rather than 781, against a
+   * `DEFAULT_RETENTION_MAX_ROWS` of 50,000.
+   *
+   * -------------------------------------------------------------------------
+   * IT IS A TABLE REBUILD, IN STEP v7's SHAPE, FOR STEP v7's REASONS
+   * -------------------------------------------------------------------------
+   * SQLite cannot alter a primary key in place, so the key arrives the only way
+   * it can: create the new shape, copy, drop, rename. Step v7 already litigated
+   * this shape when it widened `audit`'s CHECK, and its whole argument is
+   * inherited rather than re-derived.
+   *
+   * THIS STEP DOES NOT ASSERT ATOMICITY AND MUST NOT. SPIKE-09 measured
+   * MULTISTATEMENT_EXEC_ATOMIC on a batch that CONTAINED an explicit
+   * `BEGIN … COMMIT`; this batch contains none, so it is a SEQUENCE and each
+   * statement commits in its own implicit transaction. Adding `BEGIN … COMMIT`
+   * is NOT the fix — a failing `exec` strands an open write transaction on a
+   * pooled connection nothing in the plugin API can reach, and the boot path is
+   * the least recoverable place to put one (Pitfall 1), and `BEGIN` does not
+   * span `exec` calls on this driver anyway (Pitfall 2,
+   * TRANSACTION_PERSISTS_ACROSS_EXEC = false).
+   *
+   * WHAT MAKES IT SAFE IS RE-RUNNABILITY, one paragraph per state its own
+   * interruption can leave behind. `migrations.spec.ts` EXECUTES all three
+   * against a real migrated fixture rather than trusting these paragraphs, and
+   * asserts the statement order positionally.
+   *
+   *   INTERRUPTED BETWEEN 2 AND 4 — both names present, the old one still
+   *     holding every row. The re-run's statements 1 and 2 are no-ops, statement
+   *     3 copies again and `OR IGNORE` writes nothing over rows already there,
+   *     and 4 and 5 complete the swap. Converges with every row.
+   *   INTERRUPTED BETWEEN 4 AND 5 — `source_sightings` is GONE and
+   *     `source_sightings_v9` holds every row. This is the state statement 1
+   *     exists for: it re-creates the SOURCE name under `IF NOT EXISTS` so
+   *     statement 3 always has a table to select from. Without it the re-run
+   *     fails at `... SELECT ... FROM source_sightings` with `no such table`,
+   *     and THE LADDER NEVER ADVANCES AGAIN on any subsequent boot — `index.ts`
+   *     only logs `MIGRATION INCOMPLETE`. Statement 3 then copies zero rows out
+   *     of the freshly-created empty table, statement 4 drops that empty table,
+   *     and statement 5 renames the one holding the evidence into place.
+   *   COMPLETED BUT `user_version` NOT YET ADVANCED — the round trip. The rebuilt
+   *     `source_sightings` already carries the new key; statement 2 creates a
+   *     fresh `_v9`, statement 3 copies every row into it, and the swap runs
+   *     again. It is LOSSLESS because the two shapes have IDENTICAL columns, and
+   *     it is why the step re-creates BOTH names and copies BEFORE it drops. A
+   *     step written as drop-plus-rename alone would destroy the evidence here.
+   *
+   * -------------------------------------------------------------------------
+   * WHY EACH STATEMENT CANNOT FAIL
+   * -------------------------------------------------------------------------
+   *   1. `CREATE TABLE IF NOT EXISTS source_sightings (...)` — the guard makes it
+   *      a no-op on the normal forward path, where the name already exists
+   *      carrying the OLD key. It is not decoration: it is the whole recovery for
+   *      the interrupted-between-4-and-5 state above.
+   *   2. `CREATE TABLE IF NOT EXISTS source_sightings_v9 (...)` — the guard makes
+   *      a second application a no-op.
+   *   3. `INSERT OR IGNORE INTO source_sightings_v9 (...) SELECT ... FROM
+   *      source_sightings` — the source exists because statement 1 just
+   *      guaranteed it; the destination exists because statement 2 just created
+   *      it; and every row satisfies the destination's constraints because no
+   *      column constraint moved and the new key only ever separates rows the old
+   *      key had already separated. `OR IGNORE` turns any conflict into a skipped
+   *      row. Every column is NAMED on both sides, never `SELECT *`: a positional
+   *      copy would silently transpose two columns of the same type the day
+   *      either shape's column ORDER is edited.
+   *   4. `DROP TABLE IF EXISTS source_sightings` — the guard makes an absent
+   *      target a no-op.
+   *   5. `ALTER TABLE source_sightings_v9 RENAME TO source_sightings` — cannot
+   *      fail ONLY because statement 4 just freed the name. This is the one
+   *      statement whose safety is not self-contained, so the ORDER is
+   *      load-bearing and `migrations.spec.ts` asserts it positionally rather
+   *      than trusting this paragraph.
+   *   6. `CREATE INDEX IF NOT EXISTS idx_source_sightings_artifact ...` — the
+   *      guard makes it a no-op, and it is REQUIRED rather than tidy: SQLite
+   *      drops a table's indexes with the table, so step v8's index went with
+   *      statement 4 and `listRecoveredSourcesPage`'s keyset order would silently
+   *      lose the index its leading columns match.
+   *
+   * `source_sightings_v9` IS TRANSIENT AND IS NEVER AN `EXPECTED_TABLES` MEMBER,
+   * exactly as `audit_v6` is not. It does not survive the step, and
+   * `schema.spec.ts`'s table-set assertion failing with it present is the
+   * specific signal that the swap did not complete.
+   */
+  {
+    v: 9,
+    sql: `
+CREATE TABLE IF NOT EXISTS source_sightings (
+  project_id       TEXT    NOT NULL CHECK (length(project_id) > 0),
+  map_sha256       TEXT    NOT NULL CHECK (length(map_sha256) = 64),
+  source_index     INTEGER NOT NULL,
+  artifact_sha256  TEXT    NOT NULL CHECK (length(artifact_sha256) = 64),
+  request_id       TEXT    NOT NULL,
+  source_sha256    TEXT,
+  sources_verbatim TEXT,
+  producibility    TEXT    NOT NULL CHECK (producibility IN ('producible','gone','changed')),
+  producibility_at INTEGER,
+  recovered_at     INTEGER NOT NULL,
+  PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)
+);
+CREATE TABLE IF NOT EXISTS source_sightings_v9 (
+  project_id       TEXT    NOT NULL CHECK (length(project_id) > 0),
+  map_sha256       TEXT    NOT NULL CHECK (length(map_sha256) = 64),
+  source_index     INTEGER NOT NULL,
+  artifact_sha256  TEXT    NOT NULL CHECK (length(artifact_sha256) = 64),
+  request_id       TEXT    NOT NULL,
+  source_sha256    TEXT,
+  sources_verbatim TEXT,
+  producibility    TEXT    NOT NULL CHECK (producibility IN ('producible','gone','changed')),
+  producibility_at INTEGER,
+  recovered_at     INTEGER NOT NULL,
+  PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)
+);
+INSERT OR IGNORE INTO source_sightings_v9 (project_id, map_sha256, source_index, artifact_sha256,
+         request_id, source_sha256, sources_verbatim, producibility,
+         producibility_at, recovered_at)
+  SELECT project_id, map_sha256, source_index, artifact_sha256,
+         request_id, source_sha256, sources_verbatim, producibility,
+         producibility_at, recovered_at
+    FROM source_sightings;
+DROP TABLE IF EXISTS source_sightings;
+ALTER TABLE source_sightings_v9 RENAME TO source_sightings;
+CREATE INDEX IF NOT EXISTS idx_source_sightings_artifact
+  ON source_sightings (project_id, artifact_sha256, source_index);
+`,
+  },
 ];
 
 /** One step's outcome. A migration that fails must be LEGIBLE: Caido surfaces

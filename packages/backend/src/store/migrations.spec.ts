@@ -1053,7 +1053,10 @@ describe("forward-only migration ladder (STORE-05)", () => {
   /** Step v9, located by version because this is the step the plan names. */
   function step9() {
     const step = MIGRATIONS.find((m) => m.v === 9);
-    expect(step, "step v9 is missing — the key widening did not ship").toBeDefined();
+    expect(
+      step,
+      "step v9 is missing — the key widening did not ship",
+    ).toBeDefined();
     return step as (typeof MIGRATIONS)[number];
   }
 
@@ -1146,7 +1149,11 @@ describe("forward-only migration ladder (STORE-05)", () => {
       // against the DDL text: a SECOND bundle carrying the same map at the same
       // index is now a row of its own. Under the v8 key this INSERT is refused
       // by the primary key itself.
-      const seeded = before[0] as Record<string, unknown>;
+      const seeded = before[0] as {
+        project_id: string;
+        map_sha256: string;
+        source_index: number;
+      };
       const insert = fx.raw.prepare(
         `INSERT INTO source_sightings (project_id, map_sha256, source_index,
                                        artifact_sha256, request_id, producibility,
