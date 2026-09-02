@@ -792,15 +792,6 @@ describe("gate 4 — Broken Window #6 tripwire", () => {
 // companion assertion proves those same figures are STILL present in the iteration
 // docblock — because an absence check with no non-vacuity guard passes on an empty
 // region, which is the self-defeating gate this repository has already paid for.
-//
-// THE SECOND COPY OF THIS FIGURE IS UNGUARDED, AND SAYING SO IS THE HONEST OPTION.
-// `packages/backend/src/store/retention.ts:178-180` states the same two numbers —
-// "512 x 16 = 8,192 against 128 + 2,051 = 2,179" — and no test reads that
-// sentence. This spec does NOT reach across the workspace to read it: 07-REVIEW.md
-// IN-04 records what a cross-package reach out of `packages/backend` costs in the
-// build graph, and the same caution applies in this direction. The two paragraphs
-// are kept in agreement by a READER, not by a machine. Naming an unguarded copy is
-// more honest than guarding it badly.
 
 /** The module this gate polices, repo-relative — `tests/corpus-maps.spec.ts`'s
  *  FIXTURE_MODULE habit, so the path appears once and every message can name it. */
@@ -850,6 +841,16 @@ function iterationDocblock(): string {
 }
 
 describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
+  // THE SECOND COPY OF THIS FIGURE IS UNGUARDED, AND SAYING SO IS THE HONEST
+  // OPTION. `packages/backend/src/store/retention.ts:178-180` states the same two
+  // numbers this block pins — "512 x 16 = 8,192 against 128 + 2,051 = 2,179" — and
+  // NO TEST READS THAT SENTENCE. This spec deliberately does not reach across the
+  // workspace to read it: 07-REVIEW.md IN-04 records what a cross-package reach out
+  // of `packages/backend` costs in the build graph, and the same caution applies in
+  // this direction. So the two paragraphs are kept in agreement by a READER, not by
+  // a machine. Naming an unguarded copy is more honest than guarding it badly — if
+  // a figure below moves, `retention.ts` is the other place to edit by hand.
+
   // THE SHIPPED ARITHMETIC, recomputed from the imports exactly as gate 3
   // recomputes it, so no figure below is a literal anybody typed.
   const deleteSide = T.RETENTION_SWEEP_MAX_ROWS * T.RETENTION_SWEEP_MAX_PASSES;
