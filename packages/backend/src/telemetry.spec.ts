@@ -463,6 +463,121 @@ describe("slimStatus carries the retro sub-map across the RPC", () => {
   });
 });
 
+// ===========================================================================
+// LO-05 — THE SNAPSHOT MUST NOT CHANGE A VALUE'S TYPE
+// ===========================================================================
+// The walk was `Object.entries` all the way down, and `Object.entries` of an
+// ARRAY yields index keys — so an array-valued counter arrived on the RPC as
+// `{ "0": …, "1": … }` and the `as Counters` cast said nothing. No member of
+// `Counters` is an array today, so nothing was broken; the walk is GENERIC, and
+// the failure it would produce is a health payload whose field is the wrong
+// JSON type with no error anywhere and no test that could see it.
+//
+// `structuredClone` WAS CONSIDERED AND IS NOT AVAILABLE. SPIKE-07 measured
+// `typeof structuredClone === "undefined"` on Caido 0.57.1 — this module runs
+// inside Caido's embedded QuickJS, not Node — which is why `meriyah@7`'s
+// polyfill guard is unconditional rather than defensive. So the walk stays, and
+// it handles the array case explicitly.
+
+describe("snapshotCounters preserves SHAPE, not just numbers (LO-05)", () => {
+  it("keeps an array-valued member an ARRAY, with the same elements in order", () => {
+    const live = counters as unknown as Record<string, unknown>;
+    live.futureArrayMember = [3, 1, 4, 1, 5];
+    try {
+      const projected = slimStatus().counters as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(
+        Array.isArray(projected.futureArrayMember),
+        "the snapshot converted an array into an index-keyed object. The RPC " +
+          "would carry a JSON object where the contract says array, the " +
+          "`as Counters` cast would hide it, and nothing anywhere would fail.",
+      ).toBe(true);
+      expect(projected.futureArrayMember).toEqual([3, 1, 4, 1, 5]);
+    } finally {
+      delete live.futureArrayMember;
+    }
+  });
+
+  it("keeps an array NESTED inside a sub-map an array too — the walk recurses", () => {
+    const live = counters.sourcemap as unknown as Record<string, unknown>;
+    live.futureNestedArray = [[1, 2], [3]];
+    try {
+      const projected = slimStatus().counters.sourcemap as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(Array.isArray(projected.futureNestedArray)).toBe(true);
+      expect(
+        Array.isArray((projected.futureNestedArray as unknown[])[0]),
+      ).toBe(true);
+      expect(projected.futureNestedArray).toEqual([[1, 2], [3]]);
+    } finally {
+      delete live.futureNestedArray;
+    }
+  });
+
+  it("is a COPY and not an alias — mutating the SOURCE leaves the snapshot alone", () => {
+    const live = counters as unknown as Record<string, unknown>;
+    live.futureArrayMember = [1, 2];
+    counters.sourcemap.announcedExternal += 5;
+    try {
+      const projected = slimStatus().counters as unknown as Record<
+        string,
+        unknown
+      > & { sourcemap: { announcedExternal: number } };
+
+      (live.futureArrayMember as number[]).push(3);
+      counters.sourcemap.announcedExternal += 1;
+
+      expect(projected.futureArrayMember).toEqual([1, 2]);
+      expect(projected.sourcemap.announcedExternal).toBe(5);
+    } finally {
+      delete live.futureArrayMember;
+    }
+  });
+
+  it("is a COPY and not an alias — mutating the SNAPSHOT leaves the source alone", () => {
+    // The direction the docblock never asserted. A snapshot that preserved
+    // array shape and handed back a live reference would have traded one silent
+    // failure for a louder one, so both directions are pinned.
+    const live = counters as unknown as Record<string, unknown>;
+    live.futureArrayMember = [1, 2];
+    counters.sourcemap.announcedExternal += 5;
+    try {
+      const projected = slimStatus().counters as unknown as Record<
+        string,
+        unknown
+      > & { sourcemap: { announcedExternal: number } };
+
+      (projected.futureArrayMember as number[]).push(99);
+      projected.sourcemap.announcedExternal = 4242;
+
+      expect(live.futureArrayMember).toEqual([1, 2]);
+      expect(counters.sourcemap.announcedExternal).toBe(5);
+    } finally {
+      delete live.futureArrayMember;
+    }
+  });
+
+  it("projects the SAME member set as before — no live member changed shape", () => {
+    // The array fix must be invisible to every member that exists today. This
+    // is the recursive walk over the projection, asserted as a SET rather than
+    // read by eye, and it is the assertion that catches a fix which quietly
+    // dropped or renamed something on its way past.
+    const projected = slimStatus().counters;
+    expect(walkKeys(projected).sort()).toEqual(
+      walkKeys(counters).sort(),
+    );
+    expect(
+      walkValues(projected).filter((e) => typeof e.value !== "number").length,
+      "every counter member is a DefMiner-authored integer or a container of " +
+        "them; a non-number here is a member the walk would not reach honestly.",
+    ).toBe(walkValues(counters).filter((e) => typeof e.value !== "number").length);
+  });
+});
+
 describe("slimStatus is a PROJECTION, not a window onto internal state", () => {
   it("carries no string that parses as a URL", () => {
     recordError(
