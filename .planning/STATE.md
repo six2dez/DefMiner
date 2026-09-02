@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-15-PLAN.md
-last_updated: "2026-09-02T17:40:06.343Z"
+stopped_at: Completed 07-18-PLAN.md
+last_updated: "2026-09-02T19:50:30.384Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 4d61a77f5f095bbb87c28d7b5756140f55fd217b
+state_head: 0670a462ef2141e6ff7597d41e5e03d7b1b02003
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 97
-  completed_plans: 89
+  completed_plans: 90
 ---
 
 # Project State
@@ -27,12 +27,60 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 07 (sourcemap-reconstruction) — READY TO EXECUTE
-Plan: 17 of 17
-Status: Ready to execute
-Last activity: 2026-09-02 — Phase 07 gap-closure round COMPLETE (17 of 17 plans)
+Phase: 07 (sourcemap-reconstruction) — EXECUTING
+Plan: 18 of 22
+Status: Executing gap-closure round 2 — 18 of 22 plans complete, 07-19 next
+Last activity: 2026-09-02 — 07-18 (TRACER) complete; G-07-1 / WR-01 closed
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-18: THE HANDLER SAID "PHASE COMPLETE" AND DISK SAID
+> OTHERWISE, SO THE PROSE WAS CORRECTED BY HAND AND THE CORRECTION IS
+> RECORDED HERE RATHER THAN LEFT TO BE INFERRED. `state.advance-plan` read the
+> stale prose counter `Plan: 17 of 17` — written when the round-1 counter was
+> the truth — concluded `reason: last_plan`, refused to advance, and set
+> `status: verifying` plus `Status: Phase complete — ready for verification`.
+> Disk says 22 PLAN files and 18 SUMMARY files, and
+> `roadmap.update-plan-progress 07` — which counts files rather than reading
+> prose — wrote `plan_count: 22, summary_count: 18, status: In Progress` in the
+> same minute. Two handlers, one disk, opposite verdicts; the file-counting one
+> is right. Three lines were changed BY HAND: the frontmatter `status` back to
+> `executing`, the prose counter to `18 of 22`, and the `Status:` line to name
+> 07-19 as next. Nothing else.
+>
+> IT WAS CALLED TWICE AND THE SECOND CALL WAS A NO-OP, WHICH IS WHY THE COUNT
+> IS NOT DOUBLED. 07-13's note records what a second `advance-plan` can cost.
+> Run 1 reported `updated: ["state_head", "progress.completed_plans"]` and
+> moved `completed_plans` 89 -> 90; run 2 reported `updated: []`. One increment,
+> one summary written. `progress.total_plans` was left at 97 DELIBERATELY: it
+> does not match the 101 PLAN files on disk and never did, the mismatch predates
+> this round, and inventing a value for a project-wide counter no handler would
+> write is the failure mode these notes exist to prevent.
+>
+> AND `state.update-progress` WITHHELD THE BAR AGAIN — `progress percent
+> withheld by buildStateFrontmatter — STATE.md left unchanged` — the
+> FOURTEENTH consecutive occurrence across phases 05, 06 and 07. The
+> `Progress:` line still describes PHASE 01 and is deliberately untouched.
+>
+> `.planning/REQUIREMENTS.md` WAS NOT TOUCHED, AND THIS TIME THE GATE AGREES
+> WITH THE PROHIBITION. `requirements.ready-ids` reported `0/1 ready`: MAP-06 is
+> declared by 07-19 through 07-22, none of which has a SUMMARY, so the shared-ID
+> gate blocks it. MAP-06 is also already `[x]` on disk, so the mutation could
+> only be a no-op or damage to the byte-compared spans
+> `outbound-prohibition.spec.ts` pins in that file.
+>
+> WHAT 07-18 ACTUALLY DID. `RETENTION_SWEEP_MAX_PASSES`'s docblock now computes
+> from the shipped insert side 2,179 instead of the retired 4,227: quotient
+> 4.26, smallest satisfying integer 5, next power of two 8, and 16 stated as
+> RETAINED HEADROOM that was considered for lowering and NOT approved. No
+> constant moved. `thresholds.spec.ts` gained gate 5 — a prose pin that reads
+> `thresholds.ts`'s own source text, scoped to the docblock REGION because the
+> retired figure is correct history in `ROWS_INSERTED_PER_ITERATION_MAX`'s
+> paragraph, with a non-vacuity companion so the absence half cannot rot. Its
+> RED was observed and recorded verbatim in the SUMMARY (2 failed / 60 passed)
+> before the prose was touched. Full gate 90 files / 4305 tests / exit 0 /
+> 14.06 s against the verifier's 90 / 4302 / 14.12 s baseline; typecheck, lint,
+> knip, build all exit 0.
 
 > PHASE 07 PLAN 07-15: THE COUNTERS ARE RIGHT AND NOTHING WAS CORRECTED BY
 > HAND. This was the LAST plan of the gap-closure round.
@@ -578,6 +626,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P16 | 18 min | 3 tasks | 4 files |
 | Phase 07 P13 | 26 min | 3 tasks | 3 files |
 | Phase 07 P15 | 35 min | 3 tasks | 5 files |
+| Phase 07 P18 | 8 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -967,6 +1016,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: The aggregate comparison is 2 * max(existing, recovered) rows, never existing + recovered. The v9 four-column upsert writes zero rows on a repeat, so the additive form would refuse any (artifact, map) past 1,024 sightings on its next re-analysis and write partial on an artifact accepted whole. Proven by flipping the operator and watching two committed cases fail.
 - [Phase 07]: sources_verbatim is cut in code POINTS by a bounded walk, not by the review's spread-and-slice: the label is target-controlled and bounded only by MAP_MAX_BYTES, so the spread would allocate per code point of the whole input on the proxy thread.
 - [Phase 07]: D-13's depth gate is asked ONCE at the recursion call site and KEPT inside reconstruct as the backstop. A bound enforced only at one call site is a bound somebody removes by adding a second call site, which is MD-04's own lesson.
+- [Phase 07]: 16 stays 16: RETENTION_SWEEP_MAX_PASSES keeps its value and the prose is what changed. The corrected derivation produces 8 and the docblock now names the gap to 16 as retained headroom, recording that lowering it was considered and NOT approved.
+- [Phase 07]: A derivation stated in prose is now pinned by a test that reads the prose. Gate 5 of thresholds.spec.ts slices the docblock region between two export const declarations, computes every expected figure from an imported constant, and pairs the absence half with a non-vacuity companion.
+- [Phase 07]: retention.ts:178-180 is named as an unguarded second copy of the same two figures rather than guarded by a cross-package readFileSync — 07-REVIEW.md IN-04 records what a reach out of packages/backend costs in the build graph.
 
 ### Known Risks Carried Forward
 
@@ -1009,8 +1061,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T13:39:56.387Z
-**Stopped at:** Completed 07-15-PLAN.md
+**Last session:** 2026-09-02T19:50:30.226Z
+**Stopped at:** Completed 07-18-PLAN.md
 **Resume file:** None
 
 ### Blockers
