@@ -927,6 +927,97 @@ describe("the hostile corpus builds the tree it built before the merge changed",
 });
 
 // ---------------------------------------------------------------------------
+// MORE NODES FOR THE SAME ROWS — THE BOUND, AND WHAT BOUNDS IT
+// ---------------------------------------------------------------------------
+//
+// A COARSER MERGE PRODUCED FEWER NODES, so keying on the raw segment produces
+// the same number or more for a fixed set of rows. T-07-74 accepts that rather
+// than mitigating it, and this is where the acceptance is measured instead of
+// assumed.
+//
+// WHAT THE BOUND IS ON, read rather than inferred. `SOURCE_TREE_LOAD_MAX`
+// (contract.ts:317) bounds the ROWS: its docblock says `listRecoveredSources`
+// stops filling at that number, and the read answers with the TOTAL beside the
+// returned count so the tree can say the truncation in words. It says nothing
+// about nodes. `SourceTree.vue` hands `RecycleScroller` a fixed
+// `:item-size="TABLE_ROW_HEIGHT_PX"` over `scrollerItems` (:236-238, :405-412),
+// so the scroller's geometry is item count times a constant — it holds no
+// assumption relating node count to row count, and a longer list costs a longer
+// scrollbar rather than a different layout.
+//
+// AND THE REVIEW'S "AT MOST ONE DIRECTORY NODE PER ROW" UNDERSTATES IT. Every
+// interior directory of a row can newly fail to merge, not just the first, so
+// the per-row increase is bounded by the row's own interior-segment count. The
+// bound that DOES hold is the fully-unmerged ceiling below, which is a function
+// of the ROWS and which this change did not move: merging can only ever take
+// the tree below it, and the coarsest possible merge and the finest possible
+// merge sit under the same ceiling.
+
+describe("more nodes for the same rows — the bound is on the ROWS", () => {
+  const PAST_THE_CAP = "A".repeat(TABLE_CELL_MAX_GRAPHEMES + 44);
+
+  /** The review's reproduction. */
+  const REPRODUCTION: readonly SourceTreeInputRow[] = [
+    { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/secret.js` },
+    { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}evil/x.js` },
+  ];
+
+  /** The same pair with three shared segments below the divergence, which is
+   *  the shape that un-merges into two whole chains. */
+  const REPRODUCTION_DEEP: readonly SourceTreeInputRow[] = [
+    { sourceIndex: 0, sourcesVerbatim: `${PAST_THE_CAP}bank/b/c/d/x.js` },
+    { sourceIndex: 1, sourcesVerbatim: `${PAST_THE_CAP}evil/b/c/d/y.js` },
+  ];
+
+  /**
+   * The fully-unmerged ceiling, computed from the ROWS and never from the tree.
+   *
+   * At most one synthetic root, one directory per interior segment and one
+   * leaf. Segments are separator-delimited, so the separator count is a safe
+   * over-estimate: `.` and `..` and empty segments only ever REMOVE segments.
+   */
+  const unmergedCeiling = (rows: readonly SourceTreeInputRow[]): number =>
+    rows.reduce((total, row) => {
+      const verbatim = row.sourcesVerbatim ?? "";
+      const separators = [...verbatim].filter(
+        (unit) => unit === "/" || unit === "\\",
+      ).length;
+      return total + separators + 2;
+    }, 0);
+
+  it("never exceeds the ceiling the rows already set, and never loses a row", () => {
+    for (const rows of [LABEL_ROWS, REPRODUCTION, REPRODUCTION_DEEP]) {
+      const nodes = everyNode(buildSourceTree(rows)).length;
+      expect(nodes).toBeLessThanOrEqual(unmergedCeiling(rows));
+      // A leaf per row, always. The floor is what makes the ceiling meaningful.
+      expect(nodes).toBeGreaterThanOrEqual(rows.length);
+    }
+  });
+
+  it("adds ONE node to the review's two-row reproduction — measured", () => {
+    // Pre-fix: 3 nodes — one merged directory and two leaves. Post-fix: 4.
+    expect(everyNode(buildSourceTree(REPRODUCTION)).length).toBe(4);
+  });
+
+  it("adds FOUR to the deep pair — which is why the per-row claim understates", () => {
+    // Pre-fix: 6 nodes — one merged directory, three shared directories and
+    // two leaves. Post-fix: two whole chains of five. Four added nodes for two
+    // rows, so the increase is not one per row; it is bounded by the interior
+    // segment count, and through that by the ceiling above.
+    expect(everyNode(buildSourceTree(REPRODUCTION_DEEP)).length).toBe(10);
+  });
+
+  it("leaves the corpus node count exactly where it was", () => {
+    // The ceiling permits an increase; the corpus does not exhibit one, because
+    // no two corpus segments differ only past the cap or only in a stripped
+    // codepoint. The permission and the outcome are separate facts.
+    expect(everyNode(buildSourceTree(LABEL_ROWS)).length).toBe(
+      CORPUS_NODE_COUNT,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // ORDERING AND DEPTH
 // ---------------------------------------------------------------------------
 
