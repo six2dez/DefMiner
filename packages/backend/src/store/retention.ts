@@ -515,19 +515,64 @@ WHERE project_id = ? AND artifact_sha256 = ? AND map_sha256 = ? AND source_index
 // sighting it; selecting by "no sighting names it AT ALL" cannot. A `sources`
 // row therefore outlives either bundle alone and dies with its LAST sighting,
 // which is the property the operator chose this shape for and the one
-// `retention.spec.ts` fails on if the `NOT EXISTS` is replaced by a blind
-// delete.
+// `retention.spec.ts` fails on if the anti-join is replaced by a blind delete.
 //
 // `first_seen_at` leads the ordering because `idx_sources_seen` does, and
 // `sources.ts` keeps that column OUT of its upsert's update arm precisely so
 // retention's ordering describes the first sighting rather than the latest.
+//
+// ===========================================================================
+// `NOT IN` AND NOT `NOT EXISTS`, AND THE DIFFERENCE IS 1,600x. MEASURED.
+// ===========================================================================
+// Every other anti-join in this file is a CORRELATED `NOT EXISTS` against
+// `artifacts`, whose PRIMARY KEY is `(project_id, sha256)` — so the correlated
+// probe is an index seek and the shape costs nothing. THIS ONE PROBES
+// `source_sightings` ON `source_sha256`, and no index in migration `v: 8` or
+// `v: 9` leads on that column: the PK is
+// `(project_id, artifact_sha256, map_sha256, source_index)` and
+// `idx_source_sightings_artifact` is `(project_id, artifact_sha256,
+// source_index)`. A correlated probe therefore SCANS every sighting in the
+// project once per `sources` row, which is quadratic in a pair of tables whose
+// size the TARGET chooses.
+//
+// It was written as `NOT EXISTS` first and `a8-measure.spec.ts` is what caught
+// it — the idle run took 13.2 s where the working run took 0.7 s, which is the
+// wrong way round and was the tell. Measured on the v8+v9 schema with equal
+// rows in both tables, one call, `LIMIT 1024`:
+//
+//     rows/table   NOT EXISTS   this statement
+//        4,000        447 ms          1.5 ms
+//       20,000     11,069 ms          7.5 ms
+//
+// The growth is quadratic, so at the shipped `DEFAULT_RETENTION_MAX_ROWS` of
+// 50,000 the correlated form projects past a MINUTE per call — and `workRemains`
+// asks the same question again on every pass. That is exactly the long
+// uninterruptible stretch `RETENTION_SWEEP_MAX_ROWS`'s 1024-row cost cap exists
+// to prevent, arriving through the planner instead of through the row count, and
+// it is reachable by a target that serves enough distinct sourcemapped modules.
+//
+// `NOT IN` over a scoped subquery is a LIST SUBQUERY: SQLite materialises the
+// sighting digests ONCE per statement and probes them with a bloom filter, which
+// is linear. No index is added and no schema changes — the operator approved one
+// schema change this round and it was not this one.
+//
+// `AND source_sha256 IS NOT NULL` IS LOAD-BEARING AND MUST NOT BE REMOVED.
+// `source_sightings.source_sha256` is NULLABLE by design: null means the map
+// declared an index it shipped NO content for (07-RESEARCH.md Pitfall 3), and
+// such a sighting is still written because an index with nothing behind it is
+// still a fact about the bundle. SQL's `NOT IN` over a list containing NULL is
+// never TRUE for any value, so without this predicate ONE such sighting anywhere
+// in the project would silently make this statement return zero rows for ever —
+// the sweep would report a clean pass while `sources` grew without bound. That
+// is a worse failure than the one this statement was written to fix, it is
+// target-triggerable, and it is why `retention.spec.ts` carries a case that
+// seeds exactly that row.
 const UNSIGHTED_SOURCES_SQL = `
 SELECT source_sha256 FROM sources
 WHERE project_id = ?
-  AND NOT EXISTS (
-    SELECT 1 FROM source_sightings
-    WHERE source_sightings.project_id = sources.project_id
-      AND source_sightings.source_sha256 = sources.source_sha256
+  AND source_sha256 NOT IN (
+    SELECT source_sha256 FROM source_sightings
+    WHERE project_id = ? AND source_sha256 IS NOT NULL
   )
 ORDER BY first_seen_at ASC, source_sha256 ASC
 LIMIT ?
@@ -984,7 +1029,12 @@ export async function sweepRetention(
     // The anti-join half: `sources` rows no surviving sighting names.
     if (budget() > 0 && !sightingsCapped) {
       const unsightedStmt = await db.prepare(UNSIGHTED_SOURCES_SQL);
+      // `projectId` TWICE: the outer predicate and the subquery are scoped
+      // independently, which is what `sql-discipline.spec.ts`'s
+      // unscoped-subquery rule requires and what keeps one project's sweep out
+      // of another's rows in the one shared SQLite file.
       const unsighted = await unsightedStmt.all<{ source_sha256: string }>(
+        projectId,
         projectId,
         Math.min(budget(), CANDIDATE_SCAN_LIMIT),
       );
@@ -1301,7 +1351,8 @@ async function workRemains(
   // cap of its own — see the section header above. An unsighted source is work
   // remaining; a large but fully-sighted `sources` table is not.
   const unsighted = await db.prepare(UNSIGHTED_SOURCES_SQL);
-  if ((await unsighted.all<object>(projectId, 1)).length > 0) return true;
+  if ((await unsighted.all<object>(projectId, projectId, 1)).length > 0)
+    return true;
 
   return false;
 }

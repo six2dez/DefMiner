@@ -1630,3 +1630,88 @@ describe("W-5 — both ordinary bounds now apply to `source_sightings`", () => {
     expect(text).toContain("sources");
   });
 });
+
+describe("the `sources` anti-join is linear, and NULL cannot silence it", () => {
+  // WHY THIS BLOCK EXISTS AT ALL. `UNSIGHTED_SOURCES_SQL` is the one anti-join
+  // in `retention.ts` that probes a column no index leads on, so the correlated
+  // `NOT EXISTS` every other one uses is QUADRATIC here — measured at 447 ms
+  // over 4,000 rows per table and 11,069 ms over 20,000, against 1.5 ms and
+  // 7.5 ms for the `NOT IN` form that shipped. `a8-measure.spec.ts` is what
+  // caught it: the IDLE run took 13.2 s where the WORKING run took 0.7 s.
+  //
+  // `NOT IN` buys that at the price of one sharp edge, and the edge is the
+  // subject of this block.
+
+  const MAP = digest("ea");
+  const ART = digest("0");
+
+  it("a sighting with a NULL `source_sha256` does not silence the anti-join", async () => {
+    // THE `NOT IN` TRAP, EXECUTED. `source_sightings.source_sha256` is NULLABLE
+    // by design — null means the map declared an index it shipped no content
+    // for (Pitfall 3) — and SQL's `NOT IN` over a list containing NULL is never
+    // TRUE for any value. Without `AND source_sha256 IS NOT NULL` inside the
+    // subquery, ONE such row anywhere in the project would make the statement
+    // return nothing for ever: the sweep would report clean passes while
+    // `sources` grew without bound, which is worse than the quadratic scan it
+    // replaced and is target-triggerable at will.
+    const STRANDED = digest("e1");
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSource(P1, STRANDED, NOW - 10_000);
+    // The poison row: a real sighting of a real bundle, carrying NULL.
+    seedSighting(P1, ART, MAP, 0, null, NOW);
+
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    const after = await retentionCounts(fx.db, P1);
+    expect(
+      after.sources,
+      "a NULL `source_sha256` silenced the anti-join. The subquery must " +
+        "exclude NULLs, or one legal sighting stops `sources` being swept at all.",
+    ).toBe(0);
+    // And the NULL-bearing sighting itself is untouched: it is inside both
+    // bounds and its bundle is still here.
+    expect(after.source_sightings).toBe(1);
+  });
+
+  it("the anti-join still leaves a source its NULL-bearing neighbour does not name", async () => {
+    // The other half: excluding NULLs must not turn into excluding ROWS. A
+    // source that IS named by a non-null sighting survives, with a NULL-bearing
+    // sighting sitting beside it.
+    const KEPT = digest("e2");
+    seedArtifacts(P1, 1, NOW - 5);
+    seedSource(P1, KEPT, NOW - 10_000);
+    seedSighting(P1, ART, MAP, 0, null, NOW);
+    seedSighting(P1, ART, MAP, 1, KEPT, NOW);
+
+    await sweepToConvergence(P1, {
+      maxRows: HUGE_ROWS,
+      maxAgeMs: HUGE_AGE,
+      auditMaxRows: HUGE_ROWS,
+    });
+
+    expect(sourceIds(P1)).toEqual([KEPT]);
+    expect((await retentionCounts(fx.db, P1)).source_sightings).toBe(2);
+  });
+
+  it("the statement is the LIST-SUBQUERY form, scoped on BOTH sides", () => {
+    // A claim about the STATEMENT TEXT, in the register D-26's predicate case
+    // uses, because the reason for the form is a performance fact a behavioural
+    // test cannot express without becoming the load-sensitive backstop this
+    // repository already regrets having one of.
+    const sql = statementText("UNSIGHTED_SOURCES_SQL");
+    expect(sql).toContain("NOT IN");
+    expect(
+      sql,
+      "the correlated form is back. It probes `source_sha256`, which no index " +
+        "leads on, and is quadratic in two tables the target sizes.",
+    ).not.toContain("NOT EXISTS");
+    // Scoped on both sides — `sql-discipline.spec.ts`'s unscoped-subquery rule
+    // is the wired enforcement; this says which predicate satisfies it.
+    expect(sql).toContain("WHERE project_id = ?");
+    expect(sql).toContain("IS NOT NULL");
+  });
+});
