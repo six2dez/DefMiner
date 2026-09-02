@@ -311,6 +311,37 @@ export type SourcemapCounters = {
    * the other a source a map declared. Folded into one map an operator could not
    * tell which had happened.
    *
+   * ===================================================================
+   * `depth_exceeded` COUNTS STAGES, NOT SOURCES — AND IT USED TO COUNT
+   * SOURCES (plan 07-15, 07-REVIEW.md MD-03)
+   * ===================================================================
+   * THE UNIT IS ONE RECONSTRUCTION STAGE THAT DECLINED TO RECURSE. One
+   * map-bearing artifact whose map recovers N sources contributes exactly ONE
+   * increment, for every N greater than zero, because D-13's depth question is
+   * now asked ONCE at the recursion call site in `ingest/consumer.ts` rather
+   * than re-taken inside `reconstruct`'s preamble per source.
+   *
+   * BEFORE PLAN 07-15 THE UNIT WAS ONE RECOVERED SOURCE, and that is why this
+   * paragraph exists rather than the number simply being smaller. The gate sat
+   * in the callee's preamble, so an artifact carrying monaco's real 781-source
+   * map drove this member to exactly `sourcesRecovered` and emitted 781
+   * identical log lines doing it. A counter equal by construction to another
+   * counter carries no information about the run: the operator learned the
+   * source count twice and the refusal count never.
+   *
+   * WHAT THE NUMBER IS NOT. It is not the number of recursions individually
+   * declined, and it is not `sourcesRecovered`. A stage that recovered nothing
+   * declined nothing and contributes zero, so a non-zero value here always
+   * means at least one map-bearing artifact reached the bound.
+   *
+   * THE OTHER MEMBERS ARE STILL PER SOURCE. `too_large` and `empty` come from
+   * `admitDerived` inside the per-source loop and count individual recovered
+   * sources, which is the right unit for them — a refused source is not a
+   * refused map. Two units in one map, named here because that is the only
+   * place either is written down: no health surface carries this counter.
+   * `SOURCEMAP_COUNTERS` in the frontend's `health-contract.ts` names six
+   * sourcemap fields and this is not one of them.
+   *
    * DERIVED from the frozen array by the SHIPPED helper, for the reason
    * {@link mapRefused} states.
    */

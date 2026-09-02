@@ -1068,6 +1068,16 @@ export function startConsumer(
     // NOT propagated as a `reason` — a depth-1 stage runs over a recovered
     // SOURCE, which has no `analyses` row of its own, and marking the outer
     // artifact `partial` for it would report the bound working as a degradation.
+    //
+    // THIS ARM IS NOW THE BACKSTOP AND NOT THE HOT PATH (07-REVIEW.md MD-03).
+    // The recursion call site below asks the same question ONCE per stage,
+    // before the per-source loop, and only recurses when the answer admits — so
+    // the ordinary path no longer arrives here at all. THE GATE STAYS ANYWAY,
+    // and deleting it because "nothing reaches it" is exactly the mistake MD-04
+    // records one file over: a bound whose enforcement lives only at one call
+    // site is a bound somebody removes by adding a second call site. Any future
+    // caller that reaches `reconstruct` at or past `DERIVED_MAX_DEPTH` is
+    // refused here, counted here, and logged here.
     const depthGate = admitDerivedDepth(input.depth);
     if (!depthGate.ok) {
       sm.derivedRejected[depthGate.reason]++;
@@ -1151,6 +1161,46 @@ export function startConsumer(
     // optional, and telling the operator "nothing there" is not the same as
     // telling them something failed (Pitfall 3, UI-09).
     const now = Date.now();
+
+    // --- D-13's DEPTH QUESTION, ASKED ONCE PER STAGE -----------------------
+    // THE DECISION BELONGS WHERE IT IS MADE, and it is made here: the loop
+    // below recurses at `input.depth + 1`, and whether that is permitted is a
+    // property of THIS STAGE'S DEPTH which cannot change between sources.
+    // Before plan 07-15 the question was re-asked inside the callee's preamble
+    // for every recovered source, so one artifact carrying monaco's real
+    // 781-source map emitted 781 identical `sdk.console.log` lines on the proxy
+    // thread in a single consumer iteration and drove
+    // `derivedRejected.depth_exceeded` to exactly `sourcesRecovered`. A counter
+    // equal by construction to another counter carries no information about the
+    // run, and a health surface reading "781 sources rejected: depth_exceeded"
+    // describes a bound working as designed as if it were a refusal
+    // (07-REVIEW.md MD-03).
+    //
+    // COUNTED AND LOGGED ONLY WHEN THERE IS SOMETHING TO RECURSE OVER. A map
+    // that parsed and recovered nothing declined nothing, and `consumer.spec.ts`
+    // pins that: the counter describes the BOUND FIRING, not the stage running.
+    // The count in the message is `parsed.recovered.length` — the sources that
+    // reach the loop — which OVER-STATES by the sources `admitDerived` refuses
+    // below before they could recurse. Said plainly rather than left for a
+    // reader to discover: the refusal is one per stage either way, and the
+    // number beside it is the stage's recovered-source count, not a count of
+    // recursions that were individually declined.
+    const nextDepth = admitDerivedDepth(input.depth + 1);
+    if (!nextDepth.ok && parsed.recovered.length > 0) {
+      sm.derivedRejected[nextDepth.reason]++;
+      log(
+        "reconstruction of the " +
+          String(parsed.recovered.length) +
+          " source(s) recovered from " +
+          input.artifactSha256.slice(0, 12) +
+          " not attempted at depth " +
+          String(input.depth + 1) +
+          ": " +
+          nextDepth.reason +
+          " (D-13)",
+      );
+    }
+
     for (const source of parsed.recovered) {
       sliceStart = clock();
       const bytes = Buffer.from(source.content, "utf8");
@@ -1273,9 +1323,10 @@ export function startConsumer(
       // The recovered bytes go through the SAME `walk` the artifact did — same
       // deadline, same window geometry, same yield primitive — so a detector
       // arriving in Phase 3 sees them through the surface it already reads from.
-      // Then reconstruction is attempted at `depth + 1`, where the gate at the
-      // top of this function refuses it. THAT is what makes the bound a path
-      // that runs rather than a branch nobody executes.
+      // Then reconstruction is attempted at `depth + 1` — IF the stage-level
+      // gate above admitted it. THAT is what makes the bound a path that runs
+      // rather than a branch nobody executes: at depth 0 the gate refuses, once,
+      // and the walk above still happens for every recovered source.
       //
       // THE DEADLINE IS THE ARTIFACT'S, NOT A FRESH ONE. Derived analysis is
       // work this artifact caused, so it spends this artifact's budget; a new
@@ -1289,22 +1340,25 @@ export function startConsumer(
       });
       if (walked.maxSliceMs > sliceMs) sliceMs = walked.maxSliceMs;
 
-      const derived = await reconstruct(
-        projectId,
-        {
-          bytes,
-          artifactSha256: input.artifactSha256,
-          requestId: input.requestId,
-          depth: input.depth + 1,
-          deadline: input.deadline,
-        },
-        stillCurrent,
-      );
-      rowsInserted += derived.rowsInserted;
-      // The DERIVED stage's own stretch still counts against this artifact's
-      // maximum: it ran on the same thread, inside the same iteration, and a
-      // number that omitted it would under-report exactly the work D-13 bounds.
-      if (derived.sliceMs > sliceMs) sliceMs = derived.sliceMs;
+      if (nextDepth.ok) {
+        const derived = await reconstruct(
+          projectId,
+          {
+            bytes,
+            artifactSha256: input.artifactSha256,
+            requestId: input.requestId,
+            depth: input.depth + 1,
+            deadline: input.deadline,
+          },
+          stillCurrent,
+        );
+        rowsInserted += derived.rowsInserted;
+        // The DERIVED stage's own stretch still counts against this artifact's
+        // maximum: it ran on the same thread, inside the same iteration, and a
+        // number that omitted it would under-report exactly the work D-13
+        // bounds.
+        if (derived.sliceMs > sliceMs) sliceMs = derived.sliceMs;
+      }
     }
 
     return done(null);
