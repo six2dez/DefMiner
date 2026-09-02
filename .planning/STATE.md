@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-19-PLAN.md
-last_updated: "2026-09-02T20:02:15.923Z"
+stopped_at: Completed 07-20-PLAN.md
+last_updated: "2026-09-02T20:16:33.062Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 0c261c438ed970fca57be26bb914e06d04c7338c
+state_head: ac2a193cd14706ad29e252218c0f808d9b0ddfa8
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 97
-  completed_plans: 91
+  completed_plans: 92
 ---
 
 # Project State
@@ -28,11 +28,28 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 19 of 22
-Status: Executing gap-closure round 2 — 19 of 22 plans complete, 07-20 next
-Last activity: 2026-09-02 — 07-19 complete; G-07-4 / IN-01 closed
+Plan: 20 of 22
+Status: Executing gap-closure round 2 — 20 of 22 plans complete, 07-21 next
+Last activity: 2026-09-02 — 07-20 complete; G-07-2 / WR-02 and IN-03 closed
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-20: `state.advance-plan` WAS CORRECT AND ONLY
+> `state.update-progress` WITHHELD. The handler returned
+> `{"advanced": true, "previous_plan": 19, "current_plan": 20, "total_plans": 22}`
+> against 22 PLAN and 20 SUMMARY files on disk, so nothing is corrected by hand
+> this time and the 07-18 drift did not recur — the second consecutive clean
+> advance, after 07-19's. `roadmap.update-plan-progress 07`, which counts files,
+> agrees. TWO PROSE LINES WERE EDITED BY HAND because no handler owns them: the
+> `Status:` line, which still named 07-20 as next, and the `Last activity:` line,
+> which still described 07-19. The `Plan:` counter and the frontmatter were
+> written by the handler and were already right.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — recorded so the run stays visible rather than being rediscovered. The
+> `Progress:` line below still describes PHASE 01 plan execution and is
+> deliberately untouched: phase 01's verdict is not this phase's to move.
 
 > PHASE 07 PLAN 07-18: THE HANDLER SAID "PHASE COMPLETE" AND DISK SAID
 > OTHERWISE, SO THE PROSE WAS CORRECTED BY HAND AND THE CORRECTION IS
@@ -628,6 +645,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P15 | 35 min | 3 tasks | 5 files |
 | Phase 07 P18 | 8 min | 2 tasks | 2 files |
 | Phase 07 P19 | 7 min | 2 tasks | 2 files |
+| Phase 07 P20 | 6 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -1022,6 +1040,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: retention.ts:178-180 is named as an unguarded second copy of the same two figures rather than guarded by a cross-package readFileSync — 07-REVIEW.md IN-04 records what a reach out of packages/backend costs in the build graph.
 - [Phase 07]: G-07-4 / IN-01 closed: derivedRejected.depth_exceeded now fires on ADMISSION, not on recovery — an admittedForRecursion local counted at the recursion call site, with the emission moved below the per-source loop. — telemetry.ts states the unit as one reconstruction stage that DECLINED TO RECURSE. The guard read parsed.recovered.length, so a map whose every sourcesContent entry was empty incremented the counter for a stage in which zero recursions were attempted. The code moved to the specification; the specification was not edited.
 - [Phase 07]: A stage abandoned on project change now emits NO depth refusal at all, because the two stillCurrent() re-checks return done(null) from inside the loop and never reach the emission below it. — Correct and deliberate: a stage that was abandoned did not decline to recurse, it stopped. It is a visible behaviour change, so it is stated in the code beside the emission rather than left to be rediscovered.
+- [Phase 07]: Option A (2026-09-02, operator): put `source_sightings` into `deleteDigest`'s cascade rather than scope the module header's claim down to two children — The operator confirmed verbatim that no foreign key, no `ON DELETE CASCADE`, no new migration, no new index and no change to `SCHEMA_VERSION` (still 9) is implied. `retention.spec.ts:1320-1330` already recorded the UAT eviction choice as CASCADE by anti-join, which is why A makes the header true rather than smaller.
+- [Phase 07]: `SIGHTING_KEYS_FOR_DIGEST_SQL` orders by `map_sha256 ASC, source_index ASC` — the key's own tail, total inside the bound `(project_id, artifact_sha256)` scope — so a capped cascade enumeration resumes deterministically without a synthetic tie-break column — The PK has been all four columns since migration `v: 9`, so the two selected columns are unique within the two bound ones. The ordering is an index-ordered prefix scan rather than a sort, and it matches the tie-break rule every other candidate statement in `retention.ts` follows.
 
 ### Known Risks Carried Forward
 
@@ -1064,8 +1084,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T20:02:07.043Z
-**Stopped at:** Completed 07-19-PLAN.md
+**Last session:** 2026-09-02T20:16:32.898Z
+**Stopped at:** Completed 07-20-PLAN.md
 **Resume file:** None
 
 ### Blockers
