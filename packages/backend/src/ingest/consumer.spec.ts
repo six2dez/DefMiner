@@ -2677,6 +2677,92 @@ describe("D-13 — a recovered source enters the pipeline once, and never twice"
         "the admitted count.",
     ).toBe(0);
   });
+  // =========================================================================
+  // IN-01's OTHER DIRECTION — THE NUMBER BESIDE THE REASON IS THE ADMITTED ONE
+  // =========================================================================
+  // The empty-content case above proves that ZERO admitted gives ZERO refusals.
+  // This proves the half it cannot reach: a map carrying BOTH admissible and
+  // inadmissible sources still declines exactly once, logs exactly once, and
+  // the number in that line is the ADMITTED count rather than the count the map
+  // recovered. Before the fix the line interpolated `parsed.recovered.length`,
+  // so this fixture's line read 3 for 2 recursions that were declined.
+  //
+  // WHY THE INADMISSIBLE HALF IS EMPTY AND NOT OVER-SIZE. `DERIVED_SOURCE_MAX_BYTES`
+  // IS `MAP_MAX_BYTES` (`sourcemap/derive.ts:142`), and a source's bytes are a
+  // strict subset of the JSON document that carried them — which `parseSourceMap`
+  // has already refused above that same ceiling. `too_large` is therefore
+  // unreachable through the ingest path, and `empty` is the only refusal a map
+  // can actually mix in.
+  it("a MIXED map declines ONCE and the logged number is the ADMITTED count, not the recovered one", async () => {
+    const bytes = bundleAnnouncingInline(
+      mapDocument(
+        ["a.ts", "b.ts", "c.ts"],
+        ["const a = 1;\n", "", "const c = 3;\n"],
+      ),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    const sdk = await runOnce(p.overrides);
+
+    // The map RECOVERED three sources and ADMITTED two of them. Both numbers
+    // are asserted, because the whole case is about telling them apart.
+    const RECOVERED_BY_THE_MAP = 3;
+    const ADMITTED_FOR_RECURSION = 2;
+    expect(
+      counters.sourcemap.derivedRejected.empty,
+      "the empty source was not refused, so this fixture is not mixed and the " +
+        "comparison below compares a number against itself.",
+    ).toBe(RECOVERED_BY_THE_MAP - ADMITTED_FOR_RECURSION);
+    expect(counters.sourcemap.sourcesRecovered).toBe(ADMITTED_FOR_RECURSION);
+
+    // ONE increment for one reconstruction stage — MD-03's property, unmoved.
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "a mixed map produced something other than one refusal for one stage.",
+    ).toBe(1);
+
+    // ONE log line, filtered in the MD-03 case's idiom.
+    const refusals = sdk.calls.consoleLog.filter((line) =>
+      line.includes("depth_exceeded"),
+    );
+    expect(
+      refusals.length,
+      "the refusal was logged " +
+        String(refusals.length) +
+        " times for one reconstruction stage.",
+    ).toBe(1);
+
+    // THE NUMBER. Extracted with a regex that does NOT depend on the noun, so
+    // what fails on the pre-fix code is the ARITHMETIC and not a wording miss.
+    const found = /reconstruction of the (\d+) /.exec(refusals[0] ?? "");
+    expect(found, "the refusal line no longer opens with its count.").not.toBe(
+      null,
+    );
+    const logged = Number(found?.[1]);
+    expect(
+      logged,
+      "the refusal line says " +
+        String(logged) +
+        " where " +
+        String(ADMITTED_FOR_RECURSION) +
+        " sources were admitted for recursion. The line is interpolating the " +
+        "count the map RECOVERED (" +
+        String(RECOVERED_BY_THE_MAP) +
+        "), which over-states by every source `admitDerived` refused before " +
+        "it could recurse (07-REVIEW.md IN-01).",
+    ).toBe(ADMITTED_FOR_RECURSION);
+    expect(
+      logged,
+      "the refusal line still carries the map's recovered-source count.",
+    ).not.toBe(RECOVERED_BY_THE_MAP);
+
+    // AND THE NOUN AGREES WITH THE NUMBER, which is the half of the defect a
+    // corrected count alone would leave standing.
+    expect(
+      refusals[0],
+      "the number is right and the word beside it still says recovered.",
+    ).toContain(String(ADMITTED_FOR_RECURSION) + " admitted source(s)");
+  });
 });
 
 // ===========================================================================
