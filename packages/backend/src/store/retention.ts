@@ -40,9 +40,24 @@
 //
 // Foreign keys are NOT relied upon (decision P4-D3): `PRAGMA foreign_keys` is
 // per-connection and the pool holds up to five connections. The cascade is
-// therefore explicit and runs in dependency order — a digest's observations and
-// analyses go BEFORE the artifact itself, so a pass that runs out of budget
-// halfway leaves a parent with fewer children and never a child with no parent.
+// therefore explicit and runs in dependency order — a digest's observations, its
+// analyses AND its source sightings all go BEFORE the artifact itself, so a pass
+// that runs out of budget halfway leaves a parent with fewer children and never
+// a child with no parent.
+//
+// THREE CHILDREN, AND THE THIRD ARRIVED LATE. `source_sightings` was given to the
+// sweep by plan 07-13 but not to `deleteDigest`'s cascade, so until plan 07-20 an
+// evicted bundle's sightings were left to the orphan collection in step 3d —
+// which is guarded on remaining budget and therefore does not run at all in a
+// pass the artifact loop exhausted. The sentence above was consequently FALSE on
+// the ordinary path for every evicted map-bearing bundle, not merely in the
+// crash-recovery corner it describes (07-VERIFICATION.md WR-02, UAT gap G-07-2).
+// It is true now because the cascade walks all three children.
+//
+// `sources` IS NOT A FOURTH CHILD, and no repair should make it one. It is
+// content-addressed and SHARED between bundles, so it belongs to no single
+// artifact: it dies with its LAST sighting, through the anti-join in step 3d,
+// across passes by design.
 
 import {
   RETENTION_SWEEP_EVERY_N,
@@ -387,9 +402,23 @@ DELETE FROM scans WHERE project_id = ? AND scan_id = ?
 `;
 
 // Orphans: a child whose parent is already gone. The cascade below cannot create
-// one — children go first — but a crash mid-pass in some future version, or a row
-// written before this module existed, can. Cleaning them is cheap and makes "no
-// orphans" a property of the database rather than of this code's control flow.
+// one — children go first, all THREE of them — but a crash mid-pass in some
+// future version, or a row written before this module existed, can. Cleaning them
+// is cheap and makes "no orphans" a property of the database rather than of this
+// code's control flow.
+//
+// AND STEP 3d'S SIGHTINGS COLLECTION IS A CRASH-RECOVERY PATH AGAIN, WHICH IT
+// WAS NOT BETWEEN PLANS 07-13 AND 07-20. While `deleteDigest` cascaded only two
+// of the three children, that collection was the ORDINARY route by which an
+// evicted bundle's sightings were removed — and on a pass whose budget the
+// artifact loop had spent it did not run at all, so the sightings simply
+// outlived their bundle until the next pass. This is written down rather than
+// left to be rediscovered because 07-VERIFICATION.md WR-02 is precisely the
+// finding that the header and the cascade disagreed about it: the difference
+// between "the cascade covers this" and "an orphan sweep gets to it eventually"
+// is what a reader uses to decide whether a read path must defend against an
+// orphan, and `readSightingOrigin`'s LEFT JOIN is defensive rather than
+// load-bearing only while the first of those is true.
 const ORPHAN_OBSERVATIONS_SQL = `
 SELECT sha256, request_id FROM observations
 WHERE project_id = ?
@@ -486,8 +515,13 @@ LIMIT ?
 // one project cannot reach another project's rows in the one shared SQLite file
 // (T-07-56).
 //
-// The four key columns are selected because the key IS four columns since
-// migration `v: 9`, and every delete below binds all four.
+// THREE key columns are selected and the fourth is the BOUND SCOPE. The key IS
+// four columns since migration `v: 9` — `(project_id, artifact_sha256,
+// map_sha256, source_index)` — but `project_id` is bound rather than selected
+// here, so the select list is the three NON-SCOPE key columns. Every delete
+// below still binds all four: the three selected plus the bound scope.
+// `SIGHTING_KEYS_FOR_DIGEST_SQL` below draws the same distinction one step
+// further, binding TWO of the four and selecting the other two.
 const ORPHAN_SIGHTINGS_SQL = `
 SELECT artifact_sha256, map_sha256, source_index FROM source_sightings
 WHERE project_id = ?
@@ -501,6 +535,31 @@ LIMIT ?
 `;
 
 const COUNT_SIGHTINGS_SQL = `SELECT COUNT(*) AS n FROM source_sightings WHERE project_id = ?`;
+
+// The CASCADE's enumeration, in `OBSERVATION_KEYS_FOR_DIGEST_SQL`'s exact shape
+// and for exactly its reason: `DELETE FROM ... WHERE artifact_sha256 = ?` is one
+// statement, but its ROW COUNT is chosen by the target — one bundle re-served
+// with a large map produces a fresh sighting row per (map, index) on every
+// re-serve — and a cap the traffic can overrun is not a cap. So the children are
+// listed as KEYS, within the remaining budget, and each is removed by the
+// fully-bound single-row `DELETE_SIGHTING_SQL` the orphan and per-table sweeps
+// already use.
+//
+// TWO COLUMNS SELECTED AND NOT FOUR. `project_id` and `artifact_sha256` are the
+// BOUND scope — this statement is asked about one project's one digest — so the
+// select list is the two remaining key columns. The delete it feeds binds all
+// four: the two bound here plus the two selected.
+//
+// The ORDER BY is the key's own tail, which is unique inside the bound scope, so
+// a capped enumeration and the pass that resumes it agree on which rows come
+// next. Without it a capped cascade would be resumable only by luck — the rule
+// every candidate statement in this file follows.
+const SIGHTING_KEYS_FOR_DIGEST_SQL = `
+SELECT map_sha256, source_index FROM source_sightings
+WHERE project_id = ? AND artifact_sha256 = ?
+ORDER BY map_sha256 ASC, source_index ASC
+LIMIT ?
+`;
 
 const DELETE_SIGHTING_SQL = `
 DELETE FROM source_sightings
@@ -1107,6 +1166,28 @@ type DeleteParams =
  * listing itself was capped, so completeness is decided by whether the LIMIT was
  * reached rather than by the loop's own bookkeeping.
  *
+ * THREE CHILDREN: `observations`, `analyses` AND `source_sightings`. The third
+ * was added by plan 07-20; before it, an evicted bundle's sightings were left to
+ * step 3d's orphan collection, which is guarded on remaining budget and so does
+ * not run at all in a pass this loop exhausted — making an orphaned sighting the
+ * ORDINARY outcome of evicting a map-bearing bundle rather than the
+ * crash-recovery corner the module header describes (07-VERIFICATION.md WR-02).
+ * Every one of the three is enumerated as keys and capped the same way, so
+ * reaching the sightings LIMIT leaves the artifact standing exactly as reaching
+ * the observations LIMIT does.
+ *
+ * `source_sightings` IS A CHILD OF `artifacts` AND `sources` IS NOT, WHICH IS WHY
+ * ONLY ONE OF THEM IS TOUCHED HERE. A sighting names exactly one bundle, so it
+ * belongs to that bundle and dies with it. A `sources` row is keyed on the
+ * CONTENT digest (D-05) and is SHARED — two bundles shipping the same module
+ * produce one row with two sightings — so it belongs to no bundle at all. A
+ * delete driven off the evicted bundle's sightings would take that row out from
+ * under a bundle still sighting it, which is exactly the failure
+ * `UNSIGHTED_SOURCES_SQL`'s anti-join exists to prevent and the eviction order
+ * the operator chose at UAT: a source dies with its LAST sighting, by anti-join,
+ * in step 3d, across passes by design. This function must never delete from
+ * `sources`.
+ *
  * `capped` means this digest is not finished: the artifact survives and the next
  * pass picks it up again, oldest-first ordering guaranteeing it comes back.
  */
@@ -1171,9 +1252,47 @@ async function deleteDigest(
     ]);
   }
 
+  // THE THIRD CHILD (G-07-2 / WR-02). Same shape as the two above and in the
+  // same budget: a bundle re-served with a large map writes a fresh sighting row
+  // per (map, index) on every re-serve, so this row count is one the target
+  // chooses and it is enumerated as keys rather than deleted by digest.
+  const sightLimit = Math.min(left(), CANDIDATE_SCAN_LIMIT);
+  const sightStmt = await db.prepare(SIGHTING_KEYS_FOR_DIGEST_SQL);
+  const sight =
+    sightLimit <= 0
+      ? []
+      : await sightStmt.all<{ map_sha256: string; source_index: number }>(
+          projectId,
+          sha256,
+          sightLimit,
+        );
+  examined += sight.length;
+  for (const s of sight) {
+    if (left() <= 0)
+      return { examined, deleted, capped: true, artifactRemoved: false };
+    // ALL FOUR key columns since migration `v: 9`: the project and the digest
+    // this cascade is for are the bound scope the enumeration did not select,
+    // and `source_index` is a NUMBER — binding "0" where the row holds 0 matches
+    // nothing in SQLite, which is the silent no-op `deleteOne` was rewritten to
+    // stop reporting as success.
+    deleted += await remove(DELETE_SIGHTING_SQL, [
+      projectId,
+      sha256,
+      String(s.map_sha256),
+      Number(s.source_index),
+    ]);
+  }
+
   // Reaching the LIMIT means there may be more rows behind it. Deleting the
-  // parent now would orphan them.
-  if (obs.length >= obsLimit || ana.length >= anaLimit) {
+  // parent now would orphan them. THE SIGHTINGS ARM IS PART OF THIS CHECK and
+  // is the half most easily forgotten: without it a capped sightings
+  // enumeration would delete the parent anyway, which is the precise failure
+  // this check exists to prevent.
+  if (
+    obs.length >= obsLimit ||
+    ana.length >= anaLimit ||
+    sight.length >= sightLimit
+  ) {
     return { examined, deleted, capped: true, artifactRemoved: false };
   }
   if (left() <= 0)
