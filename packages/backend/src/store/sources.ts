@@ -162,6 +162,80 @@ FROM source_sightings
 WHERE project_id = ? AND map_sha256 = ?
 `;
 
+// D-24's INTEGRITY READ. The recorded digest a derivation re-verifies against
+// comes FROM THE DATABASE, never from the caller.
+//
+// THAT IS THE WHOLE OF T-07-05's MITIGATION AND IT IS WORTH SAYING WHY, because
+// the obvious shape — let the RPC carry `requestId` and `artifactSha256` and
+// compare the two — typechecks, reads naturally, and is VACUOUS. A caller that
+// supplies both halves of an equality supplies the answer: it could name any
+// request in Caido's history, name that request's own digest, and be handed
+// content presented as this bundle's. The whole point of D-24 is that the
+// operator can never be shown source attributed to a bundle it did not come
+// from, and an attribution the caller chose is not an attribution at all.
+//
+// So the RPC names the SIGHTING — `(map_sha256, source_index)`, project-scoped —
+// and this statement answers with which request DefMiner itself recorded, which
+// bundle digest it recorded, and when. The set of requests the derivation path
+// can reach is therefore exactly the set DefMiner already recorded a sighting
+// for, in this project.
+//
+// A LEFT JOIN ONTO `artifacts` for one column, in `reads.ts`'s shape. The
+// artifact's `byte_len` is the number the `changed` arm reports beside the
+// reloaded body's length so a re-deploy — the expected benign cause — is visible
+// as a difference rather than only as a refusal the operator cannot explain. An
+// INNER join would drop the sighting entirely when retention has already swept
+// the artifact row, turning a tombstone-eligible fact into a missing one;
+// `byte_len` comes back NULL there, which is a different claim from zero.
+const SIGHTING_ORIGIN_SQL = `
+SELECT sg.artifact_sha256, sg.request_id, sg.recovered_at, sg.producibility,
+       ar.byte_len
+FROM source_sightings sg
+LEFT JOIN artifacts ar
+  ON ar.project_id = sg.project_id AND ar.sha256 = sg.artifact_sha256
+WHERE sg.project_id = ? AND sg.map_sha256 = ? AND sg.source_index = ?
+`;
+
+/**
+ * Where one sighting came from, as the derivation path needs it.
+ *
+ * `@internal` — the four fields are the derivation's inputs and are not a
+ * projection anything renders.
+ */
+export type SightingOrigin = {
+  artifact_sha256: string;
+  request_id: string;
+  recovered_at: number;
+  producibility: string;
+  /** The BUNDLE's recorded byte length, or null when its artifact row is gone. */
+  byte_len: number | null;
+};
+
+/**
+ * Read one sighting's origin, so a derivation can reload the right request and
+ * re-verify against the right digest.
+ *
+ * `undefined` when there is no such sighting in this project. The caller must
+ * answer that with its "could not ask" sentinel and MUST NOT write a
+ * producibility row for it: a sighting that is not there has not been proven
+ * unproducible, and a durable-looking claim made from an absence of evidence is
+ * the defect D-23's stickiness would make permanent.
+ *
+ * Does NOT try/catch, following this module's split: writes report their own
+ * outcome and reads do not.
+ */
+export async function readSightingOrigin(
+  db: Database,
+  projectId: string,
+  mapSha256: string,
+  sourceIndex: number,
+): Promise<SightingOrigin | undefined> {
+  const stmt = await db.prepare(SIGHTING_ORIGIN_SQL);
+  // SPREAD, never one array: an array handed to a bind position is silently
+  // ignored on this driver.
+  return stmt.get<SightingOrigin>(projectId, mapSha256, sourceIndex);
+}
+
 /**
  * Record one distinct recovered source CONTENT.
  *

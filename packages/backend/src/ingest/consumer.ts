@@ -295,8 +295,16 @@ export function mapRefusalCode(reason: MapParseReason): string {
  *  downstream can re-derive it without a full bundle reload, which is why it is a
  *  column rather than read-time work. A file with no trailing newline still has a
  *  last line, so the count is separators + 1; the empty string is one empty line
- *  and `admitDerived` refuses it before this is reached anyway. */
-function countLines(content: string): number {
+ *  and `admitDerived` refuses it before this is reached anyway.
+ *
+ *  EXPORTED FOR THE DERIVATION PATH (plan 07-06), which recomputes the number
+ *  from the content it is about to return rather than reading the column. Under
+ *  D-07 the two are the same content by construction — the derivation only
+ *  reaches this point once the reloaded body's digest matched — and computing it
+ *  is what keeps the three numbers on the `content` arm descriptions OF THAT ARM
+ *  rather than a row's claims about it. One implementation, because a second
+ *  line counter that disagreed with this one would disagree silently. */
+export function countLines(content: string): number {
   let lines = 1;
   for (let i = 0; i < content.length; i += 1) {
     if (content.charCodeAt(i) === 0x0a) lines += 1;

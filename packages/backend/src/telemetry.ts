@@ -292,6 +292,49 @@ export type SourcemapCounters = {
    * {@link mapRefused} states.
    */
   derivedRejected: Record<DerivedRejectReason, number>;
+  /**
+   * On-demand derivations served: reload hit, digest matched, content returned.
+   *
+   * PHASE 7's SECOND CONSUMER OF THIS SUB-MAP, and the first that counts a READ
+   * path rather than the ingest stage. Kept in the same sub-map because it is
+   * the same subsystem — `sourcemap` answers "what did reconstruction do", and
+   * serving a recovered source is what reconstruction was for.
+   */
+  derivationsServed: number;
+  /**
+   * Derivations answered `gone` because `sdk.requests.get` returned nothing.
+   *
+   * A SEPARATE COUNTER FROM {@link derivationsGoneNoResponse}, in the shipped
+   * two-branch discipline `ingest/consumer.ts` states verbatim: the SDK types
+   * the two absences as two different optionality points, and conflating them
+   * hides WHICH one is happening — the only thing that would tell an operator
+   * whether Caido lost the request or never recorded a response for it.
+   */
+  derivationsGoneNoRequest: number;
+  /** Derivations answered `gone` because the reloaded record carried no
+   *  response. The other half of the two-branch discipline above. */
+  derivationsGoneNoResponse: number;
+  /**
+   * Derivations REFUSED by D-24: the request came back and its body no longer
+   * hashes to the recorded artifact digest.
+   *
+   * THE NUMBER THAT MAKES A RE-DEPLOY VISIBLE AS A RATE. A single `changed` row
+   * is a fact about one source; a climbing count across an afternoon is the
+   * target having shipped, which is the benign cause an operator should be able
+   * to recognise without reading nine tombstones.
+   */
+  derivationsChanged: number;
+  /**
+   * Derivations that could not be ATTEMPTED or could not be COMPLETED — no
+   * database, no project, no such sighting, a reload that threw, a re-parse that
+   * failed, or an index the map no longer declares.
+   *
+   * COUNTED, AND IT WRITES NOTHING. That pairing is the point: the sentinel is
+   * the one arm with no durable effect, so the counter is the ONLY record that
+   * it happened at all. Without it a backend failing every derivation looks
+   * exactly like an operator who never opened one.
+   */
+  derivationsUnavailable: number;
 };
 
 /**
@@ -391,6 +434,11 @@ function createCounters(): Counters {
       sourcesRecovered: 0,
       sightingsRecorded: 0,
       derivedRejected: zeroedRejectCounters(DERIVED_REJECT_REASONS),
+      derivationsServed: 0,
+      derivationsGoneNoRequest: 0,
+      derivationsGoneNoResponse: 0,
+      derivationsChanged: 0,
+      derivationsUnavailable: 0,
     },
   };
 }

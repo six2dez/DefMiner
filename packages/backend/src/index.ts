@@ -53,12 +53,28 @@
 import { createHash, randomUUID } from "crypto";
 
 import type {
+  DeriveSourceResult,
   PageRequest,
   PageResponse,
+  SourceDerivationFailure,
+  SourceProducibility,
   VisibleTotal,
 } from "@defminer/engine/contract";
+import { SOURCE_PRODUCIBILITY_STATES } from "@defminer/engine/contract";
+import { decodeUtf8 } from "@defminer/engine/decode";
+import { sha256Hex } from "@defminer/engine/digest";
 import { BoundedQueue } from "@defminer/engine/queue";
-import { QUEUE_CAP } from "@defminer/engine/thresholds";
+import { findAnnouncement } from "@defminer/engine/sourcemap/announce";
+import {
+  decodeInlineMap,
+  parseSourceMap,
+} from "@defminer/engine/sourcemap/parse";
+import {
+  MAP_MAX_BYTES,
+  QUEUE_CAP,
+  SOURCE_ROWS_PER_MAP_MAX,
+  SOURCEMAP_TAIL_WINDOW_BYTES,
+} from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 
 import {
@@ -85,7 +101,7 @@ import {
   onResponse,
   setPassiveReady,
 } from "./hooks/passive";
-import { jobsInFlight, startConsumer } from "./ingest/consumer";
+import { countLines, jobsInFlight, startConsumer } from "./ingest/consumer";
 import {
   admissionAllowed,
   currentProjectId,
@@ -141,7 +157,12 @@ import {
   readStorageFootprint,
   recordBoot,
 } from "./store/settings";
-import { describeError, slimStatus } from "./telemetry";
+import {
+  markProducibility,
+  readSightingOrigin,
+  type SightingOrigin,
+} from "./store/sources";
+import { counters, describeError, slimStatus } from "./telemetry";
 
 // Module-level state. Everything here is IN MEMORY and is lost on plugin restart:
 // durable failure recording is ERR-04 and the health surface is OBS-01, both
@@ -252,6 +273,272 @@ function scanCommandRefused(
     suspendReason: null,
     reason,
   };
+}
+
+// ===========================================================================
+// D-07's ON-DEMAND DERIVATION — 6b's TWO READ HANDLERS, AND WHAT THEY SHARE
+// ===========================================================================
+//
+// NOTHING IS HELD AT REST AND NOTHING IS CACHED. `store/sources.ts` keeps a
+// name, a size, a line count, two digests, which request produced it and when —
+// and no content column in any encoding. So every open RELOADS the originating
+// request, RE-VERIFIES its body against the digest DefMiner recorded, and
+// RE-READS the map. That is not a performance compromise; it is the phase's
+// strongest security property, and these handlers are what it is for.
+//
+// D-24 MAKES THE RELOAD AN INTEGRITY CONTROL RATHER THAN A CONVENIENCE. The
+// operator can never be shown source attributed to a bundle it did not come
+// from, and a re-deploy is detected for free. Transparently re-deriving from the
+// new body was REJECTED: the row would say one hash and the viewer show another,
+// which is the quiet mismatch every gate in this codebase exists to prevent.
+//
+// D-23's WRITE IS ON THIS READ PATH, AND `pid` IS WHY IT IS SAFE. Each handler
+// captures `pid` BEFORE any `await` and it lands in every `WHERE`. For a SINGLE
+// statement the scoping IS the epoch check: if the project changed during the
+// await, the predicate matches zero rows and the write is a no-op. That is the
+// asymmetry with `ingest/consumer.ts`, which re-checks `stillCurrent()` at five
+// sites — the consumer issues a SEQUENCE of writes per iteration and a sequence
+// cannot be made atomic by scoping alone, while `markProducibility` is one
+// guarded, idempotent, single-row UPDATE.
+
+/**
+ * What a derivation answers when it could not ASK.
+ *
+ * `NO_RETRY`'s shape, and the same argument in a new place. It is returned when
+ * the database is not open, no project is resolved, there is no such sighting,
+ * the reload threw, the body could not be read, or the map could not be
+ * re-read — and IT WRITES NOTHING. A call that did not answer is not evidence of
+ * a refusal, so this arm must never be confusable with the two tombstones: those
+ * are permanent claims about the target's history, and this is a statement about
+ * one attempt. 07-UI-SPEC.md's single most emphatic sentence is that a failed
+ * call is never rendered as a tombstone; this constant is the backend half of it.
+ *
+ * FROZEN, because one value is returned from many sites and a caller that
+ * mutated it would change every future answer.
+ */
+const DERIVATION_UNAVAILABLE: SourceDerivationFailure = Object.freeze({
+  outcome: "unavailable",
+});
+
+/** The reload's outcome: the verified bundle bytes and the sighting they belong
+ *  to, or the failure arm to answer with. */
+type BundleReload =
+  | {
+      readonly ok: true;
+      readonly bytes: Uint8Array;
+      readonly origin: SightingOrigin;
+    }
+  | { readonly ok: false; readonly failure: SourceDerivationFailure };
+
+/**
+ * The reload and the D-24 re-verify, shared by both derivation handlers.
+ *
+ * ONE IMPLEMENTATION BECAUSE IT IS ONE SECURITY CONTROL. The content read and
+ * the position-table read must not be able to disagree about what counts as a
+ * verified bundle — a second copy of this that skipped the hash comparison would
+ * serve position data for bytes the content read refused, and the operator would
+ * be annotating a file with the wrong bundle's offsets.
+ *
+ * `projectId` IS THE CALLER'S, captured before its first `await`. It is passed
+ * in rather than re-read here, because re-reading it after an await is exactly
+ * the mistake the capture exists to prevent.
+ */
+async function reloadVerifiedBundle(
+  sdk: PluginSdk,
+  database: Database,
+  projectId: string,
+  mapSha256: string,
+  sourceIndex: number,
+): Promise<BundleReload> {
+  const failed = (failure: SourceDerivationFailure): BundleReload => ({
+    ok: false,
+    failure,
+  });
+  const cannotAsk = (): BundleReload => {
+    counters.sourcemap.derivationsUnavailable++;
+    return failed(DERIVATION_UNAVAILABLE);
+  };
+
+  // THE ORIGIN COMES FROM THE DATABASE, NEVER FROM THE CALLER. The full
+  // argument is on `readSightingOrigin`'s statement: a caller that supplies both
+  // halves of the D-24 equality supplies the answer, and the control becomes a
+  // tautology. A sighting that is not in this project's partition simply cannot
+  // be derived, which is also T-07-09's mitigation on this path.
+  const origin = await readSightingOrigin(
+    database,
+    projectId,
+    mapSha256,
+    sourceIndex,
+  );
+  // NO PRODUCIBILITY WRITE HERE, and the row it would target does not exist
+  // anyway. Answering `unavailable` rather than `gone` is the rule, not a
+  // fallback: nothing has been proven about the target's history.
+  if (origin === undefined) return cannotAsk();
+
+  let reloaded: { request: unknown; response?: unknown } | undefined;
+  try {
+    reloaded = (await sdk.requests.get(origin.request_id)) as
+      | { request: unknown; response?: unknown }
+      | undefined;
+  } catch (e) {
+    // LOGGED HERE, NOT RETURNED. The description is already redacted and it
+    // still does not cross the boundary: the viewer's copy is DefMiner-authored
+    // and a message that reached it is a message somebody eventually
+    // interpolates (T-07-10).
+    log(sdk, "deriveSource reload failed: " + describeError(e));
+    return cannotAsk();
+  }
+
+  // TWO undefined branches, not one, with a counter each — the shipped
+  // discipline `ingest/consumer.ts` states verbatim: the SDK types them as two
+  // different optionality points, and conflating them hides WHICH one is
+  // happening. Both are genuine missing-or-no-response findings, so both make
+  // the permanent tombstone; only the `cause` tag and the sentence differ.
+  if (reloaded === undefined) {
+    counters.sourcemap.derivationsGoneNoRequest++;
+    return failed(
+      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
+        outcome: "gone",
+        cause: "no_request",
+        recoveredAt: origin.recovered_at,
+      }),
+    );
+  }
+  const response = reloaded.response;
+  if (response === undefined || response === null) {
+    counters.sourcemap.derivationsGoneNoResponse++;
+    return failed(
+      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
+        outcome: "gone",
+        cause: "no_response",
+        recoveredAt: origin.recovered_at,
+      }),
+    );
+  }
+
+  // Everything that touches an SDK object happens in this ONE synchronous
+  // stretch and only plain values come out of it, exactly as `extract()` does on
+  // the ingest path: CORE-05 forbids holding a `Request`, `Response` or `Body`
+  // reference across an `await`.
+  let raw: Uint8Array | undefined;
+  try {
+    const body = (
+      response as {
+        getBody(): { toRaw(): Uint8Array } | undefined;
+      }
+    ).getBody();
+    raw = body?.toRaw();
+  } catch (e) {
+    log(sdk, "deriveSource body read failed: " + describeError(e));
+    return cannotAsk();
+  }
+  // AN ABSENT OR EMPTY BODY IS `unavailable`, NOT `gone` AND NOT `changed`, and
+  // the choice is deliberate. `gone` would be a permanent claim that Caido lost
+  // the request, which it did not — the record came back. `changed` would say
+  // the target redeployed, which no evidence here supports: there are no bytes
+  // to hash, so there is nothing to compare. The rule that outranks the table
+  // applies to both wrong answers equally.
+  if (raw === undefined || raw.length === 0) return cannotAsk();
+
+  // Bytes, never `toText()` — offsets and digests derive from raw bytes only
+  // (ENC-01), and the same 222-byte fixture that changes length across a text
+  // round trip would change digest here and be reported as a re-deploy.
+  const digest = sha256Hex(raw);
+  if (digest !== origin.artifact_sha256) {
+    // D-24, FAILING CLOSED. NOTHING is re-derived from the new body, and no
+    // content field exists on the arm this returns.
+    counters.sourcemap.derivationsChanged++;
+    return failed(
+      await tombstone(sdk, database, projectId, mapSha256, sourceIndex, {
+        outcome: "changed",
+        recoveredAt: origin.recovered_at,
+        // `byteLenMismatch`'s REPORTING shape, so the expected benign cause is
+        // visible as a number rather than only as a refusal the operator cannot
+        // explain. Null when retention already swept the artifact row.
+        recordedByteLen: origin.byte_len,
+        reloadedByteLen: raw.length,
+      }),
+    );
+  }
+
+  return { ok: true, bytes: raw, origin };
+}
+
+/**
+ * Write the sticky producibility outcome, then answer with the arm regardless.
+ *
+ * THE WRITE'S FAILURE DOES NOT CHANGE THE ANSWER, and that is the point rather
+ * than an omission. What the operator is told is a fact about the reload that
+ * just happened; whether DefMiner managed to remember it is a different fact,
+ * and one that belongs in the log and the counters. `markProducibility` reports
+ * `changes: 0` on every attempt after the first — a tombstone that is already
+ * set — which is not a failure and is not treated as one.
+ *
+ * `projectId` is the one captured before the caller's first `await`, so the
+ * scoping IS the epoch check for this single statement.
+ */
+async function tombstone(
+  sdk: PluginSdk,
+  database: Database,
+  projectId: string,
+  mapSha256: string,
+  sourceIndex: number,
+  answer: SourceDerivationFailure & { outcome: "gone" | "changed" },
+): Promise<SourceDerivationFailure> {
+  const next: SourceProducibility =
+    answer.outcome === "gone"
+      ? SOURCE_PRODUCIBILITY_STATES[1]
+      : SOURCE_PRODUCIBILITY_STATES[2];
+  const written = await markProducibility(
+    database,
+    projectId,
+    mapSha256,
+    sourceIndex,
+    next,
+    Date.now(),
+  );
+  if (!written.ok) {
+    // LOGGED, NOT RETURNED — the rule every write on this contract follows.
+    log(sdk, "markProducibility failed: " + written.error);
+  }
+  return answer;
+}
+
+/** The inline map a verified bundle announces, or `null` when there is not one
+ *  this derivation can use.
+ *
+ *  THE DIGEST IS RE-CHECKED AGAINST THE ONE THE CALLER NAMED, which is a real
+ *  guard rather than a tautology: `findAnnouncement` returns the LAST
+ *  announcement in the tail window, and answering with a map whose digest is not
+ *  the recorded one would serve content from a document the sighting does not
+ *  describe. In this build every sighting comes from a depth-0 announcement —
+ *  `sourcemap/derive.ts`'s `DERIVED_MAX_DEPTH` is 1 and the gate refuses at
+ *  `depth >= 1`, so no nested map ever acquires a sighting — which makes this
+ *  check a consistency assertion today and the thing that fails closed the day
+ *  that bound is raised. */
+function announcedMap(bytes: Uint8Array, mapSha256: string): string | null {
+  let json: string;
+  try {
+    // `crossCheck: false` — the DECODED string is used to locate an
+    // announcement and to read a JSON document, and nothing derived from it is
+    // persisted as an offset or a digest. The cross-check THROWS on divergence,
+    // which would turn a malformed body into an exception instead of a null.
+    const text = decodeUtf8(bytes, { crossCheck: false });
+    const announcement = findAnnouncement(text, SOURCEMAP_TAIL_WINDOW_BYTES);
+    if (announcement === null) return null;
+    // BOUNDED AT `MAP_MAX_BYTES` AND REFUSED RATHER THAN TRUNCATED. A truncated
+    // VLQ stream decodes to WRONG POSITIONS, not to an error, which is the
+    // quiet-wrongness class every gate in this codebase exists to prevent.
+    const inline = decodeInlineMap(announcement.url, MAP_MAX_BYTES);
+    if (inline.kind !== "inline") return null;
+    json = inline.json;
+  } catch {
+    // The decode is the only thing here that can throw, and it does so on a
+    // divergence this call has disabled. Caught anyway: "cannot throw" is a
+    // claim about code somebody will edit.
+    return null;
+  }
+  return sha256Hex(Buffer.from(json, "utf8")) === mapSha256 ? json : null;
 }
 
 /**
@@ -872,6 +1159,73 @@ export async function init(sdk: PluginSdk): Promise<void> {
         changed: outcome.changes > 0,
         state: outcome.state ?? null,
       };
+    });
+    // --- MAP-07 / UI-05's DERIVATION SURFACE (D-07, D-23, D-24) ----------
+    //
+    // THE CALLER DOES NOT NAME THE PROJECT, THE REQUEST OR THE DIGEST. It names
+    // one SIGHTING; the backend reads which request produced it and which bundle
+    // digest to verify against out of `source_sightings`. That is what makes
+    // D-24 an integrity control rather than a tautology, and it is also what
+    // bounds the set of stored bodies this endpoint can reach to the set
+    // DefMiner already recorded a sighting for, in the active project.
+    sdk.api.register("deriveSource", async (_s, req) => {
+      // BEFORE ANY AWAIT, and it lands in every `WHERE` below. See this file's
+      // derivation section for why the scoping IS the epoch check here while
+      // the consumer needs five `stillCurrent()` re-checks.
+      const pid = currentProjectId();
+      if (!db || pid === null) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+
+      const reload = await reloadVerifiedBundle(
+        sdk,
+        db,
+        pid,
+        req.mapSha256,
+        req.sourceIndex,
+      );
+      if (!reload.ok) return reload.failure;
+
+      const json = announcedMap(reload.bytes, req.mapSha256);
+      // `unavailable`, NEVER `gone`. The bundle is still there and still hashes
+      // to the recorded digest; the source has not been proven unproducible,
+      // only unread this time (a bound this build refuses, a document that no
+      // longer parses, a map that is not the one this sighting describes).
+      if (json === null) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+      const parsed = parseSourceMap(json, {
+        maxSourceRows: SOURCE_ROWS_PER_MAP_MAX,
+      });
+      if (!parsed.ok) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+      const source = parsed.recovered.find(
+        (candidate) => candidate.sourcesIndex === req.sourceIndex,
+      );
+      // AN INDEX THE MAP NO LONGER CARRIES CONTENT FOR. Same reasoning: the
+      // sighting records that the index EXISTED, and `parseSourceMap` skips an
+      // index that shipped nothing — which is a fact about the map, not a
+      // finding about the target's history.
+      if (source === undefined) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+
+      // THE THREE NUMBERS DESCRIBE THE CONTENT ON THIS ARM, computed from it
+      // rather than read off the row, so they can never describe something else.
+      const bytes = Buffer.from(source.content, "utf8");
+      counters.sourcemap.derivationsServed++;
+      return {
+        outcome: "content",
+        content: source.content,
+        byteLen: bytes.length,
+        lineCount: countLines(source.content),
+        sha256: sha256Hex(bytes),
+      } as const;
     });
     sdk.api.register("exportInventory", async (_s, req) => {
       const pid = currentProjectId();

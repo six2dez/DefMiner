@@ -130,8 +130,19 @@ import type { ArtifactRow } from "../backend";
  * one for the other, and the specific failure is a strip of zeroes shown to an
  * operator who has never started a scan, which reads as "DefMiner scanned and
  * found nothing".
+ *
+ * BUMPED TO 6 IN LOCKSTEP WITH PLAN 07-06's. The backend's comment records that
+ * one as a deliberate over-bump and gives the reason; it is worth repeating
+ * where a reader edits this number, because it is the reason this bundle must
+ * stop rather than guess. `deriveSource` answers with a FOUR-ARMED union whose
+ * arms render mutually exclusive surfaces — content, a permanent tombstone, a
+ * fail-closed refusal, and a call that did not answer — and a bundle reading a
+ * shape it does not know reads `undefined` where the discriminant is. The
+ * specific failure that produces is the one 07-UI-SPEC.md spends its most
+ * emphatic sentence refusing: a failed call painted as a tombstone, which is a
+ * durable-looking claim made from an absence of evidence.
  */
-export const FRONTEND_CONTRACT_VERSION = 5;
+export const FRONTEND_CONTRACT_VERSION = 6;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.

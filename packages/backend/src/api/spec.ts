@@ -26,6 +26,7 @@
 
 import type { DefinePluginPackageSpec } from "@caido/sdk-shared";
 import type {
+  DeriveSourceResult,
   ExportFormat,
   ExportRedactionMode,
   INVALIDATION_EVENT,
@@ -143,9 +144,25 @@ import type { SlimStatus } from "../telemetry";
  * The rule the next author needs: bump when a SHIPPED reader could hold the old
  * shape. Within one phase's own surface, it cannot.
  *
+ * BUMPED TO 6 BY PLAN 07-06, AS A DELIBERATE OVER-BUMP — recorded as one, for
+ * the reason the two before it give: a bump whose justification is invented
+ * after the fact is how the rule stops meaning anything. Strictly, `deriveSource`
+ * is a NEW NAME and adding one obliges no bump.
+ *
+ * It is bumped anyway because of WHAT THE NEW SHAPE MEANS. `DeriveSourceResult`
+ * is a four-armed union whose arms render MUTUALLY EXCLUSIVE surfaces that
+ * 07-UI-SPEC.md forbids collapsing — content, a tombstone that is permanent, a
+ * fail-closed refusal, and a call that did not answer. A bundle reading a shape
+ * it does not know reads `undefined` where the discriminant is, and on this
+ * runtime that is silent. The specific failure is the one the design contract
+ * spends its most emphatic sentence refusing: a failed call painted as a
+ * tombstone, which is a durable-looking claim made from an absence of evidence.
+ * The cost of the bump is one forced reload; the cost of the other choice is an
+ * operator told a source is gone for ever because a call timed out.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 5;
+export const CONTRACT_VERSION = 6;
 
 /**
  * What `getStatus` returns.
@@ -319,6 +336,34 @@ type ExportRequest = {
   readonly chunkIndex: number;
   readonly cursor: PageCursor | null;
   readonly chunkRows: number | null;
+};
+
+/**
+ * The SIGHTING one derivation addresses (D-07, D-24).
+ *
+ * THREE FIELDS, AND THE TWO THAT ARE ABSENT ARE THE DESIGN. There is no
+ * `requestId` here and no `artifactSha256`, and neither omission is an
+ * oversight: the backend reads BOTH out of `source_sightings`, which is what
+ * makes D-24 an integrity control instead of a tautology. A request the caller
+ * named, compared against a digest the caller also named, proves nothing — it
+ * would let anything holding the RPC handle be shown any stored body, presented
+ * as this bundle's. `store/sources.ts`'s `readSightingOrigin` carries the full
+ * argument beside the statement.
+ *
+ * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
+ * (P5-D43): the store layer needs one in every predicate and the frontend is not
+ * the authority on which project is active. That matters here for the same
+ * reason it matters on the settings surface — a caller that could name the
+ * project could read ANOTHER project's recovered source out of the one shared
+ * SQLite file (T-07-09).
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not: the registration site infers
+ * this shape from the API map, and knip runs with `ignoreExportsUsedInFile: false`.
+ */
+type SourceRef = {
+  readonly projectId: string;
+  readonly mapSha256: string;
+  readonly sourceIndex: number;
 };
 
 /**
@@ -703,6 +748,20 @@ type Spec = DefinePluginPackageSpec<{
     /** Move ONE stopped analysis back out of its terminal state, on operator
      *  command (OPS-03). Nothing re-analyses on its own as a result. */
     retryAnalysis: (req: AnalysisKey) => Promise<RetryOutcome>;
+    /** ONE recovered source, DERIVED ON DEMAND (D-07, MAP-07, UI-05).
+     *
+     *  NOTHING IS HELD AT REST AND NOTHING IS CACHED. Every call reloads the
+     *  originating request, re-verifies the reloaded body's sha256 against the
+     *  digest DefMiner recorded (D-24) and re-reads the map. A mismatch is
+     *  answered with the `changed` arm and NO CONTENT — never with content
+     *  re-derived from the new body, which would show the operator source
+     *  attributed to a bundle it did not come from.
+     *
+     *  FOUR ARMS, AND THE FOURTH WRITES NOTHING. `unavailable` is "could not
+     *  ask"; only a reload that genuinely returns missing-or-no-response makes
+     *  the permanent D-23 tombstone. A call that did not answer is not evidence
+     *  of a refusal. */
+    deriveSource: (req: SourceRef) => Promise<DeriveSourceResult>;
     /** One chunk of an inventory export, as BYTES (UI-06, decision D-04).
      *
      *  NOTHING IS WRITTEN ON THE SERVER. The backend serialises and returns; the

@@ -30,6 +30,7 @@ import {
   STORAGE_BOOT_COUNT_KEY,
   STORAGE_INSTALL_ID_KEY,
 } from "@defminer/engine/contract";
+import { sha256Hex } from "@defminer/engine/digest";
 import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -89,6 +90,7 @@ const CONTRACT_ENDPOINTS: readonly string[] = [
   "countInventory",
   "getArtifactAnalysis",
   "retryAnalysis",
+  "deriveSource",
   "exportInventory",
   "listSettings",
   "writeSetting",
@@ -2072,5 +2074,415 @@ describe("a retroactive scan actually WALKS, driven from production code", () =>
     const src = readFileSync("packages/backend/src/index.ts", "utf8");
     expect(src).toContain("heldAtWatermark: isHeldAtWatermark()");
     expect(src).not.toContain("heldAtWatermark: false");
+  });
+});
+
+// ===========================================================================
+// D-07's ON-DEMAND DERIVATION — FOUR ARMS, AND WHAT EACH ONE WRITES
+// ===========================================================================
+//
+// THE ARM IS HALF THE ASSERTION AND THE DATABASE IS THE OTHER HALF. Every case
+// below reads `source_sightings.producibility` back after the call, because the
+// two failures this endpoint can have are exactly the two a return-value
+// assertion cannot see: a tombstone written for a call that merely failed, and a
+// tombstone that was supposed to be written and was not. 07-UI-SPEC.md's rule
+// that outranks its own copy table — a failed call is NEVER rendered as a
+// tombstone, and producibility is never inferred — is a claim about a WRITE, so
+// it is asserted against the write.
+
+describe("deriveSource — D-07's reload, D-24's re-verify, D-23's tombstone", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  const LABEL = "webpack://app/src/secret.ts";
+  const CONTENT =
+    "export const token = 'not-a-real-secret';\nexport default 1;\n";
+  const REQUEST_ID = "req-7";
+
+  /** A well-formed map declaring ONE source with content. */
+  const MAP_DOC = JSON.stringify({
+    version: 3,
+    file: "app.js",
+    sources: [LABEL],
+    sourcesContent: [CONTENT],
+    names: [],
+    mappings: "AAAA;AACA",
+  });
+
+  /** The bundle that announces it inline, in the spelling every real bundler
+   *  emits. Built once so the digests below are facts about these bytes. */
+  const BUNDLE = Buffer.from(
+    "console.log(1);\n//# sourceMappingURL=data:application/json;base64," +
+      Buffer.from(MAP_DOC, "utf8").toString("base64") +
+      "\n",
+    "utf8",
+  );
+  const ARTIFACT_SHA = sha256Hex(BUNDLE);
+  const MAP_SHA = sha256Hex(Buffer.from(MAP_DOC, "utf8"));
+  const SOURCE_SHA = sha256Hex(Buffer.from(CONTENT, "utf8"));
+  const RECOVERED_AT = 1_756_000_000_000;
+
+  /** A DIFFERENT bundle, announcing a DIFFERENT map — the re-deploy. */
+  const REDEPLOYED = Buffer.from(
+    "console.log(2);\n//# sourceMappingURL=data:application/json;base64," +
+      Buffer.from(
+        JSON.stringify({
+          version: 3,
+          file: "app.js",
+          sources: [LABEL],
+          sourcesContent: ["export const token = 'rotated';\n"],
+          names: [],
+          mappings: "AAAA",
+        }),
+        "utf8",
+      ).toString("base64") +
+      "\n",
+    "utf8",
+  );
+
+  /** The rows the consumer would have written for one recovered source. */
+  function seedSighting(): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES (?, ?, ?, 'script', ?, ?, 1)",
+      )
+      .run("p1", ARTIFACT_SHA, BUNDLE.length, RECOVERED_AT, RECOVERED_AT);
+    fx.raw
+      .prepare(
+        "INSERT INTO sources (project_id, source_sha256, byte_len, line_count, first_seen_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        "p1",
+        SOURCE_SHA,
+        Buffer.byteLength(CONTENT, "utf8"),
+        3,
+        RECOVERED_AT,
+      );
+    fx.raw
+      .prepare(
+        "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+          "VALUES (?, ?, 0, ?, ?, ?, ?, 'producible', NULL, ?)",
+      )
+      .run(
+        "p1",
+        MAP_SHA,
+        ARTIFACT_SHA,
+        REQUEST_ID,
+        SOURCE_SHA,
+        LABEL,
+        RECOVERED_AT,
+      );
+  }
+
+  /** What the row says now. The half of every assertion below that a return
+   *  value cannot make. */
+  function producibilityNow(): string {
+    return (
+      fx.raw
+        .prepare(
+          "SELECT producibility FROM source_sightings WHERE project_id = 'p1' AND map_sha256 = ? AND source_index = 0",
+        )
+        .get(MAP_SHA) as { producibility: string }
+    ).producibility;
+  }
+
+  /** Boot the real `init()` with a `requests.get` this case chose. */
+  async function bootWith(
+    get: (id: string) => Promise<unknown>,
+  ): Promise<Record<string, (...a: unknown[]) => unknown>> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    await init(
+      makeFakeSdk({
+        projectId: "p1",
+        db: () => Promise.resolve(fx.db),
+        get,
+        register: (name: string, fn: unknown) => {
+          rpc[name] = fn as (...a: unknown[]) => unknown;
+        },
+      }),
+    );
+    return rpc;
+  }
+
+  /** The reload result for a stored request whose response carries `bytes`. */
+  function storedResponse(bytes: Uint8Array): unknown {
+    return {
+      request: makeFakeRequest({ id: REQUEST_ID }),
+      response: makeFakeResponse({ id: REQUEST_ID, bodyBytes: bytes }),
+    };
+  }
+
+  const REF = { projectId: "p1", mapSha256: "", sourceIndex: 0 };
+
+  it("registers deriveSource AFTER the consumer and BEFORE the ready latch", async () => {
+    // THE ORDERING CONTRACT IN `index.ts`'s HEADER, asserted from outside
+    // `init()`. Step 6b sits between the consumer and step 8, and the intercept
+    // handler registered at step 8 is the only observable that moves across the
+    // latch — so recording, at each `api.register`, whether a handler existed
+    // yet proves the endpoint became reachable BEFORE the latch rather than
+    // merely at some point during init(). "At some point" is exactly the window
+    // in which a caller can reach a read with no loop behind it.
+    seedSighting();
+    const handlersAtRegistration: Record<string, number> = {};
+    const sdk = makeFakeSdk({
+      projectId: "p1",
+      db: () => Promise.resolve(fx.db),
+      register: (name: string) => {
+        handlersAtRegistration[name] =
+          sdk.calls.interceptResponseHandlers.length;
+      },
+    });
+    await init(sdk);
+
+    expect(sdk.calls.apiRegister).toContain("deriveSource");
+    expect(
+      handlersAtRegistration.deriveSource,
+      "deriveSource was registered after the ready latch, so a response could " +
+        "have been admitted before the read surface existed",
+    ).toBe(0);
+    // AFTER the consumer: `getHealth` projects the consumer's queue and is
+    // registered in the same step, and the queue only exists once step 6 has
+    // run. The registration ORDER within 6b is what carries the claim.
+    expect(sdk.calls.apiRegister.indexOf("deriveSource")).toBeGreaterThan(
+      sdk.calls.apiRegister.indexOf("getStatus"),
+    );
+    expect(sdk.calls.interceptResponseHandlers.length).toBe(1);
+  });
+
+  it("returns the CONTENT arm and leaves producibility untouched", async () => {
+    seedSighting();
+    const rpc = await bootWith(() => Promise.resolve(storedResponse(BUNDLE)));
+
+    const answer = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+
+    expect(answer.outcome, JSON.stringify(answer)).toBe("content");
+    expect(answer.content).toBe(CONTENT);
+    // THE THREE NUMBERS DESCRIBE THIS ARM's CONTENT, computed from it rather
+    // than read off the row — so they cannot describe something else.
+    expect(answer.byteLen).toBe(Buffer.byteLength(CONTENT, "utf8"));
+    expect(answer.lineCount).toBe(3);
+    expect(answer.sha256).toBe(SOURCE_SHA);
+    expect(producibilityNow()).toBe("producible");
+  });
+
+  it("a reload returning undefined is `gone` / no_request, and it STICKS", async () => {
+    // BRANCH ONE OF TWO. Caido no longer has the request at all.
+    seedSighting();
+    const rpc = await bootWith(() => Promise.resolve(undefined));
+
+    const answer = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+
+    expect(answer.outcome, JSON.stringify(answer)).toBe("gone");
+    expect(answer.cause).toBe("no_request");
+    // The date the tombstone sentence interpolates, read from the ROW rather
+    // than taken from the clock.
+    expect(answer.recoveredAt).toBe(RECOVERED_AT);
+    expect(producibilityNow()).toBe("gone");
+    expect("content" in answer).toBe(false);
+  });
+
+  it("a record with NO RESPONSE is `gone` / no_response — a DIFFERENT tag", async () => {
+    // BRANCH TWO OF TWO, and the whole point of keeping them apart: the SDK
+    // types these as two different optionality points, and conflating them
+    // hides which one is happening — the only thing that would tell an operator
+    // whether Caido lost the request or never recorded a response for it.
+    seedSighting();
+    const rpc = await bootWith(() =>
+      Promise.resolve({ request: makeFakeRequest({ id: REQUEST_ID }) }),
+    );
+
+    const answer = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+
+    expect(answer.outcome).toBe("gone");
+    expect(answer.cause).toBe("no_response");
+    expect(producibilityNow()).toBe("gone");
+  });
+
+  it("D-24: a body that hashes differently is `changed`, with NO content field at all", async () => {
+    // THE SINGLE MOST VALUABLE SECURITY PROPERTY THIS PHASE ADDS. The reloaded
+    // bundle is a real, well-formed bundle carrying a real map with a source at
+    // index 0 — so a handler that re-derived from the new body would have had
+    // something plausible to return, and would have returned it. It must not.
+    seedSighting();
+    const rpc = await bootWith(() =>
+      Promise.resolve(storedResponse(REDEPLOYED)),
+    );
+
+    const answer = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+
+    expect(answer.outcome, JSON.stringify(answer)).toBe("changed");
+    // STRUCTURAL, NOT "the content is empty". An empty string is a value a
+    // viewer renders; the absence of the key is what makes withholding a
+    // property of the answer rather than of the caller's discipline.
+    expect(Object.keys(answer).sort()).toEqual([
+      "outcome",
+      "recordedByteLen",
+      "recoveredAt",
+      "reloadedByteLen",
+    ]);
+    // `byteLenMismatch`'s reporting shape: a re-deploy is visible as a number
+    // rather than only as a refusal the operator cannot explain.
+    expect(answer.recordedByteLen).toBe(BUNDLE.length);
+    expect(answer.reloadedByteLen).toBe(REDEPLOYED.length);
+    expect(producibilityNow()).toBe("changed");
+  });
+
+  it("the tombstone is STICKY — a later reload that succeeds does not un-write it", async () => {
+    // D-23's stickiness is a property of `markProducibility`'s trailing guard
+    // rather than of this handler's discipline, and this is what proves the two
+    // are wired together. The second call reloads the ORIGINAL bundle and hashes
+    // correctly, so it answers `content` — and the row does not move back.
+    seedSighting();
+    const bodies: unknown[] = [undefined, storedResponse(BUNDLE)];
+    let at = 0;
+    const rpc = await bootWith(() => Promise.resolve(bodies[at++]));
+
+    await rpc.deriveSource(null, { ...REF, mapSha256: MAP_SHA });
+    expect(producibilityNow()).toBe("gone");
+
+    const second = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+    expect(second.outcome).toBe("content");
+    expect(
+      producibilityNow(),
+      "a tombstone was un-written by a later successful reload",
+    ).toBe("gone");
+  });
+
+  it("a reload that THREW is `unavailable` and writes NOTHING", async () => {
+    // THE RULE THAT OUTRANKS EVERYTHING ELSE HERE. A call that did not answer
+    // is not evidence of a refusal, so nothing durable may be recorded — and
+    // the only way to see that is to read the row back.
+    seedSighting();
+    const rpc = await bootWith(() =>
+      Promise.reject(new Error("the request store is unavailable")),
+    );
+
+    const answer = (await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+    })) as Record<string, unknown>;
+
+    expect(answer).toEqual({ outcome: "unavailable" });
+    expect(
+      producibilityNow(),
+      "a failed call wrote a permanent tombstone",
+    ).toBe("producible");
+  });
+
+  it("a sighting that is not in this project is `unavailable`, not `gone`", async () => {
+    // THE ORIGIN COMES FROM THE DATABASE. There is no row, so there is nothing
+    // to reload and nothing has been proven about the target's history. The
+    // reload is not even attempted, which is also what bounds the set of stored
+    // bodies this endpoint can reach.
+    const rpc = await bootWith(() => Promise.resolve(storedResponse(BUNDLE)));
+    const answer = await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: "f".repeat(64),
+    });
+    expect(answer).toEqual({ outcome: "unavailable" });
+  });
+
+  it("an index the map no longer carries content for is `unavailable`, never `gone`", async () => {
+    // The bundle is still there and still hashes correctly, so the source has
+    // not been proven unproducible — only unread this time. A `gone` here would
+    // be a permanent claim about Caido's history made from a fact about a map.
+    seedSighting();
+    fx.raw
+      .prepare(
+        "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+          "VALUES ('p1', ?, 9, ?, ?, NULL, ?, 'producible', NULL, ?)",
+      )
+      .run(MAP_SHA, ARTIFACT_SHA, REQUEST_ID, LABEL, RECOVERED_AT);
+
+    const rpc = await bootWith(() => Promise.resolve(storedResponse(BUNDLE)));
+    const answer = await rpc.deriveSource(null, {
+      ...REF,
+      mapSha256: MAP_SHA,
+      sourceIndex: 9,
+    });
+
+    expect(answer).toEqual({ outcome: "unavailable" });
+    expect(
+      (
+        fx.raw
+          .prepare(
+            "SELECT producibility FROM source_sightings WHERE project_id = 'p1' AND source_index = 9",
+          )
+          .get() as { producibility: string }
+      ).producibility,
+    ).toBe("producible");
+  });
+
+  it("a sighting whose map digest is not the one the bundle announces is `unavailable`", async () => {
+    // `findAnnouncement` returns the LAST announcement in the tail window, so
+    // the digest check is what stops content from a document the sighting does
+    // not describe being served under its name. In this build no nested map
+    // ever acquires a sighting — `DERIVED_MAX_DEPTH` is 1 and the gate refuses
+    // at `depth >= 1` — so this is a consistency assertion today and the thing
+    // that fails closed the day that bound is raised.
+    const otherMap = "e".repeat(64);
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES ('p1', ?, ?, 'script', ?, ?, 1)",
+      )
+      .run(ARTIFACT_SHA, BUNDLE.length, RECOVERED_AT, RECOVERED_AT);
+    fx.raw
+      .prepare(
+        "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+          "VALUES ('p1', ?, 0, ?, ?, NULL, ?, 'producible', NULL, ?)",
+      )
+      .run(otherMap, ARTIFACT_SHA, REQUEST_ID, LABEL, RECOVERED_AT);
+
+    const rpc = await bootWith(() => Promise.resolve(storedResponse(BUNDLE)));
+    expect(
+      await rpc.deriveSource(null, { ...REF, mapSha256: otherMap }),
+    ).toEqual({ outcome: "unavailable" });
+  });
+
+  it("NO project resolved is `unavailable`, and it never reaches the request store", async () => {
+    seedSighting();
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId: null,
+      db: () => Promise.resolve(fx.db),
+      get: () => Promise.resolve(storedResponse(BUNDLE)),
+      register: (name: string, fn: unknown) => {
+        rpc[name] = fn as (...a: unknown[]) => unknown;
+      },
+    });
+    await init(sdk);
+
+    expect(
+      await rpc.deriveSource(null, { ...REF, mapSha256: MAP_SHA }),
+    ).toEqual({ outcome: "unavailable" });
+    expect(
+      sdk.calls.requestsGet,
+      "a read with no project resolved reached the request store anyway",
+    ).toEqual([]);
+    expect(producibilityNow()).toBe("producible");
   });
 });

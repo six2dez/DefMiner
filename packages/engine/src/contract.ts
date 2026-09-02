@@ -208,6 +208,182 @@ export function assertNoOtherProducibility(value: never): never {
   throw new Error(`unhandled source producibility: ${String(value)}`);
 }
 
+// ---------------------------------------------------------------------------
+// D-07's ON-DEMAND DERIVATION, AS A CLOSED SET OF ANSWERS (MAP-07, UI-05)
+// ---------------------------------------------------------------------------
+//
+// DECLARED HERE AND NOT IN THE HANDLER, for the reason every vocabulary in this
+// file is: both packages need these as TYPES and one of them needs the gone
+// causes as VALUES, and the two packages cannot import each other.
+//
+// THE ARMS ARE A DISCRIMINATED UNION AND NOT A RESULT OBJECT WITH OPTIONAL
+// FIELDS, and that is the whole security mechanism rather than a style choice.
+// `07-UI-SPEC.md § "The Four Body States of the Viewer"` fixes four mutually
+// exclusive states — Content, Gone, Changed, Could not ask — and says no two may
+// be collapsed. A shape carrying `content?: string` beside `producibility` would
+// let a frontend render a tombstone with content still on the object, or render
+// content for a row whose bundle changed, and both failures typecheck. Here the
+// `changed` arm HAS NO CONTENT FIELD AT ALL: withholding is structural.
+//
+// REASONS, NEVER MESSAGES. Nothing a driver, a parser or Caido said is on any
+// arm. The frontend maps each arm to its own DefMiner-authored copy, which is the
+// same rule `SUSPEND_REASONS` and `RpcReason` obey on their own boundaries.
+
+/**
+ * WHICH of the two reload absences produced a `gone` answer.
+ *
+ * TWO MEMBERS AND NOT ONE, because they are different facts about the target's
+ * history and `ingest/consumer.ts` already counts them apart with the verbatim
+ * reason that conflating them "hides WHICH one is happening". The SDK types them
+ * as two distinct optionality points — `requests.get` returns a record or
+ * `undefined`, and that record's `response` is itself optional — so a single
+ * "not there" member would be this contract choosing to know less than the
+ * runtime does.
+ *
+ * `no_request` means Caido no longer has the request at all. `no_response`
+ * means the request survived and no response was ever recorded against it.
+ * Both set the same `producibility` member, because both mean DefMiner can no
+ * longer produce these bytes; only the tombstone's own sentence differs.
+ */
+export const SOURCE_GONE_CAUSES = ["no_request", "no_response"] as const;
+
+/** One member of {@link SOURCE_GONE_CAUSES}. */
+export type SourceGoneCause = (typeof SOURCE_GONE_CAUSES)[number];
+
+/**
+ * One recovered source as the drill-down READS it — metadata only, never
+ * content.
+ *
+ * THIS IS THE ROW SHAPE FOUR LATER PLANS ARE WRITTEN AGAINST, so it is declared
+ * on the contract rather than inferred from a store type. It carries NO CONTENT,
+ * which is what makes `07-UI-SPEC.md`'s eager-to-the-bound load policy
+ * affordable: the tree is a hierarchy over the WHOLE set for one artifact, and
+ * presenting a subset as the whole set is the defect the client-side sorting ban
+ * already exists to prevent.
+ *
+ * THREE FIELDS ARE NULLABLE AND THE NULLS MEAN DIFFERENT THINGS
+ * (07-RESEARCH.md § Pitfall 3). `sourceSha256` is null when the map declared an
+ * index it shipped no content for — there is no `sources` row to point at, and
+ * `byteLen` and `lineCount` are then null with it, which is a different fact
+ * from zero. `sourcesVerbatim` is null when the map declares `sources[i]` as
+ * literal null, which ECMA-426 permits; it is a value and never the string
+ * "null".
+ *
+ * `sourcesVerbatim` IS THE ONE TARGET-CONTROLLED FIELD on this row. D-06 keeps
+ * it unsanitised and unnormalised because it is evidence; every route to a
+ * template goes through the frontend's own sanitiser, and every route to an
+ * export goes through `redactUrlForExport`.
+ *
+ * The ORDER a page returns these in is the map's own `sources` declaration
+ * order, which is evidence rather than a presentation choice — the list is not
+ * sortable and will not become sortable.
+ */
+export type RecoveredSourceRow = {
+  /** The bundle this sighting came out of. Constant across one page, and
+   *  carried anyway so a row is self-describing in a manifest export. */
+  readonly artifactSha256: string;
+  readonly mapSha256: string;
+  /** The index the MAP declared. The evidence, and the sort order. */
+  readonly sourceIndex: number;
+  readonly sourcesVerbatim: string | null;
+  readonly sourceSha256: string | null;
+  readonly byteLen: number | null;
+  readonly lineCount: number | null;
+  readonly producibility: SourceProducibility;
+  readonly recoveredAt: number;
+};
+
+/**
+ * THE THREE WAYS A DERIVATION CAN ANSWER WITHOUT PRODUCING ANYTHING.
+ *
+ * DECLARED ONCE AND SHARED BY BOTH DERIVATION RPCs, deliberately. The content
+ * read and the position-table read perform the SAME reload and the SAME D-24
+ * re-verify, so their failure vocabularies are not merely similar — they are one
+ * vocabulary. Two copies would let one of them acquire a fourth failure the
+ * other does not have, and the viewer's four body states would then mean
+ * different things depending on which call produced them.
+ *
+ * `unavailable` IS THE ONE THAT MATTERS MOST. It is the sentinel for "could not
+ * ask": the database is not open, no project is resolved, there is no such
+ * sighting, the reload threw, or the re-parse failed. IT NEVER WRITES A
+ * PRODUCIBILITY ROW. A call that did not answer is not evidence of a refusal,
+ * and painting a timeout as a tombstone would be a durable-looking claim made
+ * from an absence of evidence — the exact defect the shipped compatibility rule
+ * names.
+ */
+export type SourceDerivationFailure =
+  /** D-23's tombstone, detected lazily at open and written once. `recoveredAt`
+   *  is the date the tombstone sentence interpolates — read from the sighting
+   *  row, never from the clock. */
+  | {
+      readonly outcome: "gone";
+      readonly cause: SourceGoneCause;
+      readonly recoveredAt: number;
+    }
+  /**
+   * D-24's FAIL-CLOSED mismatch. NO CONTENT FIELD, BY CONSTRUCTION.
+   *
+   * The two byte lengths are carried for the reason `byteLenMismatch` exists on
+   * the ingest path: a re-deploy is the expected benign cause, and an operator
+   * shown a refusal with no number cannot tell a redeploy from a defect. They
+   * are DefMiner's own measurements of two bodies, not content. `recordedByteLen`
+   * is null when retention has already swept the artifact row it came from —
+   * which is a different claim from zero.
+   */
+  | {
+      readonly outcome: "changed";
+      readonly recoveredAt: number;
+      readonly recordedByteLen: number | null;
+      readonly reloadedByteLen: number;
+    }
+  /** Could not ask. Writes nothing, claims nothing. */
+  | { readonly outcome: "unavailable" };
+
+/**
+ * What ONE on-demand derivation answers with (D-07, D-23, D-24).
+ *
+ * FOUR ARMS: the content, and the three shared failures. `sha256`, `byteLen` and
+ * `lineCount` describe the CONTENT ON THIS ARM, computed from it rather than
+ * read off a row, so the three numbers can never describe something else.
+ */
+export type DeriveSourceResult =
+  | {
+      readonly outcome: "content";
+      readonly content: string;
+      readonly byteLen: number;
+      readonly lineCount: number;
+      readonly sha256: string;
+    }
+  | SourceDerivationFailure;
+
+/**
+ * What ONE lazy read of a map's position table answers with (O-01, D-16).
+ *
+ * THE SAME THREE FAILURES, so the viewer's four body states govern this call
+ * too: a position read that failed must not be able to render as a tombstone
+ * either. The only difference is the payload of the first arm — the raw
+ * `mappings` string, which is decoded to integers in the browser under D-16 and
+ * never enters the DOM.
+ */
+export type SourceMappingsResult =
+  | { readonly outcome: "mappings"; readonly mappings: string }
+  | SourceDerivationFailure;
+
+/**
+ * Compile-time exhaustiveness over a derivation result's discriminant.
+ *
+ * `assertNoOtherProducibility`'s shape, applied to the arm tag rather than to a
+ * vocabulary member: a FIFTH arm added above without a case at a call site is no
+ * longer assignable to `never`, and the build stops at the moment somebody
+ * widens the union rather than at the moment a frontend silently renders nothing
+ * for it.
+ *
+ * @internal
+ */
+export function assertNoOtherDeriveOutcome(value: never): never {
+  throw new Error(`unhandled derivation outcome: ${String(value)}`);
+}
+
 /**
  * Why a scan is `suspended` — a CLOSED, DefMiner-authored code set.
  *

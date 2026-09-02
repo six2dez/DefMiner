@@ -38,6 +38,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertNoOtherDeriveOutcome,
   assertNoOtherProducibility,
   DEGRADED_ANALYSIS_FILTER,
   EVIDENCE_PANEL_MANDATORY_FIELDS,
@@ -52,6 +53,7 @@ import {
   SCAN_LIFECYCLE_STATES,
   SCAN_PROGRESS_KIND,
   SCAN_STATES,
+  SOURCE_GONE_CAUSES,
   SOURCE_PRODUCIBILITY_STATES,
   SUSPEND_REASONS,
   TERMINAL_SCAN_STATES,
@@ -59,6 +61,7 @@ import {
   UNCLASSIFIED_ANALYSIS_FAILURE_REASON,
 } from "./contract";
 import type {
+  DeriveSourceResult,
   EntityLead,
   EntityRowBase,
   EvidencePanelFrame,
@@ -68,12 +71,15 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  RecoveredSourceRow,
   ScanLifecycleState,
   ScanProgressPayload,
   ScanState,
   ScanStatusPayload,
   ScoreExplanation,
   ScoreSignal,
+  SourceDerivationFailure,
+  SourceMappingsResult,
   SourceProducibility,
   SuspendReason,
   TriageState,
@@ -717,6 +723,197 @@ describe("SOURCE_PRODUCIBILITY_STATES — the RECOVERED SOURCE vocabulary (D-22,
   it("types a producibility outcome — no bare string on the recovered-source path", () => {
     const value: SourceProducibility = "gone";
     expect(SOURCE_PRODUCIBILITY_STATES).toContain(value);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-07's DERIVATION RESULT — FOUR ARMS THAT CANNOT BE COLLAPSED
+// ---------------------------------------------------------------------------
+//
+// 07-UI-SPEC.md fixes four mutually exclusive body states and says no two may be
+// collapsed, then states the rule that outranks its own table: a failed call is
+// NEVER rendered as a tombstone, and the frontend never infers producibility.
+// These cases are the mechanical half of that — the shape has to make the
+// collapse impossible rather than merely discouraged, so they assert the
+// STRUCTURE (a `changed` arm with no content field at all) rather than a value.
+
+describe("DeriveSourceResult — the four arms, and what each one may carry", () => {
+  it("the `changed` arm has NO content field, asserted structurally", () => {
+    // NOT "content is empty". An empty string is a value a viewer can render;
+    // the absence of the key is what makes withholding a property of the type.
+    // D-24 fails closed, and the shape is the mechanism.
+    const changed: DeriveSourceResult = {
+      outcome: "changed",
+      recoveredAt: 1_756_000_000_000,
+      recordedByteLen: 4096,
+      reloadedByteLen: 4102,
+    };
+    expect(Object.keys(changed).sort()).toEqual([
+      "outcome",
+      "recordedByteLen",
+      "recoveredAt",
+      "reloadedByteLen",
+    ]);
+    expect("content" in changed).toBe(false);
+  });
+
+  it("the `unavailable` arm carries NOTHING but its tag", () => {
+    // The sentinel is the one arm with no durable effect and no payload. A
+    // reason field here would be a sentence somebody eventually interpolates,
+    // and a `producibility` field would be the frontend inferring one.
+    const sentinel: DeriveSourceResult = { outcome: "unavailable" };
+    expect(Object.keys(sentinel)).toEqual(["outcome"]);
+  });
+
+  it("the two `gone` causes are DISTINCT tags over a closed vocabulary", () => {
+    // The SDK types them as two different optionality points and the consumer
+    // counts them apart; a single "not there" member would be this contract
+    // choosing to know less than the runtime does.
+    expect(SOURCE_GONE_CAUSES).toEqual(["no_request", "no_response"]);
+    expect(new Set(SOURCE_GONE_CAUSES).size).toBe(SOURCE_GONE_CAUSES.length);
+    for (const cause of SOURCE_GONE_CAUSES) {
+      expect(cause, `${cause} is not snake_case`).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    }
+  });
+
+  it("`assertNoOtherDeriveOutcome` has a CALL SITE, so its compile-time claim is load-bearing", () => {
+    // The `assertNoOtherProducibility` idiom. A `never` helper nothing calls
+    // proves nothing: the compiler only refuses the widening at a switch that
+    // actually hands it the unhandled arm. THIS is the switch a fifth arm
+    // breaks — the failure recorded in the plan's SUMMARY was produced by
+    // adding one here and running `pnpm typecheck`.
+    const bodyState = (result: DeriveSourceResult): string => {
+      switch (result.outcome) {
+        case "content":
+          return "Content";
+        case "gone":
+          return "Gone";
+        case "changed":
+          return "Changed";
+        case "unavailable":
+          return "Could not ask";
+        default:
+          return assertNoOtherDeriveOutcome(result);
+      }
+    };
+    expect(
+      [
+        bodyState({
+          outcome: "content",
+          content: "x",
+          byteLen: 1,
+          lineCount: 1,
+          sha256: "d",
+        }),
+        bodyState({
+          outcome: "gone",
+          cause: "no_request",
+          recoveredAt: 1,
+        }),
+        bodyState({
+          outcome: "changed",
+          recoveredAt: 1,
+          recordedByteLen: null,
+          reloadedByteLen: 2,
+        }),
+        bodyState({ outcome: "unavailable" }),
+      ],
+      "the four body states must map one-to-one onto the four arms",
+    ).toEqual(["Content", "Gone", "Changed", "Could not ask"]);
+  });
+
+  it("the position read shares the SAME three failure arms — one vocabulary, not two", () => {
+    // The content read and the position read perform the same reload and the
+    // same D-24 re-verify. Two failure vocabularies would let one of them
+    // acquire a fourth failure the other does not have, and the viewer's four
+    // body states would then mean different things depending on which call
+    // produced them. Assignability in BOTH directions is the assertion.
+    const failure: SourceDerivationFailure = {
+      outcome: "gone",
+      cause: "no_response",
+      recoveredAt: 7,
+    };
+    const asDerive: DeriveSourceResult = failure;
+    const asMappings: SourceMappingsResult = failure;
+    expect(asDerive).toEqual(asMappings);
+    // And the mappings arm carries the raw string and nothing else — it is
+    // decoded to integers in the browser under D-16 and never enters the DOM.
+    const positions: SourceMappingsResult = {
+      outcome: "mappings",
+      mappings: "AAAA;",
+    };
+    expect(Object.keys(positions).sort()).toEqual(["mappings", "outcome"]);
+  });
+});
+
+describe("RecoveredSourceRow — the row shape four later plans are written against", () => {
+  it("carries NO content field, which is what makes the eager load affordable", () => {
+    // Under D-07 the bytes are never stored, so a row is a label, two digests,
+    // three integers and a vocabulary word. A `content` field here would make
+    // the tree's eager-to-the-bound policy an unbounded amount of source code.
+    const row: RecoveredSourceRow = {
+      artifactSha256: "a".repeat(64),
+      mapSha256: "b".repeat(64),
+      sourceIndex: 0,
+      sourcesVerbatim: "webpack://app/src/index.ts",
+      sourceSha256: "c".repeat(64),
+      byteLen: 128,
+      lineCount: 9,
+      producibility: "producible",
+      recoveredAt: 1_756_000_000_000,
+    };
+    expect(Object.keys(row).sort()).toEqual([
+      "artifactSha256",
+      "byteLen",
+      "lineCount",
+      "mapSha256",
+      "producibility",
+      "recoveredAt",
+      "sourceIndex",
+      "sourceSha256",
+      "sourcesVerbatim",
+    ]);
+    expect("content" in row).toBe(false);
+  });
+
+  it("keeps the two Pitfall-3 nulls expressible and distinct", () => {
+    // `sourceSha256` null: the map declared an index it shipped no content for,
+    // so there is no `sources` row and the two size columns are null with it.
+    // `sourcesVerbatim` null: the map declared the label as literal null, which
+    // ECMA-426 permits. Neither is the string "null" and neither is zero.
+    const noContent: RecoveredSourceRow = {
+      artifactSha256: "a".repeat(64),
+      mapSha256: "b".repeat(64),
+      sourceIndex: 3,
+      sourcesVerbatim: "webpack://app/src/absent.ts",
+      sourceSha256: null,
+      byteLen: null,
+      lineCount: null,
+      producibility: "producible",
+      recoveredAt: 1,
+    };
+    const noLabel: RecoveredSourceRow = { ...noContent, sourcesVerbatim: null };
+    expect(noContent.byteLen).toBeNull();
+    expect(noContent.byteLen).not.toBe(0);
+    expect(noLabel.sourcesVerbatim).toBeNull();
+    expect(noLabel.sourcesVerbatim).not.toBe("null");
+  });
+
+  it("types `producibility` against the vocabulary — no bare string on the row", () => {
+    for (const state of SOURCE_PRODUCIBILITY_STATES) {
+      const row: RecoveredSourceRow = {
+        artifactSha256: "a".repeat(64),
+        mapSha256: "b".repeat(64),
+        sourceIndex: 0,
+        sourcesVerbatim: null,
+        sourceSha256: null,
+        byteLen: null,
+        lineCount: null,
+        producibility: state,
+        recoveredAt: 1,
+      };
+      expect(SOURCE_PRODUCIBILITY_STATES).toContain(row.producibility);
+    }
   });
 });
 
