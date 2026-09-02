@@ -36,37 +36,92 @@
 import { TABLE_ROW_HEIGHT_PX } from "../safety/display";
 
 /**
- * The Tailwind utility that produces {@link TABLE_ROW_HEIGHT_PX}.
+ * The fixed height of one RECOVERED SOURCE LINE, in CSS pixels — the second
+ * row height on this page, and a SIBLING of {@link TABLE_ROW_HEIGHT_PX} rather
+ * than a change to it.
  *
- * Keyed by the constant, never restated beside it. `h-8` is the `xl` value in
- * 05-UI-SPEC.md § "Spacing Scale", which is the same 32px.
+ * ONE NUMBER IN ONE PLACE, AGAIN, AND A SECOND NUMBER BECAUSE THERE ARE TWO
+ * SURFACES. The tables and the source TREE render at 32px; the source VIEWER
+ * renders code, where 24px is the line height a monospaced 14px face wants and
+ * where a 32px row would waste a third of a column the operator is reading a
+ * file in. `TABLE_ROW_HEIGHT_PX` is byte-unchanged and stays THE number for
+ * every list on this page — plan 07-08's viewer scroller binds `item-size` to
+ * this one, and plan 07-07's tree binds it to that one.
+ *
+ * WHAT MUST NOT HAPPEN IS A THIRD, UNNAMED NUMBER AT A CALL SITE. A
+ * `RecycleScroller` handed a literal that disagrees with the class its rows
+ * carry drifts by the difference every screen, and nothing fails.
+ */
+export const SOURCE_LINE_HEIGHT_PX = 24;
+
+/**
+ * The Tailwind utilities that produce the two fixed row heights.
+ *
+ * Keyed by the constants, never restated beside them. `h-8` is the `xl` value
+ * in 05-UI-SPEC.md § "Spacing Scale", which is the same 32px; `h-6` is the `lg`
+ * value, the same 24px, and it is written here AS A LITERAL for the reason this
+ * file's header gives and the resolver's own message repeats — Tailwind's JIT
+ * only emits a utility it can see spelled out in the scanned source, so an
+ * interpolated arbitrary height scans as nothing and the built stylesheet
+ * carries no rule.
+ *
+ * TWO ENTRIES, ONE MAP. A second map would be a second place for a number and
+ * its class to part company, which is the whole defect this lookup prevents.
  */
 const ROW_HEIGHT_CLASSES: Readonly<Record<number, string>> = Object.freeze({
+  24: "h-6",
   32: "h-8",
 });
 
 /**
- * The row-height class, resolved from {@link TABLE_ROW_HEIGHT_PX} at import.
+ * The Tailwind row-height class for a fixed pixel height.
  *
  * THROWS RATHER THAN FALLS BACK. A missing entry means the number and the class
  * have parted company, and a fallback would render rows at one height while the
  * scroller computed geometry at another — a drift that produces no error and
  * misplaces a row per screen.
+ *
+ * FACTORED OUT OF ITS FORMER IIFE BY PLAN 07-07 rather than copied for the
+ * second height. The message is the part that matters and it is stated once: a
+ * copy of it beside a second constant stops matching the first the moment
+ * either is edited.
+ *
+ * EXPORTED SO ITS FAILING PATH CAN BE EXECUTED. A gate whose failure path has
+ * never run is a gate nobody has tested — `frontend-safety.spec.ts` states that
+ * rule for itself and builds its whole fixture block around it. The two
+ * constants below take the succeeding path at import; `display.spec.ts` drives
+ * this one with an unregistered height and asserts the message, which is the
+ * same demonstration as deleting a map entry by hand without leaving the
+ * deletion in the tree.
+ *
+ * @internal
  */
-export const ROW_HEIGHT_CLASS: string = (() => {
-  const found = ROW_HEIGHT_CLASSES[TABLE_ROW_HEIGHT_PX];
+export function rowHeightClass(heightPx: number): string {
+  const found = ROW_HEIGHT_CLASSES[heightPx];
   if (found === undefined) {
     throw new Error(
-      `table-contract: TABLE_ROW_HEIGHT_PX is ${String(TABLE_ROW_HEIGHT_PX)} ` +
+      `table-contract: a fixed row height of ${String(heightPx)}px is in use ` +
         `but no Tailwind utility is registered for it. Add the class to ` +
         `ROW_HEIGHT_CLASSES as a LITERAL — Tailwind's JIT only emits a utility ` +
         `it can see spelled out in the scanned source, so an interpolated ` +
-        `h-[${String(TABLE_ROW_HEIGHT_PX)}px] would emit nothing and the table ` +
+        `h-[${String(heightPx)}px] would emit nothing and the table ` +
         `would render unstyled without failing.`,
     );
   }
   return found;
-})();
+}
+
+/** The table and tree row-height class, resolved from
+ *  {@link TABLE_ROW_HEIGHT_PX} at import. */
+export const ROW_HEIGHT_CLASS: string = rowHeightClass(TABLE_ROW_HEIGHT_PX);
+
+/** The source-viewer line-height class, resolved from
+ *  {@link SOURCE_LINE_HEIGHT_PX} at import. Same lookup, same throw, same
+ *  literal requirement — see {@link rowHeightClass}. Plan 07-08's viewer
+ *  scroller is what consumes it. */
+export const SOURCE_LINE_HEIGHT_CLASS: string = rowHeightClass(
+  SOURCE_LINE_HEIGHT_PX,
+);
 
 /**
  * The classes every cell carries, target-controlled or not.

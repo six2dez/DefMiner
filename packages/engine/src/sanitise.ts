@@ -120,6 +120,22 @@ export const TABLE_CELL_MAX_GRAPHEMES = 256;
 export const EVIDENCE_PANEL_MAX_GRAPHEMES = 2048;
 
 /**
+ * R2's SOURCE-LINE cap — the third tier, added by plan 07-07 for the recovered
+ * source viewer. Imported by name by the frontend's `forSourceLine` (07-07) and
+ * never restated as a literal at a call site.
+ *
+ * FOUR TIMES THE CELL CAP AND HALF THE PANEL CAP, which is the whole reason for
+ * the number: it is distinct from BOTH, so a mistyped constant renders visibly
+ * wrong rather than subtly wrong. Neither shipped cap describes a line of source
+ * code — 256 truncates ordinary minified-adjacent code mid-statement and 2,048
+ * is the panel's, bound to a surface that shows control characters as escapes.
+ *
+ * And 1,024 monospace characters is roughly 8,600px at 14px, far past any
+ * window, so the boundary is reached only by lines no editor would call a line.
+ */
+export const SOURCE_LINE_MAX_GRAPHEMES = 1024;
+
+/**
  * What a rendering sink receives. Three fields, deliberately.
  *
  * `shown` and `total` are counted in the SAME unit as one another — graphemes

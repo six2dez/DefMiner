@@ -32,6 +32,7 @@ import {
   forDisplay,
   forDisplayText,
   forEvidence,
+  SOURCE_LINE_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "./sanitise";
 
@@ -85,6 +86,42 @@ describe("R2 constants", () => {
   it("names the two caps from 05-UI-SPEC.md R2 and does not restate them", () => {
     expect(TABLE_CELL_MAX_GRAPHEMES).toBe(256);
     expect(EVIDENCE_PANEL_MAX_GRAPHEMES).toBe(2048);
+  });
+
+  it("names the THIRD cap, and it is distinct from both shipped ones", () => {
+    // 07-UI-SPEC.md § "R2 — the third truncation tier". The distinctness is the
+    // POINT of the number and not a coincidence of it: four times the cell cap
+    // and half the panel cap, so a call site that reached for the wrong
+    // constant renders a visibly wrong length rather than a subtly wrong one.
+    // Asserted as RELATIONS as well as as a value, because the relations are
+    // what a future edit to any of the three would break.
+    expect(SOURCE_LINE_MAX_GRAPHEMES).toBe(1024);
+    expect(SOURCE_LINE_MAX_GRAPHEMES).not.toBe(TABLE_CELL_MAX_GRAPHEMES);
+    expect(SOURCE_LINE_MAX_GRAPHEMES).not.toBe(EVIDENCE_PANEL_MAX_GRAPHEMES);
+    expect(SOURCE_LINE_MAX_GRAPHEMES).toBe(TABLE_CELL_MAX_GRAPHEMES * 4);
+    expect(SOURCE_LINE_MAX_GRAPHEMES * 2).toBe(EVIDENCE_PANEL_MAX_GRAPHEMES);
+  });
+
+  it("leaves the third cap BELOW the 4 KB label fixture, which is the boundary", () => {
+    // `map-fixture.ts`'s `four-kilobyte-label` case says this in its own `why`:
+    // "Plan 07-07's SOURCE_LINE_MAX_GRAPHEMES must land BELOW 4,096 for that to
+    // keep holding". Stated here as well as there so an edit to the constant
+    // fails in the constant's own spec rather than only in a fixture consumer.
+    expect(SOURCE_LINE_MAX_GRAPHEMES).toBeLessThan(4096);
+  });
+
+  it("truncates grapheme-safe at the third cap, from both sides of it", () => {
+    // The engine half of the boundary. The frontend wrapper's own spec asserts
+    // the same boundary through `forSourceLine`; this one proves the primitive
+    // it calls honours the cap it is handed, which is what makes the wrapper a
+    // wrapper rather than a second implementation.
+    const exact = "s".repeat(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(forDisplayText(exact, SOURCE_LINE_MAX_GRAPHEMES)).toBe(exact);
+
+    const over = "s".repeat(SOURCE_LINE_MAX_GRAPHEMES + 1);
+    const out = forDisplay(over, SOURCE_LINE_MAX_GRAPHEMES);
+    expect(out.shown).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(out.total).toBe(SOURCE_LINE_MAX_GRAPHEMES + 1);
   });
 
   it("takes NO default cap — a caller must name the surface", () => {

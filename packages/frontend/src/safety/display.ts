@@ -47,6 +47,7 @@ import {
   forDisplay,
   forDisplayText,
   forEvidence,
+  SOURCE_LINE_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
 
@@ -131,6 +132,104 @@ export function forCellText(value: string): string {
  *  as visible escapes rather than removed — R2 step 1's one exception. */
 export function forPanel(value: string): Displayed {
   return forEvidence(value, EVIDENCE_PANEL_MAX_GRAPHEMES);
+}
+
+/**
+ * The DefMiner-authored run a TAB renders as. Two spaces, never derived from
+ * the file.
+ *
+ * TWO RATHER THAN FOUR, and the reason is the corpus rather than taste: the
+ * source recovered on this surface came out of a JavaScript bundle, where two
+ * is the ecosystem default, and a narrower stop keeps deeply-indented lines
+ * inside the visible column of a `flex-1` region that is already sharing the
+ * page with a tree and an evidence panel (07-UI-SPEC.md U7-5).
+ *
+ * EXPORTED so the viewer's spec can assert the width by NAME rather than by
+ * counting spaces in a string literal it wrote itself.
+ */
+export const SOURCE_LINE_TAB_SPACES = "  ";
+
+/**
+ * The tab exception, applied BEFORE the engine is called.
+ *
+ * `String.split`/`Array.join` rather than a regular expression, deliberately.
+ * TAB is `U+0009`, a C0 control, so the pattern that matches it is a
+ * control-character regex — and `noInlineConfig: true` is set for
+ * packages/frontend, which means a `// eslint-disable-next-line
+ * no-control-regex` in this package is INERT. A control-character regex literal
+ * cannot be written in the frontend at all, and this is the shape that does not
+ * need one.
+ */
+function withTabsExpanded(value: string): string {
+  return value.split("\u0009").join(SOURCE_LINE_TAB_SPACES);
+}
+
+/**
+ * R2 for one line of RECOVERED SOURCE — the third tier, and the one deliberate
+ * exception to R2 step 1 outside the evidence panel.
+ *
+ * ===========================================================================
+ * THE CAP IS BOUND IN THE NAME, FOR THIS FILE'S OWN STATED REASON
+ * ===========================================================================
+ * `SOURCE_LINE_MAX_GRAPHEMES` is imported BY NAME from the engine and appears
+ * nowhere as a literal here. Neither shipped cap describes a line of source
+ * code: 256 truncates ordinary code mid-statement, and 2,048 belongs to a
+ * surface that renders control characters as visible escapes. A call site
+ * reaching for the wrong one by mistyping is exactly what naming the surface in
+ * the function prevents — this module's header makes that argument for
+ * `forCell`/`forPanel` and this is the third instance of it, not a new rule.
+ *
+ * ===========================================================================
+ * THE ONE EXCEPTION: TAB IS RENDERED, NOT STRIPPED — AND NOT RENDERED RAW
+ * ===========================================================================
+ * Argued here, in the register `C0_C1_CONTROLS`'s own comment uses, because
+ * this is where a reader will ask.
+ *
+ * TABS ARE SOURCE STRUCTURE. Stripping them — which is what R2 step 1 does to
+ * every other C0/C1 control, and what `forCell`/`forCellText` do to this one —
+ * destroys the indentation that makes recovered code readable, and readable
+ * recovered code is the entire deliverable of the surface this wrapper exists
+ * for. A file whose every line begins flush left is not the developer's file.
+ *
+ * AND RENDERING THE TAB RAW IS NOT THE ANSWER EITHER. The row is
+ * `white-space: pre` at a fixed height, and a raw TAB inside it lets the FILE
+ * choose the column geometry: the tab stop is the renderer's, not DefMiner's,
+ * and a hostile map can indent a line to an arbitrary column by emitting tabs.
+ * So the run is DefMiner-authored — {@link SOURCE_LINE_TAB_SPACES}, a fixed two
+ * spaces — and never derived from the file.
+ *
+ * EVERY OTHER C0/C1 CONTROL IS STRIPPED, UNCHANGED, and bidi overrides and
+ * isolates are stripped unchanged. The substitution happens BEFORE the engine
+ * call, so what the engine receives contains no TAB and its own step 1 is
+ * neither weakened nor duplicated: this function still re-asserts R2 by CALLING
+ * the engine rather than by restating it, which is this module's first rule.
+ *
+ * @param value target-controlled and assumed hostile.
+ */
+export function forSourceLine(value: string): string {
+  return forDisplayText(withTabsExpanded(value), SOURCE_LINE_MAX_GRAPHEMES);
+}
+
+/**
+ * Whether {@link forSourceLine} had to cut the line — the sibling predicate,
+ * because the wrapper returns a bare string.
+ *
+ * IT DOES NOT WALK THE VALUE TWICE AND IT DOES NOT COUNT GRAPHEMES. The engine's
+ * grapheme truncation keeps a PREFIX, so the output is the whole prepared line
+ * when nothing was cut and a strictly shorter prefix of it when something was —
+ * which makes a length comparison exact rather than approximate. `forDisplay`'s
+ * `{ shown, total }` would answer the same question by walking the entire value
+ * to compute `total`, and this module already records what that walk costs on a
+ * 4 MiB single-line value: a 37,395 ms scroll against 4,010 ms.
+ *
+ * The caller that needs the SENTENCE — "Line {n} truncated at {shown} of
+ * {total} characters" — is the viewer's own truncation affordance and pays for
+ * `total` deliberately, once, for the line the operator asked about. This
+ * predicate is for the per-row marker, which is rendered for every visible row.
+ */
+export function sourceLineTruncated(value: string): boolean {
+  const prepared = withTabsExpanded(value);
+  return forDisplayText(prepared, SOURCE_LINE_MAX_GRAPHEMES) !== prepared;
 }
 
 /**

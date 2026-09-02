@@ -26,22 +26,40 @@
 // literals, the same rule hostile.fixture.ts states: a literal C0 control or
 // RIGHT-TO-LEFT OVERRIDE is invisible in every diff and every review tool.
 
+import { readFileSync } from "node:fs";
+
 import {
   BIDI_OVERRIDES_ISOLATES,
   C0_C1_CONTROLS,
   EVIDENCE_PANEL_MAX_GRAPHEMES,
+  SOURCE_LINE_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
 } from "@defminer/engine/sanitise";
+import {
+  SOURCES_LABEL_CASE_IDS,
+  SOURCES_LABEL_CASES,
+} from "@defminer/engine/sourcemap/map-fixture";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+
+import {
+  ROW_HEIGHT_CLASS,
+  rowHeightClass,
+  SOURCE_LINE_HEIGHT_CLASS,
+  SOURCE_LINE_HEIGHT_PX,
+} from "../components/table-contract";
 
 import {
   assertHighlightRanges,
   CELL_TEXT_CLASS,
   copyToClipboard,
   forCell,
+  forCellText,
   forPanel,
+  forSourceLine,
   HIGHLIGHT_CLASS,
+  SOURCE_LINE_TAB_SPACES,
+  sourceLineTruncated,
   TABLE_ROW_HEIGHT_PX,
   truncationNotice,
 } from "./display";
@@ -334,5 +352,259 @@ describe("TABLE_ROW_HEIGHT_PX — one number, one place", () => {
     // hostile.spec.ts asserts against the same one — a second copy is how the
     // scroller and the row come to disagree by four pixels.
     expect(TABLE_ROW_HEIGHT_PX).toBe(32);
+  });
+});
+
+// ===========================================================================
+// THE THIRD TIER — `forSourceLine`, ITS CAP, ITS TAB EXCEPTION AND ITS ROW
+// ===========================================================================
+// ADDED BY PLAN 07-07. The same three things a WRAPPER can get wrong are what
+// is checked here: binding the wrong cap, reaching the cap by a LITERAL rather
+// than by name, and reimplementing a step of R2 instead of calling it.
+//
+// The fourth is new to this wrapper and is the ONE DELIBERATE EXCEPTION: a TAB
+// renders as a DefMiner-authored run of two spaces instead of being stripped.
+// It is asserted BY CHARACTER CODE rather than by a visual match, because "two
+// spaces" and "a tab that happens to render as two spaces" are
+// indistinguishable in a diff — and the difference between them is whether
+// DefMiner or the hostile file owns the column geometry.
+//
+// Adversarial characters are written as ESCAPES rather than literals, the rule
+// hostile.fixture.ts states and this file already follows: a literal C0 control
+// or RIGHT-TO-LEFT OVERRIDE is invisible in every diff and every review tool.
+
+/** This module's own source, for the two assertions that are about what is
+ *  WRITTEN rather than about what is computed.
+ *
+ *  Repo-relative, the spelling `frontend-safety.spec.ts` already uses for its
+ *  own walk root: vitest runs from the workspace root and `import.meta.url` is
+ *  not a file URL under the transform. */
+const DISPLAY_MODULE = "packages/frontend/src/safety/display.ts";
+
+/** An unpaired UTF-16 surrogate — what a cap applied by `slice` rather than by
+ *  grapheme leaves behind on a four-byte character. The same predicate
+ *  hostile.spec.ts carries, for the same reason. */
+const hasLoneSurrogate = (text: string): boolean => {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(i + 1);
+      if (Number.isNaN(next) || next < 0xdc00 || next > 0xdfff) return true;
+      i++;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
+};
+
+describe("forSourceLine — the third cap, bound in the name", () => {
+  it("reaches the cap BY NAME from the engine, never as a literal", () => {
+    // A SOURCE-LEVEL ASSERTION, because the defect it catches is invisible at
+    // run time: `forDisplayText(v, 1024)` behaves identically to
+    // `forDisplayText(v, SOURCE_LINE_MAX_GRAPHEMES)` today, and stops behaving
+    // identically the moment the engine's constant moves. This module's header
+    // states the rule — the cap is bound at the WRAPPER, and a call site never
+    // mentions it.
+    const source = readFileSync(DISPLAY_MODULE, "utf8");
+    const imported =
+      /import \{([\s\S]*?)\} from "@defminer\/engine\/sanitise";/.exec(source);
+    expect(
+      imported,
+      "display.ts no longer imports from the engine",
+    ).not.toBeNull();
+    expect(imported?.[1]).toContain("SOURCE_LINE_MAX_GRAPHEMES");
+
+    const body = /export function forSourceLine\([\s\S]*?\n\}/.exec(source);
+    expect(body, "forSourceLine is no longer declared here").not.toBeNull();
+    expect(body?.[0]).toContain("SOURCE_LINE_MAX_GRAPHEMES");
+    // No three-or-more-digit number anywhere in the wrapper: 1024 written out
+    // is what this rule exists to forbid.
+    expect(body?.[0]).not.toMatch(/[0-9]{3,}/);
+  });
+
+  it("renders a line of EXACTLY the cap unchanged", () => {
+    const exact = "e".repeat(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(forSourceLine(exact)).toBe(exact);
+    expect(forSourceLine(exact).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(sourceLineTruncated(exact)).toBe(false);
+  });
+
+  it("cuts a line ONE past the cap to exactly the cap, and says so", () => {
+    // THE OFF-BY-ONE FROM THE OTHER SIDE. A `>=` / `>` slip is either a silent
+    // truncation at the boundary or a silent overflow past it, and exercising
+    // one side alone passes for whichever one the slip happened to get right.
+    const over = "e".repeat(SOURCE_LINE_MAX_GRAPHEMES + 1);
+    expect(forSourceLine(over).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(sourceLineTruncated(over)).toBe(true);
+  });
+
+  it("is a DIFFERENT cap from both shipped wrappers, observably", () => {
+    // Not a restatement of the engine's constant assertion: this drives the
+    // three WRAPPERS over one value and shows they answer three lengths, which
+    // is what makes a mistyped constant a VISIBLY wrong render.
+    const long = "e".repeat(EVIDENCE_PANEL_MAX_GRAPHEMES + 1);
+    expect(forCellText(long).length).toBe(TABLE_CELL_MAX_GRAPHEMES);
+    expect(forSourceLine(long).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(forPanel(long).text.length).toBe(EVIDENCE_PANEL_MAX_GRAPHEMES);
+  });
+});
+
+describe("forSourceLine — the ONE exception: TAB is rendered, not stripped", () => {
+  it("turns one TAB into exactly two SPACE characters, by character code", () => {
+    const out = forSourceLine("\u0009x");
+    expect([...out].map((character) => character.codePointAt(0))).toEqual([
+      0x20, 0x20, 0x78,
+    ]);
+    expect(out.includes("\u0009")).toBe(false);
+  });
+
+  it("takes the run from DefMiner's constant, not from the file", () => {
+    expect(SOURCE_LINE_TAB_SPACES).toBe("  ");
+    expect(SOURCE_LINE_TAB_SPACES.length).toBe(2);
+    expect(forSourceLine("\u0009")).toBe(SOURCE_LINE_TAB_SPACES);
+    // Two tabs are two runs and not one merged one: the indentation DEPTH the
+    // developer wrote is the thing being preserved.
+    expect(forSourceLine("\u0009\u0009")).toBe(
+      SOURCE_LINE_TAB_SPACES + SOURCE_LINE_TAB_SPACES,
+    );
+  });
+
+  it("strips every OTHER C0/C1 control, unchanged", () => {
+    // The exception is ONE CHARACTER WIDE. NUL, BEL, ESC, US, DEL and the C1
+    // range are removed exactly as `forCellText` removes them.
+    const out = forSourceLine("a\u0000b\u0007c\u001Bd\u001Fe\u007Ff\u009Fg");
+    expect(out).toBe("abcdefg");
+    expect(stripsToNothing(out, C0_C1_CONTROLS)).toBe(true);
+  });
+
+  it("strips bidi overrides and isolates, unchanged", () => {
+    const out = forSourceLine("\u202Emoc.live\u202C");
+    expect(stripsToNothing(out, BIDI_OVERRIDES_ISOLATES)).toBe(true);
+  });
+
+  it("counts the EXPANDED run against the cap, so a tab run cannot overflow it", () => {
+    // The substitution happens BEFORE the engine truncates, which is the only
+    // ordering under which a line of tabs cannot exceed the cap after
+    // expansion. The opposite order caps at 1,024 tabs and then renders 2,048
+    // characters into a row fixed at one line.
+    const tabs = "\u0009".repeat(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(forSourceLine(tabs).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+  });
+});
+
+describe("forSourceLine — the measured hostile labels, rendered safely", () => {
+  const exercisedLabels: string[] = [];
+
+  it.each(
+    SOURCES_LABEL_CASES.map(
+      (labelCase) => [labelCase.id, labelCase.value] as const,
+    ),
+  )("%s survives forSourceLine", (id, value) => {
+    const out = forSourceLine(value);
+    expect(
+      stripsToNothing(out, C0_C1_CONTROLS),
+      `case ${id} kept a C0/C1 control character`,
+    ).toBe(true);
+    expect(
+      stripsToNothing(out, BIDI_OVERRIDES_ISOLATES),
+      `case ${id} kept a bidi override or isolate`,
+    ).toBe(true);
+    expect(
+      hasLoneSurrogate(out),
+      `case ${id} left a split character behind`,
+    ).toBe(false);
+    exercisedLabels.push(id);
+  });
+
+  it("exercised EVERY label case in the fixture module", () => {
+    // The exhaustiveness assertion map-fixture.ts asks every consumer to make:
+    // the difference between iterating the fixture and iterating the part of it
+    // somebody happened to write a case for.
+    expect([...exercisedLabels].sort()).toEqual(
+      [...SOURCES_LABEL_CASE_IDS].sort(),
+    );
+  });
+
+  it("the 4 KB label is cut at the cap and the RTL label keeps its climb", () => {
+    // THE TRACER'S TWO NAMED CASES, stated outside the loop so a reader sees
+    // which two the plan called out and what each one proves.
+    const fourKilobytes = SOURCES_LABEL_CASES.find(
+      (labelCase) => labelCase.id === "four-kilobyte-label",
+    );
+    expect(
+      fourKilobytes,
+      "map-fixture.ts no longer exports four-kilobyte-label",
+    ).toBeDefined();
+    expect(forSourceLine(fourKilobytes?.value ?? "").length).toBe(
+      SOURCE_LINE_MAX_GRAPHEMES,
+    );
+    expect(sourceLineTruncated(fourKilobytes?.value ?? "")).toBe(true);
+
+    const rtl = SOURCES_LABEL_CASES.find(
+      (labelCase) => labelCase.id === "unicode-rtl-override",
+    );
+    expect(
+      rtl,
+      "map-fixture.ts no longer exports unicode-rtl-override",
+    ).toBeDefined();
+    const out = forSourceLine(rtl?.value ?? "");
+    expect(stripsToNothing(out, BIDI_OVERRIDES_ISOLATES)).toBe(true);
+    // AND THE CLIMB IS STILL THERE. Sanitisation removes the invisible
+    // characters; it does not rewrite the path. `path.normalize` does the
+    // opposite on this exact fixture — it CONSUMES the RTL run and FOLLOWS the
+    // climbs to `defminer-escape.txt` — which is the measured reason node:path
+    // is banned on the tree path (SPIKE-12 #18).
+    expect(out).toContain("..");
+  });
+
+  it("never splits a combining sequence or a surrogate pair at the cap", () => {
+    // A cap applied by `slice` rather than by grapheme cuts a four-byte
+    // character in half and leaves a lone surrogate, which renders as a
+    // replacement glyph in a string the operator is reading character by
+    // character. Both shapes, driven past the boundary.
+    const pairs = "\u{1F44D}\u{1F3FD}".repeat(SOURCE_LINE_MAX_GRAPHEMES);
+    expect(hasLoneSurrogate(forSourceLine(pairs))).toBe(false);
+
+    const stacked = "e\u0301\u0302\u0303".repeat(SOURCE_LINE_MAX_GRAPHEMES);
+    const out = forSourceLine(stacked);
+    expect(hasLoneSurrogate(out)).toBe(false);
+    // The LAST kept grapheme kept its whole mark stack rather than half of it.
+    expect(out.endsWith("e\u0301\u0302\u0303")).toBe(true);
+  });
+});
+
+describe("SOURCE_LINE_HEIGHT_PX — the SECOND number, beside the first", () => {
+  it("is 24px and is NOT the table row height", () => {
+    expect(SOURCE_LINE_HEIGHT_PX).toBe(24);
+    expect(SOURCE_LINE_HEIGHT_PX).not.toBe(TABLE_ROW_HEIGHT_PX);
+    // `TABLE_ROW_HEIGHT_PX` is byte-unchanged by plan 07-07 — the tree still
+    // reads it, and the viewer reads the new one.
+    expect(TABLE_ROW_HEIGHT_PX).toBe(32);
+  });
+
+  it("resolves to the LITERAL Tailwind utility, keyed by the constant", () => {
+    // The literal requirement is not decoration: Tailwind's JIT only emits a
+    // utility it can SEE spelled out in the scanned source, so an interpolated
+    // height scans as nothing and the built stylesheet carries no rule at all.
+    expect(SOURCE_LINE_HEIGHT_CLASS).toBe("h-6");
+    expect(ROW_HEIGHT_CLASS).toBe("h-8");
+  });
+
+  it("THROWS for a height with no registered class, with the map's own message", () => {
+    // THE FAILING PATH, EXECUTED — the same demonstration as deleting the map
+    // entry by hand, without leaving the deletion in the tree. A resolver that
+    // fell back would render rows at one height while the scroller computed
+    // geometry at another, which produces no error and misplaces a row per
+    // screen.
+    expect(() => rowHeightClass(SOURCE_LINE_HEIGHT_PX + 1)).toThrow(
+      /no Tailwind utility is registered for it/,
+    );
+    expect(() => rowHeightClass(SOURCE_LINE_HEIGHT_PX + 1)).toThrow(
+      /as a LITERAL/,
+    );
+    // And the two heights that ARE registered do not throw.
+    expect(() => rowHeightClass(SOURCE_LINE_HEIGHT_PX)).not.toThrow();
+    expect(() => rowHeightClass(TABLE_ROW_HEIGHT_PX)).not.toThrow();
   });
 });
