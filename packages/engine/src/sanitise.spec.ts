@@ -31,6 +31,7 @@ import {
   EVIDENCE_PANEL_MAX_GRAPHEMES,
   forDisplay,
   forDisplayText,
+  forDisplayTextTruncated,
   forEvidence,
   SOURCE_LINE_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
@@ -336,6 +337,100 @@ describe("forDisplayText — the cell path, held to forDisplay's answer", () => 
       `forDisplayText took ${String(Math.round(textOnly))} ms against ` +
         `forDisplay's ${String(Math.round(counting))} ms over 4 MiB. The text ` +
         `path must not be paying for the count it does not report.`,
+    ).toBeLessThan(Math.max(counting / 2, 1));
+  });
+});
+
+describe("forDisplayTextTruncated — the CUT, and nothing but the cut", () => {
+  // 07-REVIEW.md HI-01. The frontend used to answer "was this line cut?" by
+  // comparing `forDisplayText(v, cap)` against `v`, which is true whenever
+  // EITHER STRIP fired. That is a different question, and the difference was
+  // visible on ordinary input: `\r` is a C0 control, so every line of a
+  // CRLF-authored source answered `true`.
+
+  it.each([...HOSTILE_CASES])(
+    "$id: agrees EXACTLY with forDisplay's shown < total, at the cell cap",
+    (hostileCase) => {
+      // THE ANTI-DRIFT ASSERTION, in the shape this file already uses for
+      // `forDisplayText`. `forDisplay` walks the whole value and reports both
+      // counts; this predicate stops at the cap. They must answer the same
+      // question, or the marker and the sentence disagree on screen.
+      const measured = forDisplay(hostileCase.value, TABLE_CELL_MAX_GRAPHEMES);
+      expect(
+        forDisplayTextTruncated(hostileCase.value, TABLE_CELL_MAX_GRAPHEMES),
+        hostileCase.why,
+      ).toBe(measured.shown < measured.total);
+    },
+  );
+
+  it.each([...HOSTILE_CASES])(
+    "$id: agrees EXACTLY with forDisplay's shown < total, at the source-line cap",
+    (hostileCase) => {
+      const measured = forDisplay(hostileCase.value, SOURCE_LINE_MAX_GRAPHEMES);
+      expect(
+        forDisplayTextTruncated(hostileCase.value, SOURCE_LINE_MAX_GRAPHEMES),
+        hostileCase.why,
+      ).toBe(measured.shown < measured.total);
+    },
+  );
+
+  it("is FALSE for a value the strips shortened and the cap did not", () => {
+    // The finding's own reproduction, at the engine boundary. Thirteen bytes,
+    // one of them a carriage return, against a cap of 1,024.
+    expect(
+      forDisplayTextTruncated("const a = 1;\r", SOURCE_LINE_MAX_GRAPHEMES),
+    ).toBe(false);
+    expect(forDisplayTextTruncated("\u202Ex", SOURCE_LINE_MAX_GRAPHEMES)).toBe(
+      false,
+    );
+    // And the string comparison it replaced would have said `true` for both.
+    expect(
+      forDisplayText("const a = 1;\r", SOURCE_LINE_MAX_GRAPHEMES),
+    ).not.toBe("const a = 1;\r");
+  });
+
+  it("is exact at the boundary from both sides", () => {
+    const exact = "e".repeat(TABLE_CELL_MAX_GRAPHEMES);
+    expect(forDisplayTextTruncated(exact, TABLE_CELL_MAX_GRAPHEMES)).toBe(
+      false,
+    );
+    expect(forDisplayTextTruncated(exact + "e", TABLE_CELL_MAX_GRAPHEMES)).toBe(
+      true,
+    );
+    // Graphemes, not code units: a combining pair is ONE character to the cap.
+    const combining = "e\u0301".repeat(TABLE_CELL_MAX_GRAPHEMES);
+    expect(combining.length).toBe(TABLE_CELL_MAX_GRAPHEMES * 2);
+    expect(forDisplayTextTruncated(combining, TABLE_CELL_MAX_GRAPHEMES)).toBe(
+      false,
+    );
+  });
+
+  it("rejects an absent or nonsensical cap exactly as forDisplay does", () => {
+    expect(forDisplayTextTruncated.length).toBe(2);
+    expect(() => forDisplayTextTruncated("x", 0)).toThrow(RangeError);
+    expect(() => forDisplayTextTruncated("x", 1.5)).toThrow(RangeError);
+  });
+
+  it("answers 4 MiB far faster than the counting path — the per-ROW property", () => {
+    // The reason the predicate exists at all: it is called for every VISIBLE
+    // ROW, and `forDisplay`'s `total` walk is what `display.ts` measures at
+    // 37,395 ms of scroll against 4,010 ms. Same shape assertion, same reason.
+    const raw = "a".repeat(FOUR_MB);
+
+    const countingStarted = performance.now();
+    forDisplay(raw, TABLE_CELL_MAX_GRAPHEMES);
+    const counting = performance.now() - countingStarted;
+
+    const predicateStarted = performance.now();
+    const cut = forDisplayTextTruncated(raw, TABLE_CELL_MAX_GRAPHEMES);
+    const predicateOnly = performance.now() - predicateStarted;
+
+    expect(cut).toBe(true);
+    expect(
+      predicateOnly,
+      `forDisplayTextTruncated took ${String(Math.round(predicateOnly))} ms ` +
+        `against forDisplay's ${String(Math.round(counting))} ms over 4 MiB. ` +
+        `The predicate must not be paying for the count it does not report.`,
     ).toBeLessThan(Math.max(counting / 2, 1));
   });
 });

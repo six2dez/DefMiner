@@ -847,6 +847,68 @@ describe("viewer-position-strip / error — a decode throw degrades the STRIP on
   });
 });
 
+// ---------------------------------------------------------------------------
+// 07-REVIEW.md HI-01 / HI-02 — THE TRUNCATION PREDICATE AND ITS TWO INTEGERS
+// ---------------------------------------------------------------------------
+//
+// Both findings were filed with an EXECUTED reproduction and both are asserted
+// here through the mounted component, because the visible damage was three
+// render-level consequences rather than a wrong return value: a marker on every
+// row, a false one-line sentence, and a position strip that could never reach
+// `mapped` for the whole file.
+
+describe("source-viewer / truncation — a CRLF file is not a truncated file", () => {
+  /** The reviewer's reproduction: an ordinary Windows-authored source. Lines
+   *  arrive from `split("\n")`, so every one of them ends in a `\r`. */
+  const CRLF = "const a = 1;\r\nconst b = 2;\r\nexport { a, b };\r\n";
+
+  it("renders NO truncation marker on any row", async () => {
+    const wrapper = await mountViewer(clientReturning(ok(contentArm(CRLF))));
+    // Before the fix EVERY visible row carried the marker, on a file where
+    // nothing was cut: `\r` is a C0 control, and the predicate was asking
+    // whether the string had CHANGED rather than whether it had been CUT.
+    expect(
+      wrapper.findAll("[data-defminer-source-line-truncated]"),
+    ).toHaveLength(0);
+    // Non-vacuity: the rows really are there and really did lose the `\r`.
+    expect(codeNodes(wrapper)[0]?.textContent).toBe("const a = 1;");
+  });
+
+  it("lets the position strip reach a POSITION state instead of pinning it", async () => {
+    // THE FINDING'S SECOND CONSEQUENCE, AND THE WORST ONE. The strip gives
+    // truncation absolute precedence, so a `truncation` that is non-null for
+    // every line makes MAP-03's entire readout unreachable — for the whole
+    // file, on every selection, permanently.
+    const wrapper = await mountViewer(
+      clientReturning(
+        ok(contentArm(CRLF)),
+        ok({ outcome: "mappings", mappings: "AAAA" }),
+      ),
+    );
+    await wrapper.findAll("[data-defminer-source-line]")[0]?.trigger("click");
+    await flush();
+
+    const strip = wrapper.find(STRIP);
+    expect(strip.text()).not.toContain("truncated");
+    expect(strip.text()).toBe(
+      "This line has no position in the bundle's mappings.",
+    );
+  });
+
+  it("does not claim a one-line CRLF file has no line structure", async () => {
+    // O-02's sentence fires on `lines.length === 1 && sourceLineTruncated(only)`
+    // and read, verbatim, "This file has no line structure — it is one line of
+    // 13 bytes… The line is truncated at 1,024 characters." about thirteen
+    // bytes of readable code.
+    const wrapper = await mountViewer(
+      clientReturning(ok(contentArm("const a = 1;\r"))),
+    );
+    expect(
+      wrapper.find("[data-defminer-source-viewer-no-line-structure]").exists(),
+    ).toBe(false);
+  });
+});
+
 describe("Copy full line — the clipboard, never the DOM", () => {
   it("writes the FULL untruncated line while the DOM holds only the prefix", async () => {
     const long = "x".repeat(SOURCE_LINE_MAX_GRAPHEMES + 500);

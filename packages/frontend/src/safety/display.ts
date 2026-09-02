@@ -46,6 +46,7 @@ import {
   EVIDENCE_PANEL_MAX_GRAPHEMES,
   forDisplay,
   forDisplayText,
+  forDisplayTextTruncated,
   forEvidence,
   SOURCE_LINE_MAX_GRAPHEMES,
   TABLE_CELL_MAX_GRAPHEMES,
@@ -211,25 +212,44 @@ export function forSourceLine(value: string): string {
 }
 
 /**
- * Whether {@link forSourceLine} had to cut the line — the sibling predicate,
+ * Whether {@link forSourceLine} had to CUT the line — the sibling predicate,
  * because the wrapper returns a bare string.
  *
- * IT DOES NOT WALK THE VALUE TWICE AND IT DOES NOT COUNT GRAPHEMES. The engine's
- * grapheme truncation keeps a PREFIX, so the output is the whole prepared line
- * when nothing was cut and a strictly shorter prefix of it when something was —
- * which makes a length comparison exact rather than approximate. `forDisplay`'s
- * `{ shown, total }` would answer the same question by walking the entire value
- * to compute `total`, and this module already records what that walk costs on a
- * 4 MiB single-line value: a 37,395 ms scroll against 4,010 ms.
+ * ===========================================================================
+ * "WAS THIS LINE CUT?", NOT "WAS THIS STRING CHANGED?" (07-REVIEW.md HI-01)
+ * ===========================================================================
+ * This used to read `forDisplayText(prepared, CAP) !== prepared`, and that is a
+ * DIFFERENT QUESTION. `forDisplayText` strips C0/C1, strips bidi and THEN
+ * truncates, so the inequality was true whenever any of the three fired — and
+ * `\r` is a C0 control while lines arrive from `content.split("\n")`. Every
+ * line of a CRLF-authored source therefore answered `true`: the per-row marker
+ * rendered on a file where nothing was truncated, the one-line O-02 sentence
+ * claimed a 13-byte line was cut at 1,024 characters, and the position strip —
+ * which gives truncation absolute precedence — never reached `mapped` for the
+ * whole file, so MAP-03's readout was unreachable. All three were observed.
+ *
+ * SANITISATION IS NOT TRUNCATION. The engine now answers the truncation
+ * question of the truncation STEP only: it strips first and compares the
+ * grapheme count of the STRIPPED value against the cap, in the unit the cap is
+ * expressed in. A line that lost a `\r`, an ESC or a U+202E and nothing else
+ * answers `false`, which is the truth.
+ *
+ * IT STILL DOES NOT WALK THE WHOLE VALUE. `forDisplayTextTruncated` stops
+ * counting the instant it passes the cap — O(cap) past the strip — so the per-
+ * row path keeps the property this predicate has always been about.
+ * `forDisplay`'s `{ shown, total }` would walk the entire value to compute
+ * `total`, and this module records what that costs on a 4 MiB single-line
+ * value: a 37,395 ms scroll against 4,010 ms.
  *
  * The caller that needs the SENTENCE — "Line {n} truncated at {shown} of
- * {total} characters" — is the viewer's own truncation affordance and pays for
- * `total` deliberately, once, for the line the operator asked about. This
- * predicate is for the per-row marker, which is rendered for every visible row.
+ * {total} characters" — is the viewer's truncation affordance, and it pays for
+ * `total` deliberately, once, through {@link sourceLineCounts}.
  */
 export function sourceLineTruncated(value: string): boolean {
-  const prepared = withTabsExpanded(value);
-  return forDisplayText(prepared, SOURCE_LINE_MAX_GRAPHEMES) !== prepared;
+  return forDisplayTextTruncated(
+    withTabsExpanded(value),
+    SOURCE_LINE_MAX_GRAPHEMES,
+  );
 }
 
 /**

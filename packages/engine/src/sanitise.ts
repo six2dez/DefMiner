@@ -352,6 +352,74 @@ export function forDisplayText(raw: string, maxGraphemes: number): string {
   return cappedText(stripped, maxGraphemes);
 }
 
+/**
+ * Whether R2 step 3 — the GRAPHEME TRUNCATION — would fire on this value.
+ *
+ * ===========================================================================
+ * IT ASKS ABOUT THE CUT AND ABOUT NOTHING ELSE
+ * ===========================================================================
+ * `forDisplayText` does THREE things: strip C0/C1, strip bidi, then truncate.
+ * A caller that answers "was this line cut?" by comparing `forDisplayText(v,
+ * cap)` against `v` is answering "was this string CHANGED?" — which is true
+ * whenever either STRIP fired, and the strips are not truncation. `\r` is a
+ * C0 control, so under that comparison every line of a CRLF-authored file
+ * answers `true` and the caller renders a truncation marker on a file where
+ * nothing was truncated (07-REVIEW.md HI-01, observed).
+ *
+ * So the question is asked of the LENGTH against the CAP, on the string the cap
+ * is actually applied to — the STRIPPED one — and in the unit the cap is
+ * expressed in, GRAPHEMES. Sanitisation-driven shrinkage is invisible to it by
+ * construction: a value that lost twenty control characters and no graphemes
+ * past the cap answers `false`, which is the truth.
+ *
+ * O(cap), NOT O(n), past the strip. The count stops the instant it passes the
+ * cap, so this stays usable on the per-ROW path that `forDisplay`'s `total`
+ * walk is too expensive for — the 37,395 ms / 4,010 ms measurement
+ * `forDisplayText`'s comment records is exactly why that matters.
+ *
+ * @param raw target-controlled and assumed hostile.
+ * @param maxGraphemes the SAME cap the matching `forDisplayText` call passes.
+ *   No default — see the header.
+ */
+export function forDisplayTextTruncated(
+  raw: string,
+  maxGraphemes: number,
+): boolean {
+  assertCap(maxGraphemes);
+  const stripped = raw
+    .replace(C0_C1_CONTROLS, "")
+    .replace(BIDI_OVERRIDES_ISOLATES, "");
+  return graphemesExceed(stripped, maxGraphemes);
+}
+
+/**
+ * Does an ALREADY-STRIPPED string hold more than `cap` graphemes?
+ *
+ * The code-unit fast path is exact rather than a heuristic: every grapheme is
+ * at least one UTF-16 code unit, so `length <= cap` implies the grapheme count
+ * is too. It takes the ordinary line — a few dozen characters against a cap of
+ * 1,024 — out of the segmenter entirely.
+ */
+function graphemesExceed(stripped: string, cap: number): boolean {
+  if (stripped.length <= cap) return false;
+  const segmenter = graphemeSegmenter();
+  let seen = 0;
+  if (segmenter === undefined) {
+    // Code points. The backend path, where `Intl.Segmenter` is absent — the
+    // same fallback `capped`/`cappedText` take, so the three agree on the unit.
+    for (const _codePoint of stripped) {
+      seen += 1;
+      if (seen > cap) return true;
+    }
+  } else {
+    for (const _piece of segmenter.segment(stripped)) {
+      seen += 1;
+      if (seen > cap) return true;
+    }
+  }
+  return false;
+}
+
 export function forDisplay(raw: string, maxGraphemes: number): Displayed {
   assertCap(maxGraphemes);
   const stripped = raw

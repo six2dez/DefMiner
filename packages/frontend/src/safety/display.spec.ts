@@ -439,6 +439,68 @@ describe("forSourceLine — the third cap, bound in the name", () => {
     expect(sourceLineTruncated(over)).toBe(true);
   });
 
+  // -------------------------------------------------------------------------
+  // 07-REVIEW.md HI-01 — "WAS THIS LINE CUT?", NOT "WAS THIS STRING CHANGED?"
+  // -------------------------------------------------------------------------
+  //
+  // The predicate compared `forDisplayText(prepared, CAP)` against `prepared`,
+  // which is true whenever EITHER STRIP fired. `\r` is a C0 control and lines
+  // come from `content.split("\n")`, so every line of a CRLF-authored source
+  // answered `true` — the per-row marker rendered on a file where nothing was
+  // cut, the one-line O-02 sentence claimed a 13-byte line was truncated at the
+  // cap, and the position strip (which gives truncation absolute precedence)
+  // never reached `mapped` for the whole file.
+  //
+  // Every case below is a value the STRIPS change and the TRUNCATION does not.
+
+  it("does NOT call a CRLF line truncated", () => {
+    // The reviewer's executed reproduction, verbatim. Before the fix this
+    // asserted `true` and the whole file's position readout was unreachable.
+    const crlf = "const a = 1;\r";
+    expect(sourceLineTruncated(crlf)).toBe(false);
+    expect(forSourceLine(crlf)).toBe("const a = 1;");
+  });
+
+  it("does NOT call a line truncated for a stripped bidi override", () => {
+    expect(sourceLineTruncated("\u202Ex")).toBe(false);
+    expect(forSourceLine("\u202Ex")).toBe("x");
+  });
+
+  it("does NOT call a line truncated for any other stripped control", () => {
+    // ESC in a string literal is legal, ordinary source. So is NUL in a file a
+    // hostile map declared. Neither is a CUT.
+    for (const control of [
+      "\u0000",
+      "\u0007",
+      "\u001B",
+      "\u001F",
+      "\u007F",
+      "\u009F",
+    ]) {
+      expect(sourceLineTruncated("a" + control + "b")).toBe(false);
+    }
+  });
+
+  it("still says TRUE when the strip fires AND the cap is passed", () => {
+    // The strips being invisible to the predicate must not make truncation
+    // invisible to it: a value that is both stripped and cut is still cut.
+    const both = "\r" + "e".repeat(SOURCE_LINE_MAX_GRAPHEMES + 1);
+    expect(sourceLineTruncated(both)).toBe(true);
+  });
+
+  it("counts the CAP in graphemes, so stripping cannot push a line under it", () => {
+    // A line whose graphemes exceed the cap only because the controls are gone
+    // is still over the cap: `forDisplayText` truncates AFTER stripping, so the
+    // predicate must ask about the stripped length and not the raw one.
+    const padded = "e"
+      .repeat(SOURCE_LINE_MAX_GRAPHEMES + 1)
+      .split("")
+      .join("\u0000");
+    expect(padded.length).toBeGreaterThan(SOURCE_LINE_MAX_GRAPHEMES * 2);
+    expect(sourceLineTruncated(padded)).toBe(true);
+    expect(forSourceLine(padded).length).toBe(SOURCE_LINE_MAX_GRAPHEMES);
+  });
+
   it("is a DIFFERENT cap from both shipped wrappers, observably", () => {
     // Not a restatement of the engine's constant assertion: this drives the
     // three WRAPPERS over one value and shows they answer three lengths, which
