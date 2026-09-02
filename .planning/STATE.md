@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-11-PLAN.md
-last_updated: "2026-09-02T10:20:39.741Z"
+stopped_at: Completed 07-14-PLAN.md
+last_updated: "2026-09-02T10:42:22.568Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 3077442ae46c96a86de7df1e1617600cf033d9eb
+state_head: 7b33586492cc0e0bdebdb139668a73f9cb67339a
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 83
+  completed_plans: 84
 ---
 
 # Project State
@@ -28,11 +28,51 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 2 of 17
+Plan: 12 of 17
 Status: Ready to execute
 Last activity: 2026-09-02 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-14: THE PROSE COUNTER DRIFTED BY THE HANDLER'S OWN HAND AND
+> IS CORRECTED FROM THE FILE COUNT, RECORDED RATHER THAN QUIETLY FIXED, by the
+> rule these notes have followed since 01-17. `state.advance-plan` was invoked
+> EXACTLY ONCE and returned `{"previous_plan": 2, "current_plan": 3}` — it
+> INCREMENTS the prose counter from whatever value it finds, and it found a 2
+> left there by an earlier round. The truth on disk is 17 PLAN files and 12
+> SUMMARY files in this phase, so the line above now reads 12 of 17 and the next
+> outstanding plan is 07-12. THE FRONTMATTER WAS NEVER WRONG: `completed_plans`
+> moved 83 -> 84 correctly, because that handler RECOMPUTES from disk rather than
+> incrementing — which is precisely the difference between the two lines.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the NINTH consecutive occurrence across phases 05, 06 and 07. Steady handler
+> behaviour on this repo, not a transient. The `Progress:` line above still
+> describes PHASE 01 plan execution and is deliberately untouched.
+>
+> MAP-05 AND MAP-06 WERE NOT MARKED COMPLETE, AND THAT IS THE GATE WORKING.
+> `requirements.ready-ids` reported `1/3 ready`. MAP-02 was the ready one and the
+> handler reported it `already_complete` — plan 07-10 had marked it — so
+> `.planning/REQUIREMENTS.md` is byte-unchanged, which the plan also prohibits
+> changing. The other two are declared by sibling plans that have no SUMMARY yet —
+> marking them now would flip the ledger green while the work is still running.
+> They become ready when the LAST declaring plan finishes. Same shape as 07-04's
+> report and phase 06's FIND-04.
+>
+> ONE DEFECT THIS PLAN CAUGHT IN ITS OWN OUTPUT, RECORDED BECAUSE IT IS EVIDENCE
+> A GATE IS NOT DECORATIVE. Task 3's new self-scan over `announce.spec.ts` failed
+> on its first run and named three LITERAL U+2028/U+2029 separators at offsets
+> 20899, 20938 and 23832 — written by this plan's own authoring step, verbatim
+> finding W-2's class, which commit `f6cbf07` already had to repair once in this
+> phase. They were re-spelled as escapes before the commit. The same class then
+> recurred in `07-14-SUMMARY.md` itself and was caught a second time, by the
+> harness's invisible-character warning, and repaired the same way.
+>
+> NO PROHIBITED COMMAND WAS RUN. No `git stash` in any form, no `git clean`, no
+> branch created or switched, and `packages/backend` and `.planning/REQUIREMENTS.md`
+> are byte-unchanged — all four asserted by `git diff --stat` at close-out rather
+> than claimed.
 
 > PHASE 07 PLAN 07-04: THE COUNTERS ARE RIGHT AND NOTHING IS CORRECTED BY HAND.
 > `state.advance-plan` was invoked EXACTLY ONCE and moved the prose position
@@ -368,6 +408,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P09 | 25min | 2 tasks | 8 files |
 | Phase 07-sourcemap-reconstruction P10 | 42min | 3 tasks | 18 files |
 | Phase 07 P11 | 22 min | 3 tasks | 11 files |
+| Phase 07 P14 | 19 min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -736,6 +777,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: P7-D10-7 — the two false REQUIREMENTS.md parentheticals are amended with their ORIGINALS PRESERVED as dated history; a gate demanding zero would have ordered the record falsified
 - [Phase 07]: 07-11: SourceRef and both single-sighting statements now name the bundle; the two-bundle pair is built on a spec-local re-keyed table because the shipped v:8 primary key makes it unrepresentable, leaving migrations.ts byte-unchanged for 07-12's checkpoint.
 - [Phase 07]: 07-11: countSourcesForMap deliberately NOT widened — it is MAP-06's map-level aggregate, not a single-sighting read, and has no production caller (MD-04); wiring and artifact scope handed to plan 07-15.
+- [Phase 07]: MD-01 fix: the row conversion goes on the LEFT of `absorb`s aggregate comparison, with `limits.maxSourceRows` bare on the right — Halving the right-hand side computes the identical answer but reads as a source-count bound wearing a row bounds name — MD-01s exact confusion reintroduced by its own fix — and it would have left `acc.declared > limits.maxSourceRows` in the file, so the ordering grep would have reported a squash that had not happened.
+- [Phase 07]: The MD-01 gate landed in its own commit BEFORE the compensating `2 *` factor was retired, and the ordering is proven from the repository by three greps rather than by an acceptance sentence — With the gate fixed and the factor still 2 the convergence inequality over-states the insert side, which is safe. With the factor changed and the gate still counting sources it under-states, which is verbatim the failure HI-04 records. Two commits: 4bd99c1 then 59347c3, thresholds.spec.ts exit 0 at both.
+- [Phase 07]: `announce.ts` imports SOURCEMAP_TAIL_WINDOW_BYTES from thresholds.ts as its URL bound rather than restating ceil(MAP_MAX_BYTES * 4/3) + ANNOUNCEMENT_PREFIX_MAX — One derivation, not two — the second copy is the one that stops tracking MAP_MAX_BYTES the first time the D-10 ladder is re-run. It is a NUMBER import so the module stays SDK-free, and it sits 81 characters above the longest URL this build can accept, so nothing reachable is cut.
+- [Phase 07]: LO-01s parse-side property is asserted STRUCTURALLY — parse.spec.ts reads parse.ts's decodeInlineMap and compares the source offsets of the size gate and the payload slice — Both orders return the same reason for the same input and only the cost differs, so no behavioural case can be RED. Same move announce.spec.ts already makes for the no-pattern property over both modules: a property no input can expose is asserted against the source or not at all.
+- [Phase 07]: announce.spec.ts now gates ITSELF against literal C0/C1 control bytes and literal U+2028/U+2029 — The gate caught three literal separators in this plans own new fixtures on its first run — verbatim finding W-2s class, which commit f6cbf07 already had to repair once in this phase. A literal separator is invisible in every diff and every review tool, so a human reviewer would not have seen it.
 
 ### Known Risks Carried Forward
 
@@ -778,8 +824,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T10:20:31.636Z
-**Stopped at:** Completed 07-11-PLAN.md
+**Last session:** 2026-09-02T10:42:22.410Z
+**Stopped at:** Completed 07-14-PLAN.md
 **Resume file:** None
 
 ### Blockers
