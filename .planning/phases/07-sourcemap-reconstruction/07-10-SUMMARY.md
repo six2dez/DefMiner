@@ -358,7 +358,7 @@ Three deletions in a 600-line design contract and three in a 1,017-line requirem
 
 The scan walks `packages/frontend/src` recursively for `.ts` and `.vue` files and asserts each of the four raw-confirmation constants is declared exactly once and its sentence written in exactly one file. The report, printed by the assertions themselves:
 
-- **Files scanned: 97** (asserted `> 40`, and asserted to contain `packages/frontend/src/components/export-contract.ts` by name — a scan that walked nothing would otherwise report "declared once" for a constant that does not exist)
+- **Files scanned: 69** (asserted `> 40`, and asserted to contain `packages/frontend/src/components/export-contract.ts` by name — a scan that walked nothing would otherwise report "declared once" for a constant that does not exist)
 - `RAW_EXPORT_CONFIRM_HEADING` — 1 declaration, 1 file carries the sentence
 - `RAW_EXPORT_CONFIRM_BODY_TEMPLATE` — 1 declaration, 1 file carries the sentence
 - `RAW_EXPORT_CONFIRM_LABEL_TEMPLATE` — 1 declaration, 1 file carries the sentence
@@ -510,3 +510,16 @@ Plan-specific gates:
 ---
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-02*
+
+## Self-Check: PASSED
+
+Ran after the SUMMARY was written, against the files and commits it claims.
+
+**Files claimed — all present:** `07-10-SUMMARY.md`, `export-contract.ts`, `ExportDialog.vue`, `SourceBrowser.vue`, `HealthPanel.vue`, `health-contract.ts`, `ROADMAP.md`, `REQUIREMENTS.md`, `05-UI-SPEC.md`.
+
+**Commits claimed — all present in `git log`:** `91d648f`, `ae93c24`, `b4f6159`, `39fc7ac`.
+
+**Two claims were WRONG when first written and are corrected rather than left standing.** Both were caught by executing the claim instead of re-reading it, which is the only reason this section is worth having:
+
+1. **The scan's file count.** The non-vacuity report first said *97 files scanned*. The real number, taken by running the walk, is **69**. 97 was a number I had not measured; the figure above now is. The assertion's own threshold (`> 40`) was never in doubt, but a report that states a count has to state the right one.
+2. **The transitional constant was not fully gone.** `grep -rn "not available in this build" packages/frontend/src` returned one hit — my own explanatory comment in `SourceBrowser.vue`, quoting the deleted string while explaining that it was deleted. The constant itself was gone, so the ledger's requirement was met in substance; but a duplication scan of exactly the kind this plan just wrote for the raw-export ceremony would have hit it, and the SUMMARY's D6 coverage row claimed zero matches. The comment is reworded to describe the deletion without quoting it, and the grep now returns nothing. `SourceBrowser.spec.ts` and `ExportDialog.spec.ts` re-run green (60 tests), `pnpm lint` and `pnpm typecheck` exit 0 after the reword.

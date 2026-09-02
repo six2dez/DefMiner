@@ -166,10 +166,16 @@ const LEAVE_LABEL = "Back to artifacts";
  * the `Sources` cell that led here.
  *
  * BUILT FROM {@link EXPORT_MANIFEST_CTA} RATHER THAN RETYPED, so the CTA's
- * words exist in exactly one place. The third label this strip used to carry —
- * *"… not available in this build"* — is DELETED rather than repurposed: plan
- * 07-09 declared it as a transitional string for a wiring gap this plan closes,
- * and a transitional string kept past its transition is a stub with a new job.
+ * words exist in exactly one place.
+ *
+ * THIS STRIP USED TO CARRY A THIRD LABEL AND IT IS DELETED, NOT REPURPOSED.
+ * Plan 07-09 declared one for the state in which the CTA was present but not
+ * yet wired, and named it a transitional string that plan 07-10 must remove
+ * (broken-windows ledger entry 117). Plan 07-10 wired the CTA, so the constant
+ * and the `canExport` prop it was selected by are both gone — a transitional
+ * string kept past its transition is a stub with a new job. Its wording is
+ * deliberately not quoted here: a duplication scan should find zero copies of a
+ * deleted constant, including in prose.
  */
 const EXPORT_COUNT_PENDING_LABEL = `${EXPORT_MANIFEST_CTA} — counting the recovered sources`;
 
