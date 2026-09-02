@@ -69,3 +69,32 @@ which is where the operator will first see the two tables growing unbounded.
   errors 07-07 recorded**, in `ExportDialog.vue` and `SettingsPanel.vue`. 07-08 adds none: its
   three new modules are clean under `tsc --build`, which is the repo gate and is green. Unchanged
   and still out of scope.
+
+## From plan 07-13 (2026-09-02)
+
+- **D1 is CLOSED by this plan.** `store/retention.ts` now sweeps both tables in the
+  eviction order the operator chose at UAT — `source_sightings` by the two ordinary
+  bounds plus the artifact cascade, `sources` by an anti-join — and `retentionCounts`
+  reports both. The design question D1 declined to answer was answered by the operator,
+  not by the executor. Commits `48a63b0` (cascade), `994fa2c` (both bounds), `71278ad`
+  (the benchmark, and the anti-join's cost fix).
+
+- **`consumer.spec.ts` > "a claim nobody finished > is counted as STALE on the next
+  sighting, never as a cache hit" FAILED ONCE in a three-file run and has not
+  reproduced.** Passed in isolation, passed 2/2 on the same three-file command
+  immediately after, and passed in the full 90-file suite. It is NOT reachable from
+  anything 07-13 changed: the case drives `runOnce(..., { signal: { aborted: true } })`
+  and asserts the abort strands a `pending` analyses row, a path with no retention in
+  it. The shape is the same class UAT test 6 recorded for
+  `tests/frontend-load.spec.ts` — a race whose verdict moves with machine load — and
+  this one is a race between the abort check and the walk rather than a frame budget.
+  Recorded rather than chased: out of this plan's scope boundary, and one
+  non-reproducing failure is not enough to name a cause.
+  **Suggested owner:** any plan that touches `ingest/consumer.ts`'s cancellation path.
+
+- **`vue-tsc` could not be run to re-confirm verifier finding W-4's 6-error baseline.**
+  `pnpm exec vue-tsc` reports `Command "vue-tsc" not found`; the package is not
+  installed in this workspace and, as 07-07 and 07-08 both recorded, it is wired into
+  no gate. 07-13 touches no frontend file — its three changed files are all under
+  `packages/backend/src` — so the baseline cannot have grown. Unchanged and still out
+  of scope.
