@@ -34,7 +34,7 @@
 // have to be right about `..%2f..%2f`, `C:\\`, `\\\\server\\share`, `CON`,
 // `NUL.js`, a NUL byte mid-path, FULLWIDTH FULL STOP pairs and an RTL override
 // that `path.normalize` itself corrupts — every one of which is in this repo's
-// measured 23-label corpus. A matcher has to be right about nothing at all.
+// measured 24-label corpus. A matcher has to be right about nothing at all.
 
 /**
  * The extensions a recovered source may be saved with.

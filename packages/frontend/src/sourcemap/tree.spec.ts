@@ -1,5 +1,5 @@
 // packages/frontend/src/sourcemap/tree.spec.ts — the O-08 display normaliser,
-// driven over the twenty-three measured `sources` labels.
+// driven over the twenty-four measured `sources` labels.
 //
 // ===========================================================================
 // THE IMPORT SET IS ASSERTED AS AN EQUALITY, NOT SEARCHED FOR AS A STRING
@@ -266,7 +266,7 @@ describe("the normaliser has no write path — the round trip is byte-identical"
   });
 
   it("leaves the whole corpus untouched when built as one tree", () => {
-    // The per-case loop builds one row at a time; this builds all twenty-three
+    // The per-case loop builds one row at a time; this builds all twenty-four
     // together, which is the shape the drill-down actually calls, and asserts
     // the same property over the whole array.
     const copies = SOURCES_LABEL_CASES.map((labelCase) => labelCase.value);
@@ -727,12 +727,12 @@ describe("MD-02 — a directory merges on the VERBATIM segment", () => {
 });
 
 // ---------------------------------------------------------------------------
-// THE TWENTY-THREE HOSTILE LABELS, UNMOVED BY MD-02
+// THE TWENTY-FOUR HOSTILE LABELS, UNMOVED BY MD-02
 // ---------------------------------------------------------------------------
 //
 // THE BLAST RADIUS IS PINNED AGAINST THE CORPUS THAT ALREADY EXISTS rather than
 // against cases invented for the fix. A merge-key change is exactly the kind of
-// edit that moves a structure somewhere nobody looked, and the twenty-three
+// edit that moves a structure somewhere nobody looked, and the twenty-four
 // measured labels are where "somewhere nobody looked" lives in this module.
 //
 // EXPLICIT EXPECTATIONS RATHER THAN AN OPAQUE SNAPSHOT, deliberately. A
@@ -745,6 +745,14 @@ describe("MD-02 — a directory merges on the VERBATIM segment", () => {
 // module were both driven over the corpus in one process and their outlines
 // compared. Both produced 47 nodes over 21 roots and the two outlines were
 // equal line for line.
+//
+// THAT COMPARISON WAS MADE OVER THE 23-LABEL CORPUS, and the 47 above remain its
+// own record. WR-03's `loader-query` label (07-21) made the corpus 24 and added
+// exactly ONE line: it is `relative`, so it MERGES into the `src` directory
+// `benign-control` already creates rather than opening a root of its own — the
+// root count is unchanged at 21 and the node count is 48. That one line was
+// MEASURED against the shipped module in the same way the other 47 were, and it
+// is the only line in this array not carried over from the merge-key comparison.
 //
 // EVERY LABEL IS ESCAPED TO PRINTABLE ASCII. A combining acute, a fullwidth
 // full stop and a stripped control byte are invisible in a diff, and an
@@ -794,7 +802,7 @@ function outline(nodes: readonly SourceTreeNode[]): string[] {
 }
 
 /** The measured pre-fix structure of the whole corpus, which is also its
- *  post-fix structure. 47 lines, one per node. */
+ *  post-fix structure, plus WR-03's one merged line. 48 lines, one per node. */
 const CORPUS_OUTLINE: readonly string[] = [
   "0|directory|etc|0|0|0||-",
   "1|source|defminer-escape.txt|0|6|6|path-clamped|dup",
@@ -842,11 +850,16 @@ const CORPUS_OUTLINE: readonly string[] = [
   "0|directory|src|21|0|0||-",
   "1|directory|app|21|0|0||-",
   "2|source|index.js|21|0|0||-",
+  // WR-03's loader-query label, MERGED into the `src` directory above rather
+  // than given a root: the `?` and the `&`s survive into the node label
+  // VERBATIM, which is the losslessness this outline exists to pin.
+  "1|source|App.vue?vue&type=script&lang.ts|23|0|0||-",
   `0|source|${"L".repeat(TABLE_CELL_MAX_GRAPHEMES)}|22|0|0|label-truncated|-`,
 ];
 
-/** The measured node count of the corpus tree, before and after the fix. */
-const CORPUS_NODE_COUNT = 47;
+/** The measured node count of the corpus tree, before and after the fix — 47
+ *  for the 23-label corpus, plus WR-03's one merged leaf. */
+const CORPUS_NODE_COUNT = 48;
 /** The measured root count of the corpus tree, before and after the fix. */
 const CORPUS_ROOT_COUNT = 21;
 
@@ -872,7 +885,7 @@ describe("the hostile corpus builds the tree it built before the merge changed",
     expect(outline(buildSourceTree(LABEL_ROWS))).toEqual(CORPUS_OUTLINE);
   });
 
-  it("is 47 nodes over 21 roots — the counts the equality is made of", () => {
+  it("is 48 nodes over 21 roots — the counts the equality is made of", () => {
     const tree = buildSourceTree(LABEL_ROWS);
     expect(everyNode(tree).length).toBe(CORPUS_NODE_COUNT);
     expect(everyNode(tree).length).toBe(CORPUS_OUTLINE.length);

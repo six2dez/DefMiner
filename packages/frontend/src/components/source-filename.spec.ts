@@ -85,7 +85,7 @@ describe("R6 over the whole measured corpus — the label has TEN degrees of fre
   ];
 
   it("drives both corpora and the null label", () => {
-    expect(SOURCES_LABEL_CASES).toHaveLength(23);
+    expect(SOURCES_LABEL_CASES).toHaveLength(24);
     expect(LABELS.length).toBeGreaterThan(40);
   });
 

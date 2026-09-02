@@ -973,7 +973,7 @@ for (const corpus of TREE_CORPORA) {
 }
 
 describe("source tree — the whole corpus at once, still lossless", () => {
-  it("renders all twenty-three labels in one tree and rewrites none of them", () => {
+  it("renders all twenty-four labels in one tree and rewrites none of them", () => {
     // The loops above build one row at a time; this is the shape the drill-down
     // actually calls, and it is where a duplicate-label collision, a shared
     // directory node and a clamped climb all coexist.

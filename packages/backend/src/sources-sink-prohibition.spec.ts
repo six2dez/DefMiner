@@ -31,11 +31,12 @@
 // for it, and leave behind the thing that notices when it becomes reachable.
 //
 // ===========================================================================
-// WHY THE FIXTURE CORPUS IS 23 MEASURED STRINGS AND NOT A HANDFUL OF `../`
+// WHY THE FIXTURE CORPUS IS 24 MEASURED STRINGS AND NOT A HANDFUL OF `../`
 // ===========================================================================
 // The firing corpus is `SOURCES_LABEL_CASES` from
 // `packages/engine/src/sourcemap/map-fixture.ts` — SPIKE-12's 22-string
-// `path_resolution` corpus VERBATIM plus D-12's 4 KB label. IMPORTED, NEVER
+// `path_resolution` corpus VERBATIM plus D-12's 4 KB label and WR-03's
+// loader-query label, the relative label carrying a query axis. IMPORTED, NEVER
 // FORKED: there is no second traversal corpus in this repository, and a gate with
 // its own private copy of the hostile strings is a gate that stops tracking them.
 //
@@ -946,7 +947,7 @@ describe("the two derived sets track the files they are derived from", () => {
 });
 
 // ---------------------------------------------------------------------------
-// EVERY RULE'S FAILING PATH, EXECUTED — against the 23 MEASURED LABELS
+// EVERY RULE'S FAILING PATH, EXECUTED — against the 24 MEASURED LABELS
 // ---------------------------------------------------------------------------
 
 const rulesOf = (src: string, file = "fixture.ts"): string[] =>
@@ -1157,7 +1158,7 @@ describe("the gate's own failure paths, every one of them executed", () => {
 
   it("the ENCODINGS SPIKE-12 measured are in the corpus, by their measured bytes", () => {
     // Named individually because these four are the whole reason the corpus is
-    // 23 measured strings rather than a handful of `../`. If any of them is
+    // 24 measured strings rather than a handful of `../`. If any of them is
     // reworded upstream, this fails rather than quietly testing ASCII.
     expect(LABEL_BY_ID.get("null-byte")).toContain("\u0000");
     expect(LABEL_BY_ID.get("unicode-rtl-override")).toContain("‮");
@@ -1182,7 +1183,7 @@ describe("the fixture set covers the rule set, and the corpus is the WHOLE corpu
       exercised.add(id);
     }
     expect([...exercised].sort()).toEqual([...SOURCES_LABEL_CASE_IDS].sort());
-    expect(SOURCES_LABEL_CASE_IDS.length).toBe(23);
+    expect(SOURCES_LABEL_CASE_IDS.length).toBe(24);
   });
 
   it("EVERY declared rule id has at least one firing fixture", () => {
