@@ -1,5 +1,5 @@
 ---
-status: complete
+status: superseded
 phase: 07-sourcemap-reconstruction
 source: [07-VERIFICATION.md]
 started: 2026-09-02T07:13:35Z
@@ -19,17 +19,23 @@ note: Confirmed on real proxied traffic against a live Caido at commit df5b101. 
 
 ### 2. Decide the owner and eviction ORDER for sweeping `sources` and `source_sightings` (deferred D1)
 expected: An assigned phase or plan, and an answer to the design question — does a `sources` row die when its last sighting goes, or age independently?
-result: issue
+result: pass
 reported: "Cascade: a source dies with its last sighting"
 severity: major
-note: The DESIGN QUESTION is now answered; the WIRING is not. Sweep `source_sightings` first by the normal caps, then delete `sources` rows with no surviving sighting (anti-join, not an FK — no schema change, so no fifth EXPECTED_TABLES approval). Content-addressed dedupe survives: a source sighted from two bundles outlives either one alone.
+resolved_by: 07-13-PLAN.md
+resolved_at: 2026-09-02
+resolution: "WIRING LANDED. `sweepRetention` now deletes from both tables in the operator's cascade order, by anti-join and never a foreign key, so no fifth EXPECTED_TABLES approval was taken. `retention.spec.ts:1373` proves a source sighted from two bundles outlives one eviction. Independently re-verified in 07-VERIFICATION.md (must-have 14). Original issue text preserved above as the record of what was observed at round-1 UAT. Residual WR-02 (cascade omits `deleteDigest`) was raised in round 2 and accepted as a deferred follow-up."
+note: The DESIGN QUESTION was answered at round-1 UAT; the WIRING was not, at that time. Sweep `source_sightings` first by the normal caps, then delete `sources` rows with no surviving sighting (anti-join, not an FK — no schema change, so no fifth EXPECTED_TABLES approval). Content-addressed dedupe survives: a source sighted from two bundles outlives either one alone.
 
 ### 3. Re-measure the A8 COST half and land the harness in the tree
 expected: Run A (no backlog, ceiling 50,000) and Run B (20,000-row aged backlog, ceiling 100) reproduce 07-05-SUMMARY.md's figures — 40 sweeps, <=512 rows/pass, ~+11 ms idle and ~+585 ms working.
-result: issue
+result: pass
 reported: "Land the harness as a gap — assert bounds, not timings"
 severity: minor
-note: Confirmed at HEAD — `a8-measure.spec.ts` does not exist and `git log --diff-filter=A --all` shows it was never committed, so the recorded figures are unreproducible by anyone. The FREQUENCY half is independently wired and green (three `retentionSweeps` assertions in consumer.spec.ts). Pairs with the D1 sweep work: same module, one round.
+resolved_by: 07-13-PLAN.md
+resolved_at: 2026-09-02
+resolution: "HARNESS LANDED AND COMMITTED. `packages/backend/src/a8-measure.spec.ts` exists, is in the suite, and asserts BOUNDS with zero wall-clock assertions, as asked. Run B drained 20,000 rows against a ceiling of 100 in 77 passes. The prior verification report's one abstention is discharged. Writing it also surfaced a real quadratic anti-join, which was fixed before commit. Original issue text preserved above."
+note: Confirmed at round-1 UAT — `a8-measure.spec.ts` does not exist and `git log --diff-filter=A --all` shows it was never committed, so the recorded figures are unreproducible by anyone. The FREQUENCY half is independently wired and green (three `retentionSweeps` assertions in consumer.spec.ts). Pairs with the D1 sweep work: same module, one round.
 
 ### 4. Accept or reject the three literal NUL bytes in Phase 7 spec files
 expected: A decision: either re-spell them as escapes (the rule map-fixture.ts states in its own header and honours), or record the deviation with its reason.
@@ -43,9 +49,10 @@ note: Ticked with a dissolution note recorded inline. Malformed maps met by the 
 
 ### 6. The 10,000-row frame-budget backstop is load-sensitive
 expected: `tests/frontend-load.spec.ts` "drops no more frames than the stated allowance" passes in a full-suite run.
-result: issue
+result: skipped
 reported: "Observed during UAT — fails in full-suite runs under machine load, passes 3/3 in isolation"
 severity: minor
+reason: "Operator-deferred, explicitly scoped OUT of the 2026-09-02 gap-closure round and named in every one of the seven plans' prohibitions rather than silently omitted. Pre-existing at unmodified HEAD, so not a Phase 7 regression. Re-measured by the round-2 verifier: PASSED in its run (12 tests, 8.2 s) and still load-sensitive. Remains accurately recorded as open. Original issue text preserved above."
 note: NOT a regression. Reproduced at unmodified HEAD after reverting the NUL fix, and the spec references neither changed file. Earlier full-suite runs today passed in ~15s; failing runs take ~23s. The allowance (8 of 396 frames over 32 ms) is tight enough that concurrent load alone breaches it — observed 52/396.
 
 ## Summary
@@ -60,7 +67,9 @@ blocked: 0
 ## Gaps
 
 - truth: "`sources` and `source_sightings` are swept by retention, in cascade order, so neither table grows unbounded"
-  status: failed
+  status: resolved
+  resolved_by: 07-13-PLAN.md
+  resolved_at: 2026-09-02
   reason: "User decided the eviction order at UAT: cascade — a source dies with its last sighting. `store/retention.ts` names neither table and migration v:8 has no FK and no ON DELETE CASCADE, so both grow without a sweep and deleting an artifact orphans its sightings."
   severity: major
   test: 2
@@ -78,7 +87,9 @@ blocked: 0
   debug_session: ""
 
 - truth: "The A8 cost half is reproducible at HEAD by a committed harness, not only recorded in a SUMMARY"
-  status: failed
+  status: resolved
+  resolved_by: 07-13-PLAN.md
+  resolved_at: 2026-09-02
   reason: "User chose to land the harness. a8-measure.spec.ts was a scratch file deleted after its run and never committed, so 07-05-SUMMARY.md's figures cannot be re-derived at HEAD."
   severity: minor
   test: 3
@@ -94,7 +105,8 @@ blocked: 0
   debug_session: ""
 
 - truth: "The 10,000-row frame-budget backstop gives the same verdict under load as it does idle"
-  status: failed
+  status: deferred
+  deferred_by: operator, 2026-09-02 (scoped out of gap-closure round 1)
   reason: "Discovered during UAT, not by the phase verifier. Fails in full-suite runs when the machine is loaded (52 of 396 frames over 32 ms against an allowance of 8) and passes 3/3 in isolation. Reproduced at unmodified HEAD, so it is not a Phase 7 regression."
   severity: minor
   test: 6
