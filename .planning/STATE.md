@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-21-PLAN.md
-last_updated: "2026-09-02T20:31:30.049Z"
+stopped_at: Completed 07-22-PLAN.md
+last_updated: "2026-09-02T20:47:32.207Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: ce2db42f4ddcbec10f058a54453630d24aab8ecc
+state_head: d52d2606893e4107ed711448c844a23bbdd1f1eb
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 97
-  completed_plans: 93
+  completed_plans: 94
 ---
 
 # Project State
@@ -28,11 +28,33 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 21 of 22
-Status: Executing gap-closure round 2 — 21 of 22 plans complete, 07-22 next
-Last activity: 2026-09-02 — 07-21 complete; G-07-3 / WR-03 first half closed
+Plan: 22 of 22
+Status: Gap-closure round 2 COMPLETE — 22 of 22 plans executed, ready for verification
+Last activity: 2026-09-02 — 07-22 complete; G-07-3 / WR-03 closed in full (option A)
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-22: `state.advance-plan` RETURNED `last_plan` AND THAT IS
+> CORRECT THIS TIME, WHICH IS WHY IT IS RECORDED RATHER THAN ASSUMED. The 07-18
+> drift was a `last_plan` verdict read off a STALE PROSE COUNTER; this one rests
+> on the real count. The handler returned
+> `{"advanced": false, "reason": "last_plan", "current_plan": 22, "total_plans": 22,
+> "status": "ready_for_verification"}` against 22 PLAN and 22 SUMMARY files on
+> disk, and the file-counting `roadmap.update-plan-progress 07` independently
+> reports `summary_count: 22` and flipped the ROADMAP row to 22/22. Plan 07-22 IS
+> the last plan of the phase, so refusing to advance is the right answer. Fourth
+> consecutive clean run after 07-19, 07-20 and 07-21.
+>
+> TWO PROSE LINES WERE EDITED BY HAND, as on 07-20, because no handler owns them:
+> the `Status:` line, which still said "21 of 22 … 07-22 next", and the
+> `Last activity:` line, which still described 07-21. The `Plan:` counter, the
+> `Stopped at`/`Last session` pair and the frontmatter were all written by
+> handlers and were already right.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the fifth consecutive run to do so. Known, not this phase's bug, and the
+> `Progress:` line below still describes PHASE 01 and is deliberately untouched.
 
 > PHASE 07 PLAN 07-20: `state.advance-plan` WAS CORRECT AND ONLY
 > `state.update-progress` WITHHELD. The handler returned
@@ -647,6 +669,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P19 | 7 min | 2 tasks | 2 files |
 | Phase 07 P20 | 6 min | 3 tasks | 2 files |
 | Phase 07 P21 | 13 min | 2 tasks | 7 files |
+| Phase 07 P22 | 9 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -1046,6 +1069,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-21: the 24th corpus case is APPENDED, never inserted — the RED commit is 20 insertions / 0 deletions, which PROVES the first 23 are byte-unchanged rather than asserting it — Every consumer's index-ordered assertion is undisturbed, and the byte-unchanged claim becomes a diffstat a reviewer can read in one line.
 - [Phase 07]: 07-21: tree.spec.ts's CORPUS_OUTLINE gains one MEASURED line and the pre/post merge-key comparison's own 47-over-21 is PRESERVED as its record rather than overwritten — That comparison was made over the 23-label corpus and cannot honestly be restated as covering 24. The loader-query label MERGES into the src directory benign-control already creates: node count 47 -> 48, root count unchanged at 21.
 - [Phase 07]: 07-21: export.spec.ts:909's title and its stated tripwire are now BOTH false while its assertion still passes — disclosed and left standing, owned by 07-22 — The redaction DIRECTION is 07-22's decision at a blocking checkpoint. Correcting either sentence in 07-21 would have decided it silently. The untripped tripwire is itself the direct evidence for WR-03.
+- [Phase 07]: WR-03 direction: option A — split the two axes. The QUERY axis is now cut on every `sources` label; the FRAGMENT axis stays cut only on URL-shaped ones. — Chosen by the operator on 2026-09-02 at a gate="blocking-human" checkpoint, over option B (correct the premise and sanction the disclosure). It restores the pre-07-16 safe-mode behaviour on the query axis without reintroducing the false marker LO-04 removed from `#`-bearing bare paths.
+- [Phase 07]: The `?` justification in `export.ts` is written as a claim about what a BUNDLER EMITS, never as a claim that a `?` cannot be part of a name. — RFC 3986 reserved-delimiter status plus Win32 rejection is probabilistic about the label population a bundler produces. The absolute form is FALSE — APFS and ext4 accept `?` and reject only `/` and NUL — and shipping it would have opened a fifth false comment in the round that closes four. A region-scoped negative grep plus a non-vacuity companion gate the docblock. The TRUE `#`-is-a-legal-filename-character sentence was deliberately KEPT: the prohibition was scoped to the false claim, not to legality claims as a category.
+- [Phase 07]: EXPORT_QUERY_REDACTION is 16 characters, so the per-field export ceiling is 4,112 — not the 17/4,113 the byte-budget prose had claimed since it was written. — Measured while confirming that WR-03 did not raise the ceiling. The ASSERTION was always correct because it reads EXPORT_QUERY_REDACTION.length rather than a literal; only the prose beside it was wrong, and the comment already contradicted itself (27 redacts to 39, and 23 + 17 = 40).
 
 ### Known Risks Carried Forward
 
@@ -1088,8 +1114,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T20:31:17.525Z
-**Stopped at:** Completed 07-21-PLAN.md
+**Last session:** 2026-09-02T20:46:54.306Z
+**Stopped at:** Completed 07-22-PLAN.md
 **Resume file:** None
 
 ### Blockers

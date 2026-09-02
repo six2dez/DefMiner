@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 88
+open_count: 89
 waived_count: 0
 fixed_count: 33
-total_count: 121
-last_updated: 2026-09-02T20:32:28.953Z
+total_count: 122
+last_updated: 2026-09-02T20:48:01.416Z
 ---
 
 # Broken Windows Ledger
@@ -157,6 +157,7 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 119 | 07 | deviation | packages/backend/src/store/sources.spec.ts |  | 07-11: the two-bundle disambiguation cases run on a spec-local re-keyed source_sightings, because the shipped v:8 primary key makes the pair unrepresentable. Delete widerKeyFixture() and rebuild on the real table once plan 07-12 widens the key. | open |  | 2026-09-02T10:20:46.543Z |  |
 | 120 | 07 | deviation | packages/frontend/src/sourcemap/tree.spec.ts |  | 07-21 deviation: tree.spec.ts required four AUTHORED expectations (recorded outline, node/root counts, corpus-index coverage), not the prose numeral the plan predicted. Absorbed by measuring, not by loosening. | open |  | 2026-09-02T20:32:28.865Z |  |
 | 121 | 07 | deviation | packages/backend/src/store/export.spec.ts |  | 07-21 disclosure: export.spec.ts:909's title and :910-914's tripwire comment are now FALSE while the assertion still passes. Left standing deliberately; owned by plan 07-22. | open |  | 2026-09-02T20:32:28.953Z |  |
+| 122 | 07 | deviation | packages/backend/src/store/export.spec.ts |  | Byte-budget prose stated the marker as 17 chars / ceiling 4,113; measured 16 / 4,112 and corrected in 07-22. A sweep for other hardcoded restatements of a constant's value is a next-round item. | open |  | 2026-09-02T20:48:01.416Z |  |
 
 ````json
 [
@@ -1610,6 +1611,18 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-02T20:32:28.953Z",
+    "resolved_at": null
+  },
+  {
+    "id": 122,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "packages/backend/src/store/export.spec.ts",
+    "line": null,
+    "description": "Byte-budget prose stated the marker as 17 chars / ceiling 4,113; measured 16 / 4,112 and corrected in 07-22. A sweep for other hardcoded restatements of a constant's value is a next-round item.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T20:48:01.416Z",
     "resolved_at": null
   }
 ]
