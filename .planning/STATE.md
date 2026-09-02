@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Phase 07 executed; verification human_needed (5 UAT items)
-last_updated: "2026-09-02T09:56:07.284Z"
-last_activity: 2026-09-01
+stopped_at: Completed 07-11-PLAN.md
+last_updated: "2026-09-02T10:20:39.741Z"
+last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: b1fef20b3f2ccefd39591bc199ec1bf31648c798
+state_head: 3077442ae46c96a86de7df1e1617600cf033d9eb
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 82
+  completed_plans: 83
 ---
 
 # Project State
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 07 (Sourcemap Reconstruction) — READY TO EXECUTE
-Plan: 10 of 10
+Phase: 07 (Sourcemap Reconstruction) — EXECUTING
+Plan: 2 of 17
 Status: Ready to execute
-Last activity: 2026-09-01 — Phase 07 execution started
+Last activity: 2026-09-02 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -367,6 +367,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P08 | 34 min | 3 tasks | 9 files |
 | Phase 07 P09 | 25min | 2 tasks | 8 files |
 | Phase 07-sourcemap-reconstruction P10 | 42min | 3 tasks | 18 files |
+| Phase 07 P11 | 22 min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -733,6 +734,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: P7-D10-5 — HealthPayload gained a NESTED sub-object of six integers, keeping the no-string property provable by a recursive leaf walk rather than a one-level Object.values
 - [Phase 07]: P7-D10-6 — CONTRACT_VERSION stays at 6 as a RULE APPLICATION: a response widening with no union cannot be misread, and 6 was bumped by 07-06 in this same phase
 - [Phase 07]: P7-D10-7 — the two false REQUIREMENTS.md parentheticals are amended with their ORIGINALS PRESERVED as dated history; a gate demanding zero would have ordered the record falsified
+- [Phase 07]: 07-11: SourceRef and both single-sighting statements now name the bundle; the two-bundle pair is built on a spec-local re-keyed table because the shipped v:8 primary key makes it unrepresentable, leaving migrations.ts byte-unchanged for 07-12's checkpoint.
+- [Phase 07]: 07-11: countSourcesForMap deliberately NOT widened — it is MAP-06's map-level aggregate, not a single-sighting read, and has no production caller (MD-04); wiring and artifact scope handed to plan 07-15.
 
 ### Known Risks Carried Forward
 
@@ -775,9 +778,9 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T07:13:35.425Z
-**Stopped at:** Phase 07 executed; verification human_needed (5 UAT items)
-**Resume file:** .planning/phases/07-sourcemap-reconstruction/07-VERIFICATION.md
+**Last session:** 2026-09-02T10:20:31.636Z
+**Stopped at:** Completed 07-11-PLAN.md
+**Resume file:** None
 
 ### Blockers
 
