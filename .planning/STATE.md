@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
 status: executing
-stopped_at: Completed 07-13-PLAN.md
-last_updated: "2026-09-02T12:56:58.718Z"
+stopped_at: Completed 07-15-PLAN.md
+last_updated: "2026-09-02T13:40:08.272Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 4e60d5ec26ae9fe01c5c8a27f3952d67049b9a9a
+state_head: 78004b9e006fb812e55da647433bf343c5684247
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 92
-  completed_plans: 88
+  completed_plans: 89
 ---
 
 # Project State
@@ -28,11 +28,59 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
-Plan: 16 of 17
+Plan: 17 of 17
 Status: Ready to execute
-Last activity: 2026-09-02 — Phase 07 execution started
+Last activity: 2026-09-02 — Phase 07 gap-closure round COMPLETE (17 of 17 plans)
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-15: THE COUNTERS ARE RIGHT AND NOTHING WAS CORRECTED BY
+> HAND. This was the LAST plan of the gap-closure round.
+> `state.advance-plan` was invoked EXACTLY ONCE — deliberately, after 07-13's
+> note recorded what a second call costs — and moved the prose counter
+> 16 -> 17. Disk truth is 17 PLAN files and 17 SUMMARY files, so the value it
+> found was the truth and the value it wrote is the truth. `completed_plans`
+> moved 88 -> 89 by its own recomputation. Phase 07's plan execution is
+> COMPLETE; the `Status:` line still reads "Ready to execute" because no
+> handler owns it and this executor did not invent a value for it.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the THIRTEENTH consecutive occurrence across phases 05, 06 and 07. Steady
+> handler behaviour, not a transient. The `Progress:` line above still describes
+> PHASE 01 plan execution and is deliberately untouched.
+>
+> `.planning/REQUIREMENTS.md` WAS NOT TOUCHED, AND THIS TIME THE GATE AND THE
+> PROHIBITION DISAGREE — which is why the call is recorded rather than assumed.
+> `requirements.ready-ids` reported `2/2 ready`: this plan is the LAST of the
+> seven declaring MAP-06, so the shared-ID gate that blocked 07-12, 07-13 and
+> 07-16 now clears. `requirements.mark-complete` was still NOT run, for three
+> reasons that stand independently. (1) This plan's own prohibitions say "No
+> change to `.planning/REQUIREMENTS.md`". (2) BOTH MAP-05 and MAP-06 are
+> ALREADY `[x]` on disk, so the mutation's target state IS the state on disk
+> and it can only be a no-op or damage. (3) `outbound-prohibition.spec.ts`
+> pins the CORE-11 box in that file as the literal `- [ ] **CORE-11**` and
+> byte-compares a machine-generated residual span between two sentinel lines in
+> the same file — a generic checkbox rewriter that reflowed either turns a
+> green gate red for a change that changes nothing. sha256 of the file is
+> unchanged at `c09e8dfc...4672467d`, the same value 07-13 recorded.
+>
+> THE W-2 BYTE CLASS DID NOT RECUR, AND IT WAS LOOKED FOR RATHER THAN HOPED
+> AGAINST. A scanner was run over every touched file before every one of the
+> eight commits, checking NUL, U+2028, U+2029, lone CR and any C0 byte other
+> than tab and newline. All clean. Every surrogate in the LO-03 fixture is
+> written as an escape (`"\ud83d"`, `"\ude00"`) and never as a literal, and
+> `grep -c` still reads the spec as text — the check 07-13 learned to make.
+>
+> LO-03 IS WORSE THAN THE REVIEW SAID, AND THE MEASUREMENT IS WHY. The review
+> says an unpaired surrogate "round-trips through the driver unpredictably".
+> Measured against `node:sqlite`, it does not round-trip at all: binding a lone
+> U+D83D stores U+FFFD. So the code-unit cut was not merely putting an invalid
+> byte sequence at rest — it was SILENTLY TRANSFORMING evidence, which
+> contradicts the write path's one rule. Rows already stored that way are NOT
+> rewritten, and that is a decision: `sources_verbatim` is evidence under D-06,
+> and a migration editing stored evidence to look like what a later build would
+> have written is the write-time transformation the column exists to refuse.
 
 > PHASE 07 PLAN 07-13: THE PROSE COUNTER WAS CORRECTED BY HAND, AND THAT IS
 > THIS EXECUTOR'S OWN MISTAKE RATHER THAN THE HANDLER'S.
@@ -529,6 +577,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P12 | 20 min | 4 tasks | 9 files |
 | Phase 07 P16 | 18 min | 3 tasks | 4 files |
 | Phase 07 P13 | 26 min | 3 tasks | 3 files |
+| Phase 07 P15 | 35 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -914,6 +963,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: trimChildTable was NOT generalised for source_sightings: a four-column key with an INTEGER member does not fit its three-element delete tuple over a two-member secondKey union, so the table got its own bounded loop in audit's and scans' shape.
 - [Phase 07]: sources takes NO retention bound of its own. Its ceiling is INHERITED through the anti-join — a surviving source needs a surviving sighting — so count(sources) <= count(source_sightings) <= bounds.maxRows. Bounded by an edge, not exempt.
 - [Phase 07]: The sources anti-join is a scoped NOT IN with an explicit IS NOT NULL guard, not the correlated NOT EXISTS used elsewhere in retention.ts: it probes a column no shipped index leads on, measured at 447 ms vs 1.5 ms over 4,000 rows per table and 11,069 ms vs 7.5 ms over 20,000.
+- [Phase 07]: 07-15 wired MAP-06's aggregate bound rather than deleting countSourcesForMap: MAP-06 is a ticked requirement whose aggregate half was enforced nowhere, so deleting would leave the ledger row resting on a bound that does not exist.
+- [Phase 07]: The aggregate comparison is 2 * max(existing, recovered) rows, never existing + recovered. The v9 four-column upsert writes zero rows on a repeat, so the additive form would refuse any (artifact, map) past 1,024 sightings on its next re-analysis and write partial on an artifact accepted whole. Proven by flipping the operator and watching two committed cases fail.
+- [Phase 07]: sources_verbatim is cut in code POINTS by a bounded walk, not by the review's spread-and-slice: the label is target-controlled and bounded only by MAP_MAX_BYTES, so the spread would allocate per code point of the whole input on the proxy thread.
+- [Phase 07]: D-13's depth gate is asked ONCE at the recursion call site and KEPT inside reconstruct as the backstop. A bound enforced only at one call site is a bound somebody removes by adding a second call site, which is MD-04's own lesson.
 
 ### Known Risks Carried Forward
 
@@ -956,8 +1009,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T12:56:01.411Z
-**Stopped at:** Completed 07-13-PLAN.md
+**Last session:** 2026-09-02T13:39:56.387Z
+**Stopped at:** Completed 07-15-PLAN.md
 **Resume file:** None
 
 ### Blockers
