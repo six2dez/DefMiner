@@ -259,3 +259,22 @@ export function counted(
 ): string {
   return `${groupThousands(count)} ${count === 1 ? singular : plural}`;
 }
+
+/**
+ * A DefMiner-formatted timestamp — `YYYY-MM-DD HH:MM:SS`, UTC.
+ *
+ * DECLARED HERE, ONCE, RATHER THAN COPIED A THIRD TIME. `ArtifactsTable.vue`
+ * and `ObservationsTable.vue` each carry a private copy of this one line; plan
+ * 07-08 needed a third for the two producibility tombstone sentences, and three
+ * copies of a format is how one of them comes to disagree with the other two
+ * about a timezone. The two pre-existing copies are NOT rewritten by that plan
+ * — they are outside its scope and are recorded in `deferred-items.md` — but
+ * nothing new copies the line.
+ *
+ * `toISOString` and not `toLocaleString`: the copy contract calls this a
+ * DefMiner-FORMATTED date, and a locale-sensitive one reads differently on two
+ * operators' machines and cannot be compared byte-for-byte by a spec.
+ */
+export function formatTimestamp(ms: number): string {
+  return new Date(ms).toISOString().replace("T", " ").slice(0, 19);
+}

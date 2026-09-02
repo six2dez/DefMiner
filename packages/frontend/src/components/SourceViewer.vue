@@ -15,8 +15,11 @@
 // highlighting, no tokeniser, no highlighter dependency, and NO import of
 // `safety/HighlightSlices.vue` — the evidence panel's slicing path exists for
 // match highlighting and this surface has no matches to highlight. THE ABSENCE
-// OF THE MECHANISM IS THE CONTROL, and it is asserted in the spec as an
-// exact module-specifier set rather than as a search for a string.
+// OF THE MECHANISM IS THE CONTROL, and it is asserted in the spec as an exact
+// module-specifier set rather than as a search for a string. The same set is
+// what proves NO FORM CONTROL is mounted here: recovered source in an editable,
+// submittable control makes hostile bytes round-trip through a value binding
+// the render rules do not cover, and cannot be virtualised.
 //
 // ===========================================================================
 // THE SPLIT HAPPENS ONCE, AT DERIVATION TIME
@@ -39,8 +42,19 @@
 //
 // The precedent is `InventoryTable.vue:473-531`, not `ArtifactsTable.vue` —
 // plan 07-07's P7-D07-4 records why.
+//
+// ===========================================================================
+// THE FIFTH STATE IS NOT HERE, AND THAT IS RECORDED SO NOBODY LOOKS FOR IT
+// ===========================================================================
+// A map that was REFUSED, TRUNCATED OR MALFORMED produces no source rows at
+// all: D-11 records `scan_state = 'partial'` with its redacted error. That is
+// the TREE's empty state, not this component's, and its reason lives in the
+// `EvidencePanel` at the artifact level where the analysis vocabulary lives.
+// Nothing below renders an analysis-state word.
 
 import type { DeriveSourceResult } from "@defminer/engine/contract";
+import { SOURCE_LINE_MAX_GRAPHEMES } from "@defminer/engine/sanitise";
+import { SOURCE_LINE_COUNT_MAX } from "@defminer/engine/thresholds";
 import { computed, shallowRef, watch } from "vue";
 import { RecycleScroller } from "vue-virtual-scroller";
 
@@ -51,9 +65,12 @@ import {
   sourceLineTruncated,
 } from "../safety/display";
 
+import { browserDownload } from "./export-download";
+import { sourceDownloadName } from "./source-filename";
 import {
   counted,
   FOCUS_RING_CLASS,
+  formatTimestamp,
   groupThousands,
   SOURCE_LINE_HEIGHT_CLASS,
   SOURCE_LINE_HEIGHT_PX,
@@ -89,8 +106,9 @@ const emit = defineEmits<{
 // COPY — 07-UI-SPEC.md § "Copywriting Contract", VERBATIM
 // ---------------------------------------------------------------------------
 // The rule that outranks the whole copy table applies to every string below: NO
-// SENTENCE HERE INTERPOLATES A TARGET-CONTROLLED STRING. The only
-// interpolations are DefMiner-computed integers.
+// SENTENCE HERE INTERPOLATES A TARGET-CONTROLLED STRING. Every `{n}`,
+// `{bytes}`, `{cap}`, `{date}` and `{digest}` is a DefMiner-computed integer, a
+// DefMiner-formatted date or a hex digest.
 
 const IDLE_BODY = "Select a source to read it.";
 
@@ -104,15 +122,69 @@ const RPC_FAILED_BODY =
 const RETRY_LABEL = "Retry";
 const OPEN_HEALTH_LABEL = "Open Health";
 
+/** D-22's tombstone, and the reason it is a SENTENCE rather than a badge: it
+ *  explains an ABSENCE, and a one-word badge beside another one-word badge is
+ *  the confusion O-07 mechanism 5's replacement guards against. The single WORD
+ *  appears only on the 32px tree row, which cannot hold a sentence. */
+const goneSentence = (recoveredAt: number): string =>
+  `Recovered ${formatTimestamp(recoveredAt)}. The response this source came ` +
+  "from is no longer in Caido's history, so DefMiner can no longer produce " +
+  "its content. Its name, its size and its content hash are kept — that this " +
+  "file existed on this target is evidence on its own.";
+
+/** D-24's tombstone. FAIL CLOSED: the content is WITHHELD, and it is withheld
+ *  STRUCTURALLY — the `changed` arm has no `content` key at all, so there is
+ *  nothing here to forget to hide. */
+const changedSentence = (recoveredAt: number): string =>
+  `Recovered ${formatTimestamp(recoveredAt)}. The response this source came ` +
+  "from still exists, but its bytes no longer match the bundle DefMiner " +
+  "recovered from — the target has redeployed. DefMiner will not show you " +
+  "source it cannot attribute to the bundle it came from, so the content is " +
+  "withheld. The recovered name, size and content hash are kept.";
+
+/** UI-09, O-02: the file has ONE line and that line is over the per-line cap.
+ *  It is MINIFIED CODE THE MAP DECLARED AS A SOURCE — real intelligence about
+ *  the bundle, not a rendering failure — so it says so in DefMiner's words. */
+const noLineStructureSentence = (byteLen: number): string =>
+  "This file has no line structure — it is one line of " +
+  `${groupThousands(byteLen)} bytes. It is minified code that the map ` +
+  "declared as a source. The line is truncated at " +
+  `${groupThousands(SOURCE_LINE_MAX_GRAPHEMES)} characters.`;
+
+/** UI-09: the line-count bound, stated in words. Never truncated silently. */
+const lineCapSentence = (total: number): string =>
+  `Showing the first ${groupThousands(SOURCE_LINE_COUNT_MAX)} lines of ` +
+  `${groupThousands(total)}. DefMiner bounds what it renders so a hostile ` +
+  "map cannot freeze the page.";
+
+const SAVE_LABEL = "Save this source";
+
+/** The one fact the operator cannot see for themselves: the filename is
+ *  DefMiner's, not the developer's. `{name}` is 16 hex characters plus one of
+ *  ten DefMiner literals — see `source-filename.ts`. */
+const saveHelperSentence = (name: string): string =>
+  `Saved as ${name}. DefMiner never builds a filename from the developer's ` +
+  "path — that path is evidence, not a destination.";
+
 /** The per-row marker, inside the row. Label role, `surface-400`. */
 const LINE_TRUNCATED_MARKER = "…truncated";
 
+/**
+ * PLAIN TEXT, ALWAYS, and never derived from the extension.
+ *
+ * A content type chosen from the label would be a second sink for the target's
+ * string, in the one place a browser acts on it — `text/html` on a recovered
+ * "source" is a stored-XSS primitive on the operator's own machine, delivered
+ * by DefMiner. The extension is cosmetic; the type is not.
+ */
+const DOWNLOAD_CONTENT_TYPE = "text/plain;charset=utf-8";
+
 // ---------------------------------------------------------------------------
-// THE BODY STATE
+// THE FOUR BODY STATES
 // ---------------------------------------------------------------------------
 //
-// ONE VALUE, NOT A CHAIN OF FLAGS. The states are mutually exclusive by
-// construction, which is the only way two of them cannot be on screen at once.
+// ONE VALUE, NOT A CHAIN OF FLAGS, so that two of them cannot be on screen at
+// once and a spec can assert the other three ABSENT.
 //
 // THE RULE THAT OUTRANKS THE TABLE, AND IT IS THE MOST IMPORTANT SENTENCE ON
 // THIS SURFACE:
@@ -122,24 +194,30 @@ const LINE_TRUNCATED_MARKER = "…truncated";
 //
 // D-23's producibility write happens on the BACKEND, only when the reload
 // genuinely returns missing-or-no-response, and it is permanent. A frontend
-// that painted a timeout as "gone" would be making a durable-looking claim from
-// an absence of evidence. This component maps the backend's arms ONE-TO-ONE and
-// derives nothing.
+// that painted a timeout as `gone` would be making a durable-looking claim from
+// an absence of evidence — the exact defect `App.vue:606-611`'s shipped compat
+// rule names: a call that did not answer is not evidence of a refusal.
 //
-// PLAN 07-08 TASK 2 SPLITS `unavailable` INTO THE FOUR BODY STATES. Until it
-// does, every non-content arm renders the copy above — the one that claims
-// nothing durable — which is the safe direction and never the tombstone.
+// So the mapping below is ONE-TO-ONE with the backend's arms and derives
+// NOTHING. `gone` and `changed` are reached only because the backend said so;
+// an `RpcResult` failure and the `unavailable` arm both reach the could-not-ask
+// copy, which states out loud that nothing has been marked unavailable.
 
 type Body =
   | { readonly kind: "idle" }
   | { readonly kind: "loading" }
   | {
       readonly kind: "content";
+      /** The raw bytes, held for the download and the clipboard. NEVER placed
+       *  in the DOM as a whole — only per-line, sanitised, per visible row. */
+      readonly content: string;
       readonly lines: readonly string[];
       readonly byteLen: number;
       readonly lineCount: number;
       readonly sha256: string;
     }
+  | { readonly kind: "gone"; readonly recoveredAt: number }
+  | { readonly kind: "changed"; readonly recoveredAt: number }
   | { readonly kind: "unavailable" };
 
 const body = shallowRef<Body>({ kind: "idle" });
@@ -159,6 +237,28 @@ function splitOnce(content: string): readonly string[] {
   return content === "" ? [] : content.split("\n");
 }
 
+/** The four arms, mapped one-to-one. A fifth arm added to the union fails to
+ *  typecheck HERE rather than falling into a state this component chose. */
+function fromResult(value: DeriveSourceResult): Body {
+  switch (value.outcome) {
+    case "content":
+      return {
+        kind: "content",
+        content: value.content,
+        lines: splitOnce(value.content),
+        byteLen: value.byteLen,
+        lineCount: value.lineCount,
+        sha256: value.sha256,
+      };
+    case "gone":
+      return { kind: "gone", recoveredAt: value.recoveredAt };
+    case "changed":
+      return { kind: "changed", recoveredAt: value.recoveredAt };
+    case "unavailable":
+      return { kind: "unavailable" };
+  }
+}
+
 async function derive(): Promise<void> {
   const request = sourceRef;
   if (request === null) {
@@ -172,22 +272,9 @@ async function derive(): Promise<void> {
   const result = await client.deriveSource(request);
   if (generation !== inFlight) return;
 
-  if (!result.ok) {
-    body.value = { kind: "unavailable" };
-    return;
-  }
-  const value = result.value;
-  if (value.outcome !== "content") {
-    body.value = { kind: "unavailable" };
-    return;
-  }
-  body.value = {
-    kind: "content",
-    lines: splitOnce(value.content),
-    byteLen: value.byteLen,
-    lineCount: value.lineCount,
-    sha256: value.sha256,
-  };
+  // AN `RpcResult` FAILURE IS NOT AN OUTCOME. It answers "did the backend
+  // answer", not "what did it find", and the two are never collapsed.
+  body.value = result.ok ? fromResult(result.value) : { kind: "unavailable" };
 }
 
 watch(
@@ -206,11 +293,25 @@ const lines = computed<readonly string[]>(() =>
   body.value.kind === "content" ? body.value.lines : [],
 );
 
+/**
+ * THE FIRST OF TWO INDEPENDENT BOUNDS.
+ *
+ * `SOURCE_LINE_COUNT_MAX` is read BY NAME. Its derivation is an INEQUALITY
+ * asserted in `thresholds.spec.ts` against the decoded ceiling — a file
+ * reaching the cap inside `floor(PASSIVE_MAX_BYTES * 3/4)` averages under 12.6
+ * characters per line — and never the number it currently evaluates to.
+ */
+const cappedLines = computed<readonly string[]>(() =>
+  lines.value.length > SOURCE_LINE_COUNT_MAX
+    ? lines.value.slice(0, SOURCE_LINE_COUNT_MAX)
+    : lines.value,
+);
+
 /** The scroller keys by property NAME, so the line's index is lifted onto the
  *  item. `text` is the RAW line: it is sanitised in the template, per visible
  *  row, so the sanitiser is never run over lines nobody is looking at. */
 const scrollerItems = computed<readonly { key: number; text: string }[]>(() =>
-  lines.value.map((text, index) => ({ key: index, text })),
+  cappedLines.value.map((text, index) => ({ key: index, text })),
 );
 
 /** The stated line count. `counted` for singular/plural agreement at 0 (the
@@ -219,6 +320,41 @@ const lineCountLine = computed<string | null>(() =>
   body.value.kind === "content"
     ? counted(body.value.lineCount, "line", "lines")
     : null,
+);
+
+const boundLine = computed<string | null>(() =>
+  lines.value.length > SOURCE_LINE_COUNT_MAX
+    ? lineCapSentence(lines.value.length)
+    : null,
+);
+
+/**
+ * O-02, and the condition is DERIVED rather than chosen.
+ *
+ * The state is "one line, and that line is over the per-line cap" — which is
+ * exactly what the copy's own last clause claims ("the line is truncated at
+ * {cap} characters"). A one-line file of fifty bytes is a short file and gets
+ * no marker; a one-line file of four megabytes gets this one, renders as ONE
+ * ROW, and nothing about the scroller changes.
+ */
+const noLineStructureLine = computed<string | null>(() => {
+  const state = body.value;
+  if (state.kind !== "content") return null;
+  const only = state.lines.length === 1 ? state.lines[0] : undefined;
+  if (only === undefined || !sourceLineTruncated(only)) return null;
+  return noLineStructureSentence(state.byteLen);
+});
+
+/** R6. `null` when the digest is one DefMiner cannot vouch for, and the save
+ *  affordance is then not offered at all. */
+const downloadName = computed<string | null>(() =>
+  body.value.kind === "content"
+    ? sourceDownloadName(body.value.sha256, label)
+    : null,
+);
+
+const saveHelperLine = computed<string | null>(() =>
+  downloadName.value === null ? null : saveHelperSentence(downloadName.value),
 );
 
 /** The verbatim `sources` entry, through the TEXT-ONLY wrapper. */
@@ -230,6 +366,25 @@ function gutter(key: number): string {
 
 function retry(): void {
   void derive();
+}
+
+/**
+ * The save. THE BACKEND RETURNS BYTES; no path is sent, received or
+ * constructed — the shipped helper's own rule, unchanged.
+ *
+ * It gets no `danger` ceremony, and the reason is stated rather than assumed:
+ * it is not irreversible, it destroys nothing, and it releases no more than the
+ * shipped copy-full-value affordance already does with a click.
+ */
+function save(): void {
+  const state = body.value;
+  const filename = downloadName.value;
+  if (state.kind !== "content" || filename === null) return;
+  browserDownload({
+    filename,
+    contentType: DOWNLOAD_CONTENT_TYPE,
+    text: state.content,
+  });
 }
 </script>
 
@@ -256,6 +411,18 @@ function retry(): void {
       >
         {{ lineCountLine }}
       </p>
+      <button
+        v-if="downloadName !== null"
+        type="button"
+        :class="[
+          FOCUS_RING_CLASS,
+          'shrink-0 border border-surface-600 px-2 py-1 text-xs font-semibold',
+        ]"
+        data-defminer-source-viewer-save
+        @click="save()"
+      >
+        {{ SAVE_LABEL }}
+      </button>
     </div>
 
     <!-- ===================================================================
@@ -281,6 +448,32 @@ function retry(): void {
       data-defminer-source-viewer-loading
     >
       <p class="text-sm text-surface-400">{{ LOADING_BODY }}</p>
+    </div>
+
+    <!-- ===================================================================
+         GONE (D-22 / D-23) — a SENTENCE, not a badge. The single word lives
+         on the 32px tree row, which cannot hold a sentence and where no
+         other state word exists.
+         =================================================================== -->
+    <div
+      v-else-if="body.kind === 'gone'"
+      class="p-6"
+      data-defminer-source-viewer-gone
+    >
+      <p class="text-sm">{{ goneSentence(body.recoveredAt) }}</p>
+    </div>
+
+    <!-- ===================================================================
+         CHANGED (D-24) — FAIL CLOSED. There are no line rows in this
+         subtree because the arm carries no content at all: withholding is
+         structural, not a caller remembering to hide something.
+         =================================================================== -->
+    <div
+      v-else-if="body.kind === 'changed'"
+      class="p-6"
+      data-defminer-source-viewer-changed
+    >
+      <p class="text-sm">{{ changedSentence(body.recoveredAt) }}</p>
     </div>
 
     <!-- ===================================================================
@@ -323,55 +516,91 @@ function retry(): void {
     </div>
 
     <!-- ===================================================================
-         CONTENT — the virtualised line list at the FIXED height. The gutter
-         does not scroll with the code column; the code column scrolls
-         horizontally on its own.
+         CONTENT — the notices, then the virtualised line list at the FIXED
+         height. The gutter does not scroll with the code column; the code
+         column scrolls horizontally on its own.
          =================================================================== -->
-    <div v-else class="min-h-0 flex-1 overflow-hidden">
-      <RecycleScroller
-        v-slot="{ item }"
-        class="h-full"
-        :items="scrollerItems"
-        :item-size="SOURCE_LINE_HEIGHT_PX"
-        :buffer="200"
-        key-field="key"
+    <template v-else>
+      <div
+        v-if="
+          boundLine !== null ||
+          noLineStructureLine !== null ||
+          saveHelperLine !== null
+        "
+        class="shrink-0 border-b border-surface-600 px-2 py-1"
       >
-        <button
-          type="button"
-          :class="[
-            SOURCE_LINE_HEIGHT_CLASS,
-            FOCUS_RING_CLASS,
-            'flex w-full items-center gap-2 text-left',
-          ]"
-          data-defminer-source-line
+        <p
+          v-if="boundLine !== null"
+          class="text-xs text-surface-400"
+          data-defminer-source-viewer-bound
         >
-          <!-- The gutter. A DefMiner-computed integer, fixed width, right
-               aligned, and OUTSIDE the horizontally scrolling column. -->
-          <span
-            class="w-16 shrink-0 pr-2 text-right font-mono text-sm text-surface-400 tabular-nums"
-            aria-hidden="true"
-            >{{ gutter(item.key) }}</span
-          >
+          {{ boundLine }}
+        </p>
+        <p
+          v-if="noLineStructureLine !== null"
+          class="text-xs text-surface-400"
+          data-defminer-source-viewer-no-line-structure
+        >
+          {{ noLineStructureLine }}
+        </p>
+        <p
+          v-if="saveHelperLine !== null"
+          class="text-xs text-surface-400"
+          data-defminer-source-viewer-save-helper
+        >
+          {{ saveHelperLine }}
+        </p>
+      </div>
 
-          <!-- THE ONE TARGET-CONTROLLED ELEMENT ON THE ROW, and the whole
-               reason this file exists. `forSourceLine` applies R2's four steps
-               with the TAB exception; the result is a TEXT NODE and nothing
-               else. There is no `title` here and no `data-*` carrying it: R2
-               states both as absolutes. -->
-          <span
-            class="min-w-0 flex-1 overflow-x-auto font-mono text-sm whitespace-pre"
-            data-defminer-source-code
-            >{{ forSourceLine(item.text) }}</span
+      <div
+        class="min-h-0 flex-1 overflow-hidden"
+        data-defminer-source-viewer-content
+      >
+        <RecycleScroller
+          v-slot="{ item }"
+          class="h-full"
+          :items="scrollerItems"
+          :item-size="SOURCE_LINE_HEIGHT_PX"
+          :buffer="200"
+          key-field="key"
+        >
+          <button
+            type="button"
+            :class="[
+              SOURCE_LINE_HEIGHT_CLASS,
+              FOCUS_RING_CLASS,
+              'flex w-full items-center gap-2 text-left',
+            ]"
+            data-defminer-source-line
           >
+            <!-- The gutter. A DefMiner-computed integer, fixed width, right
+                 aligned, and OUTSIDE the horizontally scrolling column. -->
+            <span
+              class="w-16 shrink-0 pr-2 text-right font-mono text-sm text-surface-400 tabular-nums"
+              aria-hidden="true"
+              >{{ gutter(item.key) }}</span
+            >
 
-          <span
-            v-if="sourceLineTruncated(item.text)"
-            class="shrink-0 text-xs text-surface-400"
-            data-defminer-source-line-truncated
-            >{{ LINE_TRUNCATED_MARKER }}</span
-          >
-        </button>
-      </RecycleScroller>
-    </div>
+            <!-- THE ONE TARGET-CONTROLLED ELEMENT ON THE ROW, and the whole
+                 reason this file exists. `forSourceLine` applies R2's four
+                 steps with the TAB exception; the result is a TEXT NODE and
+                 nothing else. There is no `title` here and no `data-*`
+                 carrying it: R2 states both as absolutes. -->
+            <span
+              class="min-w-0 flex-1 overflow-x-auto font-mono text-sm whitespace-pre"
+              data-defminer-source-code
+              >{{ forSourceLine(item.text) }}</span
+            >
+
+            <span
+              v-if="sourceLineTruncated(item.text)"
+              class="shrink-0 text-xs text-surface-400"
+              data-defminer-source-line-truncated
+              >{{ LINE_TRUNCATED_MARKER }}</span
+            >
+          </button>
+        </RecycleScroller>
+      </div>
+    </template>
   </div>
 </template>

@@ -16,23 +16,39 @@
 // assertion written against that renders nothing, finds nothing, and PASSES BY
 // MEASURING AN EMPTY SET.
 //
-// So the scroller is a PASSTHROUGH stub declaring the same props. It renders
-// every item, which is what makes a per-row DOM assertion possible at all, and
-// `item-size` is asserted on the STUB'S OWN PROPS — so the number that reaches
-// the real component is still checked, by IDENTITY against
+// So there are two stubs, and the second one is not a convenience:
+//
+//   * `ScrollerStub` is a PASSTHROUGH. It renders every item, which is what
+//     makes a per-row DOM assertion possible at all. It is used for the small
+//     fixtures and for the 4 MiB single-line case, which is ONE row.
+//   * `CountingScrollerStub` renders NOTHING and only records its props. It is
+//     used for the 500,000-line cap, where a passthrough would materialise half
+//     a million DOM nodes to assert a number the scroller was already handed.
+//     The bound is a property of the DERIVED ITEM LIST, and that is where it is
+//     asserted.
+//
+// `item-size` is asserted on the STUB'S OWN PROPS in both, so the number that
+// reaches the real component is still checked, by IDENTITY against
 // `SOURCE_LINE_HEIGHT_PX` rather than against a literal 24.
 
+import { readFileSync } from "node:fs";
+
 import type { DeriveSourceResult } from "@defminer/engine/contract";
+import { HOSTILE_CASES } from "@defminer/engine/hostile.fixture";
+import { SOURCE_LINE_MAX_GRAPHEMES } from "@defminer/engine/sanitise";
+import { SOURCE_LINE_COUNT_MAX } from "@defminer/engine/thresholds";
 import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { defineComponent } from "vue";
 
 import type { RpcResult, SourceRef } from "../api/client";
 import { forSourceLine } from "../safety/display";
 
+import { SOURCE_PRODUCIBILITY_PRESENTATION } from "./source-producibility-presentation";
 import SourceViewer from "./SourceViewer.vue";
-import { SOURCE_LINE_HEIGHT_PX } from "./table-contract";
+import { groupThousands, SOURCE_LINE_HEIGHT_PX } from "./table-contract";
 
 // ---------------------------------------------------------------------------
 // FIXTURES
@@ -79,6 +95,13 @@ const ScrollerStub = defineComponent({
   name: "RecycleScroller",
   props: SCROLLER_PROPS,
   template: `<div class="scroller-stub"><template v-for="(item, index) in items" :key="index"><slot :item="item" :index="index" /></template></div>`,
+});
+
+/** Records its props and renders nothing. See the header. */
+const CountingScrollerStub = defineComponent({
+  name: "RecycleScroller",
+  props: SCROLLER_PROPS,
+  template: `<div class="scroller-counting" />`,
 });
 
 type Client = {
@@ -225,5 +248,462 @@ describe("source-viewer / populated — the content arm, rendered", () => {
     } finally {
       String.prototype.split = original;
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE FOUR BODY STATES — MUTUALLY EXCLUSIVE, AND NO TWO MAY BE COLLAPSED
+// ---------------------------------------------------------------------------
+//
+// Each test asserts its OWN copy present and the other three ABSENT. The
+// absence half is the half that catches a regression: an operator shown a
+// generic body over a state that means something specific has been told the
+// wrong thing, and the only way to catch a merge of two states is to look for
+// what must not be there.
+
+const REGIONS = {
+  content: "[data-defminer-source-viewer-content]",
+  gone: "[data-defminer-source-viewer-gone]",
+  changed: "[data-defminer-source-viewer-changed]",
+  rpcFailed: "[data-defminer-source-viewer-rpc-failed]",
+} as const;
+
+type RegionName = keyof typeof REGIONS;
+
+function expectOnly(wrapper: VueWrapper, present: RegionName): void {
+  for (const [name, selector] of Object.entries(REGIONS)) {
+    expect(
+      wrapper.find(selector).exists(),
+      `${name} region should be ${name === present ? "present" : "absent"}`,
+    ).toBe(name === present);
+  }
+}
+
+const RECOVERED_AT = Date.UTC(2026, 1, 14, 9, 30, 15);
+
+describe("the four body states — mutually exclusive, none collapsible", () => {
+  it("content — the virtualised line list, and NEITHER tombstone", async () => {
+    const wrapper = await mountViewer(
+      clientReturning(ok(contentArm(MULTI_LINE))),
+    );
+    expectOnly(wrapper, "content");
+    expect(wrapper.text()).not.toContain("no longer in Caido's history");
+    expect(wrapper.text()).not.toContain("the target has redeployed");
+    expect(wrapper.text()).not.toContain("Could not produce this source.");
+  });
+
+  it("gone — D-22's tombstone SENTENCE, and no line rows", async () => {
+    const wrapper = await mountViewer(
+      clientReturning(
+        ok({ outcome: "gone", cause: "no_request", recoveredAt: RECOVERED_AT }),
+      ),
+    );
+    expectOnly(wrapper, "gone");
+    const gone = wrapper.find(REGIONS.gone);
+    expect(gone.text()).toContain("Recovered 2026-02-14 09:30:15.");
+    expect(gone.text()).toContain("no longer in Caido's history");
+    expect(gone.text()).toContain("evidence on its own");
+    expect(wrapper.findAll("[data-defminer-source-line]")).toHaveLength(0);
+  });
+
+  it("changed — FAIL CLOSED: the subtree contains ZERO line rows", async () => {
+    // Structural, not an empty string. The `changed` arm has no `content` key
+    // at ALL (plan 07-06), so there is nothing here to forget to hide, and the
+    // assertion is over the rendered subtree rather than over a value.
+    const wrapper = await mountViewer(
+      clientReturning(
+        ok({
+          outcome: "changed",
+          recoveredAt: RECOVERED_AT,
+          recordedByteLen: 4096,
+          reloadedByteLen: 5120,
+        }),
+      ),
+    );
+    expectOnly(wrapper, "changed");
+    const changed = wrapper.find(REGIONS.changed);
+    expect(changed.text()).toContain("the target has redeployed");
+    expect(changed.text()).toContain("the content is withheld");
+    expect(wrapper.findAll("[data-defminer-source-line]")).toHaveLength(0);
+    expect(wrapper.findAll("[data-defminer-source-code]")).toHaveLength(0);
+  });
+
+  it("could not ask — the RPC failed, and it is NEVER a tombstone", async () => {
+    const wrapper = await mountViewer(
+      clientReturning({ ok: false, reason: "rpc-timeout", versions: null }),
+    );
+    expectOnly(wrapper, "rpcFailed");
+    const failed = wrapper.find(REGIONS.rpcFailed);
+    expect(failed.text()).toContain("Could not produce this source.");
+    // THE SENTENCE THAT MAKES THE RULE VISIBLE TO THE OPERATOR.
+    expect(failed.text()).toContain("has NOT been marked unavailable");
+    expect(failed.text()).toContain("does not conclude a file is gone");
+    expect(failed.text()).toContain("Retry");
+    expect(failed.text()).toContain("Open Health");
+    // NO PRODUCIBILITY MARKER ANYWHERE. The frontend never infers
+    // producibility, so there is nothing in this subtree that could carry it.
+    expect(
+      wrapper.findAll("[data-defminer-source-producibility]"),
+    ).toHaveLength(0);
+    expect(wrapper.findAll("[data-defminer-status-badge]")).toHaveLength(0);
+  });
+
+  it("maps the `unavailable` arm to the SAME could-not-ask copy", async () => {
+    // The backend answered and could not produce. It has still concluded
+    // nothing durable, so it renders the copy that claims nothing durable —
+    // never a tombstone.
+    const wrapper = await mountViewer(
+      clientReturning(ok({ outcome: "unavailable" })),
+    );
+    expectOnly(wrapper, "rpcFailed");
+    expect(wrapper.text()).toContain("has NOT been marked unavailable");
+  });
+
+  it("renders the loading SENTENCE, never a skeleton and never a spinner", () => {
+    // Not awaited: the assertion is about the state BEFORE the RPC settles.
+    const wrapper = mount(SourceViewer, {
+      props: {
+        client: {
+          deriveSource: async () =>
+            await new Promise<RpcResult<DeriveSourceResult>>(() => {
+              /* never settles */
+            }),
+        },
+        sourceRef: SOURCE_REF,
+        label: "webpack:///./src/app.ts",
+      },
+      global: { stubs: { RecycleScroller: ScrollerStub } },
+    });
+    const loading = wrapper.find("[data-defminer-source-viewer-loading]");
+    expect(loading.exists()).toBe(true);
+    expect(loading.text()).toContain(
+      "Producing this source from the original response…",
+    );
+    expect(wrapper.findAll("[role='progressbar']")).toHaveLength(0);
+    expect(wrapper.findAll("[data-defminer-skeleton-row]")).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O-07 MECHANISM 5'S REPLACEMENT, REQUIREMENT 3
+// ---------------------------------------------------------------------------
+
+describe("the degraded producibility state is a SENTENCE, not a badge", () => {
+  it("is longer than every label in the producibility presentation map", async () => {
+    const labels = Object.values(SOURCE_PRODUCIBILITY_PRESENTATION)
+      .map((entry) => entry.label)
+      .filter((label): label is string => label !== null);
+    expect(labels).toEqual(["Gone", "Changed"]);
+
+    for (const [arm, selector] of [
+      [
+        { outcome: "gone", cause: "no_request", recoveredAt: RECOVERED_AT },
+        REGIONS.gone,
+      ],
+      [
+        {
+          outcome: "changed",
+          recoveredAt: RECOVERED_AT,
+          recordedByteLen: 1,
+          reloadedByteLen: 2,
+        },
+        REGIONS.changed,
+      ],
+    ] as const) {
+      const wrapper = await mountViewer(clientReturning(ok(arm)));
+      const text = wrapper.find(selector).text();
+      expect(text).toMatch(/\s/);
+      for (const label of labels) {
+        expect(text.length).toBeGreaterThan(label.length);
+      }
+      // AND IT IS NOT A BADGE. No producibility marker and no status badge in
+      // the subtree — the single WORD belongs to the 32px tree row, which
+      // cannot hold a sentence and where no other state word exists.
+      expect(
+        wrapper.findAll("[data-defminer-source-producibility]"),
+      ).toHaveLength(0);
+      expect(wrapper.findAll("[data-defminer-status-badge]")).toHaveLength(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE LEGAL EMPTY FILE — ZERO LINES, AND NOT AN ERROR
+// ---------------------------------------------------------------------------
+
+describe("source-viewer / empty — a ZERO-BYTE source is LEGAL", () => {
+  it("renders zero line rows, a stated count of zero, and NEITHER tombstone", async () => {
+    const wrapper = await mountViewer(clientReturning(ok(contentArm(""))));
+    expectOnly(wrapper, "content");
+    expect(wrapper.findAll("[data-defminer-source-line]")).toHaveLength(0);
+    expect(itemsOf(wrapper)).toHaveLength(0);
+    expect(wrapper.find("[data-defminer-source-viewer-lines]").text()).toBe(
+      "0 lines",
+    );
+    expect(wrapper.text()).not.toContain("no longer in Caido's history");
+    expect(wrapper.text()).not.toContain("the target has redeployed");
+    expect(wrapper.text()).not.toContain("Could not produce this source.");
+  });
+
+  it("agrees at 0, 1 and many — never a parenthesised plural", async () => {
+    const zero = await mountViewer(clientReturning(ok(contentArm(""))));
+    const one = await mountViewer(clientReturning(ok(contentArm("only()"))));
+    const many = await mountViewer(clientReturning(ok(contentArm(MULTI_LINE))));
+    const lineCount = (wrapper: VueWrapper): string =>
+      wrapper.find("[data-defminer-source-viewer-lines]").text();
+    expect(lineCount(zero)).toBe("0 lines");
+    expect(lineCount(one)).toBe("1 line");
+    expect(lineCount(many)).toBe("4 lines");
+    expect(lineCount(one)).not.toContain("(s)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE TWO INDEPENDENT BOUNDS, EACH WITH ITS OWN VISIBLE MARKER
+// ---------------------------------------------------------------------------
+
+describe("source-viewer / overflow — the line-count cap", () => {
+  it("renders exactly the cap and states the bound in DefMiner's integers", async () => {
+    const overCap = `x\n`.repeat(SOURCE_LINE_COUNT_MAX + 1);
+    const total = overCap.split("\n").length;
+    expect(total).toBeGreaterThan(SOURCE_LINE_COUNT_MAX);
+
+    const wrapper = await mountViewer(
+      clientReturning(ok(contentArm(overCap))),
+      { scroller: CountingScrollerStub },
+    );
+    expect(itemsOf(wrapper, CountingScrollerStub)).toHaveLength(
+      SOURCE_LINE_COUNT_MAX,
+    );
+    expect(itemSizeOf(wrapper, CountingScrollerStub)).toBe(
+      SOURCE_LINE_HEIGHT_PX,
+    );
+
+    const bound = wrapper.find("[data-defminer-source-viewer-bound]");
+    expect(bound.exists()).toBe(true);
+    expect(bound.text()).toBe(
+      `Showing the first ${groupThousands(SOURCE_LINE_COUNT_MAX)} lines of ` +
+        `${groupThousands(total)}. DefMiner bounds what it renders so a ` +
+        "hostile map cannot freeze the page.",
+    );
+  });
+
+  it("says nothing about a bound when the file is inside it", async () => {
+    const wrapper = await mountViewer(
+      clientReturning(ok(contentArm(MULTI_LINE))),
+    );
+    expect(wrapper.find("[data-defminer-source-viewer-bound]").exists()).toBe(
+      false,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE BACKSTOP: O-02, AGAINST THE REAL 4 MiB SINGLE-LINE FIXTURE
+// ---------------------------------------------------------------------------
+//
+// `07-UI-SPEC.md` marks this row 🧪 backstop and says why: the repo has already
+// MEASURED what getting it wrong costs on this exact shape — 99 of 396 frames
+// over the 32 ms budget and a 37,395 ms scroll through `forCell`, against 0 of
+// 396 and 4,010 ms through the text-only family. It cannot be signed off by
+// inspection, so it is driven through the REAL component against the REAL
+// fixture.
+
+describe("source-viewer / long-text — the 4 MiB single-line fixture", () => {
+  const FIXTURE = HOSTILE_CASES.find(
+    (hostileCase) => hostileCase.id === "multi-megabyte-single-line",
+  );
+
+  it("is the real fixture, four megabytes on one line", () => {
+    // Non-vacuity. A `find` that missed would leave every assertion below
+    // running against the empty string.
+    expect(FIXTURE?.value).toHaveLength(4 * 1024 * 1024);
+    expect(FIXTURE?.value.includes("\n")).toBe(false);
+  });
+
+  it("renders ONE row, truncated, with a visible marker and no leak", async () => {
+    const value = FIXTURE?.value ?? "";
+    const started = Date.now();
+    const wrapper = await mountViewer(clientReturning(ok(contentArm(value))));
+    const elapsed = Date.now() - started;
+
+    // ONE ROW. Nothing about the scroller changes.
+    expect(itemsOf(wrapper)).toHaveLength(1);
+    expect(itemSizeOf(wrapper)).toBe(SOURCE_LINE_HEIGHT_PX);
+    const code = codeNodes(wrapper);
+    expect(code).toHaveLength(1);
+
+    // BOUNDED BY THE PER-LINE CAP, counted in GRAPHEMES.
+    const rendered = code[0]?.textContent ?? "";
+    expect([...rendered].length).toBeLessThanOrEqual(SOURCE_LINE_MAX_GRAPHEMES);
+
+    // BOTH MARKERS ARE VISIBLE — the per-row one and the O-02 sentence.
+    expect(wrapper.find("[data-defminer-source-line-truncated]").exists()).toBe(
+      true,
+    );
+    const marker = wrapper.find(
+      "[data-defminer-source-viewer-no-line-structure]",
+    );
+    expect(marker.exists()).toBe(true);
+    expect(marker.text()).toContain("This file has no line structure");
+    expect(marker.text()).toContain(groupThousands(value.length));
+    expect(marker.text()).toContain(groupThousands(SOURCE_LINE_MAX_GRAPHEMES));
+
+    // R2'S ABSOLUTE, OVER THE WHOLE RENDERED SUBTREE. No `title` anywhere, and
+    // no `data-*` carrying the untruncated value — asserted in the stronger
+    // honest form plan 07-07 established, because this component legitimately
+    // uses `data-*` markers for its own regions.
+    const titles: string[] = [];
+    const oversized: string[] = [];
+    for (const element of [
+      wrapper.element,
+      ...wrapper.element.querySelectorAll("*"),
+    ]) {
+      for (const attribute of element.attributes) {
+        const name = String(attribute.name).toLowerCase();
+        const attributeValue = String(attribute.value);
+        if (name === "title") titles.push(String(element.tagName));
+        if (!name.startsWith("data-")) continue;
+        if (
+          [...attributeValue].length > SOURCE_LINE_MAX_GRAPHEMES ||
+          attributeValue.includes("A".repeat(64))
+        ) {
+          oversized.push(`${String(element.tagName)}[${name}]`);
+        }
+      }
+    }
+    expect(titles).toEqual([]);
+    expect(oversized).toEqual([]);
+
+    // The freeze budget the shipped hostile backstop uses for this same value.
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  it("offers a save name that is DefMiner's, not the fixture's", async () => {
+    const wrapper = await mountViewer(
+      clientReturning(ok(contentArm(FIXTURE?.value ?? ""))),
+      { label: "../../../../../../etc/defminer-escape.txt" },
+    );
+    const helper = wrapper.find("[data-defminer-source-viewer-save-helper]");
+    expect(helper.exists()).toBe(true);
+    expect(helper.text()).toBe(
+      `Saved as ${DIGEST.slice(0, 16)}.txt. DefMiner never builds a filename ` +
+        "from the developer's path — that path is evidence, not a destination.",
+    );
+    expect(helper.text()).not.toContain("/etc/");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PROHIBITIONS, AS AN EXACT-SET EQUALITY OVER THE PARSED IMPORTS
+// ---------------------------------------------------------------------------
+//
+// The idiom plan 07-07 established, and the reason it is an EQUALITY rather
+// than a pair of absences: an import added later fails it without anyone having
+// to think of the specifier it would have been written with.
+
+describe("SourceViewer.vue imports EXACTLY these modules", () => {
+  const MODULE = "packages/frontend/src/components/SourceViewer.vue";
+
+  const parse = (): {
+    specifiers: string[];
+    namesFromDisplay: string[];
+    visited: number;
+  } => {
+    const source = readFileSync(MODULE, "utf8");
+    const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(source)?.[1] ?? "";
+    const file = ts.createSourceFile(
+      MODULE,
+      script,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS,
+    );
+    const specifiers = new Set<string>();
+    const namesFromDisplay = new Set<string>();
+    let visited = 0;
+    const visit = (node: ts.Node): void => {
+      visited += 1;
+      if (
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
+        node.moduleSpecifier !== undefined &&
+        ts.isStringLiteral(node.moduleSpecifier)
+      ) {
+        specifiers.add(node.moduleSpecifier.text);
+        const bindings = ts.isImportDeclaration(node)
+          ? node.importClause?.namedBindings
+          : undefined;
+        if (
+          node.moduleSpecifier.text === "../safety/display" &&
+          bindings !== undefined &&
+          ts.isNamedImports(bindings)
+        ) {
+          for (const element of bindings.elements) {
+            namesFromDisplay.add(element.name.text);
+          }
+        }
+      }
+      if (ts.isCallExpression(node)) {
+        const callee = node.expression;
+        const isDynamic = callee.kind === ts.SyntaxKind.ImportKeyword;
+        const isRequire = ts.isIdentifier(callee) && callee.text === "require";
+        const first = node.arguments[0];
+        if (
+          (isDynamic || isRequire) &&
+          first !== undefined &&
+          ts.isStringLiteral(first)
+        ) {
+          specifiers.add(first.text);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(file);
+    return {
+      specifiers: [...specifiers].sort(),
+      namesFromDisplay: [...namesFromDisplay].sort(),
+      visited,
+    };
+  };
+
+  it("has EXACTLY this module-specifier set", () => {
+    // Four forms are collected — `import`, `export … from`, dynamic `import()`
+    // and `require()` — so an equality over a set that counted only static
+    // imports would not be an equality over a hole.
+    //
+    // NEITHER `safety/HighlightSlices.vue` NOR ANY FORM CONTROL IS IN IT. D-19
+    // means the viewer has no slicing path at all, and no Phase 7 surface
+    // mounts a form control: hostile bytes in an editable, submittable control
+    // invite a value round-trip the render rules do not cover.
+    expect(parse().specifiers).toEqual([
+      "../api/client",
+      "../safety/display",
+      "./export-download",
+      "./source-filename",
+      "./table-contract",
+      "@defminer/engine/contract",
+      "@defminer/engine/sanitise",
+      "@defminer/engine/thresholds",
+      "vue",
+      "vue-virtual-scroller",
+    ]);
+  });
+
+  it("imports EXACTLY the text-only wrapper family from the display module", () => {
+    // Simultaneously the T-07-12 proof. `forCell` returns `total`, which forces
+    // a walk of the whole value: `display.ts:110-121` records 99 of 396 frames
+    // over budget and a 37,395 ms scroll through it on a 4 MiB single line,
+    // against 0 of 396 and 4,010 ms through the text-only family.
+    expect(parse().namesFromDisplay).toEqual([
+      "forCellText",
+      "forSourceLine",
+      "sourceLineTruncated",
+    ]);
+  });
+
+  it("parsed a NON-EMPTY script block — the non-vacuity half", () => {
+    const facts = parse();
+    expect(facts.visited).toBeGreaterThan(200);
+    expect(readFileSync(MODULE, "utf8")).toContain("splitOnce");
   });
 });
