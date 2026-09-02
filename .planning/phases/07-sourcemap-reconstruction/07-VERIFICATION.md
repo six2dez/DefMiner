@@ -1,79 +1,106 @@
 ---
 phase: 07-sourcemap-reconstruction
-verified: 2026-09-02T07:07:21Z
-verified_at_commit: 38830b7
+verified: 2026-09-02T14:06:58Z
+verified_at_commit: aaac947
 status: human_needed
-score: 12/13 must-haves verified
+score: 20/20 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: human_needed
+  previous_score: 12/13
+  previous_commit: 38830b7
+  gaps_closed:
+    - "W-3 / HI-03 residual — `source_sightings`' PK widened to `(project_id, artifact_sha256, map_sha256, source_index)` at migration `v: 9`; the resolved zero on the `Sources` column can no longer mean 'DefMiner looked, found something, and threw it away'"
+    - "W-2 — all three literal NUL bytes re-spelled as escapes; an independent byte scan of every `packages/**/*.{ts,vue}` finds ZERO C0 control bytes"
+    - "W-1 — MAP-05 ticked in REQUIREMENTS.md with a dissolution note; the machine-owned span survived (`outbound-prohibition.spec.ts` green)"
+    - "W-5 / UAT gap 1 — `retention.ts` now sweeps BOTH new tables in the operator's cascade order; the convergence inequality's insert side finally counts rows the delete side can reach"
+    - "UAT gap 2 — `packages/backend/src/a8-measure.spec.ts` is committed, runnable and asserts BOUNDS (Run A and Run B) rather than the deleted scratch harness's wall-clock timings"
+    - "UAT test 1 / prior human item 3 — the feature was observed producing readable developer source from real proxied traffic on a live Caido at `df5b101`"
+    - "HI-03, HI-04 and all nine open round-1 review findings (MD-01…MD-04, LO-01…LO-05) — each re-checked against the shipped property, not against the commit that claims it"
+  gaps_remaining: []
+  regressions: []
+  still_open_by_operator_decision:
+    - "W-4 — `vue-tsc` is wired into no gate. RE-MEASURED at HEAD: exit 2, exactly 6 errors, 4 `SettingsPanel.vue` + 2 `SourceBrowser.spec.ts`. Unchanged across all seven plans. Accurately recorded as open."
+    - "W-6 — `MAP_MAX_BYTES` under-serves recovery ~2x. CONFIRMED untouched: `git diff` on the constant is empty and every plan carries the prohibition. Accurately recorded as open."
+    - "UAT gap 3 — `tests/frontend-load.spec.ts` frame-budget backstop. Load-sensitive and pre-existing; PASSED in this verifier's run (12 tests, 8.2 s). Accurately recorded as open."
 gates_run_by_verifier:
   - command: "pnpm vitest run"
-    result: "89 files / 4204 tests passed, exit 0"
+    result: "90 files / 4302 tests passed, exit 0, 14.12 s"
   - command: "pnpm typecheck"
     result: "exit 0"
   - command: "pnpm lint"
     result: "exit 0"
   - command: "pnpm knip"
     result: "exit 0"
+  - command: "pnpm build"
+    result: "exit 0"
   - command: "pnpm --filter @defminer/frontend exec vue-tsc --noEmit"
-    result: "exit 2 — 6 errors (4 pre-existing SettingsPanel.vue, 2 NEW in SourceBrowser.spec.ts). vue-tsc is not a wired gate."
+    result: "exit 2 — 6 errors (4 pre-existing `SettingsPanel.vue`, 2 `SourceBrowser.spec.ts`). Not a wired gate. Matches the W-4 baseline exactly."
+  - command: "byte scan for C0 controls across packages/**/*.{ts,vue}"
+    result: "zero — W-2 closed"
+  - command: "debt-marker scan (TBD/FIXME/XXX, TODO/HACK/PLACEHOLDER) over the 31 files this round modified"
+    result: "zero"
 deferred:
   - truth: "SC5 second half — the FP corpora are extended to include reconstructed source as an input class, and a false-positive rate is measured"
-    addressed_in: "Phase 3, and published in Phase 11"
-    evidence: "Phase 3 goal: 'Detection Engine & FP Harness — Two-tier gate, data-driven detectors, measured false-positive rate in CI'. Phase 11 SC5: 'The measured false-positive rate is published in the README as a number, alongside the corpus it was measured on'. Verified structurally at HEAD: `packages/backend/src/ingest/consumer.ts:1325` is `visit: () => {}` — no detector exists, so no positive, true or false, can be produced over any corpus."
+    addressed_in: "Phase 3, published in Phase 11"
+    evidence: "Re-confirmed at HEAD, not carried forward on the prior report's word: `packages/backend/src/ingest/consumer.ts` still contains `visit: () => {}`. No detector exists, so no positive — true or false — can be produced over any corpus."
   - truth: "MAP-01's external half — `.map` comment and `SourceMap` response-header announcements are CONSUMED, not merely counted"
     addressed_in: "Phase 8"
-    evidence: "Phase 8 SC1: 'Active `.map` probing works by default and unbudgeted, per the recorded operator decision'. Phase 7's D-01 refuses every outbound fetch by design; the `announcedExternal` counter is surfaced on the health panel as the measurement of what is handed over."
+    evidence: "Phase 8 SC1 owns active `.map` probing. D-01 refuses every outbound fetch by design; `announcedExternal` is surfaced on the health panel as the measurement of what is handed over."
+coincidental_reliance_items:
+  - truth: "Deleting an artifact takes its sightings with it: after a sweep no `source_sightings` row names an `artifact_sha256` with no surviving `artifacts` row in the same project"
+    reason: incidental-ordering
+    harden: "The invariant holds because `sweepToConvergence` re-runs, not because a pass enforces it. `deleteDigest` (retention.ts:1112-1193) cascades `observations` and `analyses` only; the sightings are collected in step 3d behind a `budget() > 0` guard, so a pass whose budget is consumed by the artifact loop returns having orphaned every evicted bundle's sightings. `retention.spec.ts:1337` drives `sweepToConvergence`, so the single-pass property is not the one under test. Either add `source_sightings` to the cascade in dependency order, or scope the module header's 'never a child with no parent' claim to the two children it actually covers."
 human_verification:
-  - test: "Re-measure the A8 COST half — sweep elapsed time and rows deleted under a synthetic map-heavy run with an aged backlog — and land the harness in the tree rather than deleting it."
-    expected: "Run A (no backlog, ceiling 50,000) and Run B (20,000-row aged backlog, ceiling 100) reproduce the figures recorded in 07-05-SUMMARY.md: 40 sweeps, ≤512 rows per pass, ≈+11 ms idle and ≈+585 ms working over the run."
-    why_human: "The plan carries this as `verification: backstop`. The FREQUENCY half IS wired and green (`consumer.spec.ts` 'Pitfall 2' asserts `retentionSweeps === ARTIFACTS`, i.e. one sweep per map-bearing artifact). The COST half exists only as a table in 07-05-SUMMARY.md, taken by a scratch `a8-measure.spec.ts` that was deleted after the run. `ls packages/backend/src/a8-measure.spec.ts` → no such file; `git log --diff-filter=A -- '*a8-measure*'` → nothing. The numbers are not reproducible at HEAD and a verifier cannot confirm them without re-authoring the harness. Abstained rather than passed silently."
-  - test: "Decide the owner and the eviction ORDER for sweeping `sources` and `source_sightings` (deferred item D1), then wire it."
-    expected: "An assigned phase or plan. The design question D1 names is real: does a `sources` row die when its last sighting goes, or does it age independently?"
-    why_human: "Confirmed in code, not taken on the SUMMARY's word: `store/retention.ts` names neither table (`command grep -n 'sources' packages/backend/src/store/retention.ts` → nothing), and migration `v: 8` declares NO foreign key and NO `ON DELETE CASCADE`, so deleting an artifact leaves its sightings orphaned. No later ROADMAP phase claims this work — Phase 11 SC4's soak is about heap, not table rows — so it has no owner today. Not deferred by this report; escalated."
-  - test: "Observe the feature produce a readable line of developer source from real proxied traffic, end to end, on a live Caido."
-    expected: "A bundle carrying an INLINE map is proxied; the Artifacts row shows a non-zero Sources count; the drill-down renders the tree and the viewer shows the original file's lines."
-    why_human: "Every segment of the chain is tested and green, and `SourceBrowser.spec.ts` mounts the REAL tree and the REAL viewer and renders a recovered file's lines. But no single test spans proxy-response → rendered source line, and the repository's own corpus cannot produce one: I independently tail-scanned all nine committed bundles and found 3 external announcements, 6 with none, and ZERO inline. Nobody has yet watched this feature work on real traffic, because the corpus makes it impossible to."
-  - test: "Accept or reject the two literal NUL bytes shipped inside `packages/backend/src/sources-sink-prohibition.spec.ts`, and the one in `SourceBrowser.spec.ts`."
-    expected: "A decision: either re-spell them as `\\u0000` escapes (the rule `map-fixture.ts` states in its own header and honours), or record the deviation with its reason."
-    why_human: "This is a judgement about the repo's own encoding discipline, not a correctness bug. See finding W-2 — the harm is demonstrated rather than argued: it broke this verifier's grep tooling mid-run."
-  - test: "Flip MAP-05's ledger row in REQUIREMENTS.md, or state why it stays open."
-    expected: "MAP-05 marked `[x]`, or a recorded reason it is not."
-    why_human: "Assessed and reported, not actioned — the verifier does not tick requirements. See finding W-1: MAP-05 reads substantively MET at HEAD."
+  - test: "Decide WR-01: rewrite `RETENTION_SWEEP_MAX_PASSES`'s derivation, or lower the constant."
+    expected: "`thresholds.ts`'s docblock and `retention.ts:178-180` agree on one number, and the choice of 16 is re-derived from the real quotient."
+    why_human: "Verified independently, not taken from the review. `ROWS_INSERTED_PER_ITERATION_MAX = 3 + 2048 = 2051` (thresholds.ts:490-491), so the inequality's right-hand side is `128 + 2051 = 2179`. The `RETENTION_SWEEP_MAX_PASSES` docblock (thresholds.ts:166, 177, 191) still computes the pre-07-14 `4,227` in three sentences and concludes 'Nine is the smallest integer that satisfies the inequality (4,227 / 512 = 8.26)'. The true quotient is 4.26, the smallest satisfying integer is 5 and the next power of two is 8, not 16. `retention.ts:178-180` writes the correct figure ('512 x 16 = 8,192 against 128 + 2,051 = 2,179'), so two files in one repository disagree. The constant 16 OVER-satisfies, so nothing is unsafe at runtime — but its stated derivation no longer produces it, and `thresholds.spec.ts:260-281` computes the inequality FROM the constants, so it is structurally unable to fail on this. I confirmed the drift is this round's own: at `4bd99c1` (07-14's row-unit gate) the docblock's 4,227 was still correct; `59347c3` retired the factor and left it behind. A judgement about which repair the operator wants, not a mechanical fix."
+  - test: "Decide WR-02: put `source_sightings` inside `deleteDigest`'s cascade, or scope the module header's invariant to the two children it covers."
+    expected: "Either every eviction removes its sightings in the same statement sequence as its observations and analyses, or `retention.ts:42-45` and `:389-390` say plainly that sightings are reaped as orphans by design and that the window closes on the next pass."
+    why_human: "Reproduced from the code, not from the review. `deleteDigest` enumerates `OBSERVATION_KEYS_FOR_DIGEST_SQL` and `ANALYSIS_KEYS_FOR_DIGEST_SQL` and then runs `DELETE_ARTIFACT_SQL`; it never touches `source_sightings`. Step 3d's orphan collection is guarded by `budget() > 0` (retention.ts:927) with an `else { sightingsCapped = true; }` arm, so a pass that spends its whole budget on 512 childless artifacts returns with every one of those bundles' sightings orphaned. `workRemains` re-detects it through `ORPHAN_SIGHTINGS_SQL` (retention.ts:1347) so it converges across passes — but the module header states three times that the cascade cannot create that state, and this is now the ORDINARY path for every evicted map-bearing bundle rather than a crash-recovery corner. No data loss: `readSightingOrigin` LEFT JOINs `artifacts`, and the anti-join errs toward keeping `sources` rows alive. Which of the two repairs is correct depends on whether the operator's UAT cascade choice meant 'in the same statement sequence' or 'in the same pass'."
+  - test: "Decide WR-03: is a vite/webpack loader query analytic content the operator should see, or a residual the redactor should cut?"
+    expected: "Either the docblock stops claiming that a non-URL label has no query axis and `SOURCES_LABEL_CASES` gains a relative `?` case, or `redactSourceLabelForExport` cuts wherever a query axis is present rather than wherever the label is protocol-shaped."
+    why_human: "Confirmed independently. `redactSourceLabelForExport` (export.ts:273-275) delegates to `redactUrlForExport` only when `isProtocolShapedLabel` is true, and that predicate is `'://' at a positive index with the next character a slash, OR one of four known schemes`. The stated premise at export.ts:255-256 — 'A label that is not a URL has neither axis' — is false for the ordinary vite/webpack shape `src/App.vue?vue&type=script&lang.ts`, which `classify()` puts in `relative`. Those tails now export VERBATIM in redacted mode where they were previously cut at the `?`. I re-checked the corpus by id: `SOURCES_LABEL_CASES` holds 23 entries and NOT ONE contains a `?`, so `export.spec.ts`'s corpus passes identically in both modes and the narrowing is untested in the direction that changed. Counterweight, stated so this is not overread: the value still passes `stripForExport` and `csvField`, so there is no injection, and a bundler's loader query is not the credential class `redactUrlForExport` was written for. This is the safe mode disclosing more than it did, on a premise that is factually wrong, with no coverage — a scope judgement, not a bug fix."
+  - test: "Accept or repair IN-01: `derivedRejected.depth_exceeded` fires on `parsed.recovered.length > 0` rather than on whether anything was actually admitted for recursion."
+    expected: "A decision, plus the pinning case `consumer.spec.ts` lacks — a map whose every `sourcesContent` entry is empty, asserting `depth_exceeded === 0`."
+    why_human: "Read at `consumer.ts:1272-1287`. The comment above the gate names ONE inaccuracy (the log message's count over-states). The COUNTER shares the same condition, so if every recovered source is subsequently refused by `admitDerived` — all empty, or all over `DERIVED_SOURCE_MAX_BYTES`, both reachable from one hostile map — no recursion would have been attempted and the counter still increments. `telemetry.ts:317-322` states the unit as 'one reconstruction stage that DECLINED TO RECURSE'. Magnitude is one increment per map-bearing artifact against the 781 that MD-03's fix removed, and no health surface carries the counter, so this is not a reason to reopen MD-03. Whether the residual is worth a second local is a judgement."
 findings:
-  - id: W-1
+  - id: WR-01
     severity: warning
-    title: "MAP-05 is substantively met and merely un-ticked"
-  - id: W-2
+    title: "`RETENTION_SWEEP_MAX_PASSES`'s derivation still computes the retired 4,227; `thresholds.ts` and `retention.ts` disagree, and the spec is structurally blind to it"
+    introduced_by: "this round (07-14, commit 59347c3)"
+  - id: WR-02
     severity: warning
-    title: "Two Phase 7 files ship literal C0 control bytes, against the phase's own stated rule"
-  - id: W-3
+    title: "`deleteDigest` cascades two children of three, so an eviction creates orphan sightings by construction — the state the module says three times it cannot create"
+    introduced_by: "this round (07-13)"
+  - id: WR-03
     severity: warning
-    title: "HI-03's residual makes a RESOLVED ZERO lie, on the one column whose design is that a resolved zero cannot"
-  - id: W-4
-    severity: warning
-    title: "The recorded vue-tsc baseline is wrong: 4 pre-existing errors, not 5, plus 2 NEW ones in a Phase 7 file"
-  - id: W-5
-    severity: warning
-    title: "HI-04's convergence proof counts inserts into two tables the sweep structurally cannot delete from"
-  - id: W-6
-    severity: warning
-    title: "MAP_MAX_BYTES under-serves the recovery half by roughly a factor of two (WINDOW 111), conservatively"
-coincidental_reliance_items: []
+    title: "LO-04's narrowing rests on a premise the vite/webpack loader-query shape falsifies, and the 23-label corpus contains no `?` to notice"
+    introduced_by: "this round (07-16)"
+  - id: IN-01
+    severity: info
+    title: "The hoisted depth refusal counts a stage in which nothing could have recursed"
+  - id: IN-02
+    severity: info
+    title: "`DERIVED_MAX_DEPTH` is a value import used only inside `{@link}` prose — lint, typecheck and knip all pass over it"
+  - id: IN-03
+    severity: info
+    title: "`ORPHAN_SIGHTINGS_SQL`'s comment says it selects 'the four key columns'; it selects three (`project_id` is bound, not selected)"
 ---
 
-# Phase 7: Sourcemap Reconstruction — Verification Report
+# Phase 7: Sourcemap Reconstruction — Verification Report (re-verification after gap-closure round 1)
 
 **Phase Goal:** *Recover developer-readable source — the single highest value-per-effort feature in the tool — without letting a malicious map write outside its sandbox.*
-**Verified:** 2026-09-02T07:07:21Z at `38830b7`
-**Status:** `human_needed` — no must-have FAILED; one `backstop` truth abstains and four items need a human decision
-**Re-verification:** No — initial verification
+**Verified:** 2026-09-02T14:06:58Z at `aaac947`
+**Status:** `human_needed` — no must-have FAILED, no gap remains open, four items need an operator decision
+**Re-verification:** Yes — after the seven-plan gap-closure round (07-11 … 07-17)
 
 ---
 
 ## Verdict in one paragraph
 
-**The phase goal is met, in both halves, with material caveats that are named below rather than absorbed.** The recovery half closes end to end: discovery → parse → persist → RPC → tree → viewer → export all exist, are wired, carry real data, and are exercised by 4,204 passing tests I ran myself. The sandbox half is met **by dissolution** — there is no output directory because there is no filesystem — and I judge that a legitimate satisfaction of Success Criterion 3 rather than an unmet criterion wearing a different answer, for reasons argued at length below. The caveats that matter: on this repository's own eight pinned production bundles the feature recovers **zero** sources, by design and disclosed; a second bundle carrying a byte-identical map still loses its own evidence behind a *resolved* zero; and two new tables grow with no sweep and no owner.
+**The round did what it said it did, and I checked each closure against the shipped property rather than against the commit that claims it.** Every gap the prior report and the UAT left open is closed in code: the sighting key is widened and the resolved zero can no longer lie; both new tables are swept in the operator's cascade order by anti-join and never a foreign key; the A8 harness is committed and asserts bounds; the three literal NUL bytes are gone; MAP-05 is ticked. The two things I was asked to weigh independently both hold up — **WR-01 and WR-02 are real, and WR-02 is the more interesting of the two** because it is not a stale comment but a live gap between what the cascade does and what the module says it does. **WR-03 is real too, and it is the one with a security direction**: the safe export mode now discloses more than it used to, on a bundler shape that is ordinary rather than hostile, justified by a sentence that is factually wrong and covered by nothing. None of the three falsifies a must-have; all three are the kind of defect this repository's own discipline exists to catch, which is why they are named rather than absorbed. **The traceability question has a clean answer: the ledger is NOT stale.**
 
 ---
 
@@ -81,123 +108,113 @@ coincidental_reliance_items: []
 
 ### Observable Truths
 
+Rows 1–9 are the ROADMAP contract, re-checked as a regression. Rows 10–20 are the round's own must-haves, verified in full.
+
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | **SC1** — sources reconstructed from `sourcesContent` via `JSON.parse`, no VLQ on the primary path; a real inline map at `MAP_MAX_BYTES` completes within `MAX_SYNC_SLICE_MS` and `ARTIFACT_DEADLINE_MS`, or records the partial state | ✓ VERIFIED | `results/map-bytes.json` `status: pass`, four ladder points, one fresh version-asserted Caido 0.58.0 per point (`binary.reported_version` = `0.58.0`, sha256 pinned). Inline path fitted at **8.873 ms/MB**; `measured_stall_bound` 2,954,422 B; shipped `MAP_MAX_BYTES = 2_621_440` — the 512 KiB boundary *below* the fit, so policy sits outside the measurement's noise on the safe side. `thresholds.ts:506` cites `map-bytes.json` by path in `POLICY_DERIVED_FROM`. Over the bound: **refused, never truncated**, recorded `partial` with a namespaced reason code. |
-| 2 | **SC2** — VLQ decoding via `@jridgewell/sourcemap-codec` only where position attribution is genuinely needed | ✓ VERIFIED | Exactly one non-spec import in the repo: `SourcePositionStrip.vue:66-67`. `packages/frontend/package.json` diff is **exactly one added line** at an exact pin (`git diff` confirmed). `codec-prohibition.spec.ts` (1,131 lines) bans it across `packages/backend/src` + `packages/engine/src` by AST walk, specifiers derived from the package's own `exports` map. `SourcePositionStrip.spec.ts:343` asserts the codec has exactly one consumer. |
-| 3 | **SC3** — a malicious-`sources` fixture suite writes nothing outside the output directory | ✓ VERIFIED **by dissolution** | Full reasoning in its own section below. Corpus: all six named categories present by id. Dissolution: no content column in migration `v: 8`; `filesystem-prohibition.spec.ts` bans `fs`/`node:fs`/`llrt/fs` (± `/promises`) and the hosted-file surface across both source roots. Proof of unreachability: `sources-sink-prohibition.spec.ts` (1,213 lines), sinks derived from `Object.keys(posix)` at runtime, bindings derived from `parse.ts`'s `RecoveredSource` fields read off disk. |
-| 4 | **SC4** — malformed maps, bombs, absent `sourcesContent`, indexed maps and cycles stay within limits and record partial rather than crashing | ✓ VERIFIED | `parse.spec.ts`: 13-fixture hostile matrix, `it.each([...HOSTILE_MAP_CASES])`, plus *"exercised EVERY id in HOSTILE_MAP_CASE_IDS, not a subset"* and *"every member of MAP_PARSE_REASONS was OBSERVED, and names the ones that were not"*. Deep nesting → caught `RangeError` → `too_deep` (`reasonForParseError`). Nested `sections` refused *"however it is spelled"*. Size boundary exercised from both sides at the real `MAP_MAX_BYTES`, with a separate case proving the ENCODED gate was not what refused the one-over case. |
-| 5 | **SC5a** — reconstructed sources are themselves analysed, once per content hash | ✓ VERIFIED | `consumer.ts:1275-1279` runs `walk()` over recovered source at depth 1 through the derived path; the once-per-hash guard is the shipped `isAnalysed`/`claimAnalysis` pair. D-13's bound tested in both directions: `derivedRejected.depth_exceeded` asserted `1`, `0` and `2` across three cases. |
-| 6 | **SC5b** — the FP corpora are extended to include reconstructed source, with a measured rate | — DEFERRED | Not a failure. `consumer.ts:1325` is literally `visit: () => {}`; Phase 3 is unexecuted. A rate cannot exist without a detector. See `deferred` in the frontmatter. |
-| 7 | **SC6** — reconstructed source is browsable in the UI and retrievable via the Phase 6 delivery path with a manifest | ✓ VERIFIED *(caveat W-3)* | Browsable: `SourceBrowser.spec.ts:339` *"mounts the REAL tree and the REAL viewer, never a stub or a placeholder"* and `:364` *"renders the recovered file's lines when a tree node is selected"*. Exportable: third `EXPORT_COLUMNS` entry (`export.ts:285`) with `sources_verbatim` under `redactUrlForExport`, reached through the scoped **Export source manifest** CTA, heading keyed on the export table so the dialog names what the CTA named. |
-| 8 | **Goal, recovery half** — a user actually gets developer-readable source out of this, end to end | ✓ VERIFIED *(caveat below)* | Every seam checked individually, none taken on the SUMMARY's word: `consumer.ts` imports and calls `findAnnouncement`/`decodeInlineMap`/`parseSourceMap`/`upsertRecoveredSource`/`recordSighting`; `index.ts:1314` registers `deriveSource`, which really reloads via `sdk.requests.get`, really re-hashes (`sha256Hex(raw)` at `:457`) and fails closed on mismatch at `:458`; `client.ts:1085` forwards it; `SourceBrowser.vue:238` reads the list and `:435` mounts the viewer; `SourceViewer.vue:310` derives `lines` from the content arm and `:679` renders each through `forSourceLine`. **No static return, no mock, no hollow prop anywhere on the chain.** |
-| 9 | **Goal, sandbox half** — a malicious map cannot write outside its sandbox | ✓ VERIFIED | See the SC3 section. |
-| 10 | **Backstop (07-01)** — the OQ-1 retention reading is recorded as an observation with its own `status`, never as a settled policy | ✓ VERIFIED | Read the artifact directly: `observations[0]` is `{ id: "OQ-1-request-retention", status: "not_run", ... }` with a `not_a_policy` field spelling out *"Do not cite this row as DefMiner's retention model"*. The truth asserts the RECORDING, and the recording is honest — including recording that the measurement did **not** run because this build's `sdk.requests` exposes no `create`. |
-| 11 | **Backstop (07-05, A8)** — the sweep's COST half re-checked against the new cadence | ⚠️ ABSTAIN (`insufficient_spec`) | Frequency IS wired and green. Cost is a SUMMARY table from a harness that no longer exists. Routed to human verification — never a silent pass. |
-| 12 | **Backstop (07-07)** — source-tree long-text, the hostile label set through the tree | ✓ VERIFIED | `hostile.spec.ts:831` registers the *"sources-label corpus (SPIKE-12, map-fixture.ts)"* as a surface, asserts no `title` and no `data-*` carries the untruncated label, runs *"exercised EVERY case in the corpus"*, and `:976` renders *"all twenty-three labels in one tree and rewrites none of them"*. Green in the run I executed. |
-| 13 | **Backstop (07-08)** — source-viewer long-text, the O-02 case | ✓ VERIFIED | `SourceViewer.spec.ts:535` *"source-viewer / long-text — the 4 MiB single-line fixture"* → `:547` *"renders ONE row, truncated, with a visible marker and no leak"*, against the real `multi-megabyte-single-line` fixture in `packages/engine/src/hostile.fixture.ts:139`. Green. |
+| 1 | **SC1** — sources reconstructed from `sourcesContent` via `JSON.parse`, no VLQ on the primary path; a real inline map at `MAP_MAX_BYTES` completes within budget or records the partial state | ✓ VERIFIED | Regression: `results/map-bytes.json` unchanged — `status: pass`, `ladder_complete: true`, four points each `reported_version: "0.58.0"`. `MAP_MAX_BYTES` untouched by every plan's prohibition, confirmed by `git diff`. |
+| 2 | **SC2** — VLQ decoding only where position attribution is genuinely needed | ✓ VERIFIED | Regression: `codec-prohibition.spec.ts` green in the 4,302-test run; the codec's sole consumer is still `SourcePositionStrip.vue`. |
+| 3 | **SC3** — a malicious-`sources` fixture suite writes nothing outside the output directory | ✓ VERIFIED by dissolution | Regression: `filesystem-prohibition.spec.ts` and `sources-sink-prohibition.spec.ts` both green; migration `v: 9` re-declares `source_sightings` with **no content column, no BLOB, no untyped column** — every column `TEXT` or `INTEGER`. The dissolution survives the schema change. |
+| 4 | **SC4** — malformed maps, bombs, absent `sourcesContent`, indexed maps and cycles stay within limits and record partial | ✓ VERIFIED | Regression: `parse.spec.ts` green, and 07-14 **added** to the matrix (the pre-slice arithmetic refusal and the four-terminator scan) without losing a member of `MAP_PARSE_REASONS`. |
+| 5 | **SC5a** — reconstructed sources analysed once per content hash | ✓ VERIFIED | Strengthened this round: MAP-06's aggregate half now has the production caller its docblock had claimed since Phase 7 shipped (`consumer.ts:1180` → `countSourcesForMap`). |
+| 6 | **SC5b** — the FP corpora extended with a measured rate | — DEFERRED | Re-confirmed at HEAD rather than carried: `consumer.ts` still holds `visit: () => {}`. A rate cannot exist without a detector. |
+| 7 | **SC6** — reconstructed source browsable in the UI and retrievable via the Phase 6 path with a manifest | ✓ VERIFIED — **W-3's caveat now removed** | Browsable and exportable as before, and the caveat that qualified this row in the prior report is gone: see rows 10–11. |
+| 8 | **Goal, recovery half** — a user actually gets developer-readable source out of this, end to end | ✓ VERIFIED — **the prior report's central caveat is CLOSED** | The prior report abstained because no test spanned proxy-response → rendered source line and the committed corpus (0 inline / 3 external / 6 silent) could not produce one. `07-UAT.md` test 1 records this observed on real proxied traffic against a live Caido at `df5b101`: non-zero Sources count, rendered tree, readable lines. Chain re-checked at HEAD: `SourceBrowser.vue:83-84` imports and `:434`/`:450` mounts the real `SourceTree`/`SourceViewer`; `index.ts:492-493` re-hashes the reloaded body and compares against `origin.artifact_sha256`. |
+| 9 | **Goal, sandbox half** — a malicious map cannot write outside its sandbox | ✓ VERIFIED | Row 3, plus R6's content-addressed download name unchanged (`SourceViewer.vue:370` → `sourceDownloadName`). |
+| 10 | **W-3, first half (07-11)** — a `SourceRef` names four things and every single-sighting read and write binds all four; `readSightingOrigin` still reads `request_id` and `artifact_sha256` OUT of the database, so D-24 stays a control and not a tautology | ✓ VERIFIED | `spec.ts:401,446` and `client.ts:835,845` both carry required `artifactSha256`; `CONTRACT_VERSION` and `FRONTEND_CONTRACT_VERSION` are **both 7**. Traced the whole hop chain: `SourceBrowser.vue:240,311` → `client.ts` → `index.ts:396-401` `readSightingOrigin`. D-24's non-tautology confirmed at `index.ts:493`: the comparison is `digest !== origin.artifact_sha256` — the STORED row — with `index.ts:385-392` spelling out why comparing against the caller's value would be vacuous. |
+| 11 | **W-3, second half (07-12)** — two bundles carrying a byte-identical map each keep their own evidence, and a resolved zero on the `Sources` column can no longer mean "found something and threw it away" | ✓ VERIFIED | Migration `v: 9` read directly (`migrations.ts:963-1002`): `PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)`. `RECORD_SIGHTING_SQL`'s conflict target names all four (`sources.ts:175`) and the trailing attribution guard is **gone**. Behaviour is exercised, not inferred: `consumer.spec.ts:2011` "EVERY SIGHTING NAMES ITS OWN BUNDLE, and both bundles are present" with `sightingsRecorded === LABELS.length * 2`; `sources.spec.ts:371` "the SAME content in TWO bundles is ONE sources row and TWO sightings"; `sources.spec.ts:659` "gives BOTH bundles their own row when they carry the same map". All green in my run. |
+| 12 | **The fifth approval is honest (07-12)** — `EXPECTED_TABLES` still holds exactly eight members with the word `eight` byte-unchanged, both occurrences of the approval count read FIVE, and the fifth event is dated and attributed | ✓ VERIFIED | Counted the array by hand: 8 members (`schema.spec.ts:95-104`). `FIVE` appears at `:31` and `:77`; `eight` is intact at `:31`, `:80`, `:88`. The fifth event's entry (`:57-75`) records what the operator was shown — both column lists, both keys, the version, the transient table name, the **row-volume cost** (781 → 1,562 rows for a duplicated map) and the irreversible half. A reader five phases from now can reconstruct the decision. `07-12-SUMMARY.md:157` records Option A answered at a `blocking-human` gate on 2026-09-02. |
+| 13 | **Migration `v: 9` is re-runnable from every interruption state (07-12)**, and `SCHEMA_VERSION` evaluates to 9 without being restated | ✓ VERIFIED | Read the SQL: `CREATE TABLE IF NOT EXISTS` on both, `INSERT OR IGNORE`, `DROP TABLE IF EXISTS`, `RENAME`, `CREATE INDEX IF NOT EXISTS` — idempotent from any midpoint. `SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].v` (`migrations.ts:1125`), derived not restated. **No foreign key and no `ON DELETE CASCADE`**, as the operator's decision required. |
+| 14 | **UAT gap 1 + W-5 (07-13)** — `sweepRetention` deletes from both `source_sightings` and `sources`, in the operator's cascade order, by anti-join and never a foreign key | ✓ VERIFIED *(see coincidental-reliance note and WR-02)* | `SIGHTINGS_OVER_AGE_SQL`, `SIGHTINGS_OLDEST_SQL`, `ORPHAN_SIGHTINGS_SQL`, `UNSIGHTED_SOURCES_SQL`, `DELETE_SIGHTING_SQL`, `DELETE_SOURCE_SQL` all present (`retention.ts:468-585`); step 3d runs sightings then sources with `sightingsCapped` deferring the anti-join. `retentionCounts` reports both tables (`:1371-1392`). Both bounds applied: `retention.spec.ts:1467` (age, strict cutoff), `:1493` (row, per table), `:1511` (eligible under both, deleted once). The `NOT IN` NULL trap is closed on both sides and `:1648` EXECUTES the dangerous half rather than asserting it. |
+| 15 | **The eviction order the operator chose (07-13)** — a `sources` row dies with its LAST sighting and not before | ✓ VERIFIED | `retention.spec.ts:1373` "a source sighted from TWO bundles OUTLIVES the eviction of one" — content-addressed dedupe survives the sweep, which is the property the anti-join exists for. `:1573` proves a budget-exhausted sightings pass deletes NO `sources` row. `:1680` proves the anti-join still leaves a source its NULL-bearing neighbour does not name. |
+| 16 | **UAT gap 2 (07-13, `verification: backstop`)** — the A8 cost half is reproducible at HEAD by a committed benchmark asserting BOUNDS, not timings | ✓ VERIFIED — **the prior report's abstention is discharged** | `packages/backend/src/a8-measure.spec.ts` exists at HEAD (20,013 bytes), is in the suite, and passed. Run A asserts `retentionDeleted === 0`, exact post-run row counts and `totalRows === ROWS_INSERTED_BY_RUN`; Run B asserts `retentionSweeps >= MAP_BEARING`, a per-pass cap, `retentionDeleted >= BACKLOG_ROWS` and bounded final counts. **No wall-clock assertion anywhere** — the prohibition held. This is the one truth the prior report abstained on; it is now wired and green. |
+| 17 | **MD-01 / LO-01 / LO-02 (07-14)** — the aggregate map bound enforced in ROWS, the gate committed strictly BEFORE the `2 *` factor it compensated for, both cheap refusals moved ahead of their allocations, four line terminators, still no regex | ✓ VERIFIED | Row-unit gate at `parse.ts:363-380` with `ROWS_PER_RECOVERED_SOURCE`. `LINE_TERMINATORS` is a frozen four-member array including `\u2028`/`\u2029` (`announce.ts:144-148`); zero `RegExp` in the file. `decodeInlineMap` refuses on offsets at `parse.ts:204` **before** `payload = url.slice(...)` at `:207`. **The commit ordering is checkable and I checked it**: `git show 4bd99c1:thresholds.ts` still carries `2 * SOURCE_ROWS_PER_MAP_MAX`; `59347c3` retires it. The inequality was true at every commit. |
+| 18 | **MD-03 / MD-04 / LO-03 (07-15)** — one depth refusal per stage, MAP-06's aggregate bound given a production caller, `sources_verbatim` cut on a code-POINT boundary | ✓ VERIFIED | Depth gate hoisted to the recursion call site (`consumer.ts:1272`); `consumer.spec.ts:2545` "fires ONCE PER STAGE" and `:2574` "emits ONE depth refusal and ONE log line for a map carrying many sources". Aggregate enforcer at `consumer.ts:1180` with the projected post-write total `max(existing, recovered)` — so a re-ingest that adds no rows is accepted, never refused `too_many_sources`. `truncateToCodePoints` at `sources.ts:531`, pinned by `sources.spec.ts:1159` (no unpaired surrogate at the 4,096th code unit) and `:1221` (a cap-length label in code points stored whole). |
+| 19 | **LO-04 / LO-05 (07-16)** — a redacted export never reports a query withheld from a value that had none; `snapshotCounters` preserves array shape and is still a copy | ✓ VERIFIED *(premise unsound — WR-03)* | `redactSourceLabelForExport` (`export.ts:273-275`) delegates to the **shipped** `redactUrlForExport` and introduces no new vocabulary; `observations.url` never reaches it, so that column is byte-unchanged. `snapshotCounters` handles `Array.isArray(value)` via `value.map(copy)` (`telemetry.ts:971`) inside a recursive deep copy. The truth as WORDED holds — the cut happens *only* where a query axis exists. Its stated PREMISE does not; see WR-03. |
+| 20 | **MD-02 (07-17)** — the display tree merges on the byte-identical verbatim segment, so two long sibling directories stay two nodes | ✓ VERIFIED | `Building.mergeKey` carries the raw segment and `displaySegment` carries the label separately (`tree.ts:386-388, 436, 530`). The import list is still exactly `["forCellText"]` — one import, asserted as an exact set. No Unicode normalisation, no case folding, no `node:path`. |
+| 21 | **Every wired gate is green at HEAD** | ✓ VERIFIED | Run by me, not read: `pnpm vitest run` → **90 files / 4,302 tests, exit 0**; `typecheck`, `lint`, `knip`, `build` → all exit 0. This subsumes the 73-file / 3,444-test prior-phase regression scope. |
 
-**Score: 12/13 truths verified** (1 backstop abstention; 1 criterion deferred to Phase 3 and not counted against).
+**Score: 20/20 truths verified** (row 6 deferred to Phase 3 and not counted against; 0 behavior-unverified — every state-transition and cleanup invariant in this round has a named passing test).
 
 ---
 
-## Success Criterion 3 — the judgement, with reasoning
+## What I checked independently, and what it changed
 
-> *"A malicious-`sources` fixture suite — traversal, absolute paths, UNC, drive letters, reserved names, `webpack://` — writes nothing outside the output directory on macOS, Linux, and Windows"*
+### WR-01 — confirmed, and it is this round's own drift
 
-### My verdict
+I did the arithmetic from the constants rather than from the review. `ROWS_INSERTED_PER_ARTIFACT_MAX = 3`, `SOURCE_ROWS_PER_MAP_MAX = 2_048`, and after 07-14 `ROWS_INSERTED_PER_ITERATION_MAX = 3 + 2048 = 2051`. The inequality's right-hand side is `RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX = 128 + 2051 = 2179`.
 
-**This is a legitimate satisfaction of the criterion, and it is a strictly stronger outcome than the criterion asked for — but it is a DISSOLUTION, not a pass, and it holds only because the phase did the one thing that distinguishes the two.** The clause *"on macOS, Linux, and Windows"* retains **no residual meaning** and should be treated as retired, with one carve-out I name below. The corpus that exists covers what the criterion intended, in full, with room to spare.
+`thresholds.ts:166` still reads `8,192 >= 4,227, which is ~1.9x headroom`; `:177` still argues against `Raising RETENTION_SWEEP_MAX_ROWS to 4,227`; `:190-191` still concludes `Nine is the smallest integer that satisfies the inequality (4,227 / 512 = 8.26)`. The true figures are `8,192 >= 2,179` (**3.76x**), quotient **4.26**, smallest satisfying integer **5**, next power of two **8**. Meanwhile `retention.ts:178-180` writes `512 x 16 = 8,192 against 128 + 2,051 = 2,179` — correct, and contradicting its own dependency.
 
-### Why it is a dissolution and not a pass
+I traced when it broke: at `4bd99c1` (07-14's row-unit gate) the docblock's `4,227` was still exactly right, because the `2 *` factor was still there. `59347c3` retired the factor and updated `ROWS_INSERTED_PER_ITERATION_MAX`'s own paragraph — which now correctly says *"the factor was retired second (2,179, exact)"* — and left the neighbouring derivation behind. `thresholds.spec.ts:260-281` asserts the inequality **computed from the constants**, so it passes and always will.
 
-The criterion has three parts and they fare differently.
+**Nothing is unsafe.** 16 over-satisfies a bound that got slacker. What is broken is that a load-bearing constant's stated derivation no longer evaluates to the constant, in a file whose entire discipline is that every threshold is derivable. **Reported, not repaired — a verifier does not move a threshold or rewrite its justification.**
 
-**(a) The fixture suite — MET, literally and completely.** I checked the six named categories against `SOURCES_LABEL_CASES` by value, not by count:
+### WR-02 — confirmed, and it is the sharper of the two
 
-| Criterion's category | Fixture id | Value |
+I read `deleteDigest` end to end (`retention.ts:1112-1193`). It enumerates observations, then analyses, then runs `DELETE_ARTIFACT_SQL`. `source_sightings` appears nowhere in it. Plan 07-13 added a third child table and put its collection in step 3d instead, behind `if (budget() > 0)` with an `else { sightingsCapped = true; }` arm (`retention.ts:927, 948-950`).
+
+The failure is not contrived. A pass whose budget is consumed by 512 childless evictable artifacts ends with `budget() === 0`; step 3d is skipped; the pass returns having orphaned every one of those bundles' sightings. `workRemains` re-detects it (`:1347`) so the next pass repairs it — **it converges across passes, which is not what the module says.** The header (`:43-45`) claims a pass "never [leaves] a child with no parent", and `ORPHAN_OBSERVATIONS_SQL`'s comment (`:389-390`) says "The cascade below cannot create one — children go first." Those sentences were true when there were two children. And the orphan-sightings comment (`:483-486`) asserts the rows "are collected here **in the same pass**", which is exactly the claim the budget guard does not honour.
+
+`retention.spec.ts:1337` drives `sweepToConvergence`, so the single-pass property is not under test. Impact is consistency and documentation, not loss — `readSightingOrigin` LEFT JOINs `artifacts`, and the anti-join errs toward keeping `sources` alive. **This is recorded as a coincidental-reliance item, `incidental-ordering`: the invariant holds because the loop re-runs, not because the pass enforces it.** Advisory, so it costs no score — but a reader who trusts the module's most emphatic paragraph will reason wrongly, and this is now the ordinary eviction path for every map-bearing bundle.
+
+### WR-03 — confirmed, and it is the one with a direction
+
+`isProtocolShapedLabel` (`export.ts:236-241`) is true only for `'://'` at a positive index with the next character a slash, or one of `webpack: file: https: http:`. `redactSourceLabelForExport` returns everything else **whole**.
+
+The docblock's premise (`export.ts:255-256`) — *"A label that is not a URL has neither axis, so there is no query to withhold"* — is false. `src/App.vue?vue&type=script&setup=true&lang.ts` is what vite emits, routinely, into `sources`. It is relative, it is real, and it has a query axis. It now exports verbatim in redacted mode where it was previously cut at the `?`.
+
+I checked the corpus by id rather than by count: `SOURCES_LABEL_CASES` holds 23 entries — traversal, absolute, UNC, drive letter, reserved device, `webpack://`, `file:`, `http:`, NUL, NFC/NFD, case pair, fullwidth, RTL override, trailing dots, empty, dot-only, benign control, 4 KiB — and **not one contains a `?`**. So the change is invisible to every corpus-driven assertion in `export.spec.ts`.
+
+Two counterweights so this is not overread: the value still passes `stripForExport` and `csvField`'s formula neutralisation, so there is no injection; and a bundler's loader query is not the credential class `redactUrlForExport` was written for. **It is still the safe mode disclosing strictly more than it did, on an ordinary rather than hostile shape, justified by a sentence that is wrong, with no test.**
+
+### Traceability — the ledger is NOT stale
+
+Three executors (07-12, 07-15, 07-16) declined a `mark-complete` mutation their plans prohibited. I checked the file rather than the reasoning. **All eight of this phase's requirement rows are `[x]` on disk:**
+
+| Row | REQUIREMENTS.md | State |
 |---|---|---|
-| traversal | `relative-traversal`, `relative-traversal-encoded` | `../../../../../../etc/defminer-escape.txt`, `..%2f..%2f..%2fdefminer-escape.txt` |
-| absolute paths | `absolute-posix`, `absolute-posix-etc` | `/tmp/…`, `/etc/defminer-escape.txt` |
-| UNC | `windows-unc` | `\\server\share\defminer-escape.txt` |
-| drive letters | `windows-drive` | `C:\Windows\Temp\defminer-escape.txt` |
-| reserved names | `windows-reserved-device`, `-ext` | `CON`, `NUL.js` |
-| `webpack://` | `protocol-webpack` | `webpack:///./src/app.js` |
+| MAP-01 | `:838` | `[x]` |
+| MAP-02 | `:839` | `[x]` |
+| MAP-03 | `:840` | `[x]` |
+| MAP-04 | `:841` | `[x]` |
+| MAP-05 | `:842` | `[x]` — ticked at UAT with the dissolution note (closes W-1) |
+| MAP-06 | `:843` | `[x]` |
+| MAP-07 | `:844` | `[x]` |
+| UI-05 | `:884` | `[x]` |
 
-Plus eleven the criterion did not ask for and SPIKE-12 measured: `file:`, `http:`, NUL byte, NFC/NFD pair, case-only pair, FULLWIDTH FULL STOP, RTL override, trailing dots-and-spaces, empty, lone dot, and a **legal control** (`src/app/index.js`) whose stated purpose is that *"a corpus in which every case fires proves only that the check fires"*. Twenty-three cases, imported by at least eight consumers and never forked, with exhaustiveness gates on the id set in each.
+The skips were correct: the boxes were already ticked, the plans prohibited touching the file, and `outbound-prohibition.spec.ts` — which byte-compares the machine-owned `DERIVED RESIDUAL` span — passed in my run, so that span is byte-identical too. **No ledger repair is owed.**
 
-**(b) "writes nothing outside the output directory" — the SUBJECT is gone.** Verified, not assumed:
-- Migration `v: 8` declares `sources` and `source_sightings` with **no content column, no BLOB, no untyped column** — every column is `TEXT` or `INTEGER`. D-07 holds nothing at rest.
-- `filesystem-prohibition.spec.ts` bans `fs`, `node:fs`, `llrt/fs` and each with `/promises`, plus the hosted-file SDK member, across `packages/backend/src` and `packages/engine/src`.
+### The three operator-deferred items — confirmed still open, and accurately recorded
 
-So there is no output directory to write outside of. The criterion **cannot be tested**; it can only be dissolved.
+| Item | Recorded as | Re-measured at HEAD |
+|---|---|---|
+| **W-4** — `vue-tsc` is wired into no gate | open, out of scope | exit 2, **exactly 6** errors: 4 `SettingsPanel.vue` (430, 446, 461, 481) + 2 `SourceBrowser.spec.ts` (259, 267). Unchanged across all seven plans, as claimed. |
+| **W-6** — `MAP_MAX_BYTES` under-serves recovery ~2x | open, needs four fresh Caido instances | `MAP_MAX_BYTES` and every D-10-derived constant untouched; the prohibition is present in all seven plans. |
+| **UAT gap 3** — `frontend-load.spec.ts` frame budget | open, pre-existing, load-sensitive | Passed in my run (12 tests, 8,195 ms). Its load-sensitivity is unaddressed, correctly, and it has no owner yet. |
 
-**(c) "on macOS, Linux, and Windows" — the clause loses its referent.** What those three platforms disagree about *is the filesystem*: case-folding, UNC, drive letters, reserved device names, trailing dots and spaces, and Unicode normalisation on HFS+/APFS. Every one of those disagreements is about **how a path string becomes a file**. With no file, none of them can differ. Running the original three-platform matrix would measure `node:path`'s behaviour, not DefMiner's.
-
-### What makes this legitimate rather than a criterion wearing a different answer
-
-A criterion of the form *"hostile input X does not escape containment Y"* is satisfied by removing Y **only if you can prove X never reaches any sink of that kind**. That proof is what shipped, and it is the discriminator:
-
-1. **`sources-sink-prohibition.spec.ts` is a real proof, not a note.** Its sink set is `Object.keys(posix)` read at runtime — so a Node release adding a member adds it to the ban with no edit — minus exactly two exclusions (`parse`, `format`) held out **on a name collision and never on the capability**, each asserted still-present-in-the-surface so a stale exclusion is reported rather than hiding the next real one. Its binding-name set is derived from `parse.ts`'s exported `RecoveredSource` field names read off disk, with the expected members pinned so a rename is *loud* rather than silently followed. It walks the TypeScript AST across both roots at any depth, with a by-name non-vacuity block and a self-audit case. It reports nothing today and **cannot** — and it goes RED the day D-17 is relaxed.
-2. **The one sink that survives dissolution is closed by construction.** A download name is a path-like value the operator's own OS interprets. R6 (`source-filename.ts`) builds it as `contentSha256.slice(0,16)` + an extension **matched** against a closed DefMiner-authored allowlist, returning `null` when the digest fails `SHA256_PATTERN`. **No byte of the label reaches it.** A 16-hex stem can never be a reserved device name and never carries a separator, so the Windows/macOS/Linux question is answered structurally at the only place it could still have been asked. The export filename is likewise fully DefMiner-authored: `defminer-${table}-${mode}-${stamp}.${ext}`.
-3. **The label's surviving destination is the screen, and the platform-shaped strings are exercised there.** `hostile.spec.ts` drives the whole 23-case corpus through the display tree and asserts sanitisation via `forCellText`, no `title`, no `data-*` carrying the untruncated label, and a byte-identical round trip of the stored string.
-4. **The tell.** An unmet criterion wearing a different answer would have deleted the fixtures once there was nothing to test them against. This one imported them into eight consumers, put exhaustiveness assertions on the id set, and kept a gate over them whose only job is to notice when the dissolution ends. That is the difference, and it is observable in the tree.
-
-### Where it is narrower than the wording — three things a reader should not have to derive
-
-1. **The unreachability proof's scope is `packages/backend/src` + `packages/engine/src`. `packages/frontend/src` is in neither gate's `SOURCE_ROOTS`.** Defensible — the frontend has no filesystem — but it means the one live sink (the download name) is guarded by **a defence (R6) rather than by an unreachability proof**. R6 is well built and well tested. The asymmetry is real and is not stated in the criterion's ROADMAP annotation.
-2. **The criterion asked for a behavioural result on three operating systems; what shipped is a static result on one.** That is the right trade here, but it is a trade.
-3. **The dissolution is inherited, not built by this phase.** `filesystem-prohibition.spec.ts` landed in Phase 6 (`4c2ab79`, plan 06-07). Phase 7's own contribution is the proof that the *new data class* cannot reach it — which is exactly the right contribution — but it means SC3's sandbox half rests on a Phase 6 gate. Any later phase that relaxes D-17 re-opens SC3 wholesale. The sources-sink gate is the tripwire for precisely that, and it is wired and green.
-
-**Bottom line: the criterion's INTENT — a hostile `sources` entry cannot be turned into a filesystem effect — is met, and met more strongly than a fixture suite would have shown.** A passing fixture suite proves a defence held on the paths tested; an unreachability proof covers the paths nobody thought of. The ROADMAP's D-12 annotation is an accurate description of what shipped.
+None of these is reported as a new gap.
 
 ---
 
-## The recovery half — what it actually delivers, plainly
-
-The pipeline works. It also recovers **nothing** from this repository's real-world corpus, and that is by design.
-
-I tail-scanned all nine committed bundles myself rather than taking the RESEARCH claim:
-
-```
-NONE     corpus/ace-1.36.5.js          EXTERNAL corpus/babel-7.26.4.js  -> babel.min.js.map
-NONE     corpus/cesium-1.124.0.js      EXTERNAL corpus/monaco-0.52.2.js -> ../../../min-maps/…
-NONE     corpus/composite-8mb.js       EXTERNAL corpus/tfjs-4.22.0.js   -> tf.min.js.map
-NONE     corpus/echarts-5.5.1.js       NONE     corpus/plotly-2.35.2.js
-NONE     corpus/big/composite-8mb-parsable.js
-```
-
-**Zero inline. Three external. Six with no announcement at all.** Under D-01 — DefMiner never fetches a `.map`, because a fetch is a request the target can see — the committed corpus produces zero recovered sources and three `announcedExternal` increments. That is the design working, not failing, and the phase says so on the health panel in words rather than leaving an operator to read `Sources recovered: 0` as an empty result. Phase 8 SC1 owns the other half explicitly.
-
-The honest consequence for a verifier: **every segment of the chain is green, but nobody has yet watched the whole chain produce a readable line of developer source from real proxied traffic**, because the corpus cannot produce one. That is human-verification item 3, and it is not a defect of this phase.
-
----
-
-## Required Artifacts
+## Required Artifacts (this round)
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `packages/engine/src/sourcemap/announce.ts` / `.spec.ts` | bounded `lastIndexOf` scan, no regex | ✓ VERIFIED | AST-asserted zero `RegularExpressionLiteral` / `new RegExp` |
-| `packages/engine/src/sourcemap/parse.ts` / `.spec.ts` | base64 decode, `JSON.parse`, closed `MAP_PARSE_REASONS` | ✓ VERIFIED | every-reason-observed gate, 13-case matrix |
-| `packages/engine/src/sourcemap/map-fixture.ts` | one corpus, three-plus consumers, escapes not literals | ✓ VERIFIED | **0 literal control bytes** — it honours its own rule |
-| `packages/engine/src/thresholds.ts` | `MAP_MAX_BYTES` and derived siblings, cited to the probe | ✓ VERIFIED | `POLICY_DERIVED_FROM` names `map-bytes.json` by path |
-| `results/map-bytes.json` + `.schema.json` | measured, version-asserted, 4 ladder points | ✓ VERIFIED | `status: pass`, `ladder_complete: true`, 4 fresh instances |
-| `packages/backend/src/codec-prohibition.spec.ts` | D-17 package-level ban, AST | ✓ VERIFIED | 1,131 lines, specifiers derived from `exports` |
-| `packages/backend/src/sources-sink-prohibition.spec.ts` | D-12 unreachability proof | ✓ VERIFIED *(W-2)* | 1,213 lines; carries 2 literal NUL bytes |
-| `packages/backend/src/store/migrations.ts` (`v: 8`) | two tables, no content column, `project_id` at pk ordinal 1 | ✓ VERIFIED | read the SQL directly |
-| `packages/backend/src/store/sources.ts` / `.spec.ts` | content-addressed identity, HI-03 attribution guard | ✓ VERIFIED *(W-3)* | guard returns `changes: 0` and counts the discard |
-| `packages/backend/src/sourcemap/derive.ts` / `.spec.ts` | O-05 sibling vocabulary, D-14 bypass, D-13 depth | ✓ VERIFIED | `depth_exceeded` proven absent from `REJECT_REASONS` |
-| `packages/backend/src/ingest/consumer.ts` | D-08 stage in `analyseAndFinish`, epoch re-checks, row-counting sweep | ✓ VERIFIED | five `stillCurrent()` sites carried into the new writes |
-| `packages/backend/src/index.ts` / `api/spec.ts` | `deriveSource`, `listRecoveredSources`, lazy `mappings`, D-24 re-verify | ✓ VERIFIED | `CONTRACT_VERSION` 5 → 6, frontend copy agrees |
-| `packages/backend/src/store/export.ts` | third `EXPORT_COLUMNS` entry, redactor applied | ✓ VERIFIED | `sources_verbatim` under `redactUrlForExport` |
-| `packages/frontend/src/sourcemap/tree.ts` / `.spec.ts` | O-08 five-step pure normaliser, no `node:path` | ✓ VERIFIED | import list asserted as an exact set |
-| `packages/frontend/src/components/SourceTree.vue` | virtualised at 32px, `ProducibilityMark` | ✓ VERIFIED | corpus-driven hostile assertions |
-| `packages/frontend/src/components/SourceViewer.vue` | four body states, two bounds, R6 download | ✓ VERIFIED | states asserted mutually exclusive |
-| `packages/frontend/src/components/SourcePositionStrip.vue` | lazy decode, sole codec consumer | ✓ VERIFIED | seven states; raw position string never in DOM |
-| `packages/frontend/src/components/source-filename.ts` / `.spec.ts` | R6, content-addressed | ✓ VERIFIED | firing + legal fixtures |
-| `packages/frontend/src/components/SourceBrowser.vue` / `.spec.ts` | D-21 drill-down, scoped CTA | ✓ VERIFIED *(W-4)* | 2 vue-tsc errors in the spec's local test harness |
-| `packages/frontend/src/components/HealthPanel.vue` | D-03 counters surfaced | ✓ VERIFIED | `announcedExternal` with operator-facing help copy |
-| `.planning/ROADMAP.md`, `REQUIREMENTS.md`, `05-UI-SPEC.md` | A5/A6/A7, SC1 restated, parentheticals amended | ✓ VERIFIED | originals preserved as dated history, not deleted |
+| `packages/backend/src/api/spec.ts` | `SourceRef` with `artifactSha256`, `CONTRACT_VERSION` 7 | ✓ VERIFIED | `:401`, `:446`, `:203` |
+| `packages/frontend/src/api/client.ts` | mirrored `SourceRef`, `FRONTEND_CONTRACT_VERSION` 7 | ✓ VERIFIED | `:835`, `:845`, `:159` — the two copies agree |
+| `packages/backend/src/store/migrations.ts` | migration `v: 9`, PK widening, no FK, no cascade | ✓ VERIFIED | `:963-1002`, read as SQL not as a claim |
+| `packages/backend/src/store/schema.spec.ts` | eight members, five approvals, fifth event dated | ✓ VERIFIED | `:31`, `:57-95` |
+| `packages/backend/src/store/sources.ts` | four-column conflict target, no guard, code-point cut, `countSourcesForMap` with a real caller | ✓ VERIFIED | `:175`, `:531`, `:638` |
+| `packages/backend/src/store/retention.ts` | sightings trim, orphan cascade, `sources` anti-join, `retentionCounts` | ✓ VERIFIED *(WR-02)* | `:468-585`, `:905-1050`, `:1362-1392` |
+| `packages/backend/src/a8-measure.spec.ts` | committed A8 benchmark, bounds not timings | ✓ VERIFIED — **NEW** | 20,013 bytes; Run A `:343`, Run B `:391`; zero wall-clock assertions |
+| `packages/engine/src/thresholds.ts` | `ROWS_INSERTED_PER_ITERATION_MAX` with the factor retired | ⚠️ VERIFIED WITH DEFECT | `:490-491` correct; the `RETENTION_SWEEP_MAX_PASSES` docblock at `:154-197` is stale — **WR-01** |
+| `packages/engine/src/sourcemap/parse.ts` | row-unit gate, pre-slice refusal | ✓ VERIFIED | `:363-380`, `:204-207` |
+| `packages/engine/src/sourcemap/announce.ts` | four terminators, bounded slice, zero regex | ✓ VERIFIED | `:144-148`, `:238`; no `RegExp` node in the file |
+| `packages/backend/src/ingest/consumer.ts` | depth gate at the call site, aggregate enforcer | ✓ VERIFIED *(IN-01, IN-02)* | `:1272`, `:1180` |
+| `packages/backend/src/telemetry.ts` | `derivedRejected` docblock in the per-stage unit, `snapshotCounters` array-safe, counter removed | ✓ VERIFIED | `:280` (removal recorded), `:310-345`, `:971` |
+| `packages/backend/src/store/export.ts` | manifest redactor applied where its subject exists | ⚠️ VERIFIED WITH DEFECT | `:236-275`, `:385` — the premise is unsound, **WR-03** |
+| `packages/frontend/src/sourcemap/tree.ts` | merge on the verbatim segment | ✓ VERIFIED | `:386-388`, `:436`, `:530`; import list still exactly `["forCellText"]` |
 
 ---
 
@@ -205,31 +222,18 @@ The honest consequence for a verifier: **every segment of the chain is green, bu
 
 | From | To | Via | Status |
 |---|---|---|---|
-| `consumer.ts` | `engine/sourcemap/*` | `findAnnouncement`, `decodeInlineMap`, `parseSourceMap` | ✓ WIRED |
-| `consumer.ts` | `store/sources.ts` | `upsertRecoveredSource`, `recordSighting` | ✓ WIRED |
-| `index.ts` | `sdk.requests.get` | D-07 on-demand reload, D-24 re-verify at `:457-458` | ✓ WIRED |
-| `index.ts` | `store/sources.ts` | `markProducibility` (single bound `project_id`-scoped UPDATE) | ✓ WIRED |
-| `client.ts` | backend RPC | `deriveSource`, `listRecoveredSources`, `readSourceMappings` | ✓ WIRED |
-| `App.vue` | `ArtifactsTable.vue` | `:source-counts` map + `@browse-sources` | ✓ WIRED |
-| `App.vue` | `SourceBrowser.vue` | drill-down state inside the artifacts arm; `TABS` byte-unchanged | ✓ WIRED |
-| `SourceBrowser.vue` | `SourceTree` / `SourceViewer` | mounted for real — asserted *"never a stub or a placeholder"* | ✓ WIRED |
-| `SourceViewer.vue` | `source-filename.ts` | `sourceDownloadName` → `browserDownload` | ✓ WIRED |
-| `SourceBrowser.vue` | `ExportDialog.vue` | `exportDialogTable` reads `exportTable` through; toolbar computation byte-unchanged | ✓ WIRED |
-
----
-
-## Data-Flow Trace (Level 4)
-
-| Artifact | Value | Source | Real data | Status |
-|---|---|---|---|---|
-| `SourceViewer.vue` | `lines` | `deriveSource` → `sdk.requests.get` → `toRaw()` → `sha256Hex` re-verify → `parseSourceMap` | yes | ✓ FLOWING |
-| `SourceTree.vue` | node labels | `listRecoveredSources` → `source_sightings.sources_verbatim` (stored verbatim) | yes | ✓ FLOWING |
-| `ArtifactsTable.vue` | `Sources` count | `countRecoveredSourcesByArtifact` via `App.vue`'s lookup map; `null` = not known, never `0` | yes | ✓ FLOWING |
-| `SourcePositionStrip.vue` | positions | lazy `readSourceMappings` → codec `decode` → integers only | yes | ✓ FLOWING |
-| `HealthPanel.vue` | sourcemap counters | `counters.sourcemap` sub-map of the one telemetry object | yes | ✓ FLOWING |
-| `ExportDialog.vue` | manifest rows | `EXPORT_COLUMNS.sources` → `serialiseRows` → chunked transport | yes | ✓ FLOWING |
-
-No static return, no hardcoded literal, no mock terminates any chain.
+| `SourceBrowser.vue` | `client.ts` | `sourceRef` carrying `artifactSha256` (`:240`, `:311`) | ✓ WIRED |
+| `client.ts` | `spec.ts` | `SourceRef` shape, both `CONTRACT_VERSION`s at 7 | ✓ WIRED |
+| `spec.ts` | `index.ts` `reloadVerifiedBundle` | bundle digest survives the hop (`:361`, `:396-401`) | ✓ WIRED |
+| `index.ts` | `sources.ts` `readSightingOrigin` | four-column bind; digest read OUT of the row (`:493`) | ✓ WIRED |
+| `index.ts` | `sources.ts` `markProducibility` | tombstone names one bundle's sighting (`:534`) | ✓ WIRED |
+| `migrations.ts` `v: 9` | `schema.spec.ts` `EXPECTED_TABLES` | the shipped table set is still the approved eight | ✓ WIRED |
+| `consumer.ts` drain loop | `retention.ts` `sweepRetention` | cadence and coverage now describe the same tables | ✓ WIRED |
+| `retention.ts` | `source_sightings` / `sources` | cascade then anti-join, `sightingsCapped` deferral | ⚠️ WIRED — cascade omits `deleteDigest` (**WR-02**) |
+| `thresholds.ts` constants | `retention.ts` `RETENTION_PASS_LIMITS` → `a8-measure.spec.ts` | benchmark asserts against the same constants the sweep uses | ✓ WIRED |
+| `consumer.ts` | `sources.ts` `countSourcesForMap` | MAP-06's aggregate half finally has an enforcer | ✓ WIRED |
+| `export.ts` `EXPORT_COLUMNS.sources` | manifest redactor | applied only to protocol-shaped labels (**WR-03**) | ⚠️ WIRED — narrower than its own premise |
+| `telemetry.ts` `counters` | `snapshotCounters` → `slimStatus` → `HealthPanel` | array shape preserved, still a copy | ✓ WIRED |
 
 ---
 
@@ -237,47 +241,44 @@ No static return, no hardcoded literal, no mock terminates any chain.
 
 | Behaviour | Command | Result | Status |
 |---|---|---|---|
-| Whole suite | `pnpm vitest run` | 89 files / **4204 tests** passed, exit 0 | ✓ PASS |
+| Whole suite | `pnpm vitest run` | 90 files / **4,302 tests**, exit 0, 14.12 s | ✓ PASS |
 | Types | `pnpm typecheck` | exit 0 | ✓ PASS |
 | Lint | `pnpm lint` | exit 0 | ✓ PASS |
 | Dead code | `pnpm knip` | exit 0 | ✓ PASS |
-| SFC types (not a gate) | `vue-tsc --noEmit` | exit 2 — **6** errors: 4 `SettingsPanel.vue`, **2 `SourceBrowser.spec.ts`** | ⚠ see W-4 |
-| Real-corpus inline maps | tail-scan of `corpus/*.js`, `corpus/big/*.js` | 0 inline / 3 external / 6 none | ✓ PASS (confirms the recorded claim) |
-| Debt markers in the 81 modified source files | `grep -nE "\bTBD\b\|\bFIXME\b\|\bXXX\b"` and `TODO/HACK/PLACEHOLDER` | **zero** | ✓ PASS |
-| Frontend dependency diff | `git diff -- packages/frontend/package.json` | exactly one added line, exact pin | ✓ PASS |
-| Literal control bytes in shipped source | byte scan of all `packages/**/*.{ts,vue}` | 3 bytes across 2 files | ⚠ see W-2 |
+| Build | `pnpm build` | exit 0 | ✓ PASS |
+| SFC types (not a gate) | `vue-tsc --noEmit` | exit 2 — 6 errors, matching the W-4 baseline exactly | ⚠ W-4, out of scope |
+| C0 control bytes in shipped source | byte scan across `packages/**/*.{ts,vue}` | **zero** | ✓ PASS — W-2 closed |
+| Debt markers in the 31 files this round modified | `TBD/FIXME/XXX` then `TODO/HACK/PLACEHOLDER` | **zero** for both | ✓ PASS |
+| Commit ordering claim (07-14) | `git show 4bd99c1:.../thresholds.ts` vs `59347c3` | gate first with the factor intact, factor retired second — **as claimed** | ✓ PASS |
+| Frame-budget backstop (UAT gap 3) | in-suite | passed, 12 tests / 8,195 ms | ✓ PASS (still load-sensitive) |
+| Probe artifact | `results/map-bytes.json` | `status: pass`, `ladder_complete: true`, four points at `0.58.0` | ✓ PASS |
 
-**Probe execution:** the phase's probe is an out-of-band Caido measurement (`scripts/phase7/map-bytes.sh`) requiring four fresh Caido 0.58.0 instances; it is not re-runnable inside a verification pass. Its artifact was validated instead: schema reference present, `status: pass`, `ladder_complete: true`, `binary.reported_version` matching the pinned `MAP_PROBE_EXPECTED_VERSION`, four distinct `run_id`s with `fresh: true`.
+---
+
+## Probe Execution
+
+| Probe | Command | Result | Status |
+|---|---|---|---|
+| — | `find scripts -path '*/tests/probe-*.sh'` | no matches | N/A |
+
+**Step 7c: no runnable probes exist.** `scripts/phase7/` holds `map-bytes.sh`, `fetch-maps.sh`, `assemble.py`, `record-point.py`, `build-observations.py` — the out-of-band D-10 measurement, which requires four fresh Caido 0.58.0 instances and is not re-runnable inside a verification pass. Its artifact was validated instead (row above). This round modified no probe and produced no new one; its equivalent — the A8 harness — landed as a committed spec inside the suite, which is what UAT gap 2 asked for.
 
 ---
 
 ## Requirements Coverage
 
-| Requirement | Status | Evidence |
-|---|---|---|
-| MAP-01 | ✓ SATISFIED in two halves, stated | Inline discovered **and** consumed; external discovered only (D-01), counted and surfaced. Phase 8 SC1 owns the rest. |
-| MAP-02 | ✓ SATISFIED | `JSON.parse` primary path, no VLQ; parenthetical amended to name its harness (standalone quickjs-ng 0.16.1, not Caido). |
-| MAP-03 | ✓ SATISFIED | Codec confined to the position strip by a wired package-level AST ban. |
-| MAP-04 | ✓ SATISFIED | Clause 1 dissolved (nothing written); clause 2 met by the D-12 proof plus R6. |
-| **MAP-05** | ✓ **SATISFIED but ledger row is `[ ]`** | See finding W-1. |
-| MAP-06 | ✓ SATISFIED | Analysed once per content hash via `isAnalysed`/`claimAnalysis`; D-13 depth bound tested; `SOURCE_ROWS_PER_MAP_MAX` enforced. |
-| MAP-07 | ✓ SATISFIED *(caveat W-3)* | Browsable + exportable-with-manifest, each by a named mechanism. |
-| UI-05 | ✓ SATISFIED *(caveat W-3)* | Viewer, tree, position strip, drill-down, all mounted and asserted. |
+| Requirement | Ledger | Status | Evidence |
+|---|---|---|---|
+| MAP-01 | `[x]` | ✓ SATISFIED in two halves, stated | Inline discovered and consumed; external discovered only under D-01, counted and surfaced. Phase 8 owns the rest. |
+| MAP-02 | `[x]` | ✓ SATISFIED | `JSON.parse` primary path; 07-14 strengthened the pre-slice refusal without touching `MAP_MAX_BYTES`. |
+| MAP-03 | `[x]` | ✓ SATISFIED | Codec confined by a wired package-level AST ban, green. |
+| MAP-04 | `[x]` | ✓ SATISFIED | Clause 1 dissolved; clause 2 met by D-12's proof plus R6. 07-17 hardened the display tree without touching a sanitiser. |
+| MAP-05 | `[x]` | ✓ SATISFIED — **W-1 closed** | Ticked at UAT with the dissolution note recorded inline; the machine-owned span survived byte-identical. |
+| MAP-06 | `[x]` | ✓ SATISFIED — **strengthened** | The aggregate half now has the production caller its docblock claimed (07-15), enforced in the row unit 07-14 settled, and both new tables are finally swept (07-13). |
+| MAP-07 | `[x]` | ✓ SATISFIED — **W-3 caveat removed** | Browsable and exportable; both bundles of a duplicated map now keep their own evidence. |
+| UI-05 | `[x]` | ✓ SATISFIED — **W-3 caveat removed** | Viewer, tree, position strip, drill-down all mounted and asserted; the drill-down now names its bundle at every hop. |
 
-No orphaned requirements: `REQUIREMENTS.md` maps MAP-01…MAP-07 and UI-05 to Phase 7 and every one is claimed by at least one plan.
-
----
-
-## UI Considerations — the 35 rows
-
-The `07-UI-SPEC.md` table declares **35 rows** across six surfaces (5 + 8 + 8 + 5 + 4 + 5), self-scored **32 covered, 2 backstop, 1 unresolved**. I checked whether they are represented in *shipped behaviour* or only in plan text.
-
-- **34 of 35 appear as must-have truths** across plans 07-07, 07-08, 07-09 and 07-10 — one per row, in the row's own words.
-- **All 34 are represented by shipped tests.** 25 appear as row-named `describe` blocks (`"sources-count-column / zero-one-many"`, `"source-viewer / long-text"`, `"viewer-position-strip / error"`, `"drilldown-header / overflow"` …). The remaining 9 are folded into shared, correctly-named describes rather than absent: `"sources-count-column / loading and error"`, `"sources-count-column / overflow and long-text"`, `"viewer-position-strip — the seven states"`, `"the four body states — mutually exclusive, none collapsible"` (which covers source-viewer loading / error / partial by name in its `it` titles), and the `counted`-helper assertions for zero-one-many.
-- **The 35th row — `source-tree` / `overflow` — is the ⚠ unresolved one**, and it is honestly labelled. The bound is real and enforced backend-side (`SOURCE_TREE_LOAD_MAX = 2000` in `contract.ts:317`, `listRecoveredSources` stops filling there, and the read answers with the TOTAL beside the returned count so the tree says so in words rather than truncating silently). What is unresolved is only the *number*: 2,000 is a reuse of the shipped `IN_MEMORY_WINDOW_ROWS`, not a measurement. That is a disclosed planner assumption, not a gap.
-- **The 2 backstop rows both have wired, green evidence** — see truths 12 and 13.
-
-**Verdict: the 35 rows are represented in shipped behaviour, not only in plan text.**
+**No orphaned requirements.** `REQUIREMENTS.md` maps MAP-01…MAP-07 and UI-05 to Phase 7; every one is claimed by at least one plan, and every one is ticked on disk.
 
 ---
 
@@ -285,124 +286,66 @@ The `07-UI-SPEC.md` table declares **35 rows** across six surfaces (5 + 8 + 8 + 
 
 | File | Line | Pattern | Severity | Impact |
 |---|---|---|---|---|
-| `packages/backend/src/sources-sink-prohibition.spec.ts` | 543, 1162 | literal NUL byte (`"\x00unreadable"`, `toContain("\x00")`) | ⚠ Warning | File is classified **binary** by `grep`/`ugrep`; invisible in diffs |
-| `packages/frontend/src/components/SourceBrowser.spec.ts` | — | literal NUL byte ×1 | ⚠ Warning | same |
-| 81 modified source files | — | `TBD` / `FIXME` / `XXX` / `TODO` / `HACK` / `PLACEHOLDER` | — | **zero occurrences** |
+| `packages/engine/src/thresholds.ts` | 166, 177, 190-191 | a constant's stated derivation computes a retired value | ⚠️ Warning | WR-01 — `thresholds.ts` contradicts `retention.ts`; the spec computes from the constants and cannot catch it |
+| `packages/backend/src/store/retention.ts` | 42-45, 389-390, 483-486 | a stated invariant the shipped control flow does not honour in one pass | ⚠️ Warning | WR-02 — orphan sightings on the ordinary eviction path; converges across passes |
+| `packages/backend/src/store/export.ts` | 255-256 | a docblock premise falsified by an ordinary bundler shape | ⚠️ Warning | WR-03 — redacted mode discloses loader-query tails; corpus has no `?` to notice |
+| `packages/backend/src/ingest/consumer.ts` | 1272-1287 | counter fires on a condition broader than the event it names | ℹ️ Info | IN-01 — one increment per map-bearing artifact; no health surface carries it |
+| `packages/backend/src/ingest/consumer.ts` | 87 | value import used only inside `{@link}` prose | ℹ️ Info | IN-02 — passes lint, typecheck and knip together |
+| `packages/backend/src/store/retention.ts` | 496-497 | comment says "the four key columns"; the statement selects three | ℹ️ Info | IN-03 — `project_id` is bound, not selected |
+| The 31 files this round modified | — | `TBD` / `FIXME` / `XXX` / `TODO` / `HACK` / `PLACEHOLDER` | — | **zero occurrences** |
+| All `packages/**/*.{ts,vue}` | — | literal C0 control bytes | — | **zero** — W-2 closed |
 
 ---
 
-## Findings
+## Human Verification Required
 
-### W-1 · MAP-05 is substantively met and merely un-ticked
+### 1. WR-01 — rewrite `RETENTION_SWEEP_MAX_PASSES`'s derivation, or lower the constant
 
-`REQUIREMENTS.md:842` reads `[ ]`. At HEAD the requirement's four clauses are all discharged:
+**Test:** reconcile `thresholds.ts:154-197` with `thresholds.ts:490-491` and `retention.ts:178-180`.
+**Expected:** one number across both files, and 16 re-derived from the real quotient (4.26 → next power of two 8, plus a doubling of margin **stated as margin**) or lowered.
+**Why human:** the constant over-satisfies, so nothing is unsafe — but its justification no longer evaluates, and `thresholds.spec.ts` computes the inequality from the constants and so is structurally unable to fail on this. Moving a threshold or rewriting its justification is not a verifier's call. Making the headroom itself executable, as the reviewer sketched, would stop a third drift.
 
-- **malformed maps** — 13-fixture matrix with 13 distinct outcomes, an exhaustiveness gate on the id set, and an *every-reason-was-observed* gate over `MAP_PARSE_REASONS`;
-- **decompression bombs** — the base64 4:3 expansion is gated on **encoded** length *before* the decoded buffer is allocated, with a case proving the encoded gate was not what refused the one-over fixture; `million-tiny-sources` and `single-giant-sources-content` ship;
-- **path traversal attempts** — the 23-case corpus, driven through the D-12 gate, the display tree, the filename builder and the store cap;
-- **reference cycles** — JSON has no cycles; the analogues are `sections` nesting (refused *"however it is spelled"*, bound 1 by specification) and D-13's re-entry bound (`depth_exceeded` asserted at 0, 1 and 2).
+### 2. WR-02 — decide whether sightings belong in `deleteDigest`'s cascade or in step 3d by design
 
-The tick was never applied because 07-02 deliberately declined to mark it (its SUMMARY: *"MAP-01 / MAP-02 / MAP-05 are NOT checked off in REQUIREMENTS.md, deliberately"* — it shipped only the SDK-free half) and no later plan picked it back up. **This reads as a bookkeeping omission, not an open requirement.** Reported, not actioned — flipping a ledger row is not the verifier's call.
+**Test:** run one `sweepRetention` pass whose budget is consumed by the artifact loop over evictable map-bearing bundles; inspect `source_sightings` before the next pass.
+**Expected:** either no orphan exists (sightings cascaded in dependency order), or the module's header and `ORPHAN_OBSERVATIONS_SQL`'s paragraph say plainly that sightings are reaped as orphans by design and that the window closes on the next pass.
+**Why human:** whether the operator's UAT cascade choice meant "in the same statement sequence" or "in the same pass" is a design question the code cannot answer. No data loss either way — this is about a stated invariant matching shipped behaviour.
 
-### W-2 · Two Phase 7 files ship literal C0 control bytes
+### 3. WR-03 — decide whether a loader query is analytic content or a residual
 
-`map-fixture.ts` states the rule in its own header and honours it: its NUL and RTL-override cases are written `"\u0000"` and `"\u202e"`, with the reason spelled out — *"a literal NUL is invisible in every diff"*. Two Phase 7 files break it:
+**Test:** export the manifest in redacted mode with a `sources` label of `src/App.vue?vue&type=script&setup=true&lang.ts`.
+**Expected:** a decision, and a corpus entry that carries it either way, so `export.spec.ts`'s "none of them has a query axis" becomes a statement somebody re-checked.
+**Why human:** the safe export mode now discloses more than it did, on an ordinary shape, justified by a false premise, with no coverage. Whether that is acceptable is a scope judgement about what a redacted manifest promises.
 
-```
-packages/backend/src/sources-sink-prohibition.spec.ts:543   const UNREADABLE = "<NUL>unreadable";
-packages/backend/src/sources-sink-prohibition.spec.ts:1162  expect(LABEL_BY_ID.get("null-byte")).toContain("<NUL>");
-packages/frontend/src/components/SourceBrowser.spec.ts       1 byte
-```
+### 4. IN-01 — accept or repair the depth counter's firing condition
 
-**The harm is demonstrated, not argued: this broke my own tooling mid-verification.** Both files are reported as `Binary file … matches` by the repo's `grep`, so no grep-based audit — including the census idioms this codebase relies on elsewhere — can read them. Line 1162 is the sharper case: it asserts the fixture's escaped NUL by embedding an unescaped one, i.e. the assertion is spelled in exactly the form the fixture exists to forbid. Behaviour is correct; the encoding discipline is not. Not a blocker.
-
-### W-3 · HI-03's residual makes a RESOLVED ZERO lie
-
-The interim fix is real and I confirmed it by reading the test, not the SUMMARY: `source_sightings` is keyed `(project_id, map_sha256, source_index)`, and `recordSighting` for a second artifact carrying the same map returns `{ ok: true, changes: 0 }`, leaves A's `artifact_sha256`/`request_id`/`recovered_at` intact, and increments `sightingsDiscardedOtherArtifact`. Bundle A is safe and the loss is counted.
-
-**Bundle B's own evidence is still lost, and the shape of that loss is the problem.** B's drill-down reads a resolved zero and its tree says *"No recovered sources in this bundle"*. That is not a blank — the sources-count column's entire design premise, restated in the UI-SPEC and asserted in `ArtifactsTable.spec.ts`, is that **a resolved zero and an unresolved count are different facts that must never be the same pixel**, because a resolved zero means *"DefMiner looked and there was nothing"*. Here it means *"DefMiner looked, found something, and threw it away"*. It is target-triggerable at will — a CDN mirror with a different banner comment is enough — and it lands on the one column built to make that class of claim trustworthy.
-
-The complete fix widens the key to `(project_id, artifact_sha256, map_sha256, source_index)`: migration `v: 9` and a **fifth `EXPECTED_TABLES` operator approval**, which has not been given. **Cost to MAP-07/UI-05: bounded but not cosmetic** — the primary path is unaffected, the discard is visible on the health panel, and the operator has a number to read; but for the duplicated-map case the product makes a confident false statement rather than an honest unknown. The honest interim would have been to render B's count as *unresolved* rather than *resolved zero*, which is a frontend change and does not need the migration.
-
-### W-4 · The recorded vue-tsc baseline is wrong, and Phase 7 added to it
-
-The record (deferred-items.md, from 07-07 and reasserted by 07-08) says **5 pre-existing errors in `ExportDialog.vue` and `SettingsPanel.vue`**, with *"07-08 adds none"*. At HEAD:
-
-```
-4 src/components/SettingsPanel.vue      (pre-existing)
-2 src/components/SourceBrowser.spec.ts  (NEW — a Phase 7 file, from plan 07-09)
-```
-
-The `ExportDialog.vue` error is gone, fixed in passing by 07-10's heading `Record`. The two new ones are in `SourceBrowser.spec.ts`'s local `SplitBody` test harness, whose `client` prop is typed `Object` and so reaches `SourceBrowser` as `Record<string, any>` instead of `BrowserClient`.
-
-**Impact: low, but not nil.** It is test-only, and `tsc --build` is green because it cannot resolve `.vue` prop types at all. That is the point worth recording: the repo gate is structurally blind to SFC prop typing, so the drill-down's client stub is **not** checked against the real RPC interface — the spec would keep passing if `BrowserClient` drifted. The claim *"07-08 adds none"* was true of 07-08 and became false at 07-09, and nothing noticed because `vue-tsc` is wired into no gate.
-
-### W-5 · HI-04's convergence proof counts inserts into tables the sweep cannot delete from
-
-HI-04's fix is correct arithmetic and I verified it runs green, including its explicit handling of MD-01's unit mismatch (`ROWS_INSERTED_PER_ITERATION_MAX === ROWS_INSERTED_PER_ARTIFACT_MAX + 2 * SOURCE_ROWS_PER_MAP_MAX` — *"which is why the factor is 2 and not 1"*). MD-01 is therefore load-bearing and correctly compensated for; what remains of it is a naming defect, not an arithmetic one.
-
-**But the insert side counts rows the delete side structurally cannot reach.** Deferred item D1 is confirmed in code: `retention.ts` sweeps `artifacts`, `observations`, `analyses`, `scans` and `audit` and names neither new table, and migration `v: 8` declares **no foreign key and no `ON DELETE CASCADE`** — so deleting an artifact orphans its sightings rather than removing them. The convergence inequality is satisfied numerically while the property it claims (P1-D7: the database does not grow monotonically past the retention ceiling) does **not** hold: once the three swept tables are at their floor, `sources` and `source_sightings` keep growing with nothing able to delete from them.
-
-This is an assessment of the recorded D1's effect, not a new discovery — but the interaction with HI-04 is worth stating, because HI-04's own failure narrative is *"the form was true and it bounded nothing"*, and Form 3 inherits a narrower version of the same shape. **It has no owner phase**; Phase 11 SC4's soak is about heap, not table rows. Escalated as human-verification item 2.
-
-### W-6 · MAP_MAX_BYTES under-serves the recovery half by roughly 2×, conservatively
-
-Recorded as WINDOW 111. Assessing the effect: the probe's `op_ms_per_mb` puts `announce_scan` at **3.80** of the inline path's **8.87 ms/MB** — 43% of the budget. The probe's own `announceScan` notes that at the structural ceiling the window covers the whole body, so no slice happens and the scan is effectively full-body. With 07-02's shipped tail window binding, that term should fall sharply, which would move the stall bound up toward ~5 MB — against a shipped 2.62 MB.
-
-**Consequence: DefMiner refuses inline maps between roughly 2.6 MB and 5 MB that it could now afford**, i.e. it recovers from a smaller minority of inline maps than the shipped implementation can support. It **fails safe** — refuse, never truncate, with `partial` and a reason code — and the UI says so in words rather than appearing to have found nothing. Re-measuring needs four fresh Caido instances, which is why 07-02 declined to raise the constant on a projection. **That was the right call**: raising a load-bearing refusal boundary on arithmetic is exactly what D-10 exists to forbid. The bound under-serves the goal, conservatively and knowingly, and the remedy is a re-run rather than a redesign.
-
-### Open review findings — status
-
-Four HIGH findings are fixed, and I confirmed each in code rather than in the review file: HI-01 (`display.ts:219` — the predicate now answers *"was this line cut?"*), HI-02 (`display.ts:257` — one unit for both integers), HI-03 (attribution guard, `sources.ts:127`, with W-3's residual), HI-04 (multi-pass drain, `consumer.ts:1448`, plus the restated inequality in `thresholds.spec.ts:262`). Nine remain open (4 MEDIUM, 5 LOW), all disclosed; none of them falsifies a Phase 7 success criterion.
-
----
-
-## The four paragraphs owed to this document
-
-Lifted verbatim from `07-10-SUMMARY.md`, which wrote them under a heading for exactly this purpose. Two were authored upstream (07-04 and 07-05) and carried; two are 07-10's own.
-
-### 1. The O-07 pre-emption (authored in plan 07-04, carried by 07-10)
-
-> **The O-07 pre-emption, owed by UI-SPEC Named Conflict 2 and repeated here so `07-10` can carry it forward:** D-11 already ships a slice of ERR-02/OBS-02 ahead of Phase 2, and defining a producibility axis WIDENS that pre-emption. Phase 7 defines an axis OBS-02 does not yet own. If Phase 2 rules that producibility belongs inside one vocabulary, **this column is what changes**, and the change is bounded: a `migrations.ts` forward step plus one presentation map. Recording it here is the honest form; discovering it in a Phase 2 review is not.
-
-### 2. The D-11 pre-emption (authored in plan 07-05, carried by 07-10)
-
-> **D-11 ships a slice of ERR-02/OBS-02 ahead of Phase 2, and the cost is accepted openly.** Phase 7 is the first writer of a non-null `analyses.error` from the consumer path — Phase 1 always passed null — and it reuses the ONE degradation vocabulary in the one place that already has it rather than inventing a second. `scan_state = 'partial'` had exactly one producer until now, deadline expiry, and reconstruction gives it more; `error` is the discriminator, and what goes in it is a DefMiner-authored REASON CODE (`map:malformed_json`, `map:too_large`, …), never a caught exception's text. `describeError` is the right function for a *diagnostic* and is deliberately not on this path.
->
-> **The cost, stated before anyone hits it.** One `scan_state` column cannot express *"reconstruction failed but detection succeeded"*. Today that costs nothing, because no detector exists — Phase 3 has not landed and `visit` is a no-op. The day it does, an artifact whose detectors ran cleanly and whose map was refused will read `partial`, and an operator reading the Artifacts table will not be able to tell that from an artifact whose walk hit the deadline without opening the `error` column. **Phase 3 inherits that knowingly.** The exit is already visible and is not being pre-built: either ERR-02 splits the state per stage, or the UI reads the `map:` prefix — which is why the codes are namespaced at the point of writing rather than left bare.
-
-### 3. D-15, recorded NOT MEASURED with its reason (07-10's own)
-
-> **D-15 is met in its first half and NOT MEASURED in its second, and the distinction is recorded rather than passed over.** The reconstructed-source corpus FIXTURES ship. The false-positive RATE does not, and the reason is structural rather than a matter of effort: **a false-positive rate cannot exist without a detector, and none exists.** Phase 3 has not landed and `visit` is a no-op, so there is nothing that could produce a positive, true or false, over the corpus. Measuring anything here would mean inventing a detector for the purpose of measuring it, which measures the measurement.
->
-> This is recorded the way Phase 6's D-23 recorded an unreachable matrix leg — **named, with its reason, and never as a silent pass.** A criterion that reads as met because nothing contradicted it is the specific failure both records exist to prevent. Phase 3 owns the rate, and it inherits fixtures that were built for it rather than a criterion somebody already ticked.
-
-*Verifier's note: I confirmed the premise independently rather than accepting it — `packages/backend/src/ingest/consumer.ts:1325` is literally `visit: () => {}`, and Phase 3's ROADMAP box is `[ ]`.*
-
-### 4. Open Question 2 — a low recovered-source count is the EXPECTED outcome (07-10's own)
-
-> **A low recovered-source count on real traffic is an EXPECTED outcome, not a defect, and the phase says so before anybody has to ask.** Zero of the eight pinned production bundles in this repository's corpus carries an inline map; the three that announce a sourcemap at all announce an *external* `.map`. Inline maps are overwhelmingly a development artifact, and under D-01 DefMiner never fetches an external one — that would be a request the target can see, and DefMiner stays silent. So on the committed real-world corpus this phase recovers **zero** sources and takes **eight** D-03 counter increments, and that is the design working rather than failing.
->
-> **The D-03 `announcedExternal` counter is the MEASUREMENT of how much of MAP-01 this phase leaves on the table for Phase 8**, which is exactly why plan 07-10 surfaced it on the health panel rather than leaving it internal. An operator who sees `Sources recovered: 0` beside `External maps announced: 8` can read the second number and understand the first. The surface says it in words too, next to the numbers: *"DefMiner recovers source only from sourcemaps embedded in a bundle it already has. It never fetches a .map file — that would be a request the target can see. A low recovered count beside a high external count is the expected result on production traffic, not a fault."* A verifier measuring this phase against real traffic should read a low recovered count as confirmation, and should treat a *high* one as the thing worth a second look.
-
-*Verifier's note: I re-ran the scan rather than accepting the count. **Zero inline is confirmed.** The one correction: three of the eight announce externally and five carry no announcement at all, so the counter takes **three** increments on this corpus, not eight — `announcedExternal` counts announcements, and five bundles announce nothing. The paragraph's argument is unaffected; its arithmetic is off by the five silent bundles.*
+**Test:** ingest an artifact whose map recovers sources that `admitDerived` then refuses in full (every `sourcesContent` entry empty), and read `counters.sourcemap.derivedRejected.depth_exceeded`.
+**Expected:** a decision, plus the pinning case `consumer.spec.ts` lacks.
+**Why human:** the residual is one increment per map-bearing artifact against the 781 the fix removed, and no health surface carries the counter. Whether it is worth a second local is a judgement, not a defect.
 
 ---
 
 ## Gaps Summary
 
-**No gaps block the phase goal.** Nothing FAILED; no artifact is missing, stubbed or orphaned; no key link is unwired; there is not a single debt marker across 81 modified source files; and every gate I ran myself is green.
+**No gaps. Every gap the prior verification and the UAT left open is closed in the codebase, and I confirmed each against the shipped property rather than against the SUMMARY that claims it.**
 
-What stands between this phase and an unqualified pass is four things, none of which is a defect in what was built:
+- **W-3** is closed in both halves — the key is widened at `v: 9`, the interim guard and its counter are retired, and two bundles carrying a byte-identical map now each keep their own N rows, exercised by three named tests I watched pass.
+- **W-5 and UAT gap 1** are closed — both new tables are swept, in the operator's cascade order, by anti-join and never a foreign key, and the convergence inequality's insert side finally counts rows the delete side can reach.
+- **UAT gap 2** is closed — the A8 harness is committed, runnable and asserts bounds; the prior report's one abstention is discharged.
+- **W-1 and W-2** are closed — MAP-05 is ticked with its reasoning, and the byte scan finds zero control bytes.
+- **The prior report's central caveat is closed** — the feature has now been observed producing readable developer source from real proxied traffic, which no committed corpus could have shown.
+- **All nine round-1 review findings** are genuinely closed, including the two the executors asked to have adjudicated and the `NOT IN` NULL hazard, whose dangerous half is *executed* by `retention.spec.ts:1648` rather than asserted.
 
-1. **One `backstop` truth abstains** (A8's cost half) because its harness was deleted after the run. Honesty contract applied: abstained, not passed.
-2. **Two new tables have no retention sweep and no owner phase** — the cadence was fixed, the coverage was not, and the convergence proof now counts inserts it cannot delete.
-3. **Nobody has watched the feature work on real traffic**, because the corpus contains zero inline maps. That is the design, and it is disclosed; it still means the end-to-end claim rests on segment tests.
-4. **A resolved zero can lie** in the duplicated-map case, on the one column whose design premise is that it cannot.
+What stands between this and an unqualified pass is four operator decisions, three of which this round introduced and none of which falsifies a must-have:
 
-Two criteria are legitimately handed forward and are recorded as such rather than ticked: SC5's rate half to Phase 3, MAP-01's external half to Phase 8.
+1. **WR-01** — a load-bearing constant's derivation stopped evaluating, in a file whose entire discipline is that thresholds are derivable, and the gate that should catch it computes from the constants instead.
+2. **WR-02** — the cascade gained a third child table and the cascade function did not; the module still states an invariant that one pass no longer honours.
+3. **WR-03** — the safe export mode narrowed on a premise that an ordinary bundler shape falsifies, and the corpus that would have caught it contains no `?`.
+4. **IN-01** — a counter that fires slightly wider than the event it names.
+
+Plus three items the operator already scoped out and which I re-measured rather than assumed: **W-4** (6 vue-tsc errors, unchanged), **W-6** (`MAP_MAX_BYTES` untouched) and **UAT gap 3** (passed here, still load-sensitive). All three remain accurately recorded as open.
 
 ---
 
-_Verified: 2026-09-02T07:07:21Z at `38830b7`_
-_Verifier: Claude (gsd-verifier) — 4,204 tests, 5 gates and 3 byte-level scans executed in this session; no SUMMARY claim accepted without a corresponding read of the tree._
+_Verified: 2026-09-02T14:06:58Z at `aaac947`_
+_Verifier: Claude (gsd-verifier) — re-verification after gap-closure round 1_

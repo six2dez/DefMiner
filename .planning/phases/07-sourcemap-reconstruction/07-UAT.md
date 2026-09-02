@@ -1,109 +1,105 @@
 ---
-status: complete
+status: testing
 phase: 07-sourcemap-reconstruction
 source: [07-VERIFICATION.md]
-started: 2026-09-02T07:13:35Z
-updated: 2026-09-02T08:11:56Z
+started: 2026-09-02T14:10:00Z
+updated: 2026-09-02T14:10:00Z
+round: 2
+supersedes: 07-UAT-round1.md
 ---
 
 ## Current Test
 
-[testing complete]
+number: 1
+name: Decide WR-01 — rewrite `RETENTION_SWEEP_MAX_PASSES`'s derivation, or lower the constant
+expected: |
+  `thresholds.ts`'s docblock and `retention.ts:178-180` agree on one number, and the
+  choice of 16 is re-derived from the real quotient.
+awaiting: user response
 
 ## Tests
 
-### 1. End-to-end on live traffic with an inline-map bundle
-expected: A proxied bundle with an inline map yields a non-zero Sources count, a rendered tree, and readable source lines in the viewer.
-result: pass
-note: Confirmed on real proxied traffic against a live Caido at commit df5b101. Closes the verifier's central caveat that no test spanned proxy-response to rendered source line and the committed corpus could not produce one.
+### 1. Decide WR-01 — rewrite `RETENTION_SWEEP_MAX_PASSES`'s derivation, or lower the constant
+expected: `thresholds.ts`'s docblock and `retention.ts:178-180` agree on one number, and the choice of 16 is re-derived from the real quotient.
+detail: |
+  `ROWS_INSERTED_PER_ITERATION_MAX = 3 + 2048 = 2051` (thresholds.ts:490-491), so the
+  inequality's right-hand side is `128 + 2051 = 2179`. The `RETENTION_SWEEP_MAX_PASSES`
+  docblock (thresholds.ts:166, 177, 191) still computes the pre-07-14 `4,227` in three
+  sentences and concludes "Nine is the smallest integer that satisfies the inequality
+  (4,227 / 512 = 8.26)". True quotient is 4.26; smallest satisfying integer is 5; next
+  power of two is 8, not 16. `retention.ts:178-180` writes the correct figure. Two files
+  in one repository disagree.
+  The constant 16 OVER-satisfies, so nothing is unsafe at runtime — but its stated
+  derivation no longer produces it, and `thresholds.spec.ts:260-281` computes the
+  inequality FROM the constants, so it is structurally unable to fail on this.
+  Drift is this round's own: correct at `4bd99c1`, left behind by `59347c3`.
+severity: warning
+introduced_by: this round (07-14, commit 59347c3)
+result: [pending]
 
-### 2. Decide the owner and eviction ORDER for sweeping `sources` and `source_sightings` (deferred D1)
-expected: An assigned phase or plan, and an answer to the design question — does a `sources` row die when its last sighting goes, or age independently?
-result: issue
-reported: "Cascade: a source dies with its last sighting"
-severity: major
-note: The DESIGN QUESTION is now answered; the WIRING is not. Sweep `source_sightings` first by the normal caps, then delete `sources` rows with no surviving sighting (anti-join, not an FK — no schema change, so no fifth EXPECTED_TABLES approval). Content-addressed dedupe survives: a source sighted from two bundles outlives either one alone.
+### 2. Decide WR-02 — put `source_sightings` inside `deleteDigest`'s cascade, or scope the module header's invariant to the two children it covers
+expected: Either every eviction removes its sightings in the same statement sequence as its observations and analyses, or `retention.ts:42-45` and `:389-390` say plainly that sightings are reaped as orphans by design and that the window closes on the next pass.
+detail: |
+  `deleteDigest` enumerates `OBSERVATION_KEYS_FOR_DIGEST_SQL` and
+  `ANALYSIS_KEYS_FOR_DIGEST_SQL` then runs `DELETE_ARTIFACT_SQL`; it never touches
+  `source_sightings`. Step 3d's orphan collection is guarded by `budget() > 0`
+  (retention.ts:927) with an `else { sightingsCapped = true; }` arm, so a pass that
+  spends its whole budget on 512 childless artifacts returns with every one of those
+  bundles' sightings orphaned. `workRemains` re-detects it via `ORPHAN_SIGHTINGS_SQL`
+  so it converges ACROSS passes — but the module header states three times that the
+  cascade cannot create that state, and this is now the ORDINARY path for every evicted
+  map-bearing bundle, not a crash-recovery corner.
+  No data loss: `readSightingOrigin` LEFT JOINs `artifacts`, and the anti-join errs
+  toward keeping `sources` rows alive.
+  The decision turns on whether your UAT cascade choice meant "in the same statement
+  sequence" or "in the same pass".
+severity: warning
+introduced_by: this round (07-13)
+result: [pending]
 
-### 3. Re-measure the A8 COST half and land the harness in the tree
-expected: Run A (no backlog, ceiling 50,000) and Run B (20,000-row aged backlog, ceiling 100) reproduce 07-05-SUMMARY.md's figures — 40 sweeps, <=512 rows/pass, ~+11 ms idle and ~+585 ms working.
-result: issue
-reported: "Land the harness as a gap — assert bounds, not timings"
-severity: minor
-note: Confirmed at HEAD — `a8-measure.spec.ts` does not exist and `git log --diff-filter=A --all` shows it was never committed, so the recorded figures are unreproducible by anyone. The FREQUENCY half is independently wired and green (three `retentionSweeps` assertions in consumer.spec.ts). Pairs with the D1 sweep work: same module, one round.
+### 3. Decide WR-03 — is a vite/webpack loader query analytic content the operator should see, or a residual the redactor should cut?
+expected: Either the docblock stops claiming that a non-URL label has no query axis and `SOURCES_LABEL_CASES` gains a relative `?` case, or `redactSourceLabelForExport` cuts wherever a query axis is present rather than wherever the label is protocol-shaped.
+detail: |
+  `redactSourceLabelForExport` (export.ts:273-275) delegates to `redactUrlForExport`
+  only when `isProtocolShapedLabel` is true. The stated premise at export.ts:255-256 —
+  "A label that is not a URL has neither axis" — is false for the ordinary vite/webpack
+  shape `src/App.vue?vue&type=script&lang.ts`, which `classify()` puts in `relative`.
+  Those tails now export VERBATIM in redacted mode where they were previously cut at
+  the `?`.
+  `SOURCES_LABEL_CASES` holds 23 entries and NOT ONE contains a `?`, so the corpus
+  passes identically in both modes and the narrowing is untested in the direction that
+  changed.
+  Counterweight, so this is not overread: the value still passes `stripForExport` and
+  `csvField`, so there is no injection, and a bundler's loader query is not the
+  credential class `redactUrlForExport` was written for. This is the SAFE mode
+  disclosing more than it did, on a premise that is factually wrong, with no coverage.
+severity: warning
+introduced_by: this round (07-16)
+result: [pending]
 
-### 4. Accept or reject the three literal NUL bytes in Phase 7 spec files
-expected: A decision: either re-spell them as escapes (the rule map-fixture.ts states in its own header and honours), or record the deviation with its reason.
-result: pass
-note: FIXED in commit f6cbf07 rather than accepted. Three literal NUL bytes re-spelled as escape sequences in sources-sink-prohibition.spec.ts (543, 1162) and SourceBrowser.spec.ts (634). Test-only, semantically identical; 150 affected tests green, typecheck and lint exit 0. Closes verifier finding W-2.
-
-### 5. Flip MAP-05's ledger row in REQUIREMENTS.md, or state why it stays open
-expected: MAP-05 marked [x], or a recorded reason it is not. Verifier finding W-1 reads it substantively MET at HEAD.
-result: pass
-note: Ticked with a dissolution note recorded inline. Malformed maps met by the reject-reason vocabulary; traversal and cycles by the 39-entry hostile corpus with an inclusive boundary fixture at exactly MAP_MAX_BYTES. Decompression bombs met BY CONSTRUCTION - Caido decodes gzip/brotli upstream so the plugin never decompresses, admit.ts's ceiling is in decompressed bytes, and the base64 path expands 4/3 rather than compressing. Machine-owned DERIVED RESIDUAL span verified byte-identical by sha256 before and after; outbound-prohibition.spec.ts green at 465. Closes verifier finding W-1.
-
-### 6. The 10,000-row frame-budget backstop is load-sensitive
-expected: `tests/frontend-load.spec.ts` "drops no more frames than the stated allowance" passes in a full-suite run.
-result: issue
-reported: "Observed during UAT — fails in full-suite runs under machine load, passes 3/3 in isolation"
-severity: minor
-note: NOT a regression. Reproduced at unmodified HEAD after reverting the NUL fix, and the spec references neither changed file. Earlier full-suite runs today passed in ~15s; failing runs take ~23s. The allowance (8 of 396 frames over 32 ms) is tight enough that concurrent load alone breaches it — observed 52/396.
+### 4. Accept or repair IN-01 — `derivedRejected.depth_exceeded` fires on `parsed.recovered.length > 0` rather than on whether anything was actually admitted for recursion
+expected: A decision, plus the pinning case `consumer.spec.ts` lacks — a map whose every `sourcesContent` entry is empty, asserting `depth_exceeded === 0`.
+detail: |
+  At `consumer.ts:1272-1287` the comment above the gate names ONE inaccuracy (the log
+  message's count over-states). The COUNTER shares the same condition, so if every
+  recovered source is subsequently refused by `admitDerived` — all empty, or all over
+  `DERIVED_SOURCE_MAX_BYTES`, both reachable from one hostile map — no recursion would
+  have been attempted and the counter still increments.
+  `telemetry.ts:317-322` states the unit as "one reconstruction stage that DECLINED TO
+  RECURSE".
+  Magnitude is one increment per map-bearing artifact against the 781 that MD-03's fix
+  removed, and no health surface carries the counter — so this is not a reason to
+  reopen MD-03. Whether the residual is worth a second local is a judgement.
+severity: info
+result: [pending]
 
 ## Summary
 
-total: 6
-passed: 3
-issues: 3
-pending: 0
+total: 4
+passed: 0
+issues: 0
+pending: 4
 skipped: 0
 blocked: 0
 
 ## Gaps
-
-- truth: "`sources` and `source_sightings` are swept by retention, in cascade order, so neither table grows unbounded"
-  status: failed
-  reason: "User decided the eviction order at UAT: cascade — a source dies with its last sighting. `store/retention.ts` names neither table and migration v:8 has no FK and no ON DELETE CASCADE, so both grow without a sweep and deleting an artifact orphans its sightings."
-  severity: major
-  test: 2
-  root_cause: "07-05 fixed the retention CADENCE and explicitly declined the COVERAGE, calling eviction order a design question (deferred item D1). No later ROADMAP phase claims the work — Phase 11's soak covers heap, not table rows."
-  artifacts:
-    - path: "packages/backend/src/store/retention.ts"
-      issue: "sweeps neither `sources` nor `source_sightings`"
-    - path: "packages/backend/src/store/migrations.ts"
-      issue: "migration v:8 declares no FK and no ON DELETE CASCADE between the two tables"
-  missing:
-    - "Sweep `source_sightings` by the normal age/row caps"
-    - "Then delete `sources` rows with no surviving sighting, via anti-join (NOT an FK — avoids a fifth EXPECTED_TABLES approval)"
-    - "Preserve content-addressed dedupe: a source sighted from two bundles must outlive either bundle alone"
-    - "Resolves W-5 as a side effect — HI-04's convergence arithmetic currently counts inserts into tables the sweep cannot delete from"
-  debug_session: ""
-
-- truth: "The A8 cost half is reproducible at HEAD by a committed harness, not only recorded in a SUMMARY"
-  status: failed
-  reason: "User chose to land the harness. a8-measure.spec.ts was a scratch file deleted after its run and never committed, so 07-05-SUMMARY.md's figures cannot be re-derived at HEAD."
-  severity: minor
-  test: 3
-  root_cause: "The measurement was taken with a throwaway spec rather than a committed one; the plan carried the cost half as verification:backstop and the verifier correctly abstained rather than passing it on the SUMMARY's word."
-  artifacts:
-    - path: "packages/backend/src/a8-measure.spec.ts"
-      issue: "does not exist; never committed (git log --diff-filter=A --all returns nothing)"
-  missing:
-    - "Re-author a8-measure.spec.ts as a committed, runnable benchmark"
-    - "Assert BOUNDS not timings - sweeps == artifacts, rows/pass <= RETENTION_SWEEP_MAX_ROWS, idle and working deltas bounded - because wall-clock figures are machine-dependent"
-    - "Run A: no backlog, ceiling 50,000. Run B: 20,000-row aged backlog, ceiling 100"
-    - "Land alongside the D1 sweep work - same module, one test run"
-  debug_session: ""
-
-- truth: "The 10,000-row frame-budget backstop gives the same verdict under load as it does idle"
-  status: failed
-  reason: "Discovered during UAT, not by the phase verifier. Fails in full-suite runs when the machine is loaded (52 of 396 frames over 32 ms against an allowance of 8) and passes 3/3 in isolation. Reproduced at unmodified HEAD, so it is not a Phase 7 regression."
-  severity: minor
-  test: 6
-  root_cause: "A wall-clock frame-budget assertion with a tight absolute allowance, run inside a full suite that competes for the same CPU. Suite duration on this machine varies 15s-23s between runs; the allowance does not adapt."
-  artifacts:
-    - path: "tests/frontend-load.spec.ts"
-      issue: "'drops no more frames than the stated allowance' asserts an absolute frame count that concurrent load alone can breach"
-  missing:
-    - "Decide whether this backstop should run inside the full suite at all, or be isolated / serialised"
-    - "If it stays in-suite, make the verdict load-robust - relative budget, a warm-up discard, or a retry-on-contention - rather than widening the allowance, which would blunt what it measures"
-    - "Pre-existing, not introduced by Phase 7 - assign an owner rather than attaching it to this phase's gap round"
-  debug_session: ""
