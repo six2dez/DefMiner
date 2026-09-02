@@ -31,6 +31,7 @@ import { migrate, SCHEMA_VERSION } from "./migrations";
 import {
   countSourcesForMap,
   markProducibility,
+  readSightingOrigin,
   recordSighting,
   SOURCES_LABEL_MAX,
   upsertRecoveredSource,
@@ -65,6 +66,70 @@ function countRows(fx: SqliteFixture, table: string): number {
   return (
     fx.raw.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }
   ).n;
+}
+
+/**
+ * A migrated fixture whose `source_sightings` has been RE-KEYED to the wider key
+ * — `(project_id, artifact_sha256, map_sha256, source_index)`.
+ *
+ * WHY THIS EXISTS AND WHY IT IS NOT A MIGRATION. The shipped `v: 8` key is
+ * `(project_id, map_sha256, source_index)`, so two sightings that share a map
+ * and an index while naming different bundles are not merely unwritten by
+ * `recordSighting`'s attribution guard — they are UNREPRESENTABLE, and a direct
+ * `INSERT` is refused by the primary key itself. The two-bundle disambiguation
+ * these cases assert therefore cannot be constructed against the shipped table
+ * at all, and plan 07-11 is forbidden from touching `store/migrations.ts`: the
+ * widening is 07-12's, behind an operator checkpoint.
+ *
+ * So the wider world is built HERE, in the spec, against a table this fixture
+ * owns. That buys the property the widened statements exist for — a read and a
+ * write that each name ONE sighting — proven BEFORE the key moves, which is the
+ * whole reason 07-11 ships ahead of 07-12: there must be no commit at which
+ * `readSightingOrigin` can match two rows and `stmt.get` returns whichever one
+ * SQLite reaches first.
+ *
+ * THE DDL IS READ OUT OF `sqlite_master` AND REWRITTEN, never restated. The
+ * producibility-vocabulary case above reads its `CHECK` constraint the same way
+ * and for the same reason: a second copy of the DDL in a spec is a second
+ * declaration that drifts the day the first one is edited. Only the `PRIMARY
+ * KEY` clause is substituted, and the substitution is asserted to have changed
+ * something — so the day 07-12 widens the shipped key, this helper turns red
+ * naming the clause it could not find rather than silently testing nothing.
+ */
+async function widerKeyFixture(): Promise<SqliteFixture> {
+  const fx = await migratedFixture();
+  const ddl = (
+    fx.raw
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'source_sightings'",
+      )
+      .get() as { sql: string }
+  ).sql;
+  const wider = ddl.replace(
+    "PRIMARY KEY (project_id, map_sha256, source_index)",
+    "PRIMARY KEY (project_id, artifact_sha256, map_sha256, source_index)",
+  );
+  expect(
+    wider,
+    "the shipped PRIMARY KEY clause was not found in the source_sightings DDL, " +
+      "so this fixture re-keyed nothing and every case built on it is vacuous",
+  ).not.toBe(ddl);
+  fx.raw.exec("DROP TABLE source_sightings");
+  fx.raw.exec(wider);
+  return fx;
+}
+
+/** Two sightings of ONE `(map, index)` naming two different bundles, each with
+ *  its own request. Only representable against {@link widerKeyFixture}. */
+function seedTwoBundleSighting(fx: SqliteFixture): void {
+  const stmt = fx.raw.prepare(
+    `INSERT INTO source_sightings (project_id, map_sha256, source_index,
+                                   artifact_sha256, request_id, producibility,
+                                   recovered_at)
+     VALUES (?, ?, 0, ?, ?, ?, 2000)`,
+  );
+  stmt.run(PROJECT, MAP_A, ARTIFACT_A, "req-a", SOURCE_PRODUCIBILITY_STATES[0]);
+  stmt.run(PROJECT, MAP_A, ARTIFACT_B, "req-b", SOURCE_PRODUCIBILITY_STATES[0]);
 }
 
 describe("the recovered-source tables round-trip (MAP-02, D-05)", () => {
@@ -842,6 +907,80 @@ describe("D-06 — the label round-trips BYTE-IDENTICALLY", () => {
         (labelCase) => labelCase.id === "four-kilobyte-label",
       );
       expect(fourKilobyte?.value).toHaveLength(SOURCES_LABEL_MAX);
+    } finally {
+      fx.close();
+    }
+  });
+});
+
+describe("W-3 — a sighting is READ by a key that names its bundle", () => {
+  it("answers each bundle with its OWN request when two share (map, index)", async () => {
+    // THE MULTI-MATCH THIS PLAN EXISTS TO PREVENT. Under the shipped key this
+    // pair cannot be written at all, so the read's ambiguity is invisible; the
+    // moment 07-12 widens the key it becomes the ORDINARY case, and a `WHERE`
+    // that binds only map and index would hand back whichever row SQLite
+    // reached first. Measured against the pre-widening statement this case
+    // returned `req-a` for BOTH asks.
+    const fx = await widerKeyFixture();
+    try {
+      seedTwoBundleSighting(fx);
+
+      const fromA = await readSightingOrigin(
+        fx.db,
+        PROJECT,
+        ARTIFACT_A,
+        MAP_A,
+        0,
+      );
+      expect(fromA?.request_id).toBe("req-a");
+      expect(fromA?.artifact_sha256).toBe(ARTIFACT_A);
+
+      const fromB = await readSightingOrigin(
+        fx.db,
+        PROJECT,
+        ARTIFACT_B,
+        MAP_A,
+        0,
+      );
+      expect(fromB?.request_id).toBe("req-b");
+      expect(fromB?.artifact_sha256).toBe(ARTIFACT_B);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("answers `undefined` for a bundle that never carried this sighting", async () => {
+    // THE NEGATIVE HALF, and it is the half that matters at the RPC boundary:
+    // the caller now names a four-part key, so a caller naming a real map, a
+    // real index and the WRONG bundle must get nothing rather than another
+    // bundle's request. `index.ts` answers that with `unavailable` and writes no
+    // producibility row — an absence of evidence is not a proven refusal.
+    //
+    // THE POSITIVE CONTROL IS ON PURPOSE. Asserting only the `undefined` would
+    // pass against a statement that matched nothing at all, including the
+    // pre-widening one reading the digest into `map_sha256`.
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        "src/app.js",
+        2000,
+      );
+
+      expect(
+        (await readSightingOrigin(fx.db, PROJECT, ARTIFACT_A, MAP_A, 0))
+          ?.request_id,
+        "the sighting that IS there was not found, so the negative below proves nothing",
+      ).toBe("req-a");
+      expect(
+        await readSightingOrigin(fx.db, PROJECT, ARTIFACT_B, MAP_A, 0),
+      ).toBeUndefined();
     } finally {
       fx.close();
     }

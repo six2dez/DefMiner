@@ -2261,7 +2261,16 @@ describe("deriveSource — D-07's reload, D-24's re-verify, D-23's tombstone", (
     };
   }
 
-  const REF = { projectId: "p1", mapSha256: "", sourceIndex: 0 };
+  /** The sighting every case below names, with the `mapSha256` each one
+   *  overrides. `artifactSha256` is the BUNDLE the sighting belongs to and is
+   *  part of the key the backend matches on — a ref naming a different bundle
+   *  matches no row (plan 07-11, finding W-3). */
+  const REF = {
+    projectId: "p1",
+    artifactSha256: ARTIFACT_SHA,
+    mapSha256: "",
+    sourceIndex: 0,
+  };
 
   it("registers deriveSource AFTER the consumer and BEFORE the ready latch", async () => {
     // THE ORDERING CONTRACT IN `index.ts`'s HEADER, asserted from outside
@@ -2817,7 +2826,12 @@ describe("readSourceMappings — the lazy position table (O-01, D-16)", () => {
     response: makeFakeResponse({ id: REQUEST_ID, bodyBytes: bytes }),
   });
 
-  const REF = { projectId: "p1", mapSha256: MAP_SHA, sourceIndex: 0 };
+  const REF = {
+    projectId: "p1",
+    artifactSha256: ARTIFACT_SHA,
+    mapSha256: MAP_SHA,
+    sourceIndex: 0,
+  };
 
   it("returns the raw mappings string in ONE un-chunked response", async () => {
     seed();

@@ -47,6 +47,8 @@ const MAPPINGS =
 
 const SOURCE_REF: SourceRef = {
   projectId: "p1",
+  /** The PARENT BUNDLE this sighting belongs to. */
+  artifactSha256: "a".repeat(64),
   mapSha256: "b".repeat(64),
   sourceIndex: 7,
 };

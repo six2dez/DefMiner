@@ -145,8 +145,18 @@ import type { ArtifactRow } from "../backend";
  * specific failure that produces is the one 07-UI-SPEC.md spends its most
  * emphatic sentence refusing: a failed call painted as a tombstone, which is a
  * durable-looking claim made from an absence of evidence.
+ *
+ * BUMPED TO 7 IN LOCKSTEP WITH PLAN 07-11's BACKEND BUMP, and this one is the
+ * shape rule applied verbatim: {@link SourceRef} — the argument type of
+ * `deriveSource` and `readSourceMappings` — grows a required `artifactSha256`.
+ * What a version-6 bundle would do without the bump is why it is not optional.
+ * It sends three fields; the backend's widened predicate binds `undefined` into
+ * the bundle-digest position, matches NO row, and every drill-down in that
+ * bundle answers `unavailable` — a source the operator can see listed, refusing
+ * to open, indistinguishable on the surface from the target having redeployed.
+ * The mismatch banner is the cheaper half of that trade.
  */
-export const FRONTEND_CONTRACT_VERSION = 6;
+export const FRONTEND_CONTRACT_VERSION = 7;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -804,15 +814,25 @@ export type DefMinerBackendSdk = {
  * The SIGHTING one derivation addresses.
  *
  * Mirrors `SourceRef` in packages/backend/src/api/spec.ts, for the reason this
- * file's header gives — the two packages cannot import each other. THE TWO
- * FIELDS THAT ARE ABSENT ARE THE DESIGN and they are absent here too: there is
- * no request id and no artifact digest, because the backend reads both out of
- * `source_sightings`. A caller that could name the request and the digest it
+ * file's header gives — the two packages cannot import each other. THE FIELD
+ * THAT IS STILL ABSENT IS THE DESIGN and it is absent here too: there is no
+ * request id, because the backend reads which request produced this sighting out
+ * of `source_sightings`. A caller that could name the request AND the digest it
  * will be compared against could be shown any stored body, presented as this
  * bundle's — which is D-24 answering a question the caller already answered.
+ *
+ * `artifactSha256` NAMES THE SIGHTING; IT IS NOT THE DIGEST THE RELOAD IS
+ * VERIFIED AGAINST (07-REVIEW.md HI-03, finding W-3). `mapSha256` is
+ * content-addressed over the decoded MAP and never over the bundle, so two
+ * bundles can share one — a ref carrying only map and index does not name a
+ * single sighting. The backend still reads the digest it compares against out of
+ * the matched row, so this field decides WHICH row is matched and decides
+ * nothing about whether the bytes are accepted. A ref naming a bundle that never
+ * carried this `(map, index)` matches no row and comes back `unavailable`.
  */
 export type SourceRef = {
   readonly projectId: string;
+  readonly artifactSha256: string;
   readonly mapSha256: string;
   readonly sourceIndex: number;
 };

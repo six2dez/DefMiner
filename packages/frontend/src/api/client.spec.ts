@@ -139,11 +139,16 @@ const COUNT_REQUEST: CountRequest = {
   filter: null,
 };
 
-/** The sighting a derivation addresses. NO request id and NO artifact digest:
- *  the backend reads both out of `source_sightings`, which is what makes D-24
- *  an integrity control rather than a question the caller already answered. */
+/** The sighting a derivation addresses. NO request id: the backend reads which
+ *  request produced this sighting out of `source_sightings`, which is what makes
+ *  D-24 an integrity control rather than a question the caller already answered.
+ *  `artifactSha256` names WHICH sighting is meant — the same digest
+ *  `RECOVERED_REQUEST` below uses, because the drill-down that produces this ref
+ *  is the one that listed that bundle — and never the digest the reload is
+ *  verified against, which stays the stored one. */
 const SOURCE_REF: SourceRef = {
   projectId: "p1",
+  artifactSha256: "a".repeat(64),
   mapSha256: "b".repeat(64),
   sourceIndex: 0,
 };

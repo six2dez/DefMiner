@@ -378,8 +378,18 @@ describe("source-browser — the drill-down shell, end to end", () => {
 
     // The sighting the viewer asked for is the one the tree node names — and
     // it names it by INDEX, never by label.
+    //
+    // `artifactSha256` IS THE COMPONENT'S OWN PROP AND NOT A ROW FIELD (plan
+    // 07-11, finding W-3). The ref names one sighting by its full key, so the
+    // bundle on it must be the bundle whose drill-down this is; a row supplying
+    // it would let a row disagree with the tree it is displayed inside.
     expect(client.deriveCalls).toEqual([
-      { projectId: PROJECT, mapSha256: MAP_SHA, sourceIndex: 0 },
+      {
+        projectId: PROJECT,
+        artifactSha256: ARTIFACT_SHA,
+        mapSha256: MAP_SHA,
+        sourceIndex: 0,
+      },
     ]);
   });
 

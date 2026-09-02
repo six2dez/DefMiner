@@ -358,6 +358,7 @@ async function reloadVerifiedBundle(
   sdk: PluginSdk,
   database: Database,
   projectId: string,
+  artifactSha256: string,
   mapSha256: string,
   sourceIndex: number,
 ): Promise<BundleReload> {
@@ -370,14 +371,32 @@ async function reloadVerifiedBundle(
     return failed(DERIVATION_UNAVAILABLE);
   };
 
-  // THE ORIGIN COMES FROM THE DATABASE, NEVER FROM THE CALLER. The full
-  // argument is on `readSightingOrigin`'s statement: a caller that supplies both
-  // halves of the D-24 equality supplies the answer, and the control becomes a
-  // tautology. A sighting that is not in this project's partition simply cannot
-  // be derived, which is also T-07-09's mitigation on this path.
+  // THE ORIGIN COMES FROM THE DATABASE, NEVER FROM THE CALLER — and what the
+  // caller now supplies is a NAME, not an answer. The full argument is on
+  // `readSightingOrigin`'s statement; the shape of it here is that the caller
+  // names WHICH SIGHTING it means, as a four-part key, and still names neither
+  // the request to reload nor the digest to compare against. Both of those are
+  // read out of the matched row below.
+  //
+  // A caller naming a tuple with NO row gets `undefined` and is answered
+  // `unavailable`; a caller naming a real tuple gets THAT row's request. So the
+  // caller cannot pair a request of its choosing with a digest of its choosing,
+  // which is the pairing D-24 exists to refuse — supplying both halves of an
+  // equality is supplying the answer, and the control becomes a tautology.
+  //
+  // `origin.artifact_sha256` IS READ BACK OUT OF THE ROW AND COMPARED AGAINST
+  // `sha256Hex(raw)` BELOW EVEN THOUGH THE CALLER SUPPLIED AN EQUAL VALUE, and
+  // that is deliberate rather than redundant: the comparison's authority is the
+  // STORED row and never the request body. Comparing against `artifactSha256`
+  // here would make the re-verify check the caller's claim against itself, which
+  // is the vacuous shape this whole path is built to avoid.
+  //
+  // A sighting that is not in this project's partition simply cannot be derived,
+  // which is also T-07-09's mitigation on this path.
   const origin = await readSightingOrigin(
     database,
     projectId,
+    artifactSha256,
     mapSha256,
     sourceIndex,
   );
@@ -1305,12 +1324,14 @@ export async function init(sdk: PluginSdk): Promise<void> {
     });
     // --- MAP-07 / UI-05's DERIVATION SURFACE (D-07, D-23, D-24) ----------
     //
-    // THE CALLER DOES NOT NAME THE PROJECT, THE REQUEST OR THE DIGEST. It names
-    // one SIGHTING; the backend reads which request produced it and which bundle
-    // digest to verify against out of `source_sightings`. That is what makes
-    // D-24 an integrity control rather than a tautology, and it is also what
-    // bounds the set of stored bodies this endpoint can reach to the set
-    // DefMiner already recorded a sighting for, in the active project.
+    // THE CALLER DOES NOT NAME THE PROJECT OR THE REQUEST. It names one
+    // SIGHTING — project-scoped, and as of plan 07-11 by its full four-part key
+    // including the BUNDLE it belongs to; the backend reads which request
+    // produced it and which bundle digest to verify against out of
+    // `source_sightings`. Naming a sighting is not naming a request, which is
+    // what keeps D-24 an integrity control rather than a tautology, and it is
+    // also what bounds the set of stored bodies this endpoint can reach to the
+    // set DefMiner already recorded a sighting for, in the active project.
     sdk.api.register("deriveSource", async (_s, req) => {
       // BEFORE ANY AWAIT, and it lands in every `WHERE` below. See this file's
       // derivation section for why the scoping IS the epoch check here while
@@ -1325,6 +1346,7 @@ export async function init(sdk: PluginSdk): Promise<void> {
         sdk,
         db,
         pid,
+        req.artifactSha256,
         req.mapSha256,
         req.sourceIndex,
       );
@@ -1412,6 +1434,7 @@ export async function init(sdk: PluginSdk): Promise<void> {
         sdk,
         db,
         pid,
+        req.artifactSha256,
         req.mapSha256,
         req.sourceIndex,
       );

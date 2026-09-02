@@ -228,11 +228,32 @@ WHERE project_id = ? AND map_sha256 = ?
 // operator can never be shown source attributed to a bundle it did not come
 // from, and an attribution the caller chose is not an attribution at all.
 //
-// So the RPC names the SIGHTING — `(map_sha256, source_index)`, project-scoped —
-// and this statement answers with which request DefMiner itself recorded, which
-// bundle digest it recorded, and when. The set of requests the derivation path
-// can reach is therefore exactly the set DefMiner already recorded a sighting
-// for, in this project.
+// So the RPC names the SIGHTING — `(artifact_sha256, map_sha256, source_index)`,
+// project-scoped — and this statement answers with which request DefMiner itself
+// recorded, which bundle digest it recorded, and when. The set of requests the
+// derivation path can reach is therefore exactly the set DefMiner already
+// recorded a sighting for, in this project.
+//
+// THE BUNDLE DIGEST IS PART OF THE NAME AND IS STILL NOT PART OF THE ANSWER,
+// and the distinction is the whole of why widening this predicate does not
+// reopen the tautology above (07-REVIEW.md HI-03, finding W-3). Naming a
+// sighting is not naming a request: the caller says WHICH of DefMiner's own
+// recorded sightings it means, and `request_id` — the thing that decides which
+// stored body is reloaded — still comes back out of the matched row. A caller
+// that names a tuple with no row gets `undefined` and is answered `unavailable`;
+// it cannot name a request at all, let alone pair one with a digest of its
+// choosing, which is the pairing D-24 exists to refuse.
+//
+// WITHOUT THE BUNDLE IN THE PREDICATE THIS READ IS AMBIGUOUS THE MOMENT THE KEY
+// WIDENS. `map_sha256` is content-addressed over the DECODED MAP and never over
+// the bundle, so two bundles can share one — the same case the attribution guard
+// on `RECORD_SIGHTING_SQL` was built for. Today that guard makes the second
+// bundle's sighting UNWRITABLE and the shipped primary key makes it
+// unrepresentable, so a three-part `WHERE` matches at most one row by accident
+// of the schema rather than by construction. Plan 07-12 removes both of those
+// accidents. This predicate is what makes "one call, one sighting" survive it,
+// and it ships FIRST so there is never a commit at which `stmt.get` returns
+// whichever of two rows SQLite reached first.
 //
 // A LEFT JOIN ONTO `artifacts` for one column, in `reads.ts`'s shape. The
 // artifact's `byte_len` is the number the `changed` arm reports beside the
@@ -247,7 +268,8 @@ SELECT sg.artifact_sha256, sg.request_id, sg.recovered_at, sg.producibility,
 FROM source_sightings sg
 LEFT JOIN artifacts ar
   ON ar.project_id = sg.project_id AND ar.sha256 = sg.artifact_sha256
-WHERE sg.project_id = ? AND sg.map_sha256 = ? AND sg.source_index = ?
+WHERE sg.project_id = ? AND sg.artifact_sha256 = ?
+  AND sg.map_sha256 = ? AND sg.source_index = ?
 `;
 
 /**
@@ -269,11 +291,22 @@ export type SightingOrigin = {
  * Read one sighting's origin, so a derivation can reload the right request and
  * re-verify against the right digest.
  *
- * `undefined` when there is no such sighting in this project. The caller must
- * answer that with its "could not ask" sentinel and MUST NOT write a
- * producibility row for it: a sighting that is not there has not been proven
- * unproducible, and a durable-looking claim made from an absence of evidence is
- * the defect D-23's stickiness would make permanent.
+ * THE FOUR ARGUMENTS ARE THE SIGHTING'S FULL NAME, and the uniqueness this
+ * function relies on is the one the CALLER states rather than one the schema
+ * happens to enforce. It used to reason from a sighting being unique on
+ * `(map, index)`; that is true only while the attribution guard on
+ * {@link recordSighting} and the shipped primary key together make a second
+ * bundle's sighting unwritable, and plan 07-12 removes both. `artifactSha256`
+ * sits between `projectId` and `mapSha256` so the argument order mirrors the key
+ * order — a transposed call is then a type error at the digest/number boundary
+ * rather than a silently wrong row.
+ *
+ * `undefined` when there is no such sighting in this project — INCLUDING when
+ * the map and index are real and the bundle named is not the one that carried
+ * them. The caller must answer that with its "could not ask" sentinel and MUST
+ * NOT write a producibility row for it: a sighting that is not there has not
+ * been proven unproducible, and a durable-looking claim made from an absence of
+ * evidence is the defect D-23's stickiness would make permanent.
  *
  * Does NOT try/catch, following this module's split: writes report their own
  * outcome and reads do not.
@@ -281,13 +314,19 @@ export type SightingOrigin = {
 export async function readSightingOrigin(
   db: Database,
   projectId: string,
+  artifactSha256: string,
   mapSha256: string,
   sourceIndex: number,
 ): Promise<SightingOrigin | undefined> {
   const stmt = await db.prepare(SIGHTING_ORIGIN_SQL);
   // SPREAD, never one array: an array handed to a bind position is silently
   // ignored on this driver.
-  return stmt.get<SightingOrigin>(projectId, mapSha256, sourceIndex);
+  return stmt.get<SightingOrigin>(
+    projectId,
+    artifactSha256,
+    mapSha256,
+    sourceIndex,
+  );
 }
 
 /**

@@ -62,6 +62,10 @@ const DIGEST =
 
 const SOURCE_REF: SourceRef = {
   projectId: "p1",
+  // The PARENT BUNDLE this sighting belongs to. Spelled in the same `x.repeat(64)`
+  // idiom as the map digest beside it so the two read as two distinct
+  // content-addressed values rather than one restated.
+  artifactSha256: "a".repeat(64),
   mapSha256: "b".repeat(64),
   sourceIndex: 7,
 };

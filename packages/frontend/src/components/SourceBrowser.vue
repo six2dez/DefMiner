@@ -282,11 +282,25 @@ const selectedRow = computed<RecoveredSourceRow | null>(
 /**
  * The sighting the viewer produces, or `null` before one is picked.
  *
- * THE TWO ABSENT FIELDS ARE THE DESIGN. There is no request id and no artifact
- * digest on a `SourceRef`, because the backend reads both out of
- * `source_sightings`. A caller that could name the request and the digest it
+ * THE ABSENT FIELD IS THE DESIGN. There is no request id on a `SourceRef`,
+ * because the backend reads which request produced this sighting out of
+ * `source_sightings`. A caller that could name the request AND the digest it
  * will be compared against could be shown any stored body presented as this
  * bundle's — which is D-24 answering a question the caller already answered.
+ *
+ * `artifactSha256` NAMES THE SIGHTING; NAMING A SIGHTING IS NOT NAMING A DIGEST
+ * TO BE COMPARED AGAINST (07-REVIEW.md HI-03, finding W-3). `mapSha256` is
+ * content-addressed over the decoded map and never over the bundle, so two
+ * bundles can carry the same map — a ref built from `(map, index)` alone does
+ * not name ONE sighting, and the backend would answer with whichever row it
+ * reached first. The backend still reads the digest it re-verifies the reloaded
+ * bytes against out of the matched row, so this field decides which row is
+ * matched and decides nothing about whether the bytes are accepted.
+ *
+ * IT COMES FROM THIS COMPONENT'S OWN PROP AND NEVER FROM A ROW FIELD. The prop
+ * is the PARENT artifact — the bundle whose drill-down the operator is standing
+ * in — and it is the same value already on the header strip. Reading it off a
+ * row would let a row disagree with the tree it is being displayed inside.
  */
 const sourceRef = computed<SourceRef | null>(() => {
   const row = selectedRow.value;
@@ -294,6 +308,7 @@ const sourceRef = computed<SourceRef | null>(() => {
     ? null
     : {
         projectId,
+        artifactSha256,
         mapSha256: row.mapSha256,
         sourceIndex: row.sourceIndex,
       };

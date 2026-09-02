@@ -184,9 +184,23 @@ import type { SlimStatus } from "../telemetry";
  * reload on a mismatch that cannot exist, and would make the NEXT bump — the
  * one that does protect somebody — one number harder to reason about.
  *
+ * BUMPED TO 7 BY PLAN 07-11, AND THIS ONE IS THE RULE AT THE TOP APPLIED
+ * VERBATIM RATHER THAN AN OVER-BUMP. {@link SourceRef} — the ARGUMENT type of
+ * two shipped endpoints, `deriveSource` and `readSourceMappings` — grows a
+ * required `artifactSha256`. That is a changed argument shape on shipped
+ * methods, which is exactly what the rule covers.
+ *
+ * WHAT A SHIPPED BUNDLE WOULD DO WITHOUT THE BUMP is the reason it is not
+ * optional. A version-6 frontend sends three fields; the widened predicate binds
+ * `undefined` into `sg.artifact_sha256 = ?`, which matches NO row, so every
+ * drill-down in that bundle answers `unavailable` — a source the operator can
+ * see listed, refusing to open, with nothing on the surface saying why. The
+ * failure is total, silent, and indistinguishable from the target having
+ * redeployed. One forced reload is the cheaper half of that trade.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 6;
+export const CONTRACT_VERSION = 7;
 
 /**
  * What `getStatus` returns.
@@ -394,14 +408,28 @@ type RecoveredSourcesRequest = {
 /**
  * The SIGHTING one derivation addresses (D-07, D-24).
  *
- * THREE FIELDS, AND THE TWO THAT ARE ABSENT ARE THE DESIGN. There is no
- * `requestId` here and no `artifactSha256`, and neither omission is an
- * oversight: the backend reads BOTH out of `source_sightings`, which is what
- * makes D-24 an integrity control instead of a tautology. A request the caller
- * named, compared against a digest the caller also named, proves nothing — it
- * would let anything holding the RPC handle be shown any stored body, presented
- * as this bundle's. `store/sources.ts`'s `readSightingOrigin` carries the full
+ * FOUR FIELDS, IN KEY ORDER, AND THE ONE THAT IS STILL ABSENT IS THE DESIGN.
+ * There is no `requestId` here, and that omission is the whole of D-24: the
+ * backend reads which request produced this sighting out of `source_sightings`,
+ * so a request the caller named — compared against a digest the caller also
+ * named — is a pairing this contract cannot express. That pairing is what would
+ * let anything holding the RPC handle be shown any stored body, presented as
+ * this bundle's. `store/sources.ts`'s `readSightingOrigin` carries the full
  * argument beside the statement.
+ *
+ * `artifactSha256` NAMES THE SIGHTING AND DOES NOT SUPPLY THE ANSWER, which is
+ * why adding it does not reopen the tautology (07-REVIEW.md HI-03, finding W-3).
+ * `mapSha256` is content-addressed over the DECODED MAP and never over the
+ * bundle, so two bundles can share one; a ref carrying only map and index
+ * therefore does not identify a single row once plan 07-12 widens the natural
+ * key, and the backend would answer with whichever row it reached first. The
+ * digest here says WHICH of DefMiner's own recorded sightings is meant. The
+ * digest the reload is verified against is still the STORED one, read back out
+ * of the matched row and compared against `sha256Hex(raw)` — the comparison's
+ * authority is the row, not this request body. A ref naming a bundle that never
+ * carried this `(map, index)` matches nothing and is answered `unavailable`;
+ * it is not answered with another bundle's body and it writes no producibility
+ * row.
  *
  * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
  * (P5-D43): the store layer needs one in every predicate and the frontend is not
@@ -415,6 +443,7 @@ type RecoveredSourcesRequest = {
  */
 type SourceRef = {
   readonly projectId: string;
+  readonly artifactSha256: string;
   readonly mapSha256: string;
   readonly sourceIndex: number;
 };
