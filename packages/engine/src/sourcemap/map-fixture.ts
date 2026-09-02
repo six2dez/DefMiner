@@ -214,6 +214,11 @@ export const HOSTILE_MAP_CASES: readonly MapFixtureCase[] = Object.freeze([
  *
  * `benign-control` is the LEGAL CONTROL: a corpus in which every case fires
  * proves only that the check fires.
+ *
+ * The 24th, `loader-query`, is WR-03's: a RELATIVE label carrying a QUERY AXIS,
+ * the ordinary vite/webpack loader-query shape. Neither SPIKE-12 nor D-12
+ * supplies one, and without it no gate in this repository has ever seen a
+ * `sources` label containing a `?`.
  */
 export const SOURCES_LABEL_CASES: readonly MapFixtureCase[] = Object.freeze([
   {
@@ -339,6 +344,21 @@ export const SOURCES_LABEL_CASES: readonly MapFixtureCase[] = Object.freeze([
       "idiom. Plan 07-07's SOURCE_LINE_MAX_GRAPHEMES must land BELOW 4,096 for that to " +
       "keep holding, and tests/corpus-maps.spec.ts asserts the two shipped caps do",
     value: "L".repeat(4096),
+  },
+  {
+    id: "loader-query",
+    why:
+      "WR-03 — THE CLASS NEITHER SPIKE-12 NOR D-12 COVERS: a label carrying a " +
+      "QUERY AXIS without being URL-shaped. This is the ordinary vite and webpack " +
+      "loader-query form, not a hostile construction — the single most common way " +
+      "a real `sources` entry acquires a `?`. `classify()` puts it in `relative` " +
+      "(no `://` at a positive index, no known scheme prefix, not UNC, no drive " +
+      "letter, no leading slash) and `isProtocolShapedLabel` is FALSE for it, so " +
+      "it probes the NON-DELEGATING export branch rather than the URL one. It " +
+      "exists because that branch's stated premise — that a label which is not a " +
+      "URL has neither a query nor a fragment axis — is FALSE for exactly this " +
+      "shape, and a corpus of 23 labels without a single `?` could never say so.",
+    value: "src/App.vue?vue&type=script&lang.ts",
   },
 ]);
 
