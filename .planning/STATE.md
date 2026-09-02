@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-18-PLAN.md
-last_updated: "2026-09-02T19:50:30.384Z"
+stopped_at: Completed 07-19-PLAN.md
+last_updated: "2026-09-02T20:02:15.923Z"
 last_activity: 2026-09-02
 last_activity_desc: Phase 07 execution started
-state_head: 0670a462ef2141e6ff7597d41e5e03d7b1b02003
+state_head: 0c261c438ed970fca57be26bb914e06d04c7338c
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 97
-  completed_plans: 90
+  completed_plans: 91
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 18 of 22
-Status: Executing gap-closure round 2 — 18 of 22 plans complete, 07-19 next
-Last activity: 2026-09-02 — 07-18 (TRACER) complete; G-07-1 / WR-01 closed
+Plan: 19 of 22
+Status: Executing gap-closure round 2 — 19 of 22 plans complete, 07-20 next
+Last activity: 2026-09-02 — 07-19 complete; G-07-4 / IN-01 closed
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -627,6 +627,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P13 | 26 min | 3 tasks | 3 files |
 | Phase 07 P15 | 35 min | 3 tasks | 5 files |
 | Phase 07 P18 | 8 min | 2 tasks | 2 files |
+| Phase 07 P19 | 7 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -1019,6 +1020,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 16 stays 16: RETENTION_SWEEP_MAX_PASSES keeps its value and the prose is what changed. The corrected derivation produces 8 and the docblock now names the gap to 16 as retained headroom, recording that lowering it was considered and NOT approved.
 - [Phase 07]: A derivation stated in prose is now pinned by a test that reads the prose. Gate 5 of thresholds.spec.ts slices the docblock region between two export const declarations, computes every expected figure from an imported constant, and pairs the absence half with a non-vacuity companion.
 - [Phase 07]: retention.ts:178-180 is named as an unguarded second copy of the same two figures rather than guarded by a cross-package readFileSync — 07-REVIEW.md IN-04 records what a reach out of packages/backend costs in the build graph.
+- [Phase 07]: G-07-4 / IN-01 closed: derivedRejected.depth_exceeded now fires on ADMISSION, not on recovery — an admittedForRecursion local counted at the recursion call site, with the emission moved below the per-source loop. — telemetry.ts states the unit as one reconstruction stage that DECLINED TO RECURSE. The guard read parsed.recovered.length, so a map whose every sourcesContent entry was empty incremented the counter for a stage in which zero recursions were attempted. The code moved to the specification; the specification was not edited.
+- [Phase 07]: A stage abandoned on project change now emits NO depth refusal at all, because the two stillCurrent() re-checks return done(null) from inside the loop and never reach the emission below it. — Correct and deliberate: a stage that was abandoned did not decline to recurse, it stopped. It is a visible behaviour change, so it is stated in the code beside the emission rather than left to be rediscovered.
 
 ### Known Risks Carried Forward
 
@@ -1061,8 +1064,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T19:50:30.226Z
-**Stopped at:** Completed 07-18-PLAN.md
+**Last session:** 2026-09-02T20:02:07.043Z
+**Stopped at:** Completed 07-19-PLAN.md
 **Resume file:** None
 
 ### Blockers

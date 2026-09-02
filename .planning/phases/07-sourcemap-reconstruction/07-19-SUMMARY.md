@@ -309,3 +309,11 @@ None - no external service configuration required.
 ---
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-02*
+
+## Self-Check: PASSED
+
+- `packages/backend/src/ingest/consumer.ts` — FOUND
+- `packages/backend/src/ingest/consumer.spec.ts` — FOUND
+- `.planning/phases/07-sourcemap-reconstruction/07-19-SUMMARY.md` — FOUND
+- commits `c8a5932`, `afb30cb`, `3c9527f`, `0c261c4` — all FOUND in `git log --all`
+- working tree clean at the time of the check
