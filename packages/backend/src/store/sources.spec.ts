@@ -1104,6 +1104,176 @@ describe("D-06 — the label round-trips BYTE-IDENTICALLY", () => {
   });
 });
 
+// ===========================================================================
+// LO-03 — THE CAP IS ENFORCED IN CODE POINTS, SO A STORED LABEL IS ALWAYS
+// VALID UTF-8
+// ===========================================================================
+//
+// 07-REVIEW.md LO-03: `sourcesVerbatim.slice(0, SOURCES_LABEL_MAX)` cut at code
+// UNIT 4,096. A label whose 4,096th code unit is a HIGH SURROGATE therefore
+// stored an UNPAIRED surrogate — an invalid UTF-8 sequence in a SQLite `TEXT`
+// column, which round-trips through the driver and the RPC boundary
+// unpredictably. The cap keeps its value; only the unit it counts changes.
+//
+// EVERY SURROGATE HERE IS AN ESCAPE SEQUENCE AND NEVER A LITERAL, in
+// `map-fixture.ts`'s discipline: this whole case is about characters that are
+// invisible in a diff, and a literal astral character in a source file is
+// exactly that.
+
+describe("LO-03 — sources_verbatim is cut on a CODE POINT boundary", () => {
+  /** A surrogate with no partner, found by walking code units. `[...s]` cannot
+   *  answer this: the spread iterator yields a LONE surrogate as its own
+   *  one-unit "character" rather than reporting it, so a check written over the
+   *  iterator would pass on exactly the value LO-03 is about. */
+  function hasUnpairedSurrogate(value: string): boolean {
+    for (let i = 0; i < value.length; i += 1) {
+      const unit = value.charCodeAt(i);
+      if (unit >= 0xd800 && unit <= 0xdbff) {
+        const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+        if (!(next >= 0xdc00 && next <= 0xdfff)) return true;
+        i += 1;
+      } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Read the stored label back THROUGH THE STORE, in the call
+   *  `SourceBrowser.vue` makes. The defect is about what survives the driver
+   *  and the RPC boundary, so inspecting the string that was passed in — or
+   *  reaching past the store to the raw handle — would assert the wrong thing.
+   */
+  async function readLabel(fx: SqliteFixture): Promise<string | null> {
+    const page = await listRecoveredSourcesPage(
+      fx.db,
+      PROJECT,
+      ARTIFACT_A,
+      null,
+      10,
+    );
+    expect(page.rows).toHaveLength(1);
+    return page.rows[0].sources_verbatim;
+  }
+
+  it("stores no unpaired surrogate when the 4,096th code unit is a high surrogate", async () => {
+    // U+1F600 GRINNING FACE, written as its two surrogate halves so the
+    // boundary this case is about is visible in the source. 4,095 ASCII
+    // characters put the FIRST emoji's HIGH half at code unit index 4,095 —
+    // the 4,096th code unit — which is precisely where the shipped `slice` cut.
+    const HIGH = "\ud83d";
+    const LOW = "\ude00";
+    const label = "A".repeat(SOURCES_LABEL_MAX - 1) + (HIGH + LOW).repeat(5);
+    expect(label.charCodeAt(SOURCES_LABEL_MAX - 1)).toBe(0xd83d);
+
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        label,
+        2000,
+      );
+      const stored = await readLabel(fx);
+      expect(stored).not.toBeNull();
+      expect(
+        hasUnpairedSurrogate(stored ?? ""),
+        "the stored label ends in an unpaired surrogate (final code unit " +
+          "U+" +
+          (stored ?? "")
+            .charCodeAt((stored ?? "").length - 1)
+            .toString(16)
+            .toUpperCase() +
+          "). The cap is being enforced in UTF-16 CODE UNITS, so the cut fell " +
+          "between the two halves of a surrogate pair and put an invalid " +
+          "UTF-8 sequence in a TEXT column (07-REVIEW.md LO-03).",
+      ).toBe(false);
+
+      // THE OBSERVABLE SHAPE OF THE DEFECT, asserted separately from the
+      // surrogate check because the driver HIDES it: binding a lone high
+      // surrogate does not store a lone high surrogate, it stores U+FFFD. So
+      // `hasUnpairedSurrogate` comes back FALSE on the broken value and the
+      // damage shows up here instead — the stored label is neither what was
+      // bound nor a prefix of what the map declared.
+      expect(
+        (stored ?? "").charCodeAt((stored ?? "").length - 1),
+        "the stored label's final code unit is U+FFFD REPLACEMENT CHARACTER. " +
+          "The code-unit cut bound a LONE HIGH SURROGATE and the driver " +
+          "rewrote it, so `sources_verbatim` is no longer the bytes the map " +
+          "declared (07-REVIEW.md LO-03).",
+      ).not.toBe(0xfffd);
+
+      // AND IT IS STILL A PREFIX. The value is evidence under D-06: truncated,
+      // never transformed. A code-point cut is still a truncation.
+      expect(label.startsWith(stored ?? "")).toBe(true);
+      // Exactly the cap in CODE POINTS — 4,095 ASCII plus one whole emoji.
+      expect([...(stored ?? "")]).toHaveLength(SOURCES_LABEL_MAX);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("stores a label of exactly the cap IN CODE POINTS whole", async () => {
+    // ASTRAL THROUGHOUT, so code points and code units differ by a factor of
+    // two and the two readings of "4,096" cannot be confused. Under the code-
+    // UNIT cap this value was cut in half; under the code-POINT cap it is
+    // stored whole, which is the budget the operator approved.
+    const label = "\ud83d\ude00".repeat(SOURCES_LABEL_MAX);
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        label.slice(0, 2 * SOURCES_LABEL_MAX),
+        2000,
+      );
+      const stored = await readLabel(fx);
+      expect([...(stored ?? "")]).toHaveLength(SOURCES_LABEL_MAX);
+      expect(stored).toBe(label.slice(0, 2 * SOURCES_LABEL_MAX));
+      expect(hasUnpairedSurrogate(stored ?? "")).toBe(false);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("cuts an ASCII label longer than the cap at exactly the cap, unchanged from before", async () => {
+    // THE UNCHANGED HALF. For a label with no astral characters a code point
+    // IS a code unit, so this case must behave exactly as it did — the fix
+    // moves a unit, not a budget.
+    const label = "L".repeat(SOURCES_LABEL_MAX + 500);
+    const fx = await migratedFixture();
+    try {
+      await recordSighting(
+        fx.db,
+        PROJECT,
+        MAP_A,
+        0,
+        ARTIFACT_A,
+        "req-a",
+        SOURCE_A,
+        label,
+        2000,
+      );
+      const stored = await readLabel(fx);
+      expect(stored).toHaveLength(SOURCES_LABEL_MAX);
+      expect(stored).toBe("L".repeat(SOURCES_LABEL_MAX));
+      expect(label.startsWith(stored ?? "")).toBe(true);
+    } finally {
+      fx.close();
+    }
+  });
+});
+
 describe("W-3 — a sighting is READ by a key that names its bundle", () => {
   it("answers each bundle with its OWN request when two share (map, index)", async () => {
     // THE MULTI-MATCH THIS PLAN EXISTS TO PREVENT. Under the shipped key this
