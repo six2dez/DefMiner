@@ -1230,21 +1230,34 @@ export function startConsumer(
         log("SIGHTING_WRITE_FAILED " + sighting.error);
       } else if (sighting.changes === 0) {
         // ===================================================================
-        // THE ATTRIBUTION GUARD DECLINED — COUNTED, NEVER SWALLOWED (HI-03)
+        // A STORE ANOMALY — RECORDED, NEVER SWALLOWED (W-3, HI-03)
         // ===================================================================
-        // `(project_id, map_sha256, source_index)` is already attributed to a
-        // DIFFERENT bundle, and `store/sources.ts`'s upsert now refuses to move
-        // it. `map_sha256` is content-addressed over the decoded map rather
-        // than over the bundle, so this is reachable at will: the second bundle
-        // only has to carry a copy of the same map.
+        // Since migration v9 the key is `(project_id, artifact_sha256,
+        // map_sha256, source_index)`, so a conflicting upsert always has an
+        // update arm that runs: the statement either inserts a row or updates
+        // one. `changes: 0` is therefore neither, and there is no traffic
+        // pattern that reaches it on purpose.
         //
-        // `ok: true, changes: 0` IS NOT A SUCCESSFUL WRITE and must not be
-        // counted as one. `rowsInserted` feeds STORE-06's retention interval,
-        // so counting a discarded row there would advance the cadence for work
-        // that never landed; `sightingsRecorded` would report rows that do not
-        // exist. The loss gets its own counter instead, because it is a fact
-        // about the target's traffic that the operator can act on.
-        sm.sightingsDiscardedOtherArtifact++;
+        // WHAT THIS BRANCH USED TO BE. Under the pre-v9 key this was plan
+        // 07-05's attribution discard: the `(map, index)` was already
+        // attributed to a DIFFERENT bundle and the upsert's interim guard
+        // refused to move it, so the SECOND bundle's evidence was lost and
+        // counted in `sightingsDiscardedOtherArtifact`. That counter is gone
+        // with the guard — the loss cannot happen now, and a number that can
+        // never again be non-zero carries no information.
+        //
+        // `ok: true, changes: 0` IS STILL NOT A SUCCESSFUL WRITE and must not
+        // be counted as one. Both rules survive verbatim and for their original
+        // reasons: `rowsInserted` feeds STORE-06's retention interval, so
+        // counting a row that never landed would advance the cadence for work
+        // that did not happen, and `sightingsRecorded` would report rows that
+        // do not exist. It goes to `storeErrors` instead, because that is the
+        // counter for "the store did something this code cannot explain".
+        counters.storeErrors++;
+        log(
+          "SIGHTING_NO_CHANGE the upsert neither inserted nor updated on " +
+            "(project_id, artifact_sha256, map_sha256, source_index)",
+        );
       } else {
         sm.sightingsRecorded++;
         rowsInserted += 1;

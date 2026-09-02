@@ -2036,7 +2036,13 @@ describe("one admitted bundle carrying an inline map produces source rows", () =
     // nothing" — and before v9 one of these two was exactly that.
     const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
     for (const digest of digests) {
-      const page = await listRecoveredSourcesPage(fx.db, PROJECT, digest, null, 50);
+      const page = await listRecoveredSourcesPage(
+        fx.db,
+        PROJECT,
+        digest,
+        null,
+        50,
+      );
       expect(
         page.rows,
         `artifact ${digest.slice(0, 12)} drilled down to ${String(page.rows.length)} rows`,

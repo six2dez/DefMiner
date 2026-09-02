@@ -118,62 +118,66 @@ ON CONFLICT (project_id, artifact_sha256, map_sha256, source_index) DO UPDATE SE
   request_id = excluded.request_id,
   source_sha256 = excluded.source_sha256,
   sources_verbatim = excluded.sources_verbatim
-WHERE source_sightings.artifact_sha256 = excluded.artifact_sha256
 `;
 
 // =============================================================================
-// THE TRAILING `WHERE` IS AN ATTRIBUTION GUARD, NOT AN OPTIMISATION
+// THE KEY NAMES THE BUNDLE, SO THE STATEMENT NO LONGER HAS TO ARGUE ABOUT IT
 // =============================================================================
-// 07-REVIEW.md HI-03, and it is target-triggerable at will.
-//
-// The key is `(project_id, map_sha256, source_index)` and `map_sha256` is
-// content-addressed over the DECODED MAP JSON — never over the bundle. TWO
-// DIFFERENT BUNDLES CAN THEREFORE SHARE A `map_sha256` while having different
+// `map_sha256` IS CONTENT-ADDRESSED OVER THE DECODED MAP JSON AND NEVER OVER THE
+// BUNDLE, and that fact is the whole reason this comment exists. TWO DIFFERENT
+// BUNDLES CAN THEREFORE SHARE A `map_sha256` while having different
 // `artifact_sha256`: a CDN mirror with a different banner comment, a decoy stub
-// that carries a copy of the map, or the same library genuinely re-bundled.
+// that carries a copy of the map, or the same library genuinely re-bundled. It
+// is target-triggerable at will.
 //
-// The update arm used to read `artifact_sha256 = excluded.artifact_sha256,
-// request_id = excluded.request_id`, so the second bundle did not create a
-// second set of sightings — it OVERWROTE THE FIRST BUNDLE'S, moving the
-// attribution to itself. Artifact A's drill-down then returned zero rows
-// (`listRecoveredSourcesPage` is scoped `WHERE sg.artifact_sha256 = ?`),
-// `countRecoveredSourcesByArtifact` reported `0` on the `scan_state = 'done'`
-// ground — the RESOLVED zero, the one the whole zero-versus-unknown design
-// exists to make mean "DefMiner looked and there was nothing" — and the tree
-// rendered "No recovered sources in this bundle" about a bundle DefMiner had
-// recovered four hundred sources from. D-24 did not catch it: the reload
-// verified against B's digest and SUCCEEDED, so the attribution was simply the
-// wrong bundle's, silently.
+// Since migration v9 the PRIMARY KEY is `(project_id, artifact_sha256,
+// map_sha256, source_index)`, so those two bundles are two rows and the conflict
+// target above names all four columns. A sighting is "this bundle's view of this
+// map at this index", which is what it always described and now finally is.
 //
-// WHAT THE GUARD DOES. A conflicting row is updated only when the incoming
-// sighting names the SAME artifact. The first writer keeps the attribution and
-// the second bundle's sighting is DISCARDED — reported as `changes: 0`, which
-// `ingest/consumer.ts` counts rather than swallowing, because a discarded write
-// that reports success is how a health surface comes to describe work that
-// produced no row.
+// -----------------------------------------------------------------------------
+// THE HISTORY, KEPT BECAUSE A SUMMARY NAMING IT NEEDS SOMEWHERE TO LAND
+// -----------------------------------------------------------------------------
+// The original key was `(project_id, map_sha256, source_index)` and the update
+// arm read `artifact_sha256 = excluded.artifact_sha256, request_id =
+// excluded.request_id`. The second bundle did not create a second set of
+// sightings — it OVERWROTE THE FIRST BUNDLE'S, moving the attribution to itself
+// (07-REVIEW.md HI-03). Artifact A's drill-down then returned zero rows, and
+// D-24 did not catch it: the reload verified against B's digest and SUCCEEDED,
+// so the attribution was simply the wrong bundle's, silently.
 //
-// `artifact_sha256` IS GONE FROM THE `SET` LIST ENTIRELY, and that is the
-// structural half: under the guard it could only ever be assigned its own
-// value, so removing it makes "a sighting never changes bundles" a property of
-// the STATEMENT rather than of a predicate a reader has to evaluate.
+// Plan 07-05 shipped an INTERIM MITIGATION: a trailing
+// `WHERE source_sightings.artifact_sha256 = excluded.artifact_sha256` that
+// updated a conflicting row only when the incoming sighting named the same
+// artifact. It bought the strictly smaller property — the first bundle's
+// evidence could no longer be taken away — and it discarded the second bundle's,
+// reporting `changes: 0` and counting it in `sightingsDiscardedOtherArtifact`.
+// That left the SECOND bundle's drill-down reading a RESOLVED ZERO
+// (07-VERIFICATION.md W-3), on the one column whose whole design is that a
+// resolved zero means "DefMiner looked and there was nothing".
 //
-// `request_id` STAYS IN THE `SET` LIST, and it has to. It is refreshed only
-// when the artifact matches, so it always names a request that served THIS
-// bundle's bytes — which is exactly what D-24 reloads and re-verifies against.
-// Pinning it to the first sighting instead would let Caido's history evict that
-// request while the bundle is still being served, and `no_request` mints a
-// STICKY `gone` tombstone. Moving it to a DIFFERENT bundle's request is the bug
-// above. Refreshing it within one bundle is the only one of the three that is
-// correct.
+// PLAN 07-12 REMOVED BOTH, in the commit after the key landed. The guard became
+// TAUTOLOGICAL — a conflicting row necessarily agrees on `artifact_sha256`,
+// because it is a key column — and a predicate a reader must evaluate in order
+// to learn it can never be false is worse than no predicate. The counter became
+// a number that can never again be non-zero, so it was removed rather than
+// pinned at zero; `telemetry.spec.ts` asserts its ABSENCE.
 //
-// THIS IS AN INTERIM MITIGATION AND IT IS NOT THE FIX. The complete fix widens
-// the natural key to `(project_id, artifact_sha256, map_sha256, source_index)`
-// so BOTH bundles keep their evidence, which is a v9 migration and a fifth
-// `EXPECTED_TABLES` change — an operator decision that has not been taken. What
-// this delivers is the strictly smaller property: the FIRST bundle's evidence
-// can no longer be taken away from it. The second bundle's sighting is still
-// lost, and `sightingsDiscardedOtherArtifact` is how an operator can see that
-// it happened rather than inferring it from a drill-down that reads zero.
+// `artifact_sha256` IS STILL ABSENT FROM THE `SET` LIST, and the reason is now
+// structural twice over: it is a KEY column, so it cannot differ between the
+// stored row and the incoming one, and assigning a column its own value is not
+// an update. "A sighting never changes bundles" is a property of the KEY.
+//
+// `request_id` STAYS IN THE `SET` LIST, AND IT HAS TO. This argument survives
+// the widening unchanged and is the one paragraph here that must not be
+// softened. The refreshed request always names a request that served THIS
+// bundle's bytes — the key guarantees it now, where the guard used to — and that
+// is exactly what D-24 reloads and re-verifies against. Pinning it to the first
+// sighting instead would let Caido's history evict that request while the bundle
+// is still being served, and `no_request` mints a STICKY `gone` tombstone.
+// Moving it to a DIFFERENT bundle's request was the bug above, and the key now
+// makes that unrepresentable rather than merely refused. Refreshing it within
+// one bundle is the only one of the three that is correct.
 
 // `recovered_at` AND `producibility` ARE NOT IN THE UPDATE ARM EITHER, and the
 // two omissions carry different weight. `recovered_at` is when this sighting was
@@ -398,12 +402,28 @@ export async function upsertRecoveredSource(
  * `producibility` is seeded to the FIRST vocabulary member and is never written
  * again by this statement — see the comment on {@link markProducibility}.
  *
- * `changes: 0` WITH `ok: true` IS A REAL OUTCOME AND THE CALLER MUST BRANCH ON
- * IT. It means this `(map, index)` is already attributed to a DIFFERENT bundle
- * and the attribution guard declined to move it (07-REVIEW.md HI-03) — the
- * sighting was DISCARDED, no row was written, and treating it as a successful
- * write reports evidence that does not exist. `ingest/consumer.ts` counts it as
- * `sightingsDiscardedOtherArtifact` and does NOT advance `rowsInserted`.
+ * `changes: 0` WITH `ok: true` IS A STORE ANOMALY SINCE MIGRATION v9, AND THE
+ * CALLER MUST STILL BRANCH ON IT — but it now means something else, and the
+ * change of meaning is the point. Under the four-column key every conflicting
+ * upsert has an update arm that runs, so the statement either INSERTS a row or
+ * UPDATES one; there is no third outcome it can reach on purpose. `changes: 0`
+ * is therefore a statement that neither inserted nor updated, which is a fact
+ * about the STORE and not about the traffic.
+ *
+ * WHAT IT USED TO MEAN, because a reader of a pre-v9 SUMMARY will arrive here
+ * looking for it: this `(map, index)` was already attributed to a DIFFERENT
+ * bundle and plan 07-05's interim attribution guard declined to move it
+ * (07-REVIEW.md HI-03, 07-VERIFICATION.md W-3). That was a DISCARD — a fact
+ * about the target's traffic, counted in a dedicated counter. It cannot happen
+ * now: the bundle is a key column, so the second bundle gets its own row.
+ *
+ * WHAT THE CALLER MUST DO WITH IT. Treating it as a successful write would
+ * report evidence that does not exist, so `ingest/consumer.ts` still does NOT
+ * advance `sightingsRecorded` and does NOT advance `rowsInserted` — both rules
+ * survive verbatim and for their original reasons, `rowsInserted` because it
+ * feeds STORE-06's retention interval and must not advance the cadence for work
+ * that never landed. It increments `storeErrors` and logs the four-part key
+ * shape, because an anomaly nobody can see is an anomaly nobody fixes.
  */
 export async function recordSighting(
   db: Database,

@@ -277,25 +277,29 @@ export type SourcemapCounters = {
   sourcesRecovered: number;
   /** `(map, index)` sightings written to `source_sightings`. */
   sightingsRecorded: number;
-  /**
-   * Sightings DISCARDED because that `(map, index)` is already attributed to a
-   * DIFFERENT bundle (07-REVIEW.md HI-03).
-   *
-   * ITS OWN COUNTER BECAUSE IT IS THE ONLY SURFACE ON WHICH THE LOSS IS
-   * VISIBLE. `source_sightings` is keyed `(project_id, map_sha256,
-   * source_index)` and `map_sha256` is content-addressed over the decoded map,
-   * so two different bundles carrying a byte-identical map collide on it. The
-   * upsert's attribution guard keeps the FIRST bundle's row — which is what
-   * stops the first bundle's drill-down silently becoming a resolved zero — and
-   * the second bundle's sighting is dropped.
-   *
-   * A DROP THAT REPORTED SUCCESS AND COUNTED NOTHING would be indistinguishable
-   * from a write, and {@link sightingsRecorded} would keep climbing over rows
-   * that do not exist. This is the number an operator reads to know that a
-   * second bundle carried a map DefMiner had already recorded, and it is the
-   * number that goes to zero when the v9 key widening lands.
-   */
-  sightingsDiscardedOtherArtifact: number;
+  // `sightingsDiscardedOtherArtifact` WAS HERE AND WAS REMOVED BY PLAN 07-12,
+  // in the same plan that landed the migration which made it meaningless.
+  //
+  // It counted sightings DISCARDED because that `(map, index)` was already
+  // attributed to a DIFFERENT bundle (07-REVIEW.md HI-03) — plan 07-05's interim
+  // attribution guard. Migration v9 put `artifact_sha256` into
+  // `source_sightings`' PRIMARY KEY, so the second bundle gets its own row and
+  // the discard cannot happen; its own docblock had said it was "the number that
+  // goes to zero when the v9 key widening lands".
+  //
+  // REMOVED RATHER THAN PINNED AT ZERO. A counter that can never again be
+  // non-zero, sitting beside counters that move, is a number carrying no
+  // information — the same defect MD-03 records in the other direction, where a
+  // number moved and nobody could see it. The operator's exit from this was
+  // option B at 07-12's checkpoint, which would have kept the field as a
+  // permanently-zero row; option A was taken. The record that the loss ever
+  // happened lives in `store/sources.ts`'s rewritten essay and in
+  // `07-05-SUMMARY.md`, which is T-07-69's accepted disposition.
+  //
+  // It never reached the health payload: `index.ts`'s `SourcemapHealth`
+  // projection names six sourcemap fields and this was not one of them, so the
+  // removal changes no RPC contract and no frontend shape.
+  // `telemetry.spec.ts` asserts its ABSENCE, so re-adding it fails.
   /**
    * Refusals on the DERIVED-ARTIFACT path, by reason.
    *
@@ -452,7 +456,6 @@ function createCounters(): Counters {
       mapRefused: zeroedRejectCounters(MAP_PARSE_REASONS),
       sourcesRecovered: 0,
       sightingsRecorded: 0,
-      sightingsDiscardedOtherArtifact: 0,
       derivedRejected: zeroedRejectCounters(DERIVED_REJECT_REASONS),
       derivationsServed: 0,
       derivationsGoneNoRequest: 0,
