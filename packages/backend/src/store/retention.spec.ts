@@ -21,6 +21,7 @@ import {
   AUDIT_RETENTION_MAX_ROWS_KEY,
   RETENTION_MAX_ROWS_KEY,
 } from "@defminer/engine/contract";
+import { RETENTION_SWEEP_MAX_ROWS } from "@defminer/engine/thresholds";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -1421,6 +1422,167 @@ describe("UAT gap 1 — the cascade reaches `sources` and `source_sightings`", (
     // Non-vacuous: the numbers are the seeded ones, not two zeroes agreeing.
     expect(counts.sources).toBe(2);
     expect(counts.source_sightings).toBe(3);
+  });
+});
+
+describe("G-07-2 / WR-02 — ONE PASS, and what the single-pass claim covers", () => {
+  // WHY THIS BLOCK EXISTS, AND WHY IT IS NOT A FOURTH CASE IN THE ONE ABOVE.
+  //
+  // Every cascade case above drives `sweepToConvergence`. A convergence loop
+  // CANNOT see the property the module header states: it keeps running passes
+  // until step 3d's orphan collection finally gets a pass with budget left, and
+  // by then the orphan is gone whether or not `deleteDigest` ever touched it.
+  // So "no orphan after convergence" was green while "no orphan after ONE pass"
+  // was never asked — which is exactly the gap G-07-2 / WR-02 records.
+  //
+  // THESE CASES CALL `sweepRetention` DIRECTLY AND EXACTLY ONCE. The convergence
+  // helper appears below only in the separate across-passes half, where it is
+  // proving that the single-pass fix did not cost the property it already owned.
+  // The next person adding a cascade case will otherwise reach for
+  // `sweepToConvergence` again, which is how this gap was introduced.
+
+  const MAP_ONLY = digest("ca");
+  const SRC_ONLY_C = digest("5d");
+
+  /** More artifacts than one pass can delete, DERIVED from the shipped constant
+   *  rather than written out. A hand-written 520 rots the moment
+   *  `RETENTION_SWEEP_MAX_ROWS` moves; this keeps exhausting the budget. The
+   *  margin only has to make `excess` exceed one pass's cap at `maxRows: 1`. */
+  const BACKLOG = RETENTION_SWEEP_MAX_ROWS + 8;
+
+  const BUDGET_EXHAUSTING: RetentionBounds = {
+    maxRows: 1,
+    maxAgeMs: HUGE_AGE,
+    auditMaxRows: HUGE_ROWS,
+  };
+
+  /** Whether one named bundle is still in `artifacts`. The single-pass claim is
+   *  about what is left AFTER this row goes, so a case that never proved it
+   *  went would be asserting about an eviction that did not happen. */
+  function artifactExists(projectId: string, sha256: string): boolean {
+    const row = fx.raw
+      .prepare(
+        "SELECT COUNT(*) AS n FROM artifacts WHERE project_id = ? AND sha256 = ?",
+      )
+      .get(projectId, sha256) as { n: number };
+    return Number(row.n) > 0;
+  }
+
+  /** The fixture both behavioural cases need: one map-bearing bundle as the
+   *  OLDEST, then enough childless bundles that the artifact loop spends the
+   *  whole pass budget before step 3d is reached.
+   *
+   *  OLDEST ON PURPOSE. Oldest-first ordering is the mechanism; seeded last, the
+   *  map-bearing bundle would never be reached in the pass at all and the case
+   *  would pass for the wrong reason. */
+  function seedBudgetExhaustingBacklog(): string {
+    const digests = seedArtifacts(P1, BACKLOG, NOW - 10_000, 1);
+    const evicted = digests[0] ?? "";
+    seedSource(P1, SRC_ONLY_C, NOW - 10_000);
+    seedSighting(P1, evicted, MAP_ONLY, 0, SRC_ONLY_C, NOW);
+    return evicted;
+  }
+
+  it("ONE PASS, not a convergence loop: a budget-exhausting backlog leaves NO sighting naming a deleted artifact", async () => {
+    const evicted = seedBudgetExhaustingBacklog();
+
+    // EXACTLY ONE PASS. Not `sweepToConvergence`, not a loop, not a helper that
+    // wraps one — see this block's opening note.
+    const first = await sweepRetention(fx.db, P1, BUDGET_EXHAUSTING, NOW);
+
+    // NON-VACUITY, FIRST. The claim is only about the budget-exhausted pass, so
+    // the case has to prove the budget was genuinely exhausted: a pass that
+    // spent all of it took step 3d's `else { sightingsCapped = true; }` arm and
+    // ran no orphan collection at all.
+    expect(
+      first.deleted,
+      "the pass did not spend its whole budget, so step 3d's orphan collection " +
+        "ran and this case is not testing `deleteDigest`'s cascade at all.",
+    ).toBe(RETENTION_SWEEP_MAX_ROWS);
+    expect(first.moreWork).toBe(true);
+    // And the bundle really was evicted — it was the oldest, so the first victim.
+    expect(
+      artifactExists(P1, evicted),
+      "the map-bearing bundle was not evicted in this pass, so there is no " +
+        "parent-gone state to assert about.",
+    ).toBe(false);
+
+    expect(
+      sightingsNaming(P1, evicted),
+      "one pass deleted the artifact and left a sighting naming it. " +
+        "`deleteDigest` cascaded `observations` and `analyses` but not " +
+        "`source_sightings`, so the sighting was left to step 3d — which did " +
+        "not run, because the artifact loop had spent the whole budget. The " +
+        "module header states THREE times that the cascade cannot create that " +
+        "state (G-07-2 / WR-02).",
+    ).toBe(0);
+  });
+
+  it("`sources` is NOT a child of `artifacts` — the single-pass claim stops at the sighting", async () => {
+    // THE BOUNDARY, ASSERTED SO THE CASE ABOVE IS NOT READ AS WIDER THAN IT IS.
+    // Nothing in this plan makes a promise about `sources` in one pass, and a
+    // reader who inferred one would "fix" the cascade by widening it into the
+    // exact failure the anti-join exists to prevent.
+    const evicted = seedBudgetExhaustingBacklog();
+
+    const first = await sweepRetention(fx.db, P1, BUDGET_EXHAUSTING, NOW);
+    expect(first.deleted).toBe(RETENTION_SWEEP_MAX_ROWS);
+    expect(artifactExists(P1, evicted)).toBe(false);
+
+    expect(
+      sourceIds(P1),
+      "the evicted bundle's sole `sources` row was deleted inside the artifact " +
+        "cascade. THIS IS NOT A BUG TO FIX BY WIDENING THE CASCADE. `sources` " +
+        "is content-addressed and SHARED across bundles, so it is not a child " +
+        "of `artifacts`: it dies with its LAST sighting through step 3d's " +
+        "anti-join, which did not run here because the budget was spent. A " +
+        "delete driven off the evicted bundle's sightings would take the row " +
+        "out from under a bundle still sighting it.",
+    ).toEqual([SRC_ONLY_C]);
+
+    // THE ACROSS-PASSES PROPERTY IS UNWEAKENED. From the same post-pass state,
+    // the existing convergence helper drains the backlog and the anti-join
+    // finally gets a pass with budget left. This is the property the cases above
+    // this block already own; it is re-asserted here to prove the single-pass
+    // fix did not cost it.
+    await sweepToConvergence(P1, BUDGET_EXHAUSTING);
+    expect(danglingSourceRows(P1)).toEqual({
+      orphanSightings: 0,
+      unsightedSources: 0,
+    });
+    expect(sourceIds(P1)).toEqual([]);
+  });
+
+  it("`SIGHTING_KEYS_FOR_DIGEST_SQL` is scoped, ordered and LIMITed like every other candidate statement", () => {
+    // The same discipline the `SCANS_*` statement cases apply. Without the
+    // explicit tie-break a capped enumeration is resumable only by luck, which
+    // is the one thing every candidate statement in `retention.ts` refuses.
+    const sql = statementText("SIGHTING_KEYS_FOR_DIGEST_SQL");
+
+    // BOTH bound predicates: the project scope and the digest this cascade is
+    // for. `sql-discipline.spec.ts` audits the scope; this pins the pair.
+    expect(sql).toContain("project_id = ?");
+    expect(sql).toContain("artifact_sha256 = ?");
+
+    // TWO columns selected and not four, which is the same distinction IN-03
+    // records one statement above: `project_id` and `artifact_sha256` are the
+    // BOUND scope, and the delete binds all four from the two selected plus the
+    // two bound.
+    expect(sql).toMatch(
+      /SELECT\s+map_sha256,\s*source_index\s+FROM\s+source_sightings/,
+    );
+    expect(sql).toMatch(/ORDER BY\s+map_sha256\s+ASC,\s*source_index\s+ASC/);
+    expect(sql).toContain("LIMIT ?");
+
+    // ONE sighting-delete statement in the file, REUSED by the cascade. A
+    // second one would be two places to keep the four-column key correct, and
+    // migration v9 widened that key precisely because getting it wrong deletes
+    // nothing while reporting success.
+    expect(
+      RETENTION_SOURCE.match(/DELETE FROM source_sightings/g) ?? [],
+      "a second sighting-delete statement was declared; `DELETE_SIGHTING_SQL` " +
+        "already binds all four key columns and is what the cascade must reuse.",
+    ).toHaveLength(1);
   });
 });
 
