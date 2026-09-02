@@ -181,6 +181,90 @@ function indexNames(fx: ReturnType<typeof createFixtureDb>): string[] {
   ).map((r) => String(r.name));
 }
 
+/** Apply every step UP TO AND INCLUDING v8 and stop there — the ladder exactly
+ *  as plan 07-04's build shipped it, before `source_sightings`' primary key was
+ *  widened to carry the bundle. Raw handle deliberately, for the reason
+ *  {@link applyV1Only} uses one: this is simulating a PREVIOUS RELEASE, so it
+ *  must not go through this build's `migrate()`. */
+function applyThroughV8(fx: ReturnType<typeof createFixtureDb>): void {
+  for (const m of MIGRATIONS) {
+    if (m.v > 8) break;
+    fx.raw.exec(m.sql);
+  }
+  fx.raw.exec("PRAGMA user_version = 8");
+}
+
+/** The three producibility members step v8 shipped, written out rather than
+ *  imported from the engine contract — the reason {@link SHIPPED_AUDIT_KINDS} is
+ *  written out. This array stands for what a database written by the OLD build
+ *  actually holds; bound to the live constant it would start writing whatever
+ *  the vocabulary grew to and stop being about preservation. */
+const SHIPPED_PRODUCIBILITY = ["producible", "gone", "changed"];
+
+/** Six sightings across TWO projects, distinct on every column.
+ *
+ *  Two projects for the reason {@link seedAudit} uses two: a table rebuild's copy
+ *  carries NO `project_id` predicate — copying every project is the point — and a
+ *  single-project seed could not tell a correct whole-table copy from one that
+ *  silently dropped everyone else.
+ *
+ *  Both nullable columns carry a NULL on some rows. `INSERT OR IGNORE` skipping a
+ *  row is SILENT, and a defaulted NULL is indistinguishable from a preserved one
+ *  if no seeded row ever carries one. */
+function seedSightings(fx: ReturnType<typeof createFixtureDb>): void {
+  const stmt = fx.raw.prepare(
+    `INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256,
+                                   request_id, source_sha256, sources_verbatim,
+                                   producibility, producibility_at, recovered_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  let n = 0;
+  for (const project of ["proj-alpha", "proj-beta"]) {
+    for (const producibility of SHIPPED_PRODUCIBILITY) {
+      n += 1;
+      stmt.run(
+        project,
+        String(n).padEnd(64, "m"),
+        n,
+        String(n).padEnd(64, "a"),
+        `req-${String(n)}`,
+        n % 3 === 0 ? null : String(n).padEnd(64, "s"),
+        n % 3 === 0 ? null : `src/mod-${String(n)}.js`,
+        producibility,
+        n % 2 === 0 ? null : 1_700_000_000_000 + n,
+        1_700_000_000_000 + n,
+      );
+    }
+  }
+}
+
+function readSightings(fx: ReturnType<typeof createFixtureDb>): object[] {
+  return fx.raw
+    .prepare(
+      `SELECT project_id, map_sha256, source_index, artifact_sha256, request_id,
+              source_sha256, sources_verbatim, producibility, producibility_at,
+              recovered_at
+       FROM source_sightings
+       ORDER BY project_id ASC, map_sha256 ASC, source_index ASC`,
+    )
+    .all()
+    .map((r) => ({ ...r }));
+}
+
+/** One step's SQL as the list of statements the driver will see.
+ *
+ *  The same `split(";")` the structural gates below use, named once so the
+ *  re-runnability cases can REPLAY a prefix of a step rather than restating its
+ *  DDL. Restating it is what the whole `sqlite_master`-reading discipline in
+ *  `sources.spec.ts` exists to avoid: a second copy of a CREATE TABLE in a spec
+ *  is a second declaration, and it drifts the day the first one is edited. */
+function statementsOf(sql: string): string[] {
+  return sql
+    .split(";")
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
+
 function countRows(
   fx: ReturnType<typeof createFixtureDb>,
 ): Record<string, number> {
@@ -336,7 +420,7 @@ describe("forward-only migration ladder (STORE-05)", () => {
     }
   });
 
-  it("the ladder head is step v8 — the version bump IS the appended entry", () => {
+  it("the ladder head is step v9 — the version bump IS the appended entry", () => {
     // `SCHEMA_VERSION` is derived from the LAST entry, so appending a step is the
     // whole version bump and there is no second place to forget. Asserted against
     // the literal 8 rather than against `MIGRATIONS.length`: a step number that
@@ -351,8 +435,15 @@ describe("forward-only migration ladder (STORE-05)", () => {
     // tables and both indexes in ONE `exec` for the opposite half of that same
     // measurement: one `exec` IS atomic, so an invariant spanning two tables has
     // to live inside a single step rather than across two.
-    expect(SCHEMA_VERSION).toBe(8);
-    for (const v of [3, 4, 5, 6, 7, 8]) {
+    //
+    // WAS 8. Step v9 is plan 07-12's widening of `source_sightings`' PRIMARY KEY
+    // to `(project_id, artifact_sha256, map_sha256, source_index)`, approved at
+    // that plan's `blocking-human` checkpoint (option A, 2026-09-02) — the FIFTH
+    // one-way `EXPECTED_TABLES` approval. SQLite cannot alter a primary key in
+    // place, so it arrives as a table rebuild in step v7's shape rather than as
+    // one statement.
+    expect(SCHEMA_VERSION).toBe(9);
+    for (const v of [3, 4, 5, 6, 7, 8, 9]) {
       expect(
         MIGRATIONS.find((m) => m.v === v),
         `step v${String(v)} is missing`,
@@ -939,6 +1030,258 @@ describe("forward-only migration ladder (STORE-05)", () => {
           `step v${m.v} copies FROM \`${src}\`, which no earlier step creates`,
         ).toBe(true);
       });
+    }
+  });
+
+  // =========================================================================
+  // STEP v9 — `source_sightings`' PRIMARY KEY LEARNS THE BUNDLE (W-3, HI-03)
+  // =========================================================================
+  //
+  // Plan 07-12, approved at its `blocking-human` checkpoint (option A,
+  // 2026-09-02). The shipped key is `(project_id, map_sha256, source_index)` and
+  // `map_sha256` is content-addressed over the DECODED MAP JSON, never over the
+  // bundle — so two bundles carrying a byte-identical map collide on it, and the
+  // second bundle's evidence was discarded by plan 07-05's interim guard. The
+  // fix is the key itself.
+  //
+  // SQLite cannot alter a primary key in place, so this is a table rebuild in
+  // step v7's exact shape, and it inherits step v7's whole safety argument: a
+  // `BEGIN`-less multi-statement `exec` is a SEQUENCE, so what makes it safe is
+  // that the step is re-runnable from EVERY state its own interruption can leave
+  // behind. These cases execute that argument rather than restating it.
+
+  /** Step v9, located by version because this is the step the plan names. */
+  function step9() {
+    const step = MIGRATIONS.find((m) => m.v === 9);
+    expect(step, "step v9 is missing — the key widening did not ship").toBeDefined();
+    return step as (typeof MIGRATIONS)[number];
+  }
+
+  it("step v9's SIX statements run in the ONE order that makes them safe", () => {
+    // POSITIONAL, because statement 5's safety is NOT self-contained: a rename
+    // onto an occupied name fails, so `ALTER TABLE source_sightings_v9 RENAME TO
+    // source_sightings` cannot fail ONLY because statement 4 dropped that name
+    // one statement earlier. An argument that depends on ordering and is not
+    // checked for ordering is a comment, so the order is asserted by index.
+    const statements = statementsOf(step9().sql);
+    expect(
+      statements,
+      "step v9 must declare exactly six statements — a seventh is a statement " +
+        "nobody has made the cannot-fail argument for",
+    ).toHaveLength(6);
+
+    const EXPECTED: { re: RegExp; why: string }[] = [
+      {
+        re: /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+source_sightings\b/i,
+        why:
+          "statement 1 re-creates the SOURCE name under IF NOT EXISTS, so " +
+          "statement 3 always has a table to select from — including on a " +
+          "re-entry after statement 4 already dropped it",
+      },
+      {
+        re: /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+source_sightings_v9\b/i,
+        why: "statement 2 creates the DESTINATION statement 3 copies into",
+      },
+      {
+        re: /^INSERT\s+OR\s+IGNORE\s+INTO\s+source_sightings_v9\b[\s\S]*\bFROM\s+source_sightings\b/i,
+        why:
+          "statement 3 copies every row across BEFORE anything is dropped, and " +
+          "OR IGNORE makes a re-run over rows already copied write nothing",
+      },
+      {
+        re: /^DROP\s+TABLE\s+IF\s+EXISTS\s+source_sightings$/i,
+        why: "statement 4 frees the name — and it is what makes statement 5 safe",
+      },
+      {
+        re: /^ALTER\s+TABLE\s+source_sightings_v9\s+RENAME\s+TO\s+source_sightings$/i,
+        why:
+          "statement 5 CANNOT FAIL ONLY BECAUSE STATEMENT 4 RAN FIRST. This is " +
+          "the one statement in the step whose cannot-fail argument is not " +
+          "self-contained, and this index comparison is that argument",
+      },
+      {
+        re: /^CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_source_sightings_artifact\b/i,
+        why:
+          "statement 6 is REQUIRED and not tidy: SQLite drops a table's indexes " +
+          "with the table, so step v8's index went with statement 4 and the " +
+          "drill-down's keyset order would silently lose it",
+      },
+    ];
+
+    EXPECTED.forEach((expected, i) => {
+      expect(
+        expected.re.test(statements[i] ?? ""),
+        `step v9 statement ${String(i + 1)} is not the statement the order ` +
+          `requires — ${expected.why}. Found: ${(statements[i] ?? "").slice(0, 90)}`,
+      ).toBe(true);
+    });
+  });
+
+  it("the rebuild carries EVERY sighting across, in every project, with every column intact", async () => {
+    // `INSERT OR IGNORE`'s failure mode is a SKIPPED ROW, not an error, so a copy
+    // that dropped rows would migrate cleanly, report `ok` and leave a shorter
+    // evidence table than it found. Every column is compared whole, including
+    // the two nullable ones, because a defaulted NULL imitates a preserved one.
+    const fx = createFixtureDb();
+    try {
+      applyThroughV8(fx);
+      seedSightings(fx);
+      const before = readSightings(fx);
+      // Two projects x three producibility members. Non-vacuity: a seed that
+      // inserted nothing would make every comparison below trivially true.
+      expect(before).toHaveLength(SHIPPED_PRODUCIBILITY.length * 2);
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+
+      expect(readSightings(fx)).toEqual(before);
+      expect(listTables(fx.raw)).toContain("source_sightings");
+      // The scaffolding name is GONE, not left beside the table it replaced —
+      // `schema.spec.ts`'s table-set assertion is the other half of this.
+      expect(listTables(fx.raw)).not.toContain("source_sightings_v9");
+      expect(indexNames(fx)).toContain("idx_source_sightings_artifact");
+
+      // THE POINT OF THE WHOLE STEP, asserted against the database rather than
+      // against the DDL text: a SECOND bundle carrying the same map at the same
+      // index is now a row of its own. Under the v8 key this INSERT is refused
+      // by the primary key itself.
+      const seeded = before[0] as Record<string, unknown>;
+      const insert = fx.raw.prepare(
+        `INSERT INTO source_sightings (project_id, map_sha256, source_index,
+                                       artifact_sha256, request_id, producibility,
+                                       recovered_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      expect(() =>
+        insert.run(
+          seeded.project_id,
+          seeded.map_sha256,
+          seeded.source_index,
+          "b".repeat(64),
+          "req-second-bundle",
+          SHIPPED_PRODUCIBILITY[0],
+          1_700_000_500_000,
+        ),
+      ).not.toThrow();
+      // And the key is still a key: the SAME four columns twice still collide.
+      expect(() =>
+        insert.run(
+          seeded.project_id,
+          seeded.map_sha256,
+          seeded.source_index,
+          "b".repeat(64),
+          "req-again",
+          SHIPPED_PRODUCIBILITY[0],
+          1_700_000_600_000,
+        ),
+      ).toThrow();
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("step v9 recovers a database interrupted AFTER the drop — the ladder still advances", async () => {
+    // THE FAILURE THIS TEST EXISTS FOR, in step v7's words: killed between
+    // `DROP TABLE IF EXISTS source_sightings` and the rename, a database holds no
+    // `source_sightings`, a `source_sightings_v9` with every row, and a
+    // `user_version` below the step. Without statement 1 the re-run fails at
+    // `... SELECT ... FROM source_sightings` with `no such table`, which stops
+    // the ladder at this step FOR EVERY SUBSEQUENT BOOT.
+    const fx = createFixtureDb();
+    try {
+      applyThroughV8(fx);
+      seedSightings(fx);
+      const before = readSightings(fx);
+      expect(before.length).toBeGreaterThan(0);
+
+      // Replay the step's OWN statements 2 and 3 — the copy has run.
+      const statements = statementsOf(step9().sql);
+      fx.raw.exec(`${statements[1] ?? ""};`);
+      fx.raw.exec(`${statements[2] ?? ""};`);
+      // THE INTERRUPTION. Bare `DROP TABLE`, deliberately: this is the crash
+      // being simulated, not a statement the ladder runs.
+      fx.raw.exec("DROP TABLE source_sightings");
+      expect(
+        listTables(fx.raw),
+        "the copy target must hold the rows before the drop is simulated",
+      ).toContain("source_sightings_v9");
+      expect(listTables(fx.raw)).not.toContain("source_sightings");
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(report.version).toBe(SCHEMA_VERSION);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+
+      // Not one row lost to the interruption.
+      expect(readSightings(fx)).toEqual(before);
+      expect(listTables(fx.raw)).not.toContain("source_sightings_v9");
+      expect(indexNames(fx)).toContain("idx_source_sightings_artifact");
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("step v9 recovers a database interrupted BEFORE the drop — both names present", async () => {
+    // The other interruption the step's own JSDoc names: statements 2 and 3 ran,
+    // statement 4 did not, so BOTH names exist and the old one still holds every
+    // row. A re-run copies again — `OR IGNORE` writes nothing over rows already
+    // there — then drops and renames.
+    const fx = createFixtureDb();
+    try {
+      applyThroughV8(fx);
+      seedSightings(fx);
+      const before = readSightings(fx);
+      expect(before.length).toBeGreaterThan(0);
+
+      const statements = statementsOf(step9().sql);
+      fx.raw.exec(`${statements[1] ?? ""};`);
+      fx.raw.exec(`${statements[2] ?? ""};`);
+      expect(listTables(fx.raw)).toContain("source_sightings");
+      expect(listTables(fx.raw)).toContain("source_sightings_v9");
+
+      const report = await migrate(fx.db);
+      expect(report.ok, JSON.stringify(report.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+      expect(readSightings(fx)).toEqual(before);
+      expect(listTables(fx.raw)).not.toContain("source_sightings_v9");
+      expect(indexNames(fx)).toContain("idx_source_sightings_artifact");
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("step v9 is re-runnable AFTER it fully applied — a re-entry must not drop the evidence", async () => {
+    // The step's `exec` succeeded and the `PRAGMA user_version` `exec` did not,
+    // so the next boot re-runs a step that is already done. The round trip is
+    // lossless because the two shapes have IDENTICAL columns.
+    //
+    // A STEP WRITTEN AS DROP + RENAME ALONE WOULD DESTROY THE EVIDENCE HERE: the
+    // drop would take the renamed `source_sightings`, and the rename would then
+    // fail on a source that no longer exists. It survives only because it
+    // re-creates BOTH names under `IF NOT EXISTS` and copies BEFORE it drops —
+    // which is easy to "simplify" away, and this case is what stops that.
+    const fx = createFixtureDb();
+    try {
+      applyThroughV8(fx);
+      seedSightings(fx);
+      const before = readSightings(fx);
+
+      const first = await migrate(fx.db);
+      expect(first.ok, JSON.stringify(first.steps)).toBe(true);
+      expect(listTables(fx.raw)).not.toContain("source_sightings_v9");
+
+      // Rewind ONLY the version. The schema is fully rebuilt; the bump was lost.
+      fx.raw.exec(`PRAGMA user_version = ${String(step9().v - 1)}`);
+
+      const again = await migrate(fx.db);
+      expect(again.ok, JSON.stringify(again.steps)).toBe(true);
+      expect(userVersion(fx.raw)).toBe(SCHEMA_VERSION);
+      expect(readSightings(fx)).toEqual(before);
+      expect(listTables(fx.raw)).not.toContain("source_sightings_v9");
+      expect(indexNames(fx)).toContain("idx_source_sightings_artifact");
+    } finally {
+      fx.close();
     }
   });
 

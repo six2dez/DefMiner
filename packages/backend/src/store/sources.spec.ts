@@ -28,6 +28,14 @@ import {
 } from "../../test/fixtures/sqlite-fixture";
 
 import { migrate, SCHEMA_VERSION } from "./migrations";
+// THE DRILL-DOWN'S OWN TWO READS, imported into the WRITE module's spec on
+// purpose. W-3 is not a claim about a row existing — it is a claim about what
+// the operator SEES, and the only way to assert that here is to make the same
+// two calls `SourceBrowser.vue` makes.
+import {
+  countRecoveredSourcesByArtifact,
+  listRecoveredSourcesPage,
+} from "./reads";
 import {
   countSourcesForMap,
   markProducibility,
@@ -591,18 +599,25 @@ describe("nullability — the four shapes 07-RESEARCH.md § Pitfall 3 measured",
   });
 });
 
-describe("HI-03 — one map in TWO bundles never reattributes the first's evidence", () => {
-  // `source_sightings` is keyed `(project_id, map_sha256, source_index)` and
-  // `map_sha256` is content-addressed over the DECODED MAP JSON, never over the
-  // bundle. Two different bundles can therefore share a `map_sha256` — a CDN
-  // mirror with a different banner comment, a decoy stub carrying a copy, or
-  // the same library genuinely re-bundled — and the second ingest used to
-  // OVERWRITE the first's attribution rather than colliding with it.
+describe("W-3 — one map in TWO bundles leaves BOTH bundles their evidence", () => {
+  // `source_sightings` is keyed `(project_id, artifact_sha256, map_sha256,
+  // source_index)` since migration v9, and the second column is why. `map_sha256`
+  // is content-addressed over the DECODED MAP JSON, never over the bundle, so two
+  // different bundles can share a `map_sha256` — a CDN mirror with a different
+  // banner comment, a decoy stub carrying a copy, or the same library genuinely
+  // re-bundled. It is target-triggerable at will: the second bundle only has to
+  // carry a copy of the same map.
   //
-  // This is the executed form of the finding. It is target-triggerable at will:
-  // the second bundle only has to carry a copy of the same map.
+  // THE HISTORY THIS BLOCK REPLACES, because a SUMMARY naming it needs somewhere
+  // to land. Under the original `(project_id, map_sha256, source_index)` key the
+  // second ingest OVERWROTE the first bundle's attribution (07-REVIEW.md HI-03).
+  // Plan 07-05 shipped an interim attribution guard that stopped the theft and
+  // counted the discard — but the second bundle's evidence was still LOST, and
+  // its drill-down read a RESOLVED zero (07-VERIFICATION.md W-3) on the one
+  // column whose whole design is that a resolved zero means "DefMiner looked and
+  // there was nothing". The key is the complete fix, and these cases are it.
 
-  it("keeps artifact A's attribution when artifact B carries the same map", async () => {
+  it("gives BOTH bundles their own row when they carry the same map", async () => {
     const fx = await migratedFixture();
     try {
       const first = await recordSighting(
@@ -631,28 +646,144 @@ describe("HI-03 — one map in TWO bundles never reattributes the first's eviden
         "src/secret.js",
         8000,
       );
-      // DISCARDED, AND IT SAYS SO. `changes: 0` is what the consumer branches
-      // on; before the guard this was `changes: 1` and the row had moved.
-      expect(second).toEqual({ ok: true, changes: 0 });
+      // A WRITE, NOT A DISCARD. Under the interim guard this was `changes: 0`
+      // and no second row existed; the whole finding is that `changes: 0` was
+      // reported as success while evidence went missing.
+      expect(second).toEqual({ ok: true, changes: 1 });
 
-      const row = fx.raw
+      expect(countRows(fx, "source_sightings")).toBe(2);
+
+      const rows = fx.raw
         .prepare(
-          "SELECT artifact_sha256, request_id, recovered_at FROM source_sightings WHERE source_index = 0",
+          `SELECT artifact_sha256, request_id, recovered_at FROM source_sightings
+           WHERE project_id = ? AND map_sha256 = ? AND source_index = 0
+           ORDER BY artifact_sha256 ASC`,
         )
-        .get() as {
+        .all(PROJECT, MAP_A) as {
         artifact_sha256: string;
         request_id: string;
         recovered_at: number;
-      };
-      // ARTIFACT A'S DRILL-DOWN STILL FINDS THIS ROW. `listRecoveredSourcesPage`
-      // is scoped `WHERE sg.artifact_sha256 = ?`, and
-      // `countRecoveredSourcesByArtifact` reporting 0 for A on the
-      // `scan_state = 'done'` ground is the RESOLVED zero — the one the whole
-      // zero-versus-unknown design exists to make mean "DefMiner looked and
-      // there was nothing".
-      expect(row.artifact_sha256).toBe(ARTIFACT_A);
-      expect(row.request_id).toBe("req-a");
-      expect(row.recovered_at).toBe(2000);
+      }[];
+      expect(rows).toHaveLength(2);
+      // EACH BUNDLE KEEPS ITS OWN REQUEST AND ITS OWN CLOCK. D-24 reloads
+      // `request_id` and re-verifies the body against `artifact_sha256`, so a
+      // row carrying the other bundle's request is the silent mis-verification
+      // HI-03 describes.
+      expect(rows.map((r) => r.artifact_sha256)).toEqual(
+        [ARTIFACT_A, ARTIFACT_B].sort((a, b) => (a < b ? -1 : 1)),
+      );
+      const byArtifact = new Map(rows.map((r) => [r.artifact_sha256, r]));
+      expect(byArtifact.get(ARTIFACT_A)?.request_id).toBe("req-a");
+      expect(byArtifact.get(ARTIFACT_A)?.recovered_at).toBe(2000);
+      expect(byArtifact.get(ARTIFACT_B)?.request_id).toBe("req-b");
+      expect(byArtifact.get(ARTIFACT_B)?.recovered_at).toBe(8000);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("answers each bundle's drill-down with that bundle's OWN rows, and neither with a zero", async () => {
+    // THE READ-BACK HALF, AND IT IS THE HALF W-3 IS ABOUT. A key that separates
+    // the rows is worth nothing if the two reads the drill-down actually makes
+    // still collapse them. `listRecoveredSourcesPage` is scoped
+    // `WHERE sg.artifact_sha256 = ?`; `countRecoveredSourcesByArtifact` is what
+    // paints the `Sources` column, and its zero is RESOLVED on the
+    // `scan_state = 'done'` ground — which is exactly why it must never be a
+    // zero that DefMiner reached by throwing evidence away.
+    const fx = await migratedFixture();
+    try {
+      // Two artifacts, so the count read has rows to report against. Seeded on
+      // the raw handle: this case is about the sighting key, not about ingest.
+      const artifact = fx.raw.prepare(
+        `INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at,
+                                last_seen_at, seen_count)
+         VALUES (?, ?, ?, 'js', ?, ?, 1)`,
+      );
+      artifact.run(PROJECT, ARTIFACT_A, 1024, 1000, 1000);
+      artifact.run(PROJECT, ARTIFACT_B, 2048, 1100, 1100);
+
+      const LABELS = ["src/a.js", "src/b.js", "src/c.js"];
+      for (const [i, label] of LABELS.entries()) {
+        for (const [artifactSha, requestId] of [
+          [ARTIFACT_A, "req-a"],
+          [ARTIFACT_B, "req-b"],
+        ] as const) {
+          expect(
+            await recordSighting(
+              fx.db,
+              PROJECT,
+              MAP_A,
+              i,
+              artifactSha,
+              requestId,
+              SOURCE_A,
+              label,
+              2000 + i,
+            ),
+          ).toEqual({ ok: true, changes: 1 });
+        }
+      }
+
+      const pageA = await listRecoveredSourcesPage(
+        fx.db,
+        PROJECT,
+        ARTIFACT_A,
+        null,
+        50,
+      );
+      const pageB = await listRecoveredSourcesPage(
+        fx.db,
+        PROJECT,
+        ARTIFACT_B,
+        null,
+        50,
+      );
+      expect(pageA.rows).toHaveLength(LABELS.length);
+      expect(pageB.rows).toHaveLength(LABELS.length);
+      expect(pageA.rows.map((r) => r.sources_verbatim)).toEqual(LABELS);
+      expect(pageB.rows.map((r) => r.sources_verbatim)).toEqual(LABELS);
+
+      // AND THE COLUMN THE OPERATOR READS. N for BOTH, never 0 for one.
+      const counts = await countRecoveredSourcesByArtifact(fx.db, PROJECT);
+      expect(counts.get(ARTIFACT_A)).toBe(LABELS.length);
+      expect(counts.get(ARTIFACT_B)).toBe(LABELS.length);
+    } finally {
+      fx.close();
+    }
+  });
+
+  it("is still idempotent on the FOUR-part key — the same bundle twice is one row", async () => {
+    // The other side of the widening. A wider key that stopped deduplicating
+    // would turn MAP-06's once-per-sighting guarantee into a row per re-analysis,
+    // against a `DEFAULT_RETENTION_MAX_ROWS` the phase already meets soonest here.
+    const fx = await migratedFixture();
+    try {
+      expect(
+        await recordSighting(
+          fx.db,
+          PROJECT,
+          MAP_A,
+          0,
+          ARTIFACT_A,
+          "req-a",
+          SOURCE_A,
+          "src/app.js",
+          2000,
+        ),
+      ).toEqual({ ok: true, changes: 1 });
+      expect(
+        await recordSighting(
+          fx.db,
+          PROJECT,
+          MAP_A,
+          0,
+          ARTIFACT_A,
+          "req-a2",
+          SOURCE_A,
+          "src/app.js",
+          8000,
+        ),
+      ).toEqual({ ok: true, changes: 1 });
       expect(countRows(fx, "source_sightings")).toBe(1);
     } finally {
       fx.close();
@@ -712,10 +843,12 @@ describe("HI-03 — one map in TWO bundles never reattributes the first's eviden
     }
   });
 
-  it("does not un-stick a tombstone by way of the declined arm", async () => {
-    // A discarded write must change NOTHING, including the one column whose
-    // stickiness D-23 guarantees. The guard fails the whole update rather than
-    // part of it.
+  it("does not un-stick ONE bundle's tombstone by writing the OTHER bundle", async () => {
+    // D-23's stickiness across the widening. Bundle B's write is now a genuine
+    // INSERT of a row of its own, so the interesting property is not that the
+    // write is refused — it is that bundle A's tombstone is in a DIFFERENT ROW
+    // and cannot be reached by it. Under the interim guard this was the same row
+    // and the property rested on a predicate; it is now the key.
     const fx = await migratedFixture();
     try {
       await recordSighting(
@@ -750,28 +883,39 @@ describe("HI-03 — one map in TWO bundles never reattributes the first's eviden
           "src/app.js",
           8000,
         ),
-      ).toEqual({ ok: true, changes: 0 });
-      const row = fx.raw
+      ).toEqual({ ok: true, changes: 1 });
+
+      const rows = fx.raw
         .prepare(
-          "SELECT producibility, producibility_at, artifact_sha256 FROM source_sightings",
+          `SELECT artifact_sha256, producibility, producibility_at
+           FROM source_sightings WHERE project_id = ? ORDER BY artifact_sha256 ASC`,
         )
-        .get() as {
-        producibility: string;
-        producibility_at: number;
+        .all(PROJECT) as {
         artifact_sha256: string;
-      };
-      expect(row.producibility).toBe("gone");
-      expect(row.producibility_at).toBe(5000);
-      expect(row.artifact_sha256).toBe(ARTIFACT_A);
+        producibility: string;
+        producibility_at: number | null;
+      }[];
+      expect(rows).toHaveLength(2);
+      const byArtifact = new Map(rows.map((r) => [r.artifact_sha256, r]));
+      // A's tombstone is exactly where it was left.
+      expect(byArtifact.get(ARTIFACT_A)?.producibility).toBe("gone");
+      expect(byArtifact.get(ARTIFACT_A)?.producibility_at).toBe(5000);
+      // And B starts at the FIRST vocabulary member rather than inheriting A's
+      // verdict: a tombstone is a fact about one bundle's request, never about
+      // the map.
+      expect(byArtifact.get(ARTIFACT_B)?.producibility).toBe(
+        SOURCE_PRODUCIBILITY_STATES[0],
+      );
+      expect(byArtifact.get(ARTIFACT_B)?.producibility_at).toBeNull();
     } finally {
       fx.close();
     }
   });
 
-  it("scopes the guard by PROJECT: another project's bundle is a separate row", async () => {
-    // The key leads on `project_id`, so this is a different partition entirely
-    // and the guard has nothing to decline. Non-vacuity for the case above:
-    // `changes: 0` there is about the ARTIFACT and not about the statement.
+  it("scopes the key by PROJECT: another project's bundle is a separate row", async () => {
+    // The key leads on `project_id`, so this is a different partition entirely.
+    // Non-vacuity for the cases above: the second row there is about the
+    // ARTIFACT column and not merely about the statement writing twice.
     const fx = await migratedFixture();
     try {
       await recordSighting(
