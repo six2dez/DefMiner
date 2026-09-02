@@ -764,3 +764,211 @@ describe("gate 4 — Broken Window #6 tripwire", () => {
     expect(G.thresholds[DENOMINATOR].value).toBe(0);
   });
 });
+
+// ===========================================================================
+// GATE 5 — THE DOCUMENTED DERIVATION, READ AS TEXT.
+// ===========================================================================
+// Gate 3 computes the convergence inequality FROM the constants, so it is
+// structurally unable to fail when a SENTENCE about those constants goes stale.
+// That blindness is not hypothetical. Commit `59347c3` (plan 07-14) retired the
+// `2 *` compensating factor from ROWS_INSERTED_PER_ITERATION_MAX and updated one
+// docblock, leaving the neighbouring RETENTION_SWEEP_MAX_PASSES derivation
+// computing the pre-fix insert side in three sentences — and every wired gate
+// stayed green for a full verification round (07-VERIFICATION.md WR-01).
+//
+// SO THIS GATE READS thresholds.ts's OWN SOURCE TEXT and compares the figures the
+// passes docblock STATES against the figures the constants PRODUCE. It is the
+// complement of gate 3, not a duplicate: gate 3 proves the inequality holds, this
+// one proves the file says so correctly. Every expected figure is computed from an
+// imported constant — a hand-written expectation would be the same second copy
+// this gate exists to abolish.
+//
+// REGION SCOPING IS LOAD-BEARING. The superseded figures are CORRECT history
+// inside ROWS_INSERTED_PER_ITERATION_MAX's commit-ordering paragraph later in the
+// same file: that paragraph is the record of why the row-unit gate had to land
+// BEFORE the factor was retired, and it legitimately names both the over-stated
+// figure and the exact one. A file-wide absence check would therefore be wrong and
+// unsatisfiable. The absence half is scoped to the passes docblock, and a
+// companion assertion proves those same figures are STILL present in the iteration
+// docblock — because an absence check with no non-vacuity guard passes on an empty
+// region, which is the self-defeating gate this repository has already paid for.
+//
+// THE SECOND COPY OF THIS FIGURE IS UNGUARDED, AND SAYING SO IS THE HONEST OPTION.
+// `packages/backend/src/store/retention.ts:178-180` states the same two numbers —
+// "512 x 16 = 8,192 against 128 + 2,051 = 2,179" — and no test reads that
+// sentence. This spec does NOT reach across the workspace to read it: 07-REVIEW.md
+// IN-04 records what a cross-package reach out of `packages/backend` costs in the
+// build graph, and the same caution applies in this direction. The two paragraphs
+// are kept in agreement by a READER, not by a machine. Naming an unguarded copy is
+// more honest than guarding it badly.
+
+/** The module this gate polices, repo-relative — `tests/corpus-maps.spec.ts`'s
+ *  FIXTURE_MODULE habit, so the path appears once and every message can name it. */
+const THRESHOLDS_MODULE = "packages/engine/src/thresholds.ts";
+
+/** Thousands-separated, DERIVED from the number rather than written out.
+ *  Deliberately not `toLocaleString`, whose grouping depends on the runtime's
+ *  ICU data — this gate must compare the same string on every machine. */
+function grouped(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/gu, ",");
+}
+
+/** The source text BETWEEN two `export const` declarations. Slicing by
+ *  declaration rather than by line number is what stops this gate rotting the
+ *  first time somebody adds a paragraph above it. */
+function region(fromDeclaration: string, toDeclaration: string): string {
+  const source = readFileSync(REPO_ROOT + THRESHOLDS_MODULE, "utf8");
+  const start = source.indexOf(fromDeclaration);
+  const end = source.indexOf(toDeclaration);
+  if (start < 0 || end < 0 || end <= start) {
+    throw new Error(
+      `${THRESHOLDS_MODULE} no longer contains "${fromDeclaration}" followed by ` +
+        `"${toDeclaration}". This gate slices a docblock BETWEEN two declarations. ` +
+        `If a declaration was renamed or reordered, update the anchors here — do ` +
+        `not delete the assertion, which is the only thing reading this prose.`,
+    );
+  }
+  return source.slice(start, end);
+}
+
+/** The RETENTION_SWEEP_MAX_PASSES docblock — the region whose prose this gate
+ *  holds to the constants. */
+function passesDocblock(): string {
+  return region(
+    "export const RETENTION_SWEEP_MAX_ROWS",
+    "export const RETENTION_SWEEP_MAX_PASSES",
+  );
+}
+
+/** ROWS_INSERTED_PER_ITERATION_MAX's docblock — where the superseded figures
+ *  legitimately survive as history. Read ONLY for the non-vacuity half. */
+function iterationDocblock(): string {
+  return region(
+    "export const SOURCE_ROWS_PER_MAP_MAX",
+    "export const ROWS_INSERTED_PER_ITERATION_MAX",
+  );
+}
+
+describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
+  // THE SHIPPED ARITHMETIC, recomputed from the imports exactly as gate 3
+  // recomputes it, so no figure below is a literal anybody typed.
+  const deleteSide = T.RETENTION_SWEEP_MAX_ROWS * T.RETENTION_SWEEP_MAX_PASSES;
+  const insertSide =
+    T.RETENTION_SWEEP_EVERY_N + T.ROWS_INSERTED_PER_ITERATION_MAX;
+  const quotient = (insertSide / T.RETENTION_SWEEP_MAX_ROWS).toFixed(2);
+  const smallestSatisfying = Math.ceil(insertSide / T.RETENTION_SWEEP_MAX_ROWS);
+  const nextPowerOfTwo = 2 ** Math.ceil(Math.log2(smallestSatisfying));
+  const headroom = (deleteSide / insertSide).toFixed(2);
+
+  // THE INSERT SIDE AS IT READ BEFORE `59347c3`, recomputed rather than quoted —
+  // the same expression gate 3's ordering test builds. Written as a literal it
+  // would stop tracking the constants the day one of them moves, and the absence
+  // check below would then assert the absence of an arbitrary string.
+  const supersededInsertSide =
+    T.RETENTION_SWEEP_EVERY_N +
+    T.ROWS_INSERTED_PER_ARTIFACT_MAX +
+    2 * T.SOURCE_ROWS_PER_MAP_MAX;
+  const supersededQuotient = (
+    supersededInsertSide / T.RETENTION_SWEEP_MAX_ROWS
+  ).toFixed(2);
+
+  /** The remedy every message in this block ends with. The fix for a failure
+   *  here is the PROSE — repairing a derivation by moving the constant to fit
+   *  the words is the inverse of the fix. */
+  const REMEDY =
+    `The fix is the SENTENCE, not the constant: rewrite the ` +
+    `RETENTION_SWEEP_MAX_PASSES docblock so it computes from the shipped insert ` +
+    `side. 16 is retained headroom by deliberate decision and lowering it was ` +
+    `considered and NOT approved (07-VERIFICATION.md WR-01).`;
+
+  it("the passes docblock states the insert side, the quotient and the smallest satisfying integer that the constants actually produce", () => {
+    const docblock = passesDocblock();
+    const stated: readonly (readonly [string, string])[] = [
+      [
+        grouped(deleteSide),
+        `the delete side — RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) x ` +
+          `RETENTION_SWEEP_MAX_PASSES (${T.RETENTION_SWEEP_MAX_PASSES})`,
+      ],
+      [
+        grouped(insertSide),
+        `the insert side — RETENTION_SWEEP_EVERY_N (${T.RETENTION_SWEEP_EVERY_N}) + ` +
+          `ROWS_INSERTED_PER_ITERATION_MAX (${T.ROWS_INSERTED_PER_ITERATION_MAX})`,
+      ],
+      [
+        `${grouped(insertSide)} / ${grouped(T.RETENTION_SWEEP_MAX_ROWS)} = ${quotient}`,
+        "the quotient the choice of passes is derived from, to two decimal places",
+      ],
+      [
+        `smallest integer that satisfies the inequality is ${smallestSatisfying}`,
+        "the smallest integer that satisfies the inequality",
+      ],
+      [
+        `next power of two above it is ${nextPowerOfTwo}`,
+        "the next power of two above that integer",
+      ],
+      [`${headroom}x headroom`, "the headroom multiple the delete side buys"],
+    ];
+
+    for (const [figure, what] of stated) {
+      expect(
+        docblock,
+        `The RETENTION_SWEEP_MAX_PASSES docblock in ${THRESHOLDS_MODULE} does not ` +
+          `state "${figure}" — ${what}. The shipped constants produce ` +
+          `${grouped(deleteSide)} >= ${grouped(insertSide)}, quotient ${quotient}, ` +
+          `smallest satisfying integer ${smallestSatisfying}, next power of two ` +
+          `${nextPowerOfTwo}, headroom ${headroom}x. ${REMEDY}`,
+      ).toContain(figure);
+    }
+  });
+
+  it("the passes docblock carries NONE of the figures the superseded insert side produced", () => {
+    const docblock = passesDocblock();
+    const retired: readonly (readonly [string, string])[] = [
+      [
+        grouped(supersededInsertSide),
+        `the pre-59347c3 insert side (RETENTION_SWEEP_EVERY_N + ` +
+          `ROWS_INSERTED_PER_ARTIFACT_MAX + 2 x SOURCE_ROWS_PER_MAP_MAX)`,
+      ],
+      [
+        supersededQuotient,
+        "the quotient that superseded insert side produced against RETENTION_SWEEP_MAX_ROWS",
+      ],
+    ];
+
+    for (const [figure, what] of retired) {
+      expect(
+        docblock,
+        `The RETENTION_SWEEP_MAX_PASSES docblock in ${THRESHOLDS_MODULE} still ` +
+          `states "${figure}" — ${what}. The shipped insert side is ` +
+          `${grouped(insertSide)} with quotient ${quotient}, so this paragraph is ` +
+          `computing a value the code retired. Do NOT keep the retired figure here ` +
+          `as a history note: the history lives in ROWS_INSERTED_PER_ITERATION_MAX's ` +
+          `commit-ordering paragraph, which the companion test below pins. ${REMEDY}`,
+      ).not.toContain(figure);
+    }
+  });
+
+  it("the superseded figures survive where they are CORRECT history, so the absence check cannot pass vacuously", () => {
+    // WITHOUT THIS THE ABSENCE HALF ROTS. Delete the history paragraph and the
+    // test above starts passing for the wrong reason — it would then be asserting
+    // that a figure is missing from a file that no longer explains anything.
+    const history = iterationDocblock();
+    expect(
+      history,
+      `ROWS_INSERTED_PER_ITERATION_MAX's docblock in ${THRESHOLDS_MODULE} no longer ` +
+        `names ${grouped(supersededInsertSide)}. That paragraph is the record of ` +
+        `why 07-14's row-unit gate had to land BEFORE the \`2 *\` factor was ` +
+        `retired — the gate first at ${grouped(supersededInsertSide)} (over-stated ` +
+        `and therefore safe), the factor second at ${grouped(insertSide)} (exact). ` +
+        `It is ALSO the reason the absence check above is scoped to a region rather ` +
+        `than to the file. Restore the paragraph rather than relaxing the scope.`,
+    ).toContain(grouped(supersededInsertSide));
+    expect(
+      history,
+      `ROWS_INSERTED_PER_ITERATION_MAX's docblock no longer names the shipped ` +
+        `insert side ${grouped(insertSide)} alongside the superseded ` +
+        `${grouped(supersededInsertSide)}, so the ordering argument it makes can no ` +
+        `longer be checked against the constants.`,
+    ).toContain(grouped(insertSide));
+  });
+});
