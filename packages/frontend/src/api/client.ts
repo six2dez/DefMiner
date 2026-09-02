@@ -61,6 +61,7 @@
 
 import type {
   BoundRejection,
+  DeriveSourceResult,
   ExportFormat,
   ExportRedactionMode,
   InvalidationEventPayload,
@@ -68,6 +69,7 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  RecoveredSourcePage,
   ScanLifecycleState,
   ScanProgressPayload,
   ScanState,
@@ -75,6 +77,7 @@ import type {
   SettingKey,
   SettingScope,
   SettingsGroup,
+  SourceMappingsResult,
   SuspendReason,
   VisibleTotal,
 } from "@defminer/engine/contract";
@@ -728,6 +731,12 @@ export type DefMinerBackendSdk = {
       readonly sha256: string;
     }) => Promise<PanelAnalysis | null>;
     retryAnalysis: (request: AnalysisKey) => Promise<RetryOutcome>;
+    deriveSource: (request: SourceRef) => Promise<DeriveSourceResult>;
+    listRecoveredSources: (
+      request: RecoveredSourcesRequest,
+    ) => Promise<RecoveredSourcePage>;
+    countRecoveredSources: () => Promise<Readonly<Record<string, number>>>;
+    readSourceMappings: (request: SourceRef) => Promise<SourceMappingsResult>;
     listSettings: (request: {
       readonly projectId: string;
     }) => Promise<readonly SettingRow[]>;
@@ -754,6 +763,32 @@ export type DefMinerBackendSdk = {
   };
 };
 
+/**
+ * The SIGHTING one derivation addresses.
+ *
+ * Mirrors `SourceRef` in packages/backend/src/api/spec.ts, for the reason this
+ * file's header gives — the two packages cannot import each other. THE TWO
+ * FIELDS THAT ARE ABSENT ARE THE DESIGN and they are absent here too: there is
+ * no request id and no artifact digest, because the backend reads both out of
+ * `source_sightings`. A caller that could name the request and the digest it
+ * will be compared against could be shown any stored body, presented as this
+ * bundle's — which is D-24 answering a question the caller already answered.
+ */
+export type SourceRef = {
+  readonly projectId: string;
+  readonly mapSha256: string;
+  readonly sourceIndex: number;
+};
+
+/** One eager, bounded read of an artifact's recovered sources. Mirrors
+ *  `RecoveredSourcesRequest` on the backend spec. No sort key and no filter:
+ *  the map's declaration order is the evidence, and the list is not sortable. */
+export type RecoveredSourcesRequest = {
+  readonly projectId: string;
+  readonly artifactSha256: string;
+  readonly cursor: PageCursor | null;
+};
+
 /** What {@link createBackendClient} returns. */
 export type BackendClient = {
   /** Ask the backend for its contract version and record a mismatch. Called
@@ -777,6 +812,33 @@ export type BackendClient = {
   }) => Promise<RpcResult<PanelAnalysis | null>>;
   /** Move ONE stopped analysis back out of its terminal state (OPS-03). */
   retryAnalysis: (request: AnalysisKey) => Promise<RpcResult<RetryOutcome>>;
+  /** ONE recovered source, derived on demand and hash-verified (D-07, D-24).
+   *
+   *  THE FOUR ARMS ARE NOT INTERCHANGEABLE AND THIS SURFACE MUST NOT COLLAPSE
+   *  THEM. `RpcResult` answers "did the backend answer"; the arm answers "what
+   *  did it find". An `RpcResult` failure — a rejection or a timeout — is
+   *  `Could not ask` and is NEVER a tombstone, which is 07-UI-SPEC.md's rule
+   *  that outranks its own copy table: the frontend never infers producibility,
+   *  because a call that did not answer is not evidence of a refusal. */
+  deriveSource: (request: SourceRef) => Promise<RpcResult<DeriveSourceResult>>;
+  /** One artifact's recovered sources, metadata only and bounded, with the
+   *  total beside the returned count so a bounded tree can say so in words. */
+  listRecoveredSources: (
+    request: RecoveredSourcesRequest,
+  ) => Promise<RpcResult<RecoveredSourcePage>>;
+  /** The `Sources` column's optional lookup map. An ENTRY with value 0 means
+   *  DefMiner looked and found none; NO ENTRY means it has not looked. The two
+   *  are never collapsed, on either side of the boundary. */
+  countRecoveredSources: () => Promise<
+    RpcResult<Readonly<Record<string, number>>>
+  >;
+  /** One map's raw `mappings` string, fetched LAZILY on the first position
+   *  request. It does not ride `deriveSource`'s response, because the viewer
+   *  must render, scroll and be fully usable before one byte of it has crossed
+   *  the RPC. */
+  readSourceMappings: (
+    request: SourceRef,
+  ) => Promise<RpcResult<SourceMappingsResult>>;
   /** One chunk of an inventory export, as bytes (UI-06, decision D-04). */
   exportInventory: (
     request: ExportChunkRequest,
@@ -974,6 +1036,27 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
     // where showing a state that was not persisted is the whole hazard.
     retryAnalysis: (request) =>
       guarded(() => sdk.backend.retryAnalysis(request)),
+
+    // GUARDED, AND THE GUARD MATTERS MORE HERE THAN ON ANY OTHER READ. A stale
+    // bundle reading a four-armed union it does not know reads `undefined`
+    // where the discriminant is, and the arm it would then fall through to is
+    // whichever one its code happens to check last. On this contract that
+    // means rendering a permanent tombstone for a call whose shape it simply
+    // could not parse — a durable-looking claim made from an absence of
+    // evidence, which is the exact defect this surface exists to refuse.
+    deriveSource: (request) => guarded(() => sdk.backend.deriveSource(request)),
+
+    listRecoveredSources: (request) =>
+      guarded(() => sdk.backend.listRecoveredSources(request)),
+
+    countRecoveredSources: () =>
+      guarded(() => sdk.backend.countRecoveredSources()),
+
+    // GUARDED like every other read, and it is the LAZY half of the viewer. A
+    // failure here degrades the position strip and nothing else: the source
+    // stays on screen and stays readable, which is O-01's fourth requirement.
+    readSourceMappings: (request) =>
+      guarded(() => sdk.backend.readSourceMappings(request)),
 
     // GUARDED, and an export is the LAST thing a bundle known to be misreading
     // the contract should take: it reads every row the operator can reach and

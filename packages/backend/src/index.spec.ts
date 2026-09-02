@@ -27,10 +27,12 @@ import {
   isScanProgressPayload,
   OPERATOR_SETTING_KEYS,
   RETENTION_MAX_ROWS_KEY,
+  SOURCE_TREE_LOAD_MAX,
   STORAGE_BOOT_COUNT_KEY,
   STORAGE_INSTALL_ID_KEY,
 } from "@defminer/engine/contract";
 import { sha256Hex } from "@defminer/engine/digest";
+import { MAP_MAX_BYTES, PASSIVE_MAX_BYTES } from "@defminer/engine/thresholds";
 import type { Database } from "sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -91,6 +93,9 @@ const CONTRACT_ENDPOINTS: readonly string[] = [
   "getArtifactAnalysis",
   "retryAnalysis",
   "deriveSource",
+  "listRecoveredSources",
+  "countRecoveredSources",
+  "readSourceMappings",
   "exportInventory",
   "listSettings",
   "writeSetting",
@@ -2484,5 +2489,400 @@ describe("deriveSource — D-07's reload, D-24's re-verify, D-23's tombstone", (
       "a read with no project resolved reached the request store anyway",
     ).toEqual([]);
     expect(producibilityNow()).toBe("producible");
+  });
+});
+
+// ===========================================================================
+// THE LIST READ, THE COUNT MAP, AND THE LAZY POSITION TABLE
+// ===========================================================================
+
+describe("listRecoveredSources / countRecoveredSources / readSourceMappings", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  const ART = "a".repeat(64);
+  const MAP = "b".repeat(64);
+  const RECOVERED_AT = 1_756_000_000_000;
+
+  function seedArtifactRow(sha256: string): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES ('p1', ?, 10, 'script', ?, ?, 1)",
+      )
+      .run(sha256, RECOVERED_AT, RECOVERED_AT);
+  }
+
+  function seedDoneAnalysis(sha256: string): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO analyses (project_id, sha256, detector_set_hash, scan_state, bytes_walked, started_at) VALUES ('p1', ?, ?, 'done', 10, ?)",
+      )
+      .run(sha256, DETECTOR_CORPUS_VERSION, RECOVERED_AT);
+  }
+
+  /** `count` sightings at indexes 0..count-1, all on one artifact and one map. */
+  function seedSightings(count: number, artifact = ART, map = MAP): void {
+    const stmt = fx.raw.prepare(
+      "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+        "VALUES ('p1', ?, ?, ?, 'req-1', NULL, ?, 'producible', NULL, ?)",
+    );
+    for (let i = 0; i < count; i += 1) {
+      stmt.run(
+        map,
+        i,
+        artifact,
+        `webpack://app/src/${String(i)}.ts`,
+        RECOVERED_AT,
+      );
+    }
+  }
+
+  async function boot(
+    projectId: string | null = "p1",
+  ): Promise<Record<string, (...a: unknown[]) => unknown>> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    await init(
+      makeFakeSdk({
+        projectId,
+        db: () => Promise.resolve(fx.db),
+        register: (name: string, fn: unknown) => {
+          rpc[name] = fn as (...a: unknown[]) => unknown;
+        },
+      }),
+    );
+    return rpc;
+  }
+
+  type Page = {
+    rows: { sourceIndex: number; artifactSha256: string }[];
+    nextCursor: unknown;
+    returned: number;
+    total: number;
+    bound: number;
+    exhausted: boolean;
+  };
+
+  it("registers all three by name", async () => {
+    const rpc = await boot();
+    for (const name of [
+      "listRecoveredSources",
+      "countRecoveredSources",
+      "readSourceMappings",
+    ]) {
+      expect(rpc[name], `${name} was not registered`).toBeTypeOf("function");
+    }
+  });
+
+  it("returns rows in the map's own index order, with NO content on any row", async () => {
+    seedArtifactRow(ART);
+    seedSightings(5);
+    const rpc = await boot();
+
+    const page = (await rpc.listRecoveredSources(null, {
+      projectId: "p1",
+      artifactSha256: ART,
+      cursor: null,
+    })) as Page;
+
+    expect(page.rows.map((r) => r.sourceIndex)).toEqual([0, 1, 2, 3, 4]);
+    // The scope, carried onto every row so a row is self-describing in an
+    // export, and taken from the REQUEST rather than selected back.
+    expect(new Set(page.rows.map((r) => r.artifactSha256))).toEqual(
+      new Set([ART]),
+    );
+    for (const row of page.rows) expect("content" in row).toBe(false);
+    expect(page.returned).toBe(5);
+    expect(page.total).toBe(5);
+    expect(page.exhausted).toBe(true);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it("pages past KEYSET_PAGE_ROWS with no duplicate and no gap, and the total is the SEEDED count", async () => {
+    // MORE THAN THE TREE BOUND, so both the internal page loop and the bound
+    // are exercised by one seed. The union across the two calls is the whole
+    // set; neither call may repeat a row and neither may skip one — the two
+    // failures a cursor gets wrong, and the reason `OFFSET` is banned.
+    const seeded = SOURCE_TREE_LOAD_MAX + 1;
+    seedArtifactRow(ART);
+    seedSightings(seeded);
+    const rpc = await boot();
+
+    const first = (await rpc.listRecoveredSources(null, {
+      projectId: "p1",
+      artifactSha256: ART,
+      cursor: null,
+    })) as Page;
+
+    // EXACTLY THE BOUND, AND A TOTAL GREATER THAN IT — two FIELDS rather than
+    // one number the caller compares against a constant. This is what lets the
+    // tree say "Showing the first 2,000 of 2,001" instead of truncating.
+    expect(first.returned).toBe(SOURCE_TREE_LOAD_MAX);
+    expect(first.rows.length).toBe(SOURCE_TREE_LOAD_MAX);
+    expect(first.total).toBe(seeded);
+    expect(first.total).toBeGreaterThan(first.bound);
+    expect(first.bound).toBe(SOURCE_TREE_LOAD_MAX);
+    expect(first.exhausted).toBe(false);
+    expect(first.nextCursor).not.toBeNull();
+
+    const second = (await rpc.listRecoveredSources(null, {
+      projectId: "p1",
+      artifactSha256: ART,
+      cursor: first.nextCursor,
+    })) as Page;
+    expect(second.exhausted).toBe(true);
+    expect(second.total).toBe(seeded);
+
+    const union = [...first.rows, ...second.rows].map((r) => r.sourceIndex);
+    expect(new Set(union).size, "a row was served twice").toBe(union.length);
+    expect(union.length, "a row was skipped across the page boundary").toBe(
+      seeded,
+    );
+    expect([...union].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: seeded }, (_v, i) => i),
+    );
+  });
+
+  it("countRecoveredSources tells a RESOLVED ZERO from an UNKNOWN — two assertions", async () => {
+    // THE ONE THING THIS COLUMN EXISTS TO PREVENT. `analysed` has a finished
+    // analysis and no sightings: DefMiner looked and there was nothing, so the
+    // entry EXISTS with value 0. `never` has neither: DefMiner has not looked,
+    // so there is NO ENTRY at all.
+    const analysed = "c".repeat(64);
+    const never = "d".repeat(64);
+    seedArtifactRow(ART);
+    seedArtifactRow(analysed);
+    seedArtifactRow(never);
+    seedSightings(3);
+    seedDoneAnalysis(analysed);
+    const rpc = await boot();
+
+    const counts = (await rpc.countRecoveredSources()) as Record<
+      string,
+      number
+    >;
+
+    expect(counts[ART]).toBe(3);
+    // A RESOLVED ZERO: present, and zero.
+    expect(Object.prototype.hasOwnProperty.call(counts, analysed)).toBe(true);
+    expect(counts[analysed]).toBe(0);
+    // UNKNOWN: absent, not zero.
+    expect(Object.prototype.hasOwnProperty.call(counts, never)).toBe(false);
+    expect(counts[never]).toBeUndefined();
+  });
+
+  it("countRecoveredSources answers an EMPTY map with no project — never a zero-filled one", async () => {
+    seedArtifactRow(ART);
+    seedSightings(1);
+    const rpc = await boot(null);
+    // Unknown by ABSENCE. A zero-filled map would claim DefMiner had looked at
+    // every bundle and found nothing in each.
+    expect(await rpc.countRecoveredSources()).toEqual({});
+  });
+
+  it("listRecoveredSources fails closed to an empty tree with no project", async () => {
+    seedArtifactRow(ART);
+    seedSightings(3);
+    const rpc = await boot(null);
+    const page = (await rpc.listRecoveredSources(null, {
+      projectId: "p1",
+      artifactSha256: ART,
+      cursor: null,
+    })) as Page;
+    expect(page.returned).toBe(0);
+    expect(page.total).toBe(0);
+    expect(page.exhausted).toBe(true);
+    expect(page.bound).toBe(SOURCE_TREE_LOAD_MAX);
+  });
+});
+
+describe("readSourceMappings — the lazy position table (O-01, D-16)", () => {
+  let fx: SqliteFixture;
+
+  beforeEach(async () => {
+    fx = createFixtureDb();
+    await migrate(fx.db);
+  });
+
+  afterEach(() => {
+    fx.close();
+    resetDbHandleForTest();
+  });
+
+  const LABEL = "webpack://app/src/index.ts";
+  const CONTENT = "export default 1;\n";
+  const MAPPINGS = "AAAA;AACA;AAEA";
+  const REQUEST_ID = "req-9";
+  const MAP_DOC = JSON.stringify({
+    version: 3,
+    file: "app.js",
+    sources: [LABEL],
+    sourcesContent: [CONTENT],
+    names: [],
+    mappings: MAPPINGS,
+  });
+  const BUNDLE = Buffer.from(
+    "console.log(1);\n//# sourceMappingURL=data:application/json;base64," +
+      Buffer.from(MAP_DOC, "utf8").toString("base64") +
+      "\n",
+    "utf8",
+  );
+  const ARTIFACT_SHA = sha256Hex(BUNDLE);
+  const MAP_SHA = sha256Hex(Buffer.from(MAP_DOC, "utf8"));
+
+  /** The same bundle with a DIFFERENT body — the re-deploy D-24 refuses. */
+  const REDEPLOYED = Buffer.from(
+    "console.log(2);\n//# sourceMappingURL=data:application/json;base64," +
+      Buffer.from(MAP_DOC, "utf8").toString("base64") +
+      "\n",
+    "utf8",
+  );
+
+  function seed(): void {
+    fx.raw
+      .prepare(
+        "INSERT INTO artifacts (project_id, sha256, byte_len, kind, first_seen_at, last_seen_at, seen_count) VALUES ('p1', ?, ?, 'script', 1, 1, 1)",
+      )
+      .run(ARTIFACT_SHA, BUNDLE.length);
+    fx.raw
+      .prepare(
+        "INSERT INTO source_sightings (project_id, map_sha256, source_index, artifact_sha256, request_id, source_sha256, sources_verbatim, producibility, producibility_at, recovered_at) " +
+          "VALUES ('p1', ?, 0, ?, ?, NULL, ?, 'producible', NULL, 1)",
+      )
+      .run(MAP_SHA, ARTIFACT_SHA, REQUEST_ID, LABEL);
+  }
+
+  async function bootWith(
+    get: (id: string) => Promise<unknown>,
+  ): Promise<Record<string, (...a: unknown[]) => unknown>> {
+    const rpc: Record<string, (...a: unknown[]) => unknown> = {};
+    await init(
+      makeFakeSdk({
+        projectId: "p1",
+        db: () => Promise.resolve(fx.db),
+        get,
+        register: (name: string, fn: unknown) => {
+          rpc[name] = fn as (...a: unknown[]) => unknown;
+        },
+      }),
+    );
+    return rpc;
+  }
+
+  const stored = (bytes: Uint8Array): unknown => ({
+    request: makeFakeRequest({ id: REQUEST_ID }),
+    response: makeFakeResponse({ id: REQUEST_ID, bodyBytes: bytes }),
+  });
+
+  const REF = { projectId: "p1", mapSha256: MAP_SHA, sourceIndex: 0 };
+
+  it("returns the raw mappings string in ONE un-chunked response", async () => {
+    seed();
+    const rpc = await bootWith(() => Promise.resolve(stored(BUNDLE)));
+    expect(await rpc.readSourceMappings(null, REF)).toEqual({
+      outcome: "mappings",
+      mappings: MAPPINGS,
+    });
+  });
+
+  it("deriveSource's success response has NO mappings field at all", async () => {
+    // THE WHOLE REASON THESE ARE TWO ENDPOINTS. `mappings` is the larger half
+    // of the payload and is unused until the operator asks for a position, so
+    // the viewer must render, scroll and be fully usable before one byte of it
+    // has crossed the RPC. A `mappings` field riding this response would make
+    // the lazy contract a comment rather than a mechanism.
+    seed();
+    const rpc = await bootWith(() => Promise.resolve(stored(BUNDLE)));
+    const answer = (await rpc.deriveSource(null, REF)) as Record<
+      string,
+      unknown
+    >;
+    expect(answer.outcome).toBe("content");
+    expect("mappings" in answer).toBe(false);
+    expect(Object.keys(answer).sort()).toEqual([
+      "byteLen",
+      "content",
+      "lineCount",
+      "outcome",
+      "sha256",
+    ]);
+  });
+
+  it("performs the SAME D-24 re-verify: a mismatched body returns `changed` and NO mappings", async () => {
+    // The reloaded bundle carries the SAME map, so a handler that skipped the
+    // re-verify would have had the right answer to hand and would have returned
+    // it. The position read must refuse for exactly the reason the content read
+    // does — one control, one implementation.
+    seed();
+    const rpc = await bootWith(() => Promise.resolve(stored(REDEPLOYED)));
+    const answer = (await rpc.readSourceMappings(null, REF)) as Record<
+      string,
+      unknown
+    >;
+    expect(answer.outcome).toBe("changed");
+    expect("mappings" in answer).toBe(false);
+    expect(
+      (
+        fx.raw
+          .prepare(
+            "SELECT producibility FROM source_sightings WHERE project_id = 'p1' AND source_index = 0",
+          )
+          .get() as { producibility: string }
+      ).producibility,
+    ).toBe("changed");
+  });
+
+  it("a reload that could not answer is `unavailable` and writes NOTHING", async () => {
+    seed();
+    const rpc = await bootWith(() =>
+      Promise.reject(new Error("the request store is unavailable")),
+    );
+    expect(await rpc.readSourceMappings(null, REF)).toEqual({
+      outcome: "unavailable",
+    });
+    expect(
+      (
+        fx.raw
+          .prepare(
+            "SELECT producibility FROM source_sightings WHERE project_id = 'p1' AND source_index = 0",
+          )
+          .get() as { producibility: string }
+      ).producibility,
+    ).toBe("producible");
+  });
+
+  /**
+   * The per-RPC-call payload BUDGET. 8 MiB.
+   *
+   * A BUDGET, NOT A DISCOVERED LIMIT, and the phrasing is
+   * `tests/export-payload-budget.spec.ts`'s verbatim: nothing in this
+   * repository can push bytes through Caido's RPC, so the real ceiling is
+   * live-only. Declared here rather than imported, because importing a symbol
+   * from a spec module EXECUTES it and would register that whole suite a second
+   * time under this file's name — the mechanical reason the static gates give
+   * for duplicating their source roots.
+   */
+  const RPC_PAYLOAD_BUDGET_BYTES = 8 * 1024 * 1024;
+
+  it("O-01's inequality holds as an INEQUALITY, not as the number it evaluates to", () => {
+    // ASSERTED AS A COMPOSITION so it goes red the day `PASSIVE_MAX_BYTES` is
+    // raised or `MAP_MAX_BYTES` is loosened, which is the only way this can
+    // break. `mappings` is a string MEMBER of a document bounded at
+    // MAP_MAX_BYTES, so it is strictly smaller than the document.
+    const structuralCeiling = Math.floor((PASSIVE_MAX_BYTES * 3) / 4);
+    expect(MAP_MAX_BYTES).toBeLessThanOrEqual(structuralCeiling);
+    expect(structuralCeiling).toBeLessThan(RPC_PAYLOAD_BUDGET_BYTES);
+    expect(MAP_MAX_BYTES).toBeLessThan(RPC_PAYLOAD_BUDGET_BYTES);
+    // NON-VACUITY: the budget is not merely larger than everything.
+    expect(RPC_PAYLOAD_BUDGET_BYTES).toBeGreaterThan(0);
+    expect(structuralCeiling).toBe(6_291_456);
   });
 });

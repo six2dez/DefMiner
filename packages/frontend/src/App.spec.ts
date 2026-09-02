@@ -19,6 +19,7 @@ import type {
   ScanStatusPayload,
   VisibleTotal,
 } from "@defminer/engine/contract";
+import { SOURCE_TREE_LOAD_MAX } from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
@@ -291,6 +292,26 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         options.reject === true || refusing
           ? Promise.reject(new Error("backend exploded"))
           : Promise.resolve(TOTAL),
+      // THE PHASE 7 READS, STUBBED ON THE LITERAL SURFACE rather than cast in,
+      // for the reason this file's stub already follows: a stub that has to be
+      // cast is a stub that stops failing when the real surface changes. No
+      // case in THIS file drives them — the drill-down is plans 07-07 to
+      // 07-10 — so each answers the shape that claims nothing: an empty tree,
+      // an empty count map (unknown by absence, never a zero-filled claim),
+      // and the sentinel that writes nothing.
+      deriveSource: () => Promise.resolve({ outcome: "unavailable" as const }),
+      listRecoveredSources: () =>
+        Promise.resolve({
+          rows: [],
+          nextCursor: null,
+          returned: 0,
+          total: 0,
+          bound: SOURCE_TREE_LOAD_MAX,
+          exhausted: true,
+        }),
+      countRecoveredSources: () => Promise.resolve({}),
+      readSourceMappings: () =>
+        Promise.resolve({ outcome: "unavailable" as const }),
       exportInventory: (request: ExportChunkRequest) => {
         options.exports?.push(request);
         if (options.exportReject === true) {

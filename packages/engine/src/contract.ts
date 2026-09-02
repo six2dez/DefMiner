@@ -294,6 +294,67 @@ export type RecoveredSourceRow = {
 };
 
 /**
+ * How many recovered-source rows the drill-down may hold at once (U7-1).
+ *
+ * THE SHIPPED IN-MEMORY WINDOW NUMBER, REUSED RATHER THAN INVENTED. It is the
+ * same 2,000 the frontend's `IN_MEMORY_WINDOW_ROWS` holds for the inventory
+ * tables, and `client.spec.ts` asserts the two agree so neither can drift. It is
+ * DECLARED HERE and not imported from there because the backend enforces it —
+ * `listRecoveredSources` stops filling at this number — and the backend cannot
+ * import the frontend.
+ *
+ * WHY A BOUND IS NEEDED AT ALL. MAP-05's hostile set includes "millions of tiny
+ * sources", and at the decoded map ceiling a document can declare hundreds of
+ * thousands of `sources` entries. The tree is a hierarchy over the WHOLE set, so
+ * an unbounded node list is an unbounded flattened array on the render thread.
+ *
+ * AND WHY THE BOUND IS SAFE TO HAVE, which is the harder half. 05-UI-SPEC.md
+ * bans presenting a subset as the whole set — the same defect its client-side
+ * sorting ban exists to prevent. The bound is only tolerable because the read
+ * answers with the TOTAL beside the returned count, so the tree renders what it
+ * has and SAYS SO IN WORDS rather than truncating silently.
+ */
+export const SOURCE_TREE_LOAD_MAX = 2000;
+
+/**
+ * One eager load of an artifact's recovered sources, bounded and self-describing.
+ *
+ * NOT A `PageResponse`, AND THE DIFFERENCE IS THE POINT. A page answers "here
+ * are some rows and where to continue"; this answers "here is what the tree may
+ * hold, and here is how much there actually is". `returned` and `total` are two
+ * FIELDS rather than one number the caller compares against a constant, because
+ * the sentence the operator reads — *Showing the first {bound} of {total}* —
+ * needs both, and a frontend that derived one from the other would be deriving a
+ * claim about the database from a fact about its own memory.
+ *
+ * The rows arrive in the map's own `sources` declaration order, which is
+ * evidence rather than a presentation choice. The list is not sortable.
+ */
+export type RecoveredSourcePage = {
+  readonly rows: readonly RecoveredSourceRow[];
+  /** Where a caller that deliberately continues past the bound resumes.
+   *  `null` once the data ran out. Keyset, never an offset. */
+  readonly nextCursor: PageCursor | null;
+  /** `rows.length`, carried explicitly so the copy does not measure an array. */
+  readonly returned: number;
+  /**
+   * How many sightings this artifact actually has.
+   *
+   * ZERO HERE IS NOT THE RESOLVED ZERO `countRecoveredSources` CARRIES. That
+   * distinction — DefMiner looked and found none, versus DefMiner has not
+   * looked — lives on the count map, which is the surface that needs it. On this
+   * read an artifact with no rows renders the tree's own empty state, whose
+   * reason comes from the analysis row one level up.
+   */
+  readonly total: number;
+  /** {@link SOURCE_TREE_LOAD_MAX}, echoed so the sentence reads its bound from
+   *  the answer rather than from a constant the two sides each hold a copy of. */
+  readonly bound: number;
+  /** True when the data ran out before the bound did. */
+  readonly exhausted: boolean;
+};
+
+/**
  * THE THREE WAYS A DERIVATION CAN ANSWER WITHOUT PRODUCING ANYTHING.
  *
  * DECLARED ONCE AND SHARED BY BOTH DERIVATION RPCs, deliberately. The content

@@ -35,10 +35,12 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  RecoveredSourcePage,
   ScanLifecycleState,
   ScanState,
   ScanStatusPayload,
   SettingScope,
+  SourceMappingsResult,
   SuspendReason,
   VisibleTotal,
 } from "@defminer/engine/contract";
@@ -336,6 +338,30 @@ type ExportRequest = {
   readonly chunkIndex: number;
   readonly cursor: PageCursor | null;
   readonly chunkRows: number | null;
+};
+
+/**
+ * One eager, bounded read of an artifact's recovered sources.
+ *
+ * NO SORT KEY AND NO FILTER, AND NEITHER IS AN OVERSIGHT. The order is the map's
+ * own `sources` declaration order, which IS the evidence: a sortable column here
+ * would let the operator destroy that information with one click and no way
+ * back, and a filter would present a subset of a hierarchy as the hierarchy.
+ * `store/reads.ts` states the same at the statement, which is why that read has
+ * two literals rather than a statement matrix.
+ *
+ * `projectId` is carried and DISCARDED for the reason `PageRequest`'s is
+ * (P5-D43).
+ *
+ * NOT EXPORTED, for the reason {@link Spec} is not.
+ */
+type RecoveredSourcesRequest = {
+  readonly projectId: string;
+  readonly artifactSha256: string;
+  /** `null` starts at the beginning. A caller that deliberately continues past
+   *  the bound sends back what the last answer gave it. Keyset, never an
+   *  offset — 05-UI-SPEC.md's table contract bans one outright. */
+  readonly cursor: PageCursor | null;
 };
 
 /**
@@ -762,6 +788,37 @@ type Spec = DefinePluginPackageSpec<{
      *  the permanent D-23 tombstone. A call that did not answer is not evidence
      *  of a refusal. */
     deriveSource: (req: SourceRef) => Promise<DeriveSourceResult>;
+    /** ONE artifact's recovered sources, METADATA ONLY (UI-05).
+     *
+     *  NO CONTENT ON ANY ROW, which is what makes the drill-down's
+     *  eager-to-the-bound load policy affordable: the tree is a hierarchy over
+     *  the WHOLE set for one bundle, and presenting a subset as the whole set is
+     *  the defect the client-side sorting ban already exists to prevent. The
+     *  answer carries the returned count AND the total, so a bounded load is
+     *  stated in words rather than truncated silently. */
+    listRecoveredSources: (
+      req: RecoveredSourcesRequest,
+    ) => Promise<RecoveredSourcePage>;
+    /** How many recovered sources each artifact in this project has, as the
+     *  `Sources` column's optional lookup map.
+     *
+     *  ZERO AND UNKNOWN ARE DIFFERENT ANSWERS AND THIS SHAPE KEEPS THEM APART.
+     *  An artifact whose map parsed and yielded nothing has an ENTRY with value
+     *  0 — DefMiner looked and there was nothing. An artifact never analysed has
+     *  NO ENTRY. Collapsing the second into the first would tell the operator
+     *  "no sources here" about a bundle nothing has read yet. */
+    countRecoveredSources: () => Promise<Readonly<Record<string, number>>>;
+    /** One map's raw `mappings` string, READ LAZILY AND SEPARATELY (O-01, D-16).
+     *
+     *  A DIFFERENT NAME FROM `deriveSource` ON PURPOSE. `mappings` is the larger
+     *  half of the payload and is unused until the operator asks for a position,
+     *  so it must not ride the first response: the viewer has to render, scroll
+     *  and be fully usable before one byte of it has crossed the RPC.
+     *
+     *  It performs the SAME reload and the SAME D-24 re-verify, and answers with
+     *  the same three failures — a position read that failed must not be able to
+     *  render as a tombstone either. */
+    readSourceMappings: (req: SourceRef) => Promise<SourceMappingsResult>;
     /** One chunk of an inventory export, as BYTES (UI-06, decision D-04).
      *
      *  NOTHING IS WRITTEN ON THE SERVER. The backend serialises and returns; the

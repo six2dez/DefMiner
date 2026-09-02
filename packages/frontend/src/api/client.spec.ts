@@ -27,22 +27,29 @@
 //      four project switches later one backend event fires four refreshes and
 //      the reaction cap is silently multiplied (research P-04).
 
+import { readFileSync } from "node:fs";
+
 import type {
+  DeriveSourceResult,
   InvalidationEventPayload,
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  RecoveredSourcePage,
   ScanProgressPayload,
+  SourceMappingsResult,
   VisibleTotal,
 } from "@defminer/engine/contract";
 import {
   INVALIDATION_EVENT,
   RETENTION_MAX_ROWS_KEY,
   SCAN_PROGRESS_KIND,
+  SOURCE_TREE_LOAD_MAX,
 } from "@defminer/engine/contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ArtifactRow } from "../backend";
+import { IN_MEMORY_WINDOW_ROWS } from "../stores/inventory";
 
 import type {
   BackendClient,
@@ -54,11 +61,13 @@ import type {
   ExportChunkRequest,
   HealthOutcome,
   ObservationRow,
+  RecoveredSourcesRequest,
   RpcFailure,
   RpcReason,
   RpcResult,
   ScanHistoryRow,
   SettingRow,
+  SourceRef,
   StorageFootprint,
 } from "./client";
 import {
@@ -128,6 +137,61 @@ const COUNT_REQUEST: CountRequest = {
   projectId: "p1",
   table: "artifacts",
   filter: null,
+};
+
+/** The sighting a derivation addresses. NO request id and NO artifact digest:
+ *  the backend reads both out of `source_sightings`, which is what makes D-24
+ *  an integrity control rather than a question the caller already answered. */
+const SOURCE_REF: SourceRef = {
+  projectId: "p1",
+  mapSha256: "b".repeat(64),
+  sourceIndex: 0,
+};
+
+const RECOVERED_REQUEST: RecoveredSourcesRequest = {
+  projectId: "p1",
+  artifactSha256: "a".repeat(64),
+  cursor: null,
+};
+
+const DERIVED: DeriveSourceResult = {
+  outcome: "content",
+  content: "export default 1;\n",
+  byteLen: 18,
+  lineCount: 2,
+  sha256: "c".repeat(64),
+};
+
+/** A BOUNDED tree: fewer rows returned than exist, with both numbers on the
+ *  answer so the copy can say so in words rather than truncating silently. */
+const RECOVERED_PAGE: RecoveredSourcePage = {
+  rows: [
+    {
+      artifactSha256: "a".repeat(64),
+      mapSha256: "b".repeat(64),
+      sourceIndex: 0,
+      sourcesVerbatim: "webpack://app/src/index.ts",
+      sourceSha256: "c".repeat(64),
+      byteLen: 18,
+      lineCount: 2,
+      producibility: "producible",
+      recoveredAt: 1_756_000_000_000,
+    },
+  ],
+  nextCursor: { sortValue: 0, tieBreak: "b".repeat(64) },
+  returned: 1,
+  total: 4,
+  bound: SOURCE_TREE_LOAD_MAX,
+  exhausted: false,
+};
+
+/** ONE analysed artifact that yielded nothing — a RESOLVED zero — and nothing
+ *  at all for one that has never been analysed. The absent key is the claim. */
+const SOURCE_COUNTS: Readonly<Record<string, number>> = { ["d".repeat(64)]: 0 };
+
+const MAPPINGS: SourceMappingsResult = {
+  outcome: "mappings",
+  mappings: "AAAA;AACA",
 };
 
 const EXPORT_REQUEST: ExportChunkRequest = {
@@ -294,6 +358,25 @@ function makeStub(): Stub {
       exportInventory: (request) => {
         expect(request).toEqual(EXPORT_REQUEST);
         return answer("exportInventory", EXPORT_CHUNK);
+      },
+      // THE PHASE 7 READS. Stubbed on the LITERAL surface for the reason this
+      // file's header gives, and each answers the shape a case below asserts
+      // against: the four-armed derivation, the bounded tree with its total
+      // beside its returned count, the count map whose ABSENT entry means
+      // unknown, and the lazy position table.
+      deriveSource: (request) => {
+        expect(request).toEqual(SOURCE_REF);
+        return answer("deriveSource", DERIVED);
+      },
+      listRecoveredSources: (request) => {
+        expect(request).toEqual(RECOVERED_REQUEST);
+        return answer("listRecoveredSources", RECOVERED_PAGE);
+      },
+      countRecoveredSources: () =>
+        answer("countRecoveredSources", SOURCE_COUNTS),
+      readSourceMappings: (request) => {
+        expect(request).toEqual(SOURCE_REF);
+        return answer("readSourceMappings", MAPPINGS);
       },
       listSettings: () => answer("listSettings", SETTING_ROWS),
       writeSetting: () =>
@@ -694,5 +777,234 @@ describe("exportInventory — the export crosses as a VALUE, and a stale bundle 
     // The rejection's text is discarded WITHOUT INSPECTION. The reason is a
     // DefMiner-authored code and shares no token with what the backend said.
     expect(JSON.stringify(result)).not.toContain("victim.example");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE PHASE 7 SURFACE, AND THE TWO AGREEMENTS THAT KEEP IT HONEST
+// ---------------------------------------------------------------------------
+//
+// These two packages cannot import each other, so every shared shape here is a
+// MIRROR — and a mirror nobody checks is a mirror that drifts. The two cases
+// below read the backend's own source text off disk and compare, which is the
+// `contract.spec.ts` idiom applied across a package boundary: the claim is about
+// two files, so it is asserted against both rather than trusted in one.
+
+/**
+ * The backend contract, as text.
+ *
+ * READ RATHER THAN IMPORTED: `@defminer/backend` is not a dependency of this
+ * package and must not become one — the whole reason these shapes are mirrors is
+ * that the two packages cannot import each other.
+ *
+ * A REPOSITORY-RELATIVE PATH, in `frontend-safety.spec.ts`'s idiom, and NOT one
+ * derived from `import.meta.url`. This file runs under the jsdom environment,
+ * where `import.meta.url` is an `http:` URL and `fileURLToPath` throws — a
+ * failure mode worth naming here, because the fix looks like a style preference
+ * and is not.
+ */
+function backendSpecSource(): string {
+  return readFileSync("packages/backend/src/api/spec.ts", "utf8");
+}
+
+/**
+ * Backend endpoint names this client deliberately does NOT expose.
+ *
+ * NAMED RATHER THAN LEFT AS A GAP. `getStatus` is the raw telemetry projection
+ * and no surface in this bundle reads it; `getArtifacts` and `getObservations`
+ * are the pre-Phase-5 unpaginated reads kept only because the compatibility
+ * smoke test drives them. An omission that is listed is a decision; an omission
+ * that is merely absent is the thing this assertion exists to catch.
+ */
+const NOT_EXPOSED_TO_THE_FRONTEND: readonly string[] = [
+  "getStatus",
+  "getArtifacts",
+  "getObservations",
+];
+
+describe("the frontend surface agrees with the backend contract", () => {
+  it("reads the SAME contract version the backend declares", () => {
+    // THE ONE CHECK THAT PREVENTS A STALE BUNDLE FROM MISREADING A CHANGED
+    // SHAPE IS WORTHLESS IF THE TWO NUMBERS DRIFT WITHOUT ANYBODY NOTICING.
+    // They are two independently shipped constants — that is what makes the
+    // runtime check able to fail at all — so this asserts they were moved
+    // TOGETHER, which is the only thing a build can check about them.
+    const declared = /export const CONTRACT_VERSION = (\d+);/.exec(
+      backendSpecSource(),
+    );
+    expect(declared, "CONTRACT_VERSION not found in the backend spec").not.toBe(
+      null,
+    );
+    expect(Number(declared?.[1])).toBe(FRONTEND_CONTRACT_VERSION);
+  });
+
+  it("calls no endpoint the backend does not declare, and the check is non-vacuous", () => {
+    // A FRONTEND METHOD NAMING AN ENDPOINT THAT DOES NOT EXIST FAILS SILENTLY
+    // on this runtime — Caido surfaces neither a throw nor a rejection from
+    // plugin code — so the typed surface is the only place it can be caught.
+    const spec = backendSpecSource();
+    const stub = makeStub();
+    const names = Object.keys(stub.sdk.backend).filter(
+      (name) => name !== "onEvent",
+    );
+    expect(names.length, "the stub surface is empty").toBeGreaterThan(15);
+    for (const name of names) {
+      expect(
+        new RegExp(`^\\s{4}${name}:`, "m").test(spec),
+        `${name} is not declared on the backend contract`,
+      ).toBe(true);
+    }
+    // AND THE OTHER DIRECTION, as a listed decision rather than a gap: every
+    // backend name is either exposed here or named above as deliberately not.
+    for (const omitted of NOT_EXPOSED_TO_THE_FRONTEND) {
+      expect(names).not.toContain(omitted);
+      expect(new RegExp(`^\\s{4}${omitted}:`, "m").test(spec)).toBe(true);
+    }
+    // The four names this plan added, asserted by name so the surface cannot
+    // lose one to a refactor and still pass the shape check above.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "deriveSource",
+        "listRecoveredSources",
+        "countRecoveredSources",
+        "readSourceMappings",
+      ]),
+    );
+  });
+
+  it("bounds the source tree at the SAME number the inventory window uses", () => {
+    // U7-1: "the shipped in-memory window number, reused rather than invented".
+    // The backend enforces the bound and cannot import this package, so the
+    // constant lives on the engine contract; this is what stops the two from
+    // becoming two numbers that merely happen to agree today.
+    expect(SOURCE_TREE_LOAD_MAX).toBe(IN_MEMORY_WINDOW_ROWS);
+  });
+});
+
+describe("the recovered-source reads — four arms, a bounded tree, and a lazy table", () => {
+  it("forwards each of the four and returns the typed answer", async () => {
+    const stub = makeStub();
+    const client: BackendClient = createBackendClient(stub.sdk);
+
+    expect(await client.deriveSource(SOURCE_REF)).toEqual({
+      ok: true,
+      value: DERIVED,
+    });
+    expect(await client.listRecoveredSources(RECOVERED_REQUEST)).toEqual({
+      ok: true,
+      value: RECOVERED_PAGE,
+    });
+    expect(await client.countRecoveredSources()).toEqual({
+      ok: true,
+      value: SOURCE_COUNTS,
+    });
+    expect(await client.readSourceMappings(SOURCE_REF)).toEqual({
+      ok: true,
+      value: MAPPINGS,
+    });
+    expect(stub.calls).toEqual([
+      "deriveSource",
+      "listRecoveredSources",
+      "countRecoveredSources",
+      "readSourceMappings",
+    ]);
+  });
+
+  it("a rejected derivation is an RpcFailure and NEVER a tombstone", async () => {
+    // THE RULE THAT OUTRANKS EVERYTHING ELSE ON THIS SURFACE. `RpcResult`
+    // answers "did the backend answer" and the arm answers "what did it find";
+    // a client that turned a rejection into a `gone` value would be making the
+    // permanent claim from an absence of evidence that 07-UI-SPEC.md's most
+    // emphatic sentence forbids. The assertion is that no producibility word
+    // and no arm tag appears anywhere in the failure.
+    const stub = makeStub();
+    stub.behaviour = "reject";
+    stub.rejectionMessage = "sqlite: no such table: source_sightings";
+    const client = createBackendClient(stub.sdk);
+
+    const failure = (await client.deriveSource(SOURCE_REF)) as RpcFailure;
+    expect(failure.ok).toBe(false);
+    expect(failure.reason).toBe("rpc-rejected");
+    // And nothing the backend said crossed into it.
+    expect(JSON.stringify(failure)).not.toContain("source_sightings");
+    expect(JSON.stringify(failure)).not.toContain("gone");
+    expect(JSON.stringify(failure)).not.toContain("outcome");
+  });
+
+  it("a timed-out position read degrades to a failure, not to a missing table", async () => {
+    vi.useFakeTimers();
+    const stub = makeStub();
+    stub.behaviour = "hang";
+    const client = createBackendClient(stub.sdk);
+
+    const pending = client.readSourceMappings(SOURCE_REF);
+    await vi.advanceTimersByTimeAsync(RPC_TIMEOUT_MS + 1);
+    const failure = (await pending) as RpcFailure;
+    expect(failure.reason).toBe("rpc-timeout");
+    expect(failure.versions).toBeNull();
+  });
+
+  it("a contract mismatch SUPPRESSES all four rather than reading through it", async () => {
+    // A bundle known to be misreading the contract must not derive content,
+    // must not paint a tombstone, and must not put a count against the wrong
+    // column. The guard answers BEFORE the endpoint is called, which is what
+    // makes the check a stop rather than a warning beside a read.
+    const stub = makeStub();
+    stub.backendVersion = FRONTEND_CONTRACT_VERSION + 1;
+    const client = createBackendClient(stub.sdk);
+    await client.checkContractVersion();
+    const before = stub.calls.length;
+
+    for (const result of [
+      await client.deriveSource(SOURCE_REF),
+      await client.listRecoveredSources(RECOVERED_REQUEST),
+      await client.countRecoveredSources(),
+      await client.readSourceMappings(SOURCE_REF),
+    ]) {
+      expect(result.ok).toBe(false);
+      expect((result as RpcFailure).reason).toBe("contract-version-mismatch");
+    }
+    expect(
+      stub.calls.length,
+      "a suppressed read reached the backend anyway",
+    ).toBe(before);
+  });
+
+  it("keeps the bounded tree's two numbers as two FIELDS, not one comparison", async () => {
+    // The sentence the operator reads — "Showing the first {bound} of {total}"
+    // — needs both, and a frontend that derived one from the other would be
+    // deriving a claim about the database from a fact about its own memory.
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const page = await client.listRecoveredSources(RECOVERED_REQUEST);
+    expect(page.ok).toBe(true);
+    if (!page.ok) return;
+    expect(page.value.returned).toBe(1);
+    expect(page.value.total).toBe(4);
+    expect(page.value.bound).toBe(SOURCE_TREE_LOAD_MAX);
+    expect(page.value.exhausted).toBe(false);
+    // NO CONTENT ON ANY ROW. The whole reason the eager load is affordable.
+    for (const row of page.value.rows) expect("content" in row).toBe(false);
+  });
+
+  it("carries the count map's ZERO-versus-UNKNOWN distinction across the boundary", async () => {
+    // An ENTRY with value 0 is a resolved zero; NO ENTRY is unknown. A `Map`
+    // would have serialised to `{}` and turned every count into unknown, which
+    // is why the contract carries a plain object.
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const counts = await client.countRecoveredSources();
+    expect(counts.ok).toBe(true);
+    if (!counts.ok) return;
+    const analysed = "d".repeat(64);
+    const never = "e".repeat(64);
+    expect(counts.value[analysed]).toBe(0);
+    expect(Object.prototype.hasOwnProperty.call(counts.value, analysed)).toBe(
+      true,
+    );
+    expect(Object.prototype.hasOwnProperty.call(counts.value, never)).toBe(
+      false,
+    );
+    expect(counts.value[never]).toBeUndefined();
   });
 });

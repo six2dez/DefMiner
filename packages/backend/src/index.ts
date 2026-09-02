@@ -54,13 +54,19 @@ import { createHash, randomUUID } from "crypto";
 
 import type {
   DeriveSourceResult,
+  PageCursor,
   PageRequest,
   PageResponse,
+  RecoveredSourcePage,
+  RecoveredSourceRow,
   SourceDerivationFailure,
   SourceProducibility,
   VisibleTotal,
 } from "@defminer/engine/contract";
-import { SOURCE_PRODUCIBILITY_STATES } from "@defminer/engine/contract";
+import {
+  SOURCE_PRODUCIBILITY_STATES,
+  SOURCE_TREE_LOAD_MAX,
+} from "@defminer/engine/contract";
 import { decodeUtf8 } from "@defminer/engine/decode";
 import { sha256Hex } from "@defminer/engine/digest";
 import { BoundedQueue } from "@defminer/engine/queue";
@@ -144,8 +150,12 @@ import { listObservations, type ObservationRow } from "./store/observations";
 import {
   type ArtifactPageRow,
   countInventory,
+  countRecoveredSourcesByArtifact,
+  KEYSET_PAGE_ROWS,
   listArtifactsPage,
   listObservationsPage,
+  listRecoveredSourcesPage,
+  type RecoveredSourceRow as RecoveredSourceStoreRow,
 } from "./store/reads";
 import { retryAnalysis } from "./store/retry";
 import {
@@ -539,6 +549,138 @@ function announcedMap(bytes: Uint8Array, mapSha256: string): string | null {
     return null;
   }
   return sha256Hex(Buffer.from(json, "utf8")) === mapSha256 ? json : null;
+}
+
+/**
+ * One producibility word, narrowed from the column's TEXT to the vocabulary.
+ *
+ * The `CHECK` on `source_sightings.producibility` makes the fallback branch
+ * unreachable from any row this build can write. It exists so the mapping is
+ * TOTAL — a widened vocabulary that skipped its migration would otherwise reach
+ * the frontend as a word no copy row answers to, and a surface that renders a
+ * state nobody knows is the failure every explicit-outcome constant in this file
+ * exists to avoid. The fallback is the FIRST member because it is the one that
+ * asserts nothing: a derivation re-verifies on every open regardless of what the
+ * row says, so `producible` here means only "the row does not claim otherwise".
+ */
+function producibilityOf(value: string): SourceProducibility {
+  for (const state of SOURCE_PRODUCIBILITY_STATES) {
+    if (state === value) return state;
+  }
+  return SOURCE_PRODUCIBILITY_STATES[0];
+}
+
+/**
+ * One store row projected onto the contract's row.
+ *
+ * MAPPED FIELD BY FIELD, NEVER SPREAD — the rule `getArtifactAnalysis` and
+ * `getScanStatus` already follow. A spread would carry every column this table
+ * grows across the RPC boundary on the day somebody adds one, and this is the
+ * table whose whole design is about what it does NOT carry.
+ *
+ * `artifactSha256` comes from the REQUEST's scope rather than from the row,
+ * because the statement is scoped to it and does not select it back. It is on
+ * the contract row so a row is self-describing in a manifest export.
+ */
+function toRecoveredSourceRow(
+  artifactSha256: string,
+  row: RecoveredSourceStoreRow,
+): RecoveredSourceRow {
+  return {
+    artifactSha256,
+    mapSha256: row.map_sha256,
+    sourceIndex: row.source_index,
+    // TARGET-CONTROLLED AND UNSANITISED, deliberately: D-06 puts sanitisation
+    // at display time, and every route to a template on the far side goes
+    // through the frontend's own sanitiser.
+    sourcesVerbatim: row.sources_verbatim,
+    sourceSha256: row.source_sha256,
+    byteLen: row.byte_len,
+    lineCount: row.line_count,
+    producibility: producibilityOf(row.producibility),
+    recoveredAt: row.recovered_at,
+  };
+}
+
+/**
+ * Draw whole keyset pages until the tree's bound or the data runs out.
+ *
+ * WHOLE PAGES, UP TO THE CEILING — the shape `readExportChunk` already uses, and
+ * for the same reason: a page's cursor addresses the PAGE, so stopping in the
+ * middle of one and resuming from its cursor would skip every row after the cut.
+ * The consequence, stated because it is not what a bound sounds like: the answer
+ * carries whole pages up to `SOURCE_TREE_LOAD_MAX` and can therefore be smaller
+ * than it, never larger.
+ *
+ * `KEYSET_PAGE_ROWS` IS RE-READ AND NEVER RESTATED. `listRecoveredSourcesPage`
+ * clamps to it, and a second literal at this call site is how the two come to
+ * disagree with the scroller the frontend sized against it.
+ */
+async function readSourceTree(
+  database: Database,
+  projectId: string,
+  artifactSha256: string,
+  from: PageCursor | null,
+): Promise<RecoveredSourcePage> {
+  const rows: RecoveredSourceRow[] = [];
+  let cursor = from;
+  let exhausted = false;
+
+  for (;;) {
+    const page = await listRecoveredSourcesPage(
+      database,
+      projectId,
+      artifactSha256,
+      cursor,
+      KEYSET_PAGE_ROWS,
+    );
+    for (const row of page.rows) {
+      rows.push(toRecoveredSourceRow(artifactSha256, row));
+    }
+    if (page.exhausted || page.nextCursor === null) {
+      exhausted = true;
+      cursor = null;
+      break;
+    }
+    cursor = page.nextCursor;
+    if (rows.length + KEYSET_PAGE_ROWS > SOURCE_TREE_LOAD_MAX) break;
+  }
+
+  // COUNTED, NEVER DERIVED FROM `rows.length`. The whole reason the bound is
+  // tolerable is that the answer states how much there actually is — a total
+  // computed from what was returned would say "showing the first 2,000 of 2,000"
+  // for a map with 40,000 sources, which is the silent truncation
+  // 05-UI-SPEC.md bans in the one place it would be invisible.
+  //
+  // ONE STATEMENT PER DRILL-DOWN OPEN, and that is the cost. It is paid on an
+  // operator click rather than on a poll, and `idx_source_sightings_artifact`
+  // is what the EXISTS clauses inside it ride.
+  const counts = await countRecoveredSourcesByArtifact(database, projectId);
+  return {
+    rows,
+    nextCursor: cursor,
+    returned: rows.length,
+    total: counts.get(artifactSha256) ?? 0,
+    bound: SOURCE_TREE_LOAD_MAX,
+    exhausted,
+  };
+}
+
+/** The answer a bounded source read gives when there is nothing to read from.
+ *
+ *  FAIL CLOSED, NOT THROW, and NOT a page that claims a measured empty tree
+ *  either: `total` is 0 beside `returned` 0, which is the same claim
+ *  `emptyPage` makes one surface over — there is nothing here to show — rather
+ *  than a count about a project nothing has resolved. */
+function emptySourceTree(): RecoveredSourcePage {
+  return {
+    rows: [],
+    nextCursor: null,
+    returned: 0,
+    total: 0,
+    bound: SOURCE_TREE_LOAD_MAX,
+    exhausted: true,
+  };
 }
 
 /**
@@ -1226,6 +1368,106 @@ export async function init(sdk: PluginSdk): Promise<void> {
         lineCount: countLines(source.content),
         sha256: sha256Hex(bytes),
       } as const;
+    });
+    sdk.api.register("listRecoveredSources", async (_s, req) => {
+      const pid = currentProjectId();
+      if (!db || pid === null) return emptySourceTree();
+      // THE CALLER DOES NOT NAME THE PROJECT, for the reason the settings
+      // surface states: anything holding the RPC handle could otherwise read
+      // ANOTHER project's recovered sources out of the one shared SQLite file
+      // (T-07-09).
+      return readSourceTree(db, pid, req.artifactSha256, req.cursor);
+    });
+    sdk.api.register("countRecoveredSources", async () => {
+      const pid = currentProjectId();
+      // AN EMPTY MAP AND NOT A REFUSAL, and the empty map is the HONEST answer
+      // rather than a convenient one: this shape says "unknown" by the ABSENCE
+      // of an entry, so a map with no entries claims nothing about any artifact.
+      // A zero-filled map would claim DefMiner had looked at every bundle and
+      // found nothing in each, which is the one thing this column exists to
+      // prevent.
+      if (!db || pid === null) return {};
+      const counts = await countRecoveredSourcesByArtifact(db, pid);
+      // A PLAIN OBJECT, because a `Map` does not survive the RPC boundary — it
+      // serialises to `{}` and every count silently becomes unknown. The
+      // zero-versus-unknown distinction is carried across as entry PRESENCE,
+      // which is the same mechanism on both sides of the boundary.
+      const out: Record<string, number> = {};
+      for (const [sha256, n] of counts) out[sha256] = n;
+      return out;
+    });
+    sdk.api.register("readSourceMappings", async (_s, req) => {
+      // BEFORE ANY AWAIT, exactly as `deriveSource` does. The two handlers are
+      // deliberately separate — see this file's derivation section and
+      // `api/spec.ts` — but they run the SAME reload and the SAME re-verify
+      // through the one implementation, so they cannot disagree about what
+      // counts as a verified bundle.
+      const pid = currentProjectId();
+      if (!db || pid === null) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+      const reload = await reloadVerifiedBundle(
+        sdk,
+        db,
+        pid,
+        req.mapSha256,
+        req.sourceIndex,
+      );
+      if (!reload.ok) return reload.failure;
+
+      const json = announcedMap(reload.bytes, req.mapSha256);
+      if (json === null) {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+
+      // ===================================================================
+      // O-01 — WHY THIS CROSSES IN ONE UN-CHUNKED RESPONSE, AS AN ARGUMENT A
+      // READER CAN CHECK RATHER THAN A CLAIM
+      // ===================================================================
+      // `mappings` is a JSON string MEMBER of a document bounded at
+      // `MAP_MAX_BYTES`, so it is strictly smaller than the document:
+      //
+      //   MAP_MAX_BYTES        = 2,621,440
+      //   <= floor(PASSIVE_MAX_BYTES x 3/4) = 6,291,456   (plan 07-01's bound)
+      //   <  8,388,608 = the project's per-call RPC budget
+      //
+      // At the shipped `MAP_MAX_BYTES` that leaves roughly 5.5 MiB of slack
+      // BEFORE the announcement prefix and the surrounding JS are subtracted,
+      // and the structural ceiling leaves ~2.1 MiB even if the bound were raised
+      // to it. So no new transport is needed and none is built.
+      //
+      // THE RESIDUAL, RECORDED HONESTLY RATHER THAN HEDGED. The 8 MiB figure is
+      // a BUDGET this project sets and not a ceiling it measured from Caido —
+      // `store/export.ts` says so verbatim, because nothing in this repository
+      // can push bytes through Caido's RPC. `exportInventory` already ships
+      // 7.00 MiB responses under the same assumption, so Phase 7 INHERITS that
+      // residual rather than creating it (T-07-34).
+      //
+      // A MAP OVER THE BOUND IS REFUSED, NEVER TRUNCATED. `decodeInlineMap`
+      // does that inside `announcedMap` above: a truncated VLQ stream decodes to
+      // WRONG POSITIONS rather than to an error, which is the quiet-wrongness
+      // class every gate in this codebase exists to prevent.
+      let mappings: unknown;
+      try {
+        mappings = (JSON.parse(json) as Record<string, unknown>).mappings;
+      } catch {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+      // A DOCUMENT WITH NO `mappings` STRING HAS NO POSITION TABLE, and that is
+      // "could not ask" rather than a finding about the target: a `sections` map
+      // carries its mappings per section, and ECMA-426 does not make the member
+      // mandatory. It writes NOTHING, which is the property that matters.
+      if (typeof mappings !== "string") {
+        counters.sourcemap.derivationsUnavailable++;
+        return DERIVATION_UNAVAILABLE;
+      }
+      // RETURNED AS DATA, NEVER RENDERED. It is decoded to integers in the
+      // browser under D-16 — the decode this thread must not run — and it never
+      // enters the DOM (T-07-11).
+      return { outcome: "mappings", mappings } as const;
     });
     sdk.api.register("exportInventory", async (_s, req) => {
       const pid = currentProjectId();
