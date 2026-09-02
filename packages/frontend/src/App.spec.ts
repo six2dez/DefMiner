@@ -13,9 +13,11 @@
 // reaches the page.
 
 import type {
+  DeriveSourceResult,
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  RecoveredSourceRow,
   ScanStatusPayload,
   VisibleTotal,
 } from "@defminer/engine/contract";
@@ -73,6 +75,7 @@ import {
   SCAN_STATUS_SUSPENDED,
 } from "./components/scan-contract";
 import { SCAN_LIFECYCLE_PRESENTATION } from "./components/scan-lifecycle-presentation";
+import { SCAN_STATE_PRESENTATION } from "./components/scan-state-presentation";
 import { FOCUS_RING_CLASS } from "./components/table-contract";
 
 /**
@@ -202,6 +205,20 @@ type StubOptions = {
    * that did not answer is not evidence of that.
    */
   readonly scanFailsAfter?: number;
+  /**
+   * The `Sources` column's lookup map, as the backend answers it: a PLAIN
+   * OBJECT, never a Map. A Map serialises to `{}` across the RPC and would turn
+   * every resolved zero into an unknown, which is the one distinction that
+   * column exists to keep.
+   *
+   * ABSENT MEANS THE EMPTY OBJECT — DefMiner has looked at nothing — which is
+   * the shape that claims nothing about any row.
+   */
+  readonly sourceCounts?: Readonly<Record<string, number>>;
+  /** The recovered-source rows the drill-down's eager read answers with. */
+  readonly recoveredSources?: readonly RecoveredSourceRow[];
+  /** What one derivation answers with. */
+  readonly derive?: DeriveSourceResult;
 };
 
 /**
@@ -294,22 +311,27 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
           : Promise.resolve(TOTAL),
       // THE PHASE 7 READS, STUBBED ON THE LITERAL SURFACE rather than cast in,
       // for the reason this file's stub already follows: a stub that has to be
-      // cast is a stub that stops failing when the real surface changes. No
-      // case in THIS file drives them — the drill-down is plans 07-07 to
-      // 07-10 — so each answers the shape that claims nothing: an empty tree,
-      // an empty count map (unknown by absence, never a zero-filled claim),
-      // and the sentinel that writes nothing.
-      deriveSource: () => Promise.resolve({ outcome: "unavailable" as const }),
-      listRecoveredSources: () =>
-        Promise.resolve({
-          rows: [],
+      // cast is a stub that stops failing when the real surface changes.
+      //
+      // PLAN 07-09 DRIVES THEM. The defaults are still the shapes that claim
+      // NOTHING — an empty tree, an EMPTY count map (unknown by absence, never
+      // a zero-filled claim), and the derivation sentinel that writes nothing —
+      // so every case written before the drill-down existed is unaffected and
+      // no `Sources` cell renders a count it was not given.
+      deriveSource: () =>
+        Promise.resolve(options.derive ?? { outcome: "unavailable" as const }),
+      listRecoveredSources: () => {
+        const rows = options.recoveredSources ?? [];
+        return Promise.resolve({
+          rows,
           nextCursor: null,
-          returned: 0,
-          total: 0,
+          returned: rows.length,
+          total: rows.length,
           bound: SOURCE_TREE_LOAD_MAX,
           exhausted: true,
-        }),
-      countRecoveredSources: () => Promise.resolve({}),
+        });
+      },
+      countRecoveredSources: () => Promise.resolve(options.sourceCounts ?? {}),
       readSourceMappings: () =>
         Promise.resolve({ outcome: "unavailable" as const }),
       exportInventory: (request: ExportChunkRequest) => {
@@ -1545,5 +1567,284 @@ describe("App — the Scan tab", () => {
         expect(String(attribute.value)).not.toContain("xxxx");
       }
     }
+  });
+});
+
+// ===========================================================================
+// THE ARTIFACTS-TAB DRILL-DOWN (D-21, UI-05, MAP-07)
+// ===========================================================================
+//
+// IT IS A STATE, NOT A SIXTH TAB. Everything below is written so that a change
+// which turned it into one would fail here rather than merely look different:
+// the tab list is asserted unchanged in the drill-down, the active tab is
+// asserted unchanged across entering and leaving, and the toolbar's export CTA
+// — whose computation is derived from `activeTab` and is byte-unchanged — is
+// asserted still present and still saying the same thing.
+
+const BROWSED = ROWS[0]?.sha256 ?? "";
+
+function recoveredRow(
+  over: Partial<RecoveredSourceRow> = {},
+): RecoveredSourceRow {
+  return {
+    artifactSha256: BROWSED,
+    mapSha256: "b".repeat(64),
+    sourceIndex: 0,
+    sourcesVerbatim: "webpack:///./src/app.ts",
+    sourceSha256: "c".repeat(64),
+    byteLen: 42,
+    lineCount: 4,
+    producibility: "producible",
+    recoveredAt: 1_756_000_000_000,
+    ...over,
+  };
+}
+
+/** One ordinary source and one TOMBSTONED one — the tombstone is what puts a
+ *  producibility marker in the tree at all. */
+const RECOVERED: readonly RecoveredSourceRow[] = [
+  recoveredRow(),
+  recoveredRow({
+    sourceIndex: 1,
+    sourcesVerbatim: "webpack:///./src/secrets.ts",
+    producibility: "gone",
+  }),
+];
+
+/** Every operator-facing word from BOTH shipped analysis vocabularies. */
+const ANALYSIS_WORDS: readonly string[] = [
+  ...Object.values(SCAN_STATE_PRESENTATION).map((p) => p.label),
+  ...Object.values(SCAN_LIFECYCLE_PRESENTATION).map((p) => p.label),
+];
+
+function browsePage(options: StubOptions = {}): DefMinerBackendSdk {
+  return stubSdk({
+    artifacts: ROWS,
+    sourceCounts: { [BROWSED]: 2 },
+    recoveredSources: RECOVERED,
+    ...options,
+  });
+}
+
+/** The `Sources` cell's button on the first artifacts row. */
+function browseButton(wrapper: VueWrapper): HTMLButtonElement {
+  const button = wrapper.element.querySelector('button[aria-label^="Browse "]');
+  expect(button).not.toBeNull();
+  return button as HTMLButtonElement;
+}
+
+async function enterDrillDown(wrapper: VueWrapper): Promise<void> {
+  browseButton(wrapper).click();
+  await settle(wrapper);
+  await settle(wrapper);
+}
+
+describe("App — the drill-down is a STATE inside the Artifacts tab", () => {
+  it("keeps the five-tab strip byte-identical while the drill-down is open", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    expect(wrapper.find("[data-defminer-source-browser]").exists()).toBe(true);
+    // NO SIXTH TAB, and the five that exist are the five that existed.
+    const tabs = wrapper.findAll('[role="tab"]');
+    expect(tabs).toHaveLength(TAB_LABELS.length);
+    expect(tabs.map((t) => t.text())).toEqual(TAB_LABELS);
+    // The active tab is UNCHANGED, which is what keeps `exportTable` honest
+    // without editing it.
+    expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe(
+      "Artifacts",
+    );
+  });
+
+  it("leaves the toolbar's Export CTA exactly where and what it was", async () => {
+    // NAMED CONFLICT 1, asserted rather than described. `exportTable` is
+    // computed from `activeTab`, and `activeTab` is still `artifacts` here — so
+    // the toolbar CTA still means the ARTIFACTS INVENTORY while the operator is
+    // reading recovered source. The manifest is reached by its own scoped CTA
+    // in the drill-down header, which names what it will export.
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    const before = wrapper.get("header").text();
+
+    await enterDrillDown(wrapper);
+    expect(wrapper.get("header").text()).toBe(before);
+    expect(wrapper.get("header").text()).toContain(EXPORT_CTA);
+  });
+
+  it("mounts the REAL tree and viewer, reached in two clicks from the table", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    expect(wrapper.find("[data-defminer-source-tree]").exists()).toBe(true);
+    expect(wrapper.find("[data-defminer-source-viewer]").exists()).toBe(true);
+    expect(wrapper.find("[data-defminer-drilldown-leave]").exists()).toBe(true);
+  });
+
+  it("does NOT close the evidence panel and does NOT clear the selection", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    // The panel is still mounted, at its shipped width, and it has a SUBJECT —
+    // its close action only renders when one is selected, so its presence is
+    // the selection asserted through the panel's own rule.
+    const panel = wrapper.get("#defminer-evidence-panel");
+    expect(panel.element.parentElement?.getAttribute("class")).toContain(
+      "w-1/3",
+    );
+    expect(wrapper.find("#defminer-evidence-close").exists()).toBe(true);
+  });
+
+  it("returns to the artifacts table with the SAME ROW still selected", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    (
+      wrapper.get("[data-defminer-drilldown-leave]").element as HTMLElement
+    ).click();
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-source-browser]").exists()).toBe(false);
+    const selected = wrapper.findAll('[role="row"][aria-selected="true"]');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]?.text()).toContain(BROWSED);
+  });
+
+  it("leaves on Escape without changing the active tab", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    wrapper
+      .get("[data-defminer-source-browser]")
+      .element.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    await settle(wrapper);
+
+    expect(wrapper.find("[data-defminer-source-browser]").exists()).toBe(false);
+    expect(wrapper.find('[role="tab"][aria-selected="true"]').text()).toBe(
+      "Artifacts",
+    );
+    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(
+      TAB_LABELS,
+    );
+  });
+});
+
+describe("App — the Sources column's three states on the running page", () => {
+  it("renders a button for a counted artifact and NOTHING for an uncounted one", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+
+    // ROWS[0] is counted; ROWS[1] is absent from the map and therefore UNKNOWN.
+    const labels = wrapper
+      .findAll('button[aria-label^="Browse "]')
+      .map((b) => b.attributes("aria-label"));
+    expect(labels).toEqual(["Browse 2 recovered sources"]);
+  });
+
+  it("renders NO count at all while the lookup has not answered", async () => {
+    // The DEFAULT stub answers an empty object — DefMiner has looked at
+    // nothing — so no cell may claim a number, and none may claim a zero.
+    const wrapper = mountWith(stubSdk({ artifacts: ROWS }));
+    await settle(wrapper);
+
+    expect(wrapper.findAll('button[aria-label^="Browse "]')).toHaveLength(0);
+    expect(wrapper.text()).not.toContain("Browse ");
+  });
+
+  it("renders a RESOLVED zero as a non-button digit", async () => {
+    const wrapper = mountWith(
+      stubSdk({ artifacts: ROWS, sourceCounts: { [BROWSED]: 0 } }),
+    );
+    await settle(wrapper);
+
+    expect(wrapper.findAll('button[aria-label^="Browse "]')).toHaveLength(0);
+    const headers = wrapper
+      .findAll('[role="columnheader"]')
+      .map((c) => c.text().split(" ")[0]);
+    const position = headers.indexOf("Sources");
+    expect(position).toBeGreaterThanOrEqual(0);
+    const cells = wrapper
+      .get('[role="row"][aria-rowindex="1"]')
+      .element.querySelectorAll('[role="gridcell"]');
+    expect((cells[position]?.textContent ?? "").trim()).toBe("0");
+  });
+});
+
+describe("App — O-07 mechanism 5's replacement, over the REAL page", () => {
+  it("renders NO analysis-state word anywhere inside the drill-down", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    const drilldown = wrapper.get("[data-defminer-source-browser]").element;
+    const text = drilldown.textContent ?? "";
+    expect(text.length).toBeGreaterThan(0);
+    expect(ANALYSIS_WORDS.length).toBeGreaterThan(0);
+    for (const word of ANALYSIS_WORDS) {
+      expect(word.length).toBeGreaterThan(0);
+      expect(text).not.toContain(word);
+    }
+    // And no status badge marker either — a badge rendering no text would slip
+    // past a text search.
+    expect(
+      drilldown.querySelectorAll("[data-defminer-status-badge]"),
+    ).toHaveLength(0);
+  });
+
+  it("renders NO producibility mark anywhere at level 1 — the converse", async () => {
+    // The artifacts table is the other half of the pair. Its rows carry the
+    // analysis vocabulary as BADGE MARKER NODES, and not one producibility mark
+    // exists on that screen. Non-vacuous: the badges are asserted present first.
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+
+    expect(
+      wrapper.element.querySelectorAll("[data-defminer-status-badge]").length,
+    ).toBeGreaterThan(0);
+    expect(
+      wrapper.element.querySelectorAll("[data-defminer-source-producibility]"),
+    ).toHaveLength(0);
+  });
+
+  it("puts the two vocabularies in different REGIONS, both on screen at once", async () => {
+    const wrapper = mountWith(browsePage());
+    await settle(wrapper);
+    await enterDrillDown(wrapper);
+
+    // Select the tombstoned source, so the producibility vocabulary is at its
+    // most alarming beside the analysis vocabulary in the panel.
+    const tombstoned = wrapper
+      .findAll('[role="treeitem"]')
+      .find((row) => row.text().includes("Gone"));
+    expect(tombstoned).toBeDefined();
+    (tombstoned?.element as HTMLElement).click();
+    await settle(wrapper);
+
+    const drilldown = wrapper.get("[data-defminer-source-browser]").element;
+    const panel = wrapper.get("#defminer-evidence-panel").element;
+
+    // NON-VACUITY: the producibility vocabulary is genuinely rendered.
+    expect(
+      drilldown.querySelectorAll("[data-defminer-source-producibility]").length,
+    ).toBeGreaterThan(0);
+    // BOTH DIRECTIONS, at the region level.
+    expect(
+      panel.querySelectorAll("[data-defminer-source-producibility]"),
+    ).toHaveLength(0);
+    expect(
+      drilldown.querySelectorAll("[data-defminer-status-badge]"),
+    ).toHaveLength(0);
+    for (const word of ANALYSIS_WORDS) {
+      expect(drilldown.textContent ?? "").not.toContain(word);
+    }
+    // And the regions are SIBLINGS: neither contains the other.
+    expect(drilldown.contains(panel)).toBe(false);
+    expect(panel.contains(drilldown)).toBe(false);
   });
 });

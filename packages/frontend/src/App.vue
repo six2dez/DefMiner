@@ -20,6 +20,7 @@ import type {
 } from "@defminer/engine/contract";
 import {
   DEGRADED_ANALYSIS_FILTER,
+  isDegradedScanState,
   SCAN_KIND_CLAUSE,
 } from "@defminer/engine/contract";
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
@@ -66,6 +67,7 @@ import type { ScanLifecyclePresentation } from "./components/scan-lifecycle-pres
 import { SCAN_LIFECYCLE_PRESENTATION } from "./components/scan-lifecycle-presentation";
 import ScanPanel from "./components/ScanPanel.vue";
 import SettingsPanel from "./components/SettingsPanel.vue";
+import SourceBrowser from "./components/SourceBrowser.vue";
 import { FOCUS_RING_CLASS } from "./components/table-contract";
 import type { InvalidationCoalescer } from "./stores/coalescer";
 import { createCoalescer } from "./stores/coalescer";
@@ -253,6 +255,12 @@ const pillLabel = computed<string>(
  *  D4): applying it re-orders the table, and the operator asks for that. */
 async function applyPending(): Promise<void> {
   await coalescer?.applyPending();
+  // RE-READ THE COUNTS ON THE SAME DELIBERATE ACT, and on no other. The counts
+  // move when new sources are recovered, and refreshing them on every
+  // invalidation would change a number under a reader mid-triage — the row
+  // shift the coalescer exists to prevent, arriving through a column instead of
+  // a row. This is the one moment the operator has asked for new numbers.
+  await loadSourceCounts();
 }
 
 // ---------------------------------------------------------------------------
@@ -310,6 +318,75 @@ const artifactAnalyses = computed<ReadonlyMap<string, ScanState>>(() => {
  * artifacts" button that silently narrows to nothing.
  */
 const AFFECTED_FILTER: PageRequest["filter"] = DEGRADED_ANALYSIS_FILTER;
+
+// ---------------------------------------------------------------------------
+// UI-05 / MAP-07 — THE `Sources` COLUMN'S LOOKUP, AND THE DRILL-DOWN (D-21)
+// ---------------------------------------------------------------------------
+//
+// THE COUNT MAP IS `null` UNTIL IT ANSWERS, AND `null` AGAIN IF IT FAILS, and
+// those are the same claim on purpose: NOT KNOWN. `ArtifactsTable.vue` renders
+// an unknown count as an EMPTY CELL — never a `0`, never a spinner — because a
+// zero reads as "nothing found here" and stops the operator opening the one row
+// that had the finding. A read failure is not evidence of a zero, exactly as
+// `loadCompat` above refuses to read a call that did not answer as a refusal.
+//
+// It crosses the RPC as a PLAIN OBJECT rather than a Map, because a Map
+// serialises to `{}` and would turn every resolved zero into an unknown. It is
+// converted here, once, at the boundary.
+
+const sourceCounts = ref<ReadonlyMap<string, number> | null>(null);
+
+async function loadSourceCounts(): Promise<void> {
+  if (client === null) return;
+  const result = await client.countRecoveredSources();
+  // FAIL TO `null`, NOT TO AN EMPTY MAP. Both render as unknown today, and the
+  // `null` says WHY at the one place a later reader would look.
+  sourceCounts.value = result.ok ? new Map(Object.entries(result.value)) : null;
+}
+
+/**
+ * The artifact whose recovered sources are being browsed, or `null`.
+ *
+ * A STATE, NOT A TAB. `TABS` is byte-unchanged and `activeTab` is still
+ * `artifacts` for the whole life of the drill-down — which is why the toolbar's
+ * `exportTable` computation below is byte-unchanged too, and still means the
+ * artifacts inventory while this is open (07-UI-SPEC.md § "Named Conflicts",
+ * conflict 1). The manifest has its own scoped CTA in the drill-down header.
+ */
+const browsingSources = ref<string | null>(null);
+
+/**
+ * Enter the drill-down.
+ *
+ * IT SELECTS THE ROW AND OPENS THE PANEL DELIBERATELY rather than relying on
+ * the row's own click handler winning a bubbling race. Three things follow and
+ * all three are wanted: the parent's analysis state stays on screen in the
+ * evidence panel, the coalescer's triage lock stays engaged so newly recovered
+ * sources accrue into the pill instead of shifting rows under a reader, and
+ * leaving returns to the table with the same row still selected.
+ */
+function enterSourceBrowser(sha256: string): void {
+  artifacts.selectRow(sha256);
+  artifacts.openPanel();
+  browsingSources.value = sha256;
+}
+
+/** Leave it. IT CLEARS A FLAG AND NOTHING ELSE — not the selection, not the
+ *  panel, not the active tab. */
+function leaveSourceBrowser(): void {
+  browsingSources.value = null;
+}
+
+/** Whether the browsed artifact's own analysis stopped early. An EMPTY SOURCE
+ *  LIST under a stopped-early analysis is not the same fact as "the bundle
+ *  carried no map", and the tree says so with the one action that resolves the
+ *  ambiguity. Absent from the map means UNKNOWN, which claims neither. */
+const browsedAnalysisStoppedEarly = computed<boolean>(() => {
+  const sha256 = browsingSources.value;
+  if (sha256 === null) return false;
+  const state = artifactAnalyses.value.get(sha256);
+  return state !== undefined && isDegradedScanState(state);
+});
 
 // ---------------------------------------------------------------------------
 // THE EVIDENCE PANEL'S SUBJECT
@@ -447,6 +524,7 @@ onMounted(() => {
   void loadCompat();
   void artifacts.loadFirstPage();
   void observations.loadFirstPage();
+  void loadSourceCounts();
 });
 
 // ---------------------------------------------------------------------------
@@ -1060,13 +1138,35 @@ async function loadCompat(): Promise<void> {
              artifact is outside the resident window would be marked as unknown
              beside identical ones that were not. The column keeps its position
              either way. -->
-        <ArtifactsTable
-          v-if="activeTab === 'artifacts'"
-          :store="artifacts"
-          :analyses="artifactAnalyses"
-          :affected-filter="AFFECTED_FILTER"
-          @open-health="openHealth"
-        />
+        <!-- D-21's DRILL-DOWN IS A STATE WITHIN THIS ARM, NOT A SIXTH ARM,
+             and `TABS` above is byte-unchanged. The `<template>` wrapper adds
+             a LEVEL to the artifacts arm and leaves the five-arm chain below
+             it exactly as it was: `activeTab` is still `artifacts` while the
+             operator reads recovered source, which is what keeps the toolbar's
+             `exportTable` computation honest without editing it. -->
+        <template v-if="activeTab === 'artifacts'">
+          <SourceBrowser
+            v-if="browsingSources !== null && client !== null"
+            :project-id="SERVER_SCOPED_PROJECT"
+            :artifact-sha256="browsingSources"
+            :client="client"
+            :analysis-stopped-early="browsedAnalysisStoppedEarly"
+            :can-export="false"
+            @leave="leaveSourceBrowser"
+            @open-health="openHealth"
+            @open-evidence="artifacts.openPanel()"
+          />
+
+          <ArtifactsTable
+            v-else
+            :store="artifacts"
+            :analyses="artifactAnalyses"
+            :source-counts="sourceCounts"
+            :affected-filter="AFFECTED_FILTER"
+            @open-health="openHealth"
+            @browse-sources="enterSourceBrowser"
+          />
+        </template>
 
         <ObservationsTable
           v-else-if="activeTab === 'observations'"

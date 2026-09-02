@@ -44,6 +44,42 @@
 // "Unknown" label would introduce the UI-only synonym § "Status vocabulary"
 // bans. The column keeps its position either way, so the plan that supplies the
 // data does not move the operator's columns underneath them.
+//
+// ===========================================================================
+// THE `Sources` COLUMN (PLAN 07-09) — AND THE ONE THING IT MUST NOT COLLAPSE
+// ===========================================================================
+// It is the drill-down's ONLY entry point (U7-6), and it arrives by the SAME
+// route and for the SAME measured reason as `analyses` above: `reads.ts`'s
+// paged statements select a fixed column set and no source count, so joining
+// one in is an edit to that literal statement matrix. It is therefore an
+// OPTIONAL LOOKUP MAP the mounting component supplies, keyed on content digest.
+//
+// THREE CELL STATES, AND THE DISTINCTION BETWEEN TWO OF THEM IS THE WHOLE
+// POINT OF THE COLUMN:
+//
+//   * count known and >= 1 -> the grouped integer as a BUTTON. Activating it
+//     enters the drill-down.
+//   * count known and 0    -> the literal `0` in the level-4 tone, NOT a
+//     button. A RESOLVED ZERO IS A REAL, USEFUL FACT: this bundle carried no
+//     inline map, and there is nothing to browse.
+//   * count NOT known      -> NOTHING AT ALL. No text and no element.
+//
+// A resolved zero and an unresolved count are DIFFERENT FACTS and are never
+// the same pixel. `countRecoveredSources` carries the distinction across the
+// RPC by presence rather than by value precisely so this cell can render it —
+// an entry with value 0 means DefMiner looked and found none, and no entry
+// means DefMiner has not looked. A `0` rendered for an unknown count tells the
+// operator the OPPOSITE of the truth and stops them opening the one row that
+// had the finding; a spinner in a 32px cell reflows the column when it
+// resolves. So the unknown cell is empty, and a failed lookup is DELIBERATELY
+// indistinguishable from a still-resolving one, because both mean NOT KNOWN.
+// A read failure surfaces at the artifact level, in the evidence panel, where
+// the analysis vocabulary lives.
+//
+// THE COLUMN IS NOT TARGET-CONTROLLED and does not need to be: it renders a
+// DefMiner-computed integer and nothing else, so the shell's exactly-one
+// assertion is unchanged and there is no field here a later edit could render
+// a target-controlled string into.
 
 import type { PageRequest, ScanState } from "@defminer/engine/contract";
 import { isDegradedScanState } from "@defminer/engine/contract";
@@ -56,8 +92,9 @@ import InventoryTable from "./InventoryTable.vue";
 import PartialBanner from "./PartialBanner.vue";
 import StatusBadge from "./StatusBadge.vue";
 import type { ColumnDefinition } from "./table-contract";
+import { counted, FOCUS_RING_CLASS, groupThousands } from "./table-contract";
 
-const { store, analyses, affectedFilter } = defineProps<{
+const { store, analyses, sourceCounts, affectedFilter } = defineProps<{
   store: InventoryStore<ArtifactRow>;
   /**
    * Scan state per content digest, for the artifacts currently resident.
@@ -66,6 +103,16 @@ const { store, analyses, affectedFilter } = defineProps<{
    * an UNKNOWN state, which renders as nothing rather than as a guess.
    */
   analyses: ReadonlyMap<string, ScanState> | null;
+  /**
+   * Recovered-source count per content digest (07-UI-SPEC.md § "The `Sources`
+   * column").
+   *
+   * AN ENTRY WITH VALUE 0 IS A RESOLVED ZERO; NO ENTRY IS AN UNKNOWN. The two
+   * are never collapsed, and `null` — the whole map absent — means the same
+   * thing as an absent entry: NOT KNOWN. That is why a failed lookup and a
+   * still-resolving one are indistinguishable here by design.
+   */
+  sourceCounts: ReadonlyMap<string, number> | null;
   /**
    * The single column filter that narrows to the degraded artifacts, or `null`
    * when no such filter column exists on the backend yet.
@@ -77,7 +124,14 @@ const { store, analyses, affectedFilter } = defineProps<{
   affectedFilter: PageRequest["filter"];
 }>();
 
-const emit = defineEmits<{ "open-health": [] }>();
+const emit = defineEmits<{
+  "open-health": [];
+  /** The operator asked to browse this artifact's recovered sources. The
+   *  DRILL-DOWN IS THE PAGE'S TO ENTER, exactly as `open-health` is the page's
+   *  to route: a table that entered it itself would be a component writing to
+   *  a sibling's state. */
+  "browse-sources": [sha256: string];
+}>();
 
 /**
  * The empty lookup, frozen at module scope so every mount shares one instance
@@ -92,6 +146,14 @@ const EMPTY_ANALYSES: ReadonlyMap<string, ScanState> = new Map();
 
 const states = computed<ReadonlyMap<string, ScanState>>(
   () => analyses ?? EMPTY_ANALYSES,
+);
+
+/** The empty count lookup, frozen at module scope for the reason above. A
+ *  null map and an empty map say the same thing — NOT KNOWN for every row. */
+const EMPTY_SOURCE_COUNTS: ReadonlyMap<string, number> = new Map();
+
+const counts = computed<ReadonlyMap<string, number>>(
+  () => sourceCounts ?? EMPTY_SOURCE_COUNTS,
 );
 
 /** A millisecond epoch as a fixed-width, sortable, locale-independent string. */
@@ -154,6 +216,18 @@ const COLUMNS: readonly ColumnDefinition<ArtifactRow>[] = [
     sortKey: null,
     text: (row) => row.kind,
   },
+  // The drill-down's only entry point, rendered through the `cell-sources`
+  // slot below. `text` answers the EMPTY STRING and never a count: the slot
+  // owns all three states, and a fallback that stringified a number here would
+  // render `0` for an unknown row the moment somebody removed the slot.
+  {
+    id: "sources",
+    label: "Sources",
+    widthClass: "w-24",
+    targetControlled: false,
+    sortKey: null,
+    text: () => "",
+  },
 ];
 
 /**
@@ -175,6 +249,45 @@ function leadStates(row: ArtifactRow): readonly ScanState[] {
  *  inside a template expression is not parseable by vue-eslint-parser. */
 function rowKey(row: ArtifactRow): string {
   return row.sha256;
+}
+
+/**
+ * The BROWSABLE count, as a LIST OF AT MOST ONE.
+ *
+ * A list rather than an optional value, for the reason {@link leadStates} gives
+ * one screen up: a `!` inside a template expression is not parseable by
+ * vue-eslint-parser, and a lookup with a fallback would fabricate a count for a
+ * row nobody has counted. An empty list renders NOTHING, which is the absence
+ * of a claim rather than a wrong one.
+ */
+function browsableCounts(row: ArtifactRow): readonly number[] {
+  const count = counts.value.get(row.sha256);
+  return count === undefined || count < 1 ? [] : [count];
+}
+
+/**
+ * The RESOLVED ZERO, as a list of at most one.
+ *
+ * Separate from {@link browsableCounts} rather than one function with a mode,
+ * because the two cells are different SHAPES — a button and a plain digit —
+ * and the whole point of the column is that they cannot be collapsed. A row
+ * whose count is unknown is in NEITHER list, and its cell has no child at all.
+ */
+function resolvedZeros(row: ArtifactRow): readonly number[] {
+  return counts.value.get(row.sha256) === 0 ? [0] : [];
+}
+
+/**
+ * The cell button's accessible name.
+ *
+ * `counted` rather than the copy row's literal `{n} recovered sources`, because
+ * 05-UI-SPEC.md § "Copywriting Contract"'s own zero-one-many rule outranks its
+ * template: a count that does not agree with its noun is the defect that rule
+ * names, and "Browse 1 recovered sources" is exactly it. Agreement wins at one;
+ * the string is byte-identical to the copy row at every other count.
+ */
+function browseLabel(count: number): string {
+  return `Browse ${counted(count, "recovered source", "recovered sources")}`;
 }
 
 /**
@@ -240,6 +353,37 @@ async function showOnlyAffected(): Promise<void> {
           :key="state"
           :state="state"
         />
+      </template>
+
+      <!-- THE THREE CELL STATES. There is no `v-else` here and there must not
+           be one: the third state is the ABSENCE of both `v-for`s, so a row
+           whose count is unknown renders no text and no element at all. A
+           `v-else` would be a place for somebody to put a `0` or a spinner.
+
+           `@click.stop` because the row's own click opens the evidence panel:
+           entering the drill-down is the PAGE'S to arrange, and it selects the
+           row and opens the panel deliberately rather than by relying on which
+           handler bubbling reaches first. -->
+      <template #cell-sources="{ row }">
+        <button
+          v-for="count in browsableCounts(row)"
+          :key="`browse-${count}`"
+          type="button"
+          :class="[
+            FOCUS_RING_CLASS,
+            'whitespace-pre overflow-hidden text-xs font-semibold underline',
+          ]"
+          :aria-label="browseLabel(count)"
+          @click.stop="emit('browse-sources', row.sha256)"
+        >
+          {{ groupThousands(count) }}
+        </button>
+        <span
+          v-for="zero in resolvedZeros(row)"
+          :key="`zero-${zero}`"
+          class="whitespace-pre overflow-hidden text-xs text-surface-400"
+          >{{ groupThousands(zero) }}</span
+        >
       </template>
     </InventoryTable>
   </div>

@@ -304,7 +304,13 @@ const mountArtifacts = (
   affectedFilter: PageRequest["filter"] = null,
 ): VueWrapper =>
   mount(ArtifactsTable, {
-    props: { store, analyses, affectedFilter },
+    // `sourceCounts: null` STATED AT THE CALL SITE, exactly as `analyses` is:
+    // the prop is required and explicitly nullable, and `null` says this mount
+    // has nothing to say about recovered-source counts. Every cell in the new
+    // column is then UNKNOWN and renders nothing, which is what keeps the
+    // column-shape assertions below about SHAPE. The three cell states are
+    // asserted in ArtifactsTable.spec.ts, where the map is supplied.
+    props: { store, analyses, sourceCounts: null, affectedFilter },
     global: { stubs: { RecycleScroller: ScrollerStub } },
   });
 
@@ -324,8 +330,10 @@ describe("ArtifactsTable — the bound column shape", () => {
       "Last",
       "Triage",
     ]);
-    // Entity-specific columns follow the four, never precede them.
-    expect(headers.slice(4)).toEqual(["Bytes", "Kind"]);
+    // Entity-specific columns follow the four, never precede them. `Sources`
+    // is plan 07-09's addition — the drill-down's only entry point — and it
+    // is APPENDED, so no shipped column moved under the operator.
+    expect(headers.slice(4)).toEqual(["Bytes", "Kind", "Sources"]);
   });
 
   it("carries EXACTLY ONE target-controlled column, rendered in monospace", async () => {
