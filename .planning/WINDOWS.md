@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 85
 waived_count: 0
-fixed_count: 32
-total_count: 117
-last_updated: 2026-09-02T03:09:47.676Z
+fixed_count: 33
+total_count: 118
+last_updated: 2026-09-02T03:52:49.140Z
 ---
 
 # Broken Windows Ledger
@@ -152,7 +152,8 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
 | 114 | 07 | deviation | packages/frontend/src/sourcemap/tree.ts |  | displaySegment detects truncation by a one-character probe; a segment of EXACTLY TABLE_CELL_MAX_GRAPHEMES over-reports as 'label truncated'. Bounded, safe-direction, stated at the declaration — revisit if a second named import from safety/display ever becomes acceptable | open |  | 2026-09-02T01:48:15.177Z |  |
 | 115 | 07 | deviation | packages/frontend/src/components/table-contract.ts |  | formatTimestamp is now exported once, but ArtifactsTable.vue:98 and ObservationsTable.vue:68 still carry byte-identical private copies (pre-existing, out of 07-08's scope) | fixed |  | 2026-09-02T02:31:39.016Z | 2026-09-02T03:09:47.585Z |
 | 116 | 07 | deviation | packages/frontend/src/components/ObservationsTable.vue | 68 | SUPERSEDES entry 115, which named TWO byte-identical private copies of formatTimestamp. Plan 07-09 deleted ArtifactsTable.vue's — that file is in its files_modified for the Sources column, so it is the plan entry 115's suggested owner named — and it now imports table-contract.ts's exported one. ONE copy remains, in ObservationsTable.vue, which is outside 07-09's scope and is not reachable from any 07-09 module. Two copies of a date format is still how one comes to disagree with the other about a timezone. OWNER: any plan that touches ObservationsTable.vue. | open |  | 2026-09-02T03:09:38.158Z |  |
-| 117 | 07 | stub | packages/frontend/src/components/SourceBrowser.vue |  | The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export="false" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10. | open |  | 2026-09-02T03:09:47.676Z |  |
+| 117 | 07 | stub | packages/frontend/src/components/SourceBrowser.vue |  | The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export="false" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10. | fixed |  | 2026-09-02T03:09:47.676Z | 2026-09-02T03:52:49.051Z |
+| 118 | 07 | deviation | .planning/REQUIREMENTS.md |  | WINDOWS 85's stated risk FIRED AGAIN in 07-10: requirements.mark-complete inserted three blank lines into the MACHINE-OWNED DERIVED RESIDUAL span while ticking MAP-07/UI-05, which outbound-prohibition.spec.ts byte-compares. 07-10 captured the span's sha256 BEFORE running the verb, restored it byte-for-byte after, and re-ran the gate green (465 tests) before committing. The tool defect is in gsd-tools' markdown handling, not in this repository, so it is NOT fixed here and entry 85 stays open. THE PROCEDURE THAT WORKS, for whoever runs the next docs close-out: snapshot the span, run mark-complete, diff, restore, re-run packages/backend/src/outbound-prohibition.spec.ts. OWNER: whoever next runs requirements.mark-complete. | open |  | 2026-09-02T03:52:49.140Z |  |
 
 ````json
 [
@@ -1555,9 +1556,21 @@ WAVE 27 REPLACES THIS AUTHORED TEXT WITH ONE DERIVED FROM THE CODE. This wave cl
     "file": "packages/frontend/src/components/SourceBrowser.vue",
     "line": null,
     "description": "The manifest export CTA is present in all three count states and DISABLED WITH ITS REASON, but cannot run: canExport is a required prop and App.vue states :can-export=\"false\" at the call site. A declared wiring gap the plan sanctions, not fabricated data — the component already emits export-manifest and 07-10 flips one boolean and handles it. The transitional copy constant 'Export source manifest — not available in this build' must be DELETED, not repurposed, when 07-10 lands. OWNER: 07-10.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-02T03:09:47.676Z",
+    "resolved_at": "2026-09-02T03:52:49.051Z"
+  },
+  {
+    "id": 118,
+    "kind": "deviation",
+    "phase": "07",
+    "file": ".planning/REQUIREMENTS.md",
+    "line": null,
+    "description": "WINDOWS 85's stated risk FIRED AGAIN in 07-10: requirements.mark-complete inserted three blank lines into the MACHINE-OWNED DERIVED RESIDUAL span while ticking MAP-07/UI-05, which outbound-prohibition.spec.ts byte-compares. 07-10 captured the span's sha256 BEFORE running the verb, restored it byte-for-byte after, and re-ran the gate green (465 tests) before committing. The tool defect is in gsd-tools' markdown handling, not in this repository, so it is NOT fixed here and entry 85 stays open. THE PROCEDURE THAT WORKS, for whoever runs the next docs close-out: snapshot the span, run mark-complete, diff, restore, re-run packages/backend/src/outbound-prohibition.spec.ts. OWNER: whoever next runs requirements.mark-complete.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-02T03:52:49.140Z",
     "resolved_at": null
   }
 ]

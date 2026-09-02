@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 07
 current_phase_name: Sourcemap Reconstruction
-status: executing
-stopped_at: Completed 07-09-PLAN.md
-last_updated: "2026-09-02T03:09:17.418Z"
+status: verifying
+stopped_at: Completed 07-10-PLAN.md — phase 07 ready for verification
+last_updated: "2026-09-02T03:52:35.198Z"
 last_activity: 2026-09-01
 last_activity_desc: Phase 07 execution started
-state_head: b424ce1be030976d04c975d1f48acdd21d44ade3
+state_head: f01b30d01187e5fb59fe226abfecd609de98d5f3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 85
-  completed_plans: 81
+  completed_plans: 82
 ---
 
 # Project State
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 Phase: 07 (Sourcemap Reconstruction) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-01 — Phase 07 execution started
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
@@ -366,6 +366,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P07 | 31 min | 3 tasks | 15 files |
 | Phase 07 P08 | 34 min | 3 tasks | 9 files |
 | Phase 07 P09 | 25min | 2 tasks | 8 files |
+| Phase 07-sourcemap-reconstruction P10 | 42min | 3 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -726,6 +727,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: P7-D09-4 — O-07 requirement 2's non-vacuity finds a presentation-map LABEL, not a badge marker, because EvidencePanel deliberately carries no data-* attribute; both forms are searched in both directions
 - [Phase 07]: P7-D09-5 — the source-count map is re-read on applyPending() and on no other event, so a number never changes under a reader mid-triage
 - [Phase 07]: P7-D09-6 — the Sources cell's accessible name uses counted, so it agrees with its noun at one; the UI-SPEC's own zero-one-many rule outranks its copy-table literal
+- [Phase 07]: P7-D10-1 — canExport is DELETED, not flipped to true: flipping it would have left an unreachable branch that still needed the transitional label ledger 117 required removed
+- [Phase 07]: P7-D10-2 — the export dialog's table is DERIVED from the scope rather than set beside it, so App.vue's exportTable stays byte-unchanged and two flags cannot disagree about which table is leaving
+- [Phase 07]: P7-D10-4 — the six reconstruction counters are rows BELOW the health strip, not six more strip cells: the overflow/health-strip contract fixes the height at one utility and six long labels would wrap it
+- [Phase 07]: P7-D10-5 — HealthPayload gained a NESTED sub-object of six integers, keeping the no-string property provable by a recursive leaf walk rather than a one-level Object.values
+- [Phase 07]: P7-D10-6 — CONTRACT_VERSION stays at 6 as a RULE APPLICATION: a response widening with no union cannot be misread, and 6 was bumped by 07-06 in this same phase
+- [Phase 07]: P7-D10-7 — the two false REQUIREMENTS.md parentheticals are amended with their ORIGINALS PRESERVED as dated history; a gate demanding zero would have ordered the record falsified
 
 ### Known Risks Carried Forward
 
@@ -768,8 +775,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T03:09:17.287Z
-**Stopped at:** Completed 07-09-PLAN.md
+**Last session:** 2026-09-02T03:52:23.457Z
+**Stopped at:** Completed 07-10-PLAN.md — phase 07 ready for verification
 **Resume file:** None
 
 ### Blockers
