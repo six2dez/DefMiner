@@ -2622,6 +2622,61 @@ describe("D-13 — a recovered source enters the pipeline once, and never twice"
         "a refusal.",
     ).not.toBe(counters.sourcemap.sourcesRecovered);
   });
+  // =========================================================================
+  // IN-01 / G-07-4 — THE COUNTER FIRES ON ADMISSION, NOT ON RECOVERY
+  // =========================================================================
+  // `telemetry.ts` states the unit as "one reconstruction stage that DECLINED
+  // TO RECURSE", and adds that a non-zero value always means at least one
+  // map-bearing artifact reached the bound. A map whose every `sourcesContent`
+  // entry is the empty string recovers three sources and admits NONE of them —
+  // `sourcemap/parse.ts` skips only a NON-STRING entry, so the empty string
+  // reaches `admitDerived` and is refused there with `empty`. No recursion was
+  // attempted at any depth, so the bound did not fire.
+  it("a map whose every `sourcesContent` entry is EMPTY declines nothing — `depth_exceeded` stays 0", async () => {
+    const bytes = bundleAnnouncingInline(
+      mapDocument(["a.ts", "b.ts", "c.ts"], ["", "", ""]),
+    );
+    const p = plan([{ id: "r1", url: "https://x.test/app.js", bytes }]);
+    p.offer();
+    const sdk = await runOnce(p.overrides);
+
+    // THE NON-VACUITY GUARD, AND IT IS NOT OPTIONAL. `depth_exceeded === 0`
+    // asserted alone passes identically against a map the parser rejected
+    // outright, against a bundle with no announcement, and against a build
+    // where reconstruction stopped running at all. Three `empty` refusals
+    // prove the three sources genuinely reached `admitDerived` and were
+    // genuinely refused there, which is the only configuration in which this
+    // case measures the thing it names.
+    expect(
+      counters.sourcemap.derivedRejected.empty,
+      "the three empty sources never reached `admitDerived`, so the zero " +
+        "asserted below would be zero for the wrong reason and this case " +
+        "would pin nothing.",
+    ).toBe(3);
+    expect(counters.sourcemap.sourcesRecovered).toBe(0);
+
+    expect(
+      counters.sourcemap.derivedRejected.depth_exceeded,
+      "the depth counter fired for a stage in which NOTHING could have " +
+        "recursed: all three recovered sources were refused by " +
+        "`admitDerived` before the recursion call site was reachable. " +
+        "`telemetry.ts` states the unit as one reconstruction stage that " +
+        "DECLINED TO RECURSE, and that a non-zero value always means at " +
+        "least one map-bearing artifact reached the bound. Count what was " +
+        "ADMITTED for recursion, not what the map RECOVERED " +
+        "(07-REVIEW.md IN-01).",
+    ).toBe(0);
+
+    const refusals = sdk.calls.consoleLog.filter((line) =>
+      line.includes("depth_exceeded"),
+    );
+    expect(
+      refusals.length,
+      "a depth refusal was logged for a stage that declined nothing. The " +
+        "log line and the counter share one condition and both must read " +
+        "the admitted count.",
+    ).toBe(0);
+  });
 });
 
 // ===========================================================================
