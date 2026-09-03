@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
-status: planned
-stopped_at: Planned 07-23 … 07-25 (gap-closure round 3)
-last_updated: "2026-09-03T08:55:17.848Z"
-last_activity: 2026-09-02
+status: executing
+stopped_at: Completed 07-23-PLAN.md (G-07-5 closed); 07-24 next
+last_updated: "2026-09-03T09:05:05.432Z"
+last_activity: 2026-09-03
 last_activity_desc: Phase 07 gap-closure round 3 planned
-state_head: f7ea7eb57e8a8b2df7566211a27187036d4462ad
+state_head: 94b2e6a1d7836c99c5a89d9669eaa94467108b67
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 100
-  completed_plans: 94
+  completed_plans: 95
 ---
 
 # Project State
@@ -27,12 +27,35 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 07 (sourcemap-reconstruction) — READY TO EXECUTE
-Plan: 22 of 25 executed — 07-23 … 07-25 planned, not yet executed
-Status: Gap-closure round 3 PLANNED — 3 plans (07-23 … 07-25) closing G-07-5 … G-07-8; ready to execute
-Last activity: 2026-09-03 — round-3 planning complete at 87cccd8; plan-checker passed (0 blockers, 1 warning fixed at f7ea7eb)
+Phase: 07 (sourcemap-reconstruction) — EXECUTING
+Plan: 23 of 25 executed — 07-24 next (07-25 after it)
+Status: Gap-closure round 3 EXECUTING — 07-23 done (G-07-5 closed); 07-24 and 07-25 remain (G-07-6 … G-07-8)
+Last activity: 2026-09-03 — 07-23 executed at 94b2e6a; both consumer.ts depth justifications corrected, 90 files / 4321 tests green
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-23: `state.advance-plan` WAS INVOKED TWICE BY THE EXECUTOR
+> AND DOUBLE-ADVANCED THE PROSE COUNTER 22 -> 23 -> 24. Not the 07-18 stale-counter
+> drift and not a handler bug: the first call's stdout was swallowed by a `tail`
+> in the executor's own shell pipeline, the call was repeated to see the JSON, and
+> the second run advanced again. `previous_plan: 23, current_plan: 24` on the
+> second run is the fingerprint. `progress.completed_plans` moved only 94 -> 95,
+> so the frontmatter was RIGHT while the prose line was one ahead.
+>
+> CORRECTED BY HAND TO `23 of 25 executed`, which the file-counting
+> `roadmap.update-plan-progress 07` independently confirms: it reports
+> `plan_count: 25, summary_count: 23, status: "In Progress"`. The `Phase:`,
+> `Status:` and `Last activity:` prose lines and the frontmatter `status:` were
+> also hand-edited, as on 07-20 and 07-22, because no handler owns them — the
+> phase is EXECUTING, not `planned`/`ready to execute`.
+>
+> LESSON FOR 07-24 AND 07-25: call `state.advance-plan` EXACTLY ONCE and capture
+> its output without a truncating pipe. It is not idempotent on the prose counter.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the sixth consecutive run to do so. Known, not this phase's bug, and the
+> `Progress:` line below still describes PHASE 01 and is deliberately untouched.
 
 > PHASE 07 PLAN 07-22: `state.advance-plan` RETURNED `last_plan` AND THAT IS
 > CORRECT THIS TIME, WHICH IS WHY IT IS RECORDED RATHER THAN ASSUMED. The 07-18
@@ -670,6 +693,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P20 | 6 min | 3 tasks | 2 files |
 | Phase 07 P21 | 13 min | 2 tasks | 7 files |
 | Phase 07 P22 | 9 min | 3 tasks | 2 files |
+| Phase 07 P23 | 11 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -1072,6 +1096,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: WR-03 direction: option A — split the two axes. The QUERY axis is now cut on every `sources` label; the FRAGMENT axis stays cut only on URL-shaped ones. — Chosen by the operator on 2026-09-02 at a gate="blocking-human" checkpoint, over option B (correct the premise and sanction the disclosure). It restores the pre-07-16 safe-mode behaviour on the query axis without reintroducing the false marker LO-04 removed from `#`-bearing bare paths.
 - [Phase 07]: The `?` justification in `export.ts` is written as a claim about what a BUNDLER EMITS, never as a claim that a `?` cannot be part of a name. — RFC 3986 reserved-delimiter status plus Win32 rejection is probabilistic about the label population a bundler produces. The absolute form is FALSE — APFS and ext4 accept `?` and reject only `/` and NUL — and shipping it would have opened a fifth false comment in the round that closes four. A region-scoped negative grep plus a non-vacuity companion gate the docblock. The TRUE `#`-is-a-legal-filename-character sentence was deliberately KEPT: the prohibition was scoped to the false claim, not to legality claims as a category.
 - [Phase 07]: EXPORT_QUERY_REDACTION is 16 characters, so the per-field export ceiling is 4,112 — not the 17/4,113 the byte-budget prose had claimed since it was written. — Measured while confirming that WR-03 did not raise the ceiling. The ASSERTION was always correct because it reads EXPORT_QUERY_REDACTION.length rather than a literal; only the prose beside it was wrong, and the comment already contradicted itself (27 redacts to 39, and 23 + 17 = 40).
+- [Phase 07]: G-07-5 closed by deleting the size refusal from both consumer.ts depth justifications AND stating its unreachability positively — The gap truth demands the comments SAY the refusal is unreachable, so deletion alone would leave it unsatisfied; an unexplained omission also invites a later reader to restore it as a helpful completion.
+- [Phase 07]: Comment gates are region-scoped via awk ranges with a mandatory non-vacuity companion, and the comment-stripping prefilter is deliberately INVERTED when the comment is the subject — too_large is legitimate prose at consumer.ts:276 and live production code at :1005, so a file-wide gate is unsatisfiable; and stripping comments from a comment-subject gate leaves a gate that can never fail.
 
 ### Known Risks Carried Forward
 
@@ -1114,8 +1140,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-02T20:46:54.306Z
-**Stopped at:** Completed 07-22-PLAN.md
+**Last session:** 2026-09-03T09:04:40.251Z
+**Stopped at:** Completed 07-23-PLAN.md (G-07-5 closed); 07-24 next
 **Resume file:** None
 
 ### Blockers
