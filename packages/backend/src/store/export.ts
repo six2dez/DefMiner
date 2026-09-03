@@ -309,8 +309,8 @@ export function isProtocolShapedLabel(label: string): boolean {
  * no query axis. `export.spec.ts` pins exactly that as EXPECTED, and the column
  * comment on `sources_verbatim` names the same output as the wrong thing LO-04's
  * fix removed on the path branch. It is PRE-EXISTING `redactUrlForExport`
- * behaviour and it is `observations.url`'s shipped behaviour on every row it has
- * ever written.
+ * behaviour and it is `observations.url`'s shipped behaviour on every REDACTED
+ * row it has ever written.
  *
  * IT IS ACCEPTED RATHER THAN DEFENDED, and the cost is named so nobody has to
  * re-derive it: the marker discloses LESS than the truth, so what it costs is
@@ -446,11 +446,9 @@ export const EXPORT_COLUMNS: Readonly<
     // Hence {@link redactSourceLabelForExport}: the SAME MARKER, applied PER
     // AXIS. A protocol-shaped label DELEGATES to `redactUrlForExport` and is cut
     // on `?` or `#`; every other label is cut by hand at its first `?` and keeps
-    // its `#` tail. Two cuts with different semantics, not one redactor reused —
-    // and the two axes moved in OPPOSITE directions: the FRAGMENT axis NARROWED,
-    // to protocol-shaped labels only, while the QUERY axis WIDENED, to every
-    // label. Still not a per-column exemption, and the argument in full — with
-    // the delegated branch's known exception — is at that function.
+    // its `#` tail. Two cuts with different semantics, not one redactor reused.
+    // Still not a per-column exemption, and the argument in full — with the
+    // delegated branch's known exception — is at that function.
     { name: "sources_verbatim", redact: redactSourceLabelForExport },
     { name: "source_sha256", redact: null },
     { name: "byte_len", redact: null },
