@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
-status: ready_for_verification
-stopped_at: Completed 07-25-PLAN.md (G-07-8 closed); round 3 complete, phase 07 ready for verification
-last_updated: "2026-09-03T11:07:26.836Z"
+status: executing
+stopped_at: Completed 07-26-PLAN.md
+last_updated: "2026-09-03T11:22:05.300Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 07 plan 07-25 executed — G-07-8 closed; gap-closure round 3 COMPLETE, 25 of 25 plans done
-state_head: 08feed0bcfaae68d1d7c5a56e0febdb5949b04a7
+last_activity_desc: Phase 07 plan 07-26 executed — G-07-9 and G-07-12 closed; gap-closure round 4 wave 1 done, 26 of 27 plans executed
+state_head: e5460d5b9159ec9ff68e327a81e66a24f658d12e
 progress:
   total_phases: 11
   completed_phases: 0
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 07 (sourcemap-reconstruction) — READY TO EXECUTE
-Plan: 25 of 25 executed — none remain
-Status: Gap-closure round 3 COMPLETE — G-07-5, G-07-6, G-07-7 and G-07-8 all closed. Ready for /gsd-verify-work 07
-Last activity: 2026-09-03 — 07-25 executed at ed0018e; the two superseded figures in thresholds.spec.ts's documented-derivation block pinned as named literals with MEASURED provenance (confirmed against 59347c3^'s source), a new coincidence assertion added whose failure message names ITSELF as the thing that retires, and the non-vacuity trap proven still armed by a real toContain failure at :1015 against a temporarily emptied history paragraph. 62 -> 63 tests; whole suite 90 files / 4322 tests, four static gates exit 0
+Phase: 07 (sourcemap-reconstruction) — EXECUTING
+Plan: 26 of 27 executed — 07-27 remains (G-07-10, G-07-11, `thresholds.spec.ts`)
+Status: Gap-closure round 4 WAVE 1 done — G-07-9 and G-07-12 closed. Wave 2 (07-27) must run next on the same working tree before /gsd-verify-work 07
+Last activity: 2026-09-03 — 07-26 executed at 95a2a73 and e5460d5; the axis-direction claim DELETED from `export.ts`'s `sources_verbatim` column comment rather than restated a fourth time (region 15 -> 13 lines, 1,104 -> 934 bytes, no direction word, both cuts still described), the KNOWN AND ACCEPTED EXCEPTION paragraph qualified to "on every REDACTED row", and the two documents that AUTHORED the claim — `07-24-PLAN.md`'s `must_haves.truths[4]` and the ROADMAP's round-3 07-24 entry — corrected with a dated ERRATA block reconstructed from `d5cd5e0`/`a901b9e`/`0e44102`. Four md5 digests unchanged; whole suite 90 files / 4322 tests, four static gates exit 0
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -747,6 +747,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P23 | 11 min | 2 tasks | 1 files |
 | Phase 07 P24 | 6 min | 2 tasks | 1 files |
 | Phase 07 P25 | 6 min | 2 tasks | 1 files |
+| Phase 07 P26 | 7 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -1158,6 +1159,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: The coincidence between a pinned historical figure and today's recomputation is ASSERTED, and the assertion's failure message names ITSELF as the thing that retires — The dependency was real and silent — this round's one coincidental_reliance_item (undeclared-precondition). The new test's message says the literal STAYS, forbids rewriting the dated paragraph, and names retiring the assertion as the remedy. It deliberately does not reuse the block-level REMEDY string, which points at the passes docblock and is the wrong repair for this failure.
 - [Phase 07]: The non-vacuity property was DEMONSTRATED against the real thresholds.ts rather than asserted — Removing the trap by removing the guard was the cheapest wrong answer available. The history paragraph's two figures were deleted from the real file with both export const anchors left standing, producing a toContain failure at thresholds.spec.ts:1015 rather than a region() anchor throw, then restored with git checkout -- (never cp, which is aliased to cp -i here).
 - [Phase 07]: The commit-ordering test's identically-named recomputation at thresholds.spec.ts:328-355 was recorded, not fixed — It asserts a relational property over TODAY's constants (retiring the compensating factor must LOOSEN the inequality), never compares against prose, and stays meaningful if SOURCE_ROWS_PER_MAP_MAX moves. A different assertion, not G-07-8 wearing different line numbers. Suggested owner: any plan that next touches it.
+- [Phase 07]: G-07-9 repaired by DELETION rather than a fourth restatement of the sources_verbatim axis-direction sentence. — The sentence had carried a false claim in three consecutive rounds (G-07-3/07-16, G-07-6/07-22, WR-01/07-24) and each repair was a restatement that became the next round defect. A restatement cannot satisfy a strictly decreasing byte count, which is why the gate was written that way: the region fell 1,104 -> 934 bytes and 15 -> 13 lines with nothing added. export.ts:255-275 already states each axis against a NAMED baseline, so no replacement text was needed.
+- [Phase 07]: The planning record that AUTHORED the false claim was corrected, not just the source file. — 07-24-PLAN.md must_haves.truths[4] and the ROADMAP round-3 07-24 entry both stated the claim, so a round-5 plan derived from either would have re-shipped the deleted sentence. A dated ERRATA block reconstructed from d5cd5e0/a901b9e/0e44102 governs the twelve body restatements, which are preserved byte-unchanged on purpose because that file records what was planned and executed and 07-24-SUMMARY.md cites it.
+- [Phase 07]: VF-01 discharged: every prose gate in this plan was a region-scoped absence assertion, a strictly decreasing byte count, or a git show comparison — never a grep -c word-presence probe. — The evidence that shipped round 3 defect was grep -c NARROWED -> 1 and grep -c WIDENED -> 1, structurally incapable of falsifying a directional claim. Each negated gate here carried a non-vacuity companion so an absence assertion could not pass over an empty stream.
 
 ### Known Risks Carried Forward
 
@@ -1200,8 +1204,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-03T09:25:44.814Z
-**Stopped at:** Completed 07-25-PLAN.md (G-07-8 closed); round 3 complete, phase 07 ready for verification
+**Last session:** 2026-09-03T11:22:05.160Z
+**Stopped at:** Completed 07-26-PLAN.md
 **Resume file:** None
 
 ### Blockers
