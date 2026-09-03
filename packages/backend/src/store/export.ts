@@ -443,10 +443,14 @@ export const EXPORT_COLUMNS: Readonly<
     // at its first `#` discarded a legal filename tail AND printed a marker
     // claiming a query had been withheld from a value with no query axis.
     //
-    // Hence {@link redactSourceLabelForExport}: the SAME redactor, the SAME
-    // marker, applied where its subject exists. Not an exemption — a narrowed
-    // application, which is a different thing and is argued in full at that
-    // function.
+    // Hence {@link redactSourceLabelForExport}: the SAME MARKER, applied PER
+    // AXIS. A protocol-shaped label DELEGATES to `redactUrlForExport` and is cut
+    // on `?` or `#`; every other label is cut by hand at its first `?` and keeps
+    // its `#` tail. Two cuts with different semantics, not one redactor reused —
+    // and the two axes moved in OPPOSITE directions: the FRAGMENT axis NARROWED,
+    // to protocol-shaped labels only, while the QUERY axis WIDENED, to every
+    // label. Still not a per-column exemption, and the argument in full — with
+    // the delegated branch's known exception — is at that function.
     { name: "sources_verbatim", redact: redactSourceLabelForExport },
     { name: "source_sha256", redact: null },
     { name: "byte_len", redact: null },
