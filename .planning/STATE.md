@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
-status: executing
-stopped_at: Completed 07-22-PLAN.md
+status: planned
+stopped_at: Planned 07-23 … 07-25 (gap-closure round 3)
 last_updated: "2026-09-03T08:55:17.848Z"
 last_activity: 2026-09-02
-last_activity_desc: Phase 07 execution started
+last_activity_desc: Phase 07 gap-closure round 3 planned
 state_head: f7ea7eb57e8a8b2df7566211a27187036d4462ad
 progress:
   total_phases: 11
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — READY TO EXECUTE
-Plan: 22 of 22
-Status: Gap-closure round 2 COMPLETE — 22 of 22 plans executed, ready for verification
-Last activity: 2026-09-02 — 07-22 complete; G-07-3 / WR-03 closed in full (option A)
+Plan: 22 of 25 executed — 07-23 … 07-25 planned, not yet executed
+Status: Gap-closure round 3 PLANNED — 3 plans (07-23 … 07-25) closing G-07-5 … G-07-8; ready to execute
+Last activity: 2026-09-03 — round-3 planning complete at 87cccd8; plan-checker passed (0 blockers, 1 warning fixed at f7ea7eb)
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
