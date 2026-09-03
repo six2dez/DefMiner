@@ -1265,9 +1265,12 @@ export function startConsumer(
     // the REPORT is emitted after the loop, from `admittedForRecursion` — the
     // sources that actually reached the recursion call site. RECOVERY IS NOT
     // ADMISSION: a map can recover sources that `admitDerived` refuses as
-    // `empty` or `too_large` before they could recurse, and a stage that
-    // admitted none of them declined nothing at any depth. Guarding the emission
-    // on `parsed.recovered.length` claimed the bound had fired when it had not,
+    // `empty` before they could recurse, and a stage that admitted none of them
+    // declined nothing at any depth. The size refusal is NOT the other half of
+    // that sentence and never was: it is structurally unreachable through the
+    // ingest path, argued at the mixed-map case in `consumer.spec.ts`, so
+    // `empty` carries this justification alone. Guarding the emission on
+    // `parsed.recovered.length` claimed the bound had fired when it had not,
     // and put the recovered count beside a noun that meant recursions — two
     // inaccuracies sharing one condition, both closed here (07-REVIEW.md IN-01).
     const nextDepth = admitDerivedDepth(input.depth + 1);
@@ -1443,14 +1446,19 @@ export function startConsumer(
     // DECIDED AT THE TOP, REPORTED AT THE BOTTOM. The guard reads
     // `admittedForRecursion` and not `parsed.recovered.length`, so the refusal
     // fires on ADMISSION rather than on recovery. A map whose every
-    // `sourcesContent` entry is the empty string — or whose every source is over
-    // `DERIVED_SOURCE_MAX_BYTES`, both reachable from one hostile map — recovers
-    // sources and admits none of them, attempts no recursion at any depth, and
-    // therefore declines nothing. The number beside the reason is the ADMITTED
-    // count and the noun beside it says so, which is the unit `telemetry.ts`
-    // already states: one reconstruction stage that DECLINED TO RECURSE, and a
-    // non-zero value always meaning at least one map-bearing artifact reached the
-    // bound (07-REVIEW.md IN-01).
+    // `sourcesContent` entry is the empty string recovers sources and admits
+    // none of them, attempts no recursion at any depth, and therefore declines
+    // nothing. An empty entry is the ONLY refusal a hostile map can mix in here.
+    // The size refusal is structurally unreachable through the ingest path: the
+    // whole document has already been refused above the same ceiling the
+    // per-source gate applies, and a decoded entry is a byte-subset of the JSON
+    // that carried it. That is argued at the mixed-map case in
+    // `consumer.spec.ts`, and it is the statement these comments agree with.
+    // The number beside the reason is the ADMITTED count and the noun beside it
+    // says so, which is the unit `telemetry.ts` already states: one
+    // reconstruction stage that DECLINED TO RECURSE, and a non-zero value
+    // always meaning at least one map-bearing artifact reached the bound
+    // (07-REVIEW.md IN-01).
     //
     // A STAGE ABANDONED ON PROJECT CHANGE EMITS NO REFUSAL AT ALL, because the
     // two `stillCurrent()` re-checks inside the loop `return done(null)` and
