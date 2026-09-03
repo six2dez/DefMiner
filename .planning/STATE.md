@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
-status: executing
-stopped_at: Completed 07-24-PLAN.md (G-07-6 and G-07-7 closed); 07-25 next
-last_updated: "2026-09-03T09:14:25.914Z"
+status: ready_for_verification
+stopped_at: Completed 07-25-PLAN.md (G-07-8 closed); round 3 complete, phase 07 ready for verification
+last_updated: "2026-09-03T09:25:44.990Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 07 plan 07-24 executed — G-07-6 and G-07-7 closed
-state_head: 8d2f3fc3c724f5bb319ecf08732770a2b13a19ec
+last_activity_desc: Phase 07 plan 07-25 executed — G-07-8 closed; gap-closure round 3 COMPLETE, 25 of 25 plans done
+state_head: ed0018e3af80eecfa58fe445b7aff0fef4eb71c5
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 100
-  completed_plans: 96
+  completed_plans: 97
 ---
 
 # Project State
@@ -27,12 +27,39 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 
 ## Current Position
 
-Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 24 of 25 executed — 07-25 next (the last plan of round 3)
-Status: Gap-closure round 3 EXECUTING — 07-23 and 07-24 done (G-07-5, G-07-6, G-07-7 closed); 07-25 remains (G-07-8)
-Last activity: 2026-09-03 — 07-24 executed at 3276a82 and 8d2f3fc; the export redaction principle scoped to its branch with the delegated branch's marker recorded as a known and accepted exception, and the sources_verbatim column comment restated per axis. Comment-only: 90 files / 4321 tests green, marker count still 2
+Phase: 07 (sourcemap-reconstruction) — ALL PLANS EXECUTED, awaiting verification
+Plan: 25 of 25 executed — none remain
+Status: Gap-closure round 3 COMPLETE — G-07-5, G-07-6, G-07-7 and G-07-8 all closed. Ready for /gsd-verify-work 07
+Last activity: 2026-09-03 — 07-25 executed at ed0018e; the two superseded figures in thresholds.spec.ts's documented-derivation block pinned as named literals with MEASURED provenance (confirmed against 59347c3^'s source), a new coincidence assertion added whose failure message names ITSELF as the thing that retires, and the non-vacuity trap proven still armed by a real toContain failure at :1015 against a temporarily emptied history paragraph. 62 -> 63 tests; whole suite 90 files / 4322 tests, four static gates exit 0
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-25: `state.advance-plan` WAS CALLED EXACTLY ONCE, UNPIPED,
+> AND WAS CORRECT — 07-23's lesson applied for the second run in a row. The
+> handler returned `{"advanced": true, "previous_plan": 24, "current_plan": 25,
+> "total_plans": 25}` and `progress.completed_plans` moved 96 -> 97. It did NOT
+> return `last_plan`; it advanced INTO 25, which is the correct final position.
+> The verdict rests on the real count, not on stale prose: the file-counting
+> `roadmap.update-plan-progress 07` independently reports `plan_count: 25,
+> summary_count: 25`, so all 25 plans of phase 07 now have SUMMARYs on disk.
+>
+> FIVE PROSE LINES PLUS THE FRONTMATTER `status:` WERE EDITED BY HAND, as on
+> every plan since 07-20, because no handler owns them: `last_activity_desc`
+> (still described 07-24), the `Phase:` line (still said EXECUTING), the `Plan:`
+> line's stale "07-25 next" suffix, the `Status:` line and the `Last activity:`
+> line. The frontmatter `status:` moved `executing` -> `ready_for_verification`
+> because the phase is now 25/25 with nothing left to execute. One ROADMAP.md
+> prose fragment was also hand-corrected: it still called round 3's three plans
+> "not yet executed" after the handler had already flipped the counter to 25/25.
+>
+> `requirements.ready-ids` was consulted before marking. MAP-06 is declared by
+> BOTH 07-23 and 07-25 and the shared-ID gate (#2388) correctly held it
+> incomplete until this SUMMARY landed.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the EIGHTH consecutive run to do so. Known, not this phase's bug, and the
+> `Progress:` line below still describes PHASE 01 and is deliberately untouched.
 
 > PHASE 07 PLAN 07-24: `state.advance-plan` WAS CALLED EXACTLY ONCE, UNPIPED,
 > AND WAS CORRECT — 07-23's lesson applied. The handler returned
@@ -719,6 +746,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P22 | 9 min | 3 tasks | 2 files |
 | Phase 07 P23 | 11 min | 2 tasks | 1 files |
 | Phase 07 P24 | 6 min | 2 tasks | 1 files |
+| Phase 07 P25 | 6 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -1126,6 +1154,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: 07-24: the never-claim-a-false-redaction principle in `redactSourceLabelForExport`'s docblock is SCOPED to the label branch that honours it, and `redactUrlForExport`'s shared query marker over a fragment-only URL is recorded as a KNOWN AND ACCEPTED EXCEPTION — The operator explicitly chose the comment-scoping repair over the vocabulary change, declining the latter as a decision needing its own round. The exception paragraph states its cost so nobody re-derives it: the marker discloses LESS than the truth, so what it costs is OPERATOR TRUST AND REVIEWABILITY, not disclosure — nothing leaks. `redactUrlForExport`, `EXPORT_QUERY_REDACTION`, `isProtocolShapedLabel`, `redactSourceLabelForExport`'s body and `observations.url`'s shipped output are all byte-unchanged, and `export.spec.ts` (which pins the fragment-only case at :883-887) is unmodified. Closes G-07-7 at 3276a82.
 - [Phase 07]: 07-24: the `sources_verbatim` column comment states one MARKER applied PER AXIS, names both branches, and states BOTH axis directions — FRAGMENT narrowed, QUERY widened — "the SAME redactor … a narrowed application" was true under 07-16 and falsified by 07-22, which added a hand-rolled `?`-only cut with different semantics AND widened the query axis to every label — so "narrowed" was backwards on that axis. G-07-6's second `missing` bullet asks for the DIRECTION, not just the deletion, so stating only the widening would have been as incomplete as stating only the narrowing. The comment is the first thing a redaction-policy audit reads. Closes G-07-6 at 8d2f3fc.
 - [Phase 07]: 07-24: the vocabulary non-growth gate — `grep -c 'query-redacted' export.ts` pinned at the measured 2 and run after BOTH comment edits — A second marker spelling would break the single-spelling property the manifest field ceiling of 4,113 is computed from, and would do it inside a comment edit nobody would think to check (T-07-106, high). All new prose refers to the marker through `{@link EXPORT_QUERY_REDACTION}`, so the count read 2 at HEAD (declaration :178, illustrative use :265) and reads 2 now. This is what makes the adjacent `NO NEW VOCABULARY` paragraph's "spelt in exactly one place" claim mechanically checkable rather than merely asserted.
+- [Phase 07]: Historical figures in thresholds.spec.ts are PINNED LITERALS with stated provenance; shipped figures stay DERIVED from the T.* imports — 4,227 is what the insert side READ at 59347c3's parent, not a property of today's constants. Recomputing it meant a re-measured SOURCE_ROWS_PER_MAP_MAX would demand the NEW figure be written into a paragraph describing 2026-09-02 while the absence half asserted the absence of a string never in the docblock. The drift detector would have become the drift generator (G-07-8 / WR-04).
+- [Phase 07]: The coincidence between a pinned historical figure and today's recomputation is ASSERTED, and the assertion's failure message names ITSELF as the thing that retires — The dependency was real and silent — this round's one coincidental_reliance_item (undeclared-precondition). The new test's message says the literal STAYS, forbids rewriting the dated paragraph, and names retiring the assertion as the remedy. It deliberately does not reuse the block-level REMEDY string, which points at the passes docblock and is the wrong repair for this failure.
+- [Phase 07]: The non-vacuity property was DEMONSTRATED against the real thresholds.ts rather than asserted — Removing the trap by removing the guard was the cheapest wrong answer available. The history paragraph's two figures were deleted from the real file with both export const anchors left standing, producing a toContain failure at thresholds.spec.ts:1015 rather than a region() anchor throw, then restored with git checkout -- (never cp, which is aliased to cp -i here).
+- [Phase 07]: The commit-ordering test's identically-named recomputation at thresholds.spec.ts:328-355 was recorded, not fixed — It asserts a relational property over TODAY's constants (retiring the compensating factor must LOOSEN the inequality), never compares against prose, and stays meaningful if SOURCE_ROWS_PER_MAP_MAX moves. A different assertion, not G-07-8 wearing different line numbers. Suggested owner: any plan that next touches it.
 
 ### Known Risks Carried Forward
 
@@ -1168,8 +1200,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-03T09:14:06.454Z
-**Stopped at:** Completed 07-24-PLAN.md (G-07-6 and G-07-7 closed); 07-25 next
+**Last session:** 2026-09-03T09:25:44.814Z
+**Stopped at:** Completed 07-25-PLAN.md (G-07-8 closed); round 3 complete, phase 07 ready for verification
 **Resume file:** None
 
 ### Blockers
