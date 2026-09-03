@@ -895,6 +895,17 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
   // 2,179 — the drift detector become the drift generator again, on the operand
   // 07-UAT.md G-07-8 left behind (07-UAT.md G-07-10, 07-VERIFICATION.md WR-02).
   //
+  // AND `8.26`'s DENOMINATOR IS PINNED ALONGSIDE ITS NUMERATOR, so the quotient
+  // is recorded end to end rather than half-recomputed. 8.26 is 4,227 / 512 as
+  // BOTH figures stood at `59347c3^`: `git show
+  // 59347c3^:packages/engine/src/thresholds.ts` gives RETENTION_SWEEP_MAX_ROWS =
+  // 512 (line 152), and 4,227 / 512 = 8.26 to two decimal places. The denominator
+  // holds that same value today, which is why pinning it changes no outcome — the
+  // defect it removes is LATENT, not live: the message below claimed to describe
+  // values "as both stood before 59347c3" while interpolating TODAY's constant
+  // into the clause, and would have started lying the day the sweep bound moved
+  // (07-UAT.md G-07-11, 07-VERIFICATION.md IN-01).
+  //
   // THE COINCIDENCE IS ASSERTED RATHER THAN ASSUMED, immediately below, so the
   // day it ends is a test failure carrying its own remedy instead of a silently
   // wrong demand. The distinction this block keeps is the rule, not a tally: the
@@ -906,6 +917,7 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
   const SUPERSEDED_INSERT_SIDE_BEFORE_59347C3 = 4_227;
   const SUPERSEDED_QUOTIENT_BEFORE_59347C3 = "8.26";
   const SHIPPED_INSERT_SIDE_AT_59347C3 = 2_179;
+  const SUPERSEDED_SWEEP_MAX_ROWS_BEFORE_59347C3 = 512;
 
   /** The remedy every message in this block ends with. The fix for a failure
    *  here is the PROSE — repairing a derivation by moving the constant to fit
@@ -948,8 +960,12 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
         `${recomputedQuotient}, but the pinned historical figure is ` +
         `${SUPERSEDED_QUOTIENT_BEFORE_59347C3}. THE LITERAL IS STILL CORRECT AND IT ` +
         `STAYS — it is ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)} over ` +
-        `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) as both stood ` +
-        `before 59347c3. Do NOT rewrite ROWS_INSERTED_PER_ITERATION_MAX's history ` +
+        `RETENTION_SWEEP_MAX_ROWS ` +
+        `(${SUPERSEDED_SWEEP_MAX_ROWS_BEFORE_59347C3}) as both stood before ` +
+        `59347c3 — the denominator PINNED at what 59347c3^ shipped, not read from ` +
+        `today's constants, so this clause states two historical values and ` +
+        `interpolates no present-day one. Do NOT rewrite ` +
+        `ROWS_INSERTED_PER_ITERATION_MAX's history ` +
         `paragraph to the new figure; what ended is the COINCIDENCE, not the ` +
         `history. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line dated ` +
         `note of the new recomputed value.`,
