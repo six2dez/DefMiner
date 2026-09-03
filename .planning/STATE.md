@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-23-PLAN.md (G-07-5 closed); 07-24 next
-last_updated: "2026-09-03T09:05:05.432Z"
+stopped_at: Completed 07-24-PLAN.md (G-07-6 and G-07-7 closed); 07-25 next
+last_updated: "2026-09-03T09:14:25.914Z"
 last_activity: 2026-09-03
-last_activity_desc: Phase 07 gap-closure round 3 planned
-state_head: 94b2e6a1d7836c99c5a89d9669eaa94467108b67
+last_activity_desc: Phase 07 plan 07-24 executed — G-07-6 and G-07-7 closed
+state_head: 8d2f3fc3c724f5bb319ecf08732770a2b13a19ec
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 100
-  completed_plans: 95
+  completed_plans: 96
 ---
 
 # Project State
@@ -28,11 +28,35 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 23 of 25 executed — 07-24 next (07-25 after it)
-Status: Gap-closure round 3 EXECUTING — 07-23 done (G-07-5 closed); 07-24 and 07-25 remain (G-07-6 … G-07-8)
-Last activity: 2026-09-03 — 07-23 executed at 94b2e6a; both consumer.ts depth justifications corrected, 90 files / 4321 tests green
+Plan: 24 of 25 executed — 07-25 next (the last plan of round 3)
+Status: Gap-closure round 3 EXECUTING — 07-23 and 07-24 done (G-07-5, G-07-6, G-07-7 closed); 07-25 remains (G-07-8)
+Last activity: 2026-09-03 — 07-24 executed at 3276a82 and 8d2f3fc; the export redaction principle scoped to its branch with the delegated branch's marker recorded as a known and accepted exception, and the sources_verbatim column comment restated per axis. Comment-only: 90 files / 4321 tests green, marker count still 2
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
+
+> PHASE 07 PLAN 07-24: `state.advance-plan` WAS CALLED EXACTLY ONCE, UNPIPED,
+> AND WAS CORRECT — 07-23's lesson applied. The handler returned
+> `{"advanced": true, "previous_plan": 23, "current_plan": 24, "total_plans": 25}`
+> and `progress.completed_plans` moved 95 -> 96. The file-counting
+> `roadmap.update-plan-progress 07` independently agrees: `plan_count: 25,
+> summary_count: 24, status: "In Progress"`. No prose counter needed correcting
+> this time.
+>
+> FOUR PROSE LINES WERE STILL EDITED BY HAND, as on 07-20, 07-22 and 07-23,
+> because no handler owns them: `last_activity_desc` (still said "round 3
+> planned"), the `Plan:` line's "07-24 next" suffix, the `Status:` line and the
+> `Last activity:` line. The frontmatter `status:` was already `executing` and
+> needed no correction.
+>
+> `requirements.mark-complete MAP-07 UI-05` returned
+> `already_complete: ["MAP-07","UI-05"]` — both were marked by earlier plans of
+> this phase, so REQUIREMENTS.md is unchanged. `MAP-06` remains correctly
+> incomplete: 07-25 also declares it and the shared-ID gate holds it.
+>
+> AND `state.update-progress` WITHHELD THE PROJECT-WIDE BAR AGAIN —
+> `progress percent withheld by buildStateFrontmatter — STATE.md left unchanged`
+> — the seventh consecutive run to do so. Known, not this phase's bug, and the
+> `Progress:` line below still describes PHASE 01 and is deliberately untouched.
 
 > PHASE 07 PLAN 07-23: `state.advance-plan` WAS INVOKED TWICE BY THE EXECUTOR
 > AND DOUBLE-ADVANCED THE PROSE COUNTER 22 -> 23 -> 24. Not the 07-18 stale-counter
@@ -694,6 +718,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P21 | 13 min | 2 tasks | 7 files |
 | Phase 07 P22 | 9 min | 3 tasks | 2 files |
 | Phase 07 P23 | 11 min | 2 tasks | 1 files |
+| Phase 07 P24 | 6 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -1098,6 +1123,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: EXPORT_QUERY_REDACTION is 16 characters, so the per-field export ceiling is 4,112 — not the 17/4,113 the byte-budget prose had claimed since it was written. — Measured while confirming that WR-03 did not raise the ceiling. The ASSERTION was always correct because it reads EXPORT_QUERY_REDACTION.length rather than a literal; only the prose beside it was wrong, and the comment already contradicted itself (27 redacts to 39, and 23 + 17 = 40).
 - [Phase 07]: G-07-5 closed by deleting the size refusal from both consumer.ts depth justifications AND stating its unreachability positively — The gap truth demands the comments SAY the refusal is unreachable, so deletion alone would leave it unsatisfied; an unexplained omission also invites a later reader to restore it as a helpful completion.
 - [Phase 07]: Comment gates are region-scoped via awk ranges with a mandatory non-vacuity companion, and the comment-stripping prefilter is deliberately INVERTED when the comment is the subject — too_large is legitimate prose at consumer.ts:276 and live production code at :1005, so a file-wide gate is unsatisfiable; and stripping comments from a comment-subject gate leaves a gate that can never fail.
+- [Phase 07]: 07-24: the never-claim-a-false-redaction principle in `redactSourceLabelForExport`'s docblock is SCOPED to the label branch that honours it, and `redactUrlForExport`'s shared query marker over a fragment-only URL is recorded as a KNOWN AND ACCEPTED EXCEPTION — The operator explicitly chose the comment-scoping repair over the vocabulary change, declining the latter as a decision needing its own round. The exception paragraph states its cost so nobody re-derives it: the marker discloses LESS than the truth, so what it costs is OPERATOR TRUST AND REVIEWABILITY, not disclosure — nothing leaks. `redactUrlForExport`, `EXPORT_QUERY_REDACTION`, `isProtocolShapedLabel`, `redactSourceLabelForExport`'s body and `observations.url`'s shipped output are all byte-unchanged, and `export.spec.ts` (which pins the fragment-only case at :883-887) is unmodified. Closes G-07-7 at 3276a82.
+- [Phase 07]: 07-24: the `sources_verbatim` column comment states one MARKER applied PER AXIS, names both branches, and states BOTH axis directions — FRAGMENT narrowed, QUERY widened — "the SAME redactor … a narrowed application" was true under 07-16 and falsified by 07-22, which added a hand-rolled `?`-only cut with different semantics AND widened the query axis to every label — so "narrowed" was backwards on that axis. G-07-6's second `missing` bullet asks for the DIRECTION, not just the deletion, so stating only the widening would have been as incomplete as stating only the narrowing. The comment is the first thing a redaction-policy audit reads. Closes G-07-6 at 8d2f3fc.
+- [Phase 07]: 07-24: the vocabulary non-growth gate — `grep -c 'query-redacted' export.ts` pinned at the measured 2 and run after BOTH comment edits — A second marker spelling would break the single-spelling property the manifest field ceiling of 4,113 is computed from, and would do it inside a comment edit nobody would think to check (T-07-106, high). All new prose refers to the marker through `{@link EXPORT_QUERY_REDACTION}`, so the count read 2 at HEAD (declaration :178, illustrative use :265) and reads 2 now. This is what makes the adjacent `NO NEW VOCABULARY` paragraph's "spelt in exactly one place" claim mechanically checkable rather than merely asserted.
 
 ### Known Risks Carried Forward
 
@@ -1140,8 +1168,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-03T09:04:40.251Z
-**Stopped at:** Completed 07-23-PLAN.md (G-07-5 closed); 07-24 next
+**Last session:** 2026-09-03T09:14:06.454Z
+**Stopped at:** Completed 07-24-PLAN.md (G-07-6 and G-07-7 closed); 07-25 next
 **Resume file:** None
 
 ### Blockers
