@@ -3,7 +3,7 @@ status: diagnosed
 phase: 07-sourcemap-reconstruction
 source: [07-VERIFICATION.md]
 started: 2026-09-03T12:10:00Z
-updated: 2026-09-03T12:45:00Z
+updated: 2026-09-03T13:05:00Z
 round: 4
 supersedes: 07-UAT-round3.md
 verification_score: 29/30
@@ -312,11 +312,25 @@ blocked: 0
 - **Correct the planning record, not just the source.** `07-24-PLAN.md`'s `must_haves.truths[4]`
   and the ROADMAP's round-3 07-24 entry carry the same falsehood; a plan derived from them
   re-ships it.
-- **Byte-identity prohibitions carried from round 3, all verified at HEAD:**
-  `redactSourceLabelForExport`, `redactUrlForExport`, `EXPORT_QUERY_REDACTION`,
-  `isProtocolShapedLabel`, the export vocabulary, `observations.url`, `thresholds.ts`,
-  `export.spec.ts`, `consumer.spec.ts`, `parse.ts`, `derive.ts`, `telemetry.ts`, `retention.ts`,
-  `migrations.ts`. This round changes comments and one spec file. Nothing else.
+- **Byte-identity prohibitions carried from round 3, all verified at HEAD.** Constructs:
+  `redactSourceLabelForExport` (body), `redactUrlForExport`, `EXPORT_QUERY_REDACTION`,
+  `isProtocolShapedLabel`, `serialiseRows`, the export vocabulary, `observations.url`.
+  Files, by **repo-relative path** — never by bare name (see the correction note below):
+  `packages/engine/src/thresholds.ts`, `packages/backend/src/store/export.spec.ts`,
+  `packages/backend/src/ingest/consumer.spec.ts`, `packages/engine/src/sourcemap/parse.ts`,
+  `packages/backend/src/sourcemap/derive.ts`, `packages/backend/src/telemetry.ts`,
+  `packages/backend/src/store/retention.ts`, `packages/backend/src/store/migrations.ts`.
+  This round changes comments and one spec file. Nothing else.
+- **Path-ambiguity correction (2026-09-03, from the round-4 plan-check).** This bullet
+  originally listed those eight files by BARE FILENAME. The round-4 planner resolved two of
+  them into a runnable prohibition gate and got both wrong — it wrote
+  `packages/engine/src/consumer.spec.ts` and `packages/engine/src/parse.ts`, neither of which
+  exists. `git diff --stat` over a nonexistent pathspec prints nothing and exits 0, so those
+  two arms passed unconditionally and would have kept passing if the real files were rewritten
+  wholesale. Caught by the plan-checker before execution; the deterministic verify-command
+  probes classify every `git` command as `not_applicable` and cannot see this class at all.
+  **Never name a prohibited file by bare filename in this project's planning documents** — the
+  ambiguity is a vacuous-gate generator, which is VF-01's defect one artifact removed.
 
 ## Still Open By Operator Decision (carried, not re-litigated)
 
