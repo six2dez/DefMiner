@@ -876,12 +876,36 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
   // here said this gate existed to avoid. The drift detector would have become
   // the drift generator (07-UAT.md G-07-8).
   //
+  // AND THE INSERT SIDE AS IT READ *AT* `59347c3` IS PINNED FOR THE SAME REASON.
+  // 2,179 is what `RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ITERATION_MAX`
+  // evaluated to at that commit — "fix(07-14): retire the MD-01 compensating
+  // factor from the insert bound", 2026-09-02. Measured, not documentary:
+  // `git show 59347c3:packages/engine/src/thresholds.ts` gives
+  // RETENTION_SWEEP_EVERY_N = 128 (line 215), ROWS_INSERTED_PER_ARTIFACT_MAX = 3
+  // (line 111), SOURCE_ROWS_PER_MAP_MAX = 2_048 (line 454) and
+  // ROWS_INSERTED_PER_ITERATION_MAX = ROWS_INSERTED_PER_ARTIFACT_MAX +
+  // SOURCE_ROWS_PER_MAP_MAX with no compensating factor (line 490), so
+  // 128 + (3 + 2,048) = 2,179. It is the SECOND figure the same history paragraph
+  // records — the factor retired second, exact — and the non-vacuity half below
+  // demands it of that paragraph.
+  //
+  // RECOMPUTING *THAT* ONE HAD THE SAME DEFECT, one operand later. Re-measure
+  // `SOURCE_ROWS_PER_MAP_MAX` to 1_024 and the non-vacuity half began demanding
+  // that "1,155" appear in a paragraph describing a day when the figure was
+  // 2,179 — the drift detector become the drift generator again, on the operand
+  // 07-UAT.md G-07-8 left behind (07-UAT.md G-07-10, 07-VERIFICATION.md WR-02).
+  //
   // THE COINCIDENCE IS ASSERTED RATHER THAN ASSUMED, immediately below, so the
   // day it ends is a test failure carrying its own remedy instead of a silently
-  // wrong demand. The SHIPPED figures above stay derived; only these two are
-  // pinned.
+  // wrong demand. The distinction this block keeps is the rule, not a tally: the
+  // SHIPPED figures above are DERIVED from the `T.*` imports and never written
+  // out, while the HISTORICAL figures below are PINNED as the literals they are.
+  // Another historical pin does not change that rule — which is why this sentence
+  // states the rule and counts nothing, a count here being exactly the kind of
+  // claim the next pin beneath it would falsify.
   const SUPERSEDED_INSERT_SIDE_BEFORE_59347C3 = 4_227;
   const SUPERSEDED_QUOTIENT_BEFORE_59347C3 = "8.26";
+  const SHIPPED_INSERT_SIDE_AT_59347C3 = 2_179;
 
   /** The remedy every message in this block ends with. The fix for a failure
    *  here is the PROSE — repairing a derivation by moving the constant to fit
@@ -900,6 +924,8 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
     const recomputedQuotient = (
       recomputed / T.RETENTION_SWEEP_MAX_ROWS
     ).toFixed(2);
+    const recomputedShipped =
+      T.RETENTION_SWEEP_EVERY_N + T.ROWS_INSERTED_PER_ITERATION_MAX;
     expect(
       recomputed,
       `Today's constants recompute the pre-59347c3 insert side as ` +
@@ -913,8 +939,8 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
         `day does not change because a constant moved today. What ended is the ` +
         `COINCIDENCE that today's constants happen to reproduce the historical ` +
         `figure. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line note of ` +
-        `the date and the new recomputed value, leaving the two literals, the ` +
-        `absence half and the presence half exactly as they are.`,
+        `the date and the new recomputed value, leaving the pinned historical ` +
+        `literals, the absence half and the presence half exactly as they are.`,
     ).toBe(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3);
     expect(
       recomputedQuotient,
@@ -928,6 +954,23 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
         `history. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line dated ` +
         `note of the new recomputed value.`,
     ).toBe(SUPERSEDED_QUOTIENT_BEFORE_59347C3);
+    expect(
+      recomputedShipped,
+      `Today's constants derive the shipped insert side as ` +
+        `${grouped(recomputedShipped)}, but the pinned historical figure is ` +
+        `${grouped(SHIPPED_INSERT_SIDE_AT_59347C3)}. THE LITERAL IS STILL CORRECT ` +
+        `AND IT STAYS — it records what the insert side READ at 59347c3, the ` +
+        `commit that retired the \`2 *\` compensating factor, and ` +
+        `ROWS_INSERTED_PER_ITERATION_MAX's docblock in ${THRESHOLDS_MODULE} ` +
+        `describes 2026-09-02, when the figure was ` +
+        `${grouped(SHIPPED_INSERT_SIDE_AT_59347C3)}. Do NOT rewrite that history ` +
+        `paragraph to ${grouped(recomputedShipped)}: a paragraph describing a past ` +
+        `day does not change because a constant moved today. What ended is the ` +
+        `COINCIDENCE that today's constants still reproduce the figure that commit ` +
+        `shipped. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line dated ` +
+        `note of the new derived value, leaving the pinned historical literals, ` +
+        `the presence half and the absence half exactly as they are.`,
+    ).toBe(SHIPPED_INSERT_SIDE_AT_59347C3);
   });
 
   it("the passes docblock states the insert side, the quotient and the smallest satisfying integer that the constants actually produce", () => {
@@ -1009,16 +1052,21 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
         `names ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}. That paragraph is the record of ` +
         `why 07-14's row-unit gate had to land BEFORE the \`2 *\` factor was ` +
         `retired — the gate first at ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)} (over-stated ` +
-        `and therefore safe), the factor second at ${grouped(insertSide)} (exact). ` +
+        `and therefore safe), the factor second at ` +
+        `${grouped(SHIPPED_INSERT_SIDE_AT_59347C3)} (exact). ` +
         `It is ALSO the reason the absence check above is scoped to a region rather ` +
         `than to the file. Restore the paragraph rather than relaxing the scope.`,
     ).toContain(grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3));
     expect(
       history,
-      `ROWS_INSERTED_PER_ITERATION_MAX's docblock no longer names the shipped ` +
-        `insert side ${grouped(insertSide)} alongside the superseded ` +
-        `${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}, so the ordering argument it makes can no ` +
-        `longer be checked against the constants.`,
-    ).toContain(grouped(insertSide));
+      `ROWS_INSERTED_PER_ITERATION_MAX's docblock no longer names ` +
+        `${grouped(SHIPPED_INSERT_SIDE_AT_59347C3)} — the insert side as the ` +
+        `retirement of the \`2 *\` factor SHIPPED it at 59347c3 — alongside the ` +
+        `superseded ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}, so the ` +
+        `ordering argument it makes can no longer be checked against the record. ` +
+        `That figure is PINNED here rather than recomputed from today's ` +
+        `constants: this paragraph describes 2026-09-02, and what a gate demands ` +
+        `of a dated record must not move when a constant moves.`,
+    ).toContain(grouped(SHIPPED_INSERT_SIDE_AT_59347C3));
   });
 });
