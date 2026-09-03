@@ -294,9 +294,31 @@ export function isProtocolShapedLabel(label: string): boolean {
  *   "A non-protocol label is cut at the first `?` only, with the SHIPPED marker
  *   appended, and keeps its `#` tail."
  *
- * A redaction that reports withholding something that was never there is not a
- * stronger redaction. It is an unreliable one, and an operator who finds one
- * marker they can prove is false has no reason to trust the next.
+ * THAT PRINCIPLE IS STATED OF THIS BRANCH, NOT OF THE EXPORT AS A WHOLE. On the
+ * label branch this function decides, a redaction that reports withholding
+ * something that was never there is not a stronger redaction. It is an
+ * unreliable one, and an operator who finds one marker they can prove is false
+ * has no reason to trust the next. The scoping is deliberate: the delegated
+ * branch does NOT honour it, and that exception is recorded immediately below
+ * rather than papered over by a sentence that covers it silently.
+ *
+ * THE KNOWN AND ACCEPTED EXCEPTION, ON THE DELEGATED BRANCH.
+ * {@link redactUrlForExport} cuts at the first `?` OR `#` and appends
+ * {@link EXPORT_QUERY_REDACTION} for either hit, so a fragment-only URL such as
+ * `webpack:///./src/app.js#L5` exports with a query marker over a value that has
+ * no query axis. `export.spec.ts` pins exactly that as EXPECTED, and the column
+ * comment on `sources_verbatim` names the same output as the wrong thing LO-04's
+ * fix removed on the path branch. It is PRE-EXISTING `redactUrlForExport`
+ * behaviour and it is `observations.url`'s shipped behaviour on every row it has
+ * ever written.
+ *
+ * IT IS ACCEPTED RATHER THAN DEFENDED, and the cost is named so nobody has to
+ * re-derive it: the marker discloses LESS than the truth, so what it costs is
+ * OPERATOR TRUST AND REVIEWABILITY, not disclosure. Nothing leaks. Making the
+ * marker true on both branches needs a second vocabulary word and a change to
+ * `observations.url`'s shipped output — the operator declined that here as a
+ * decision needing its own round rather than a drive-by (07-UAT.md G-07-7,
+ * 2026-09-03).
  *
  * NO NEW VOCABULARY. The marker is {@link EXPORT_QUERY_REDACTION}, unchanged
  * and spelt in exactly one place; this function decides WHERE the shipped
