@@ -414,3 +414,10 @@ None — no external service configuration required.
 ---
 *Phase: 07-sourcemap-reconstruction*
 *Completed: 2026-09-03*
+
+## Self-Check: PASSED
+
+- `packages/engine/src/thresholds.spec.ts` — exists on disk.
+- `.planning/phases/07-sourcemap-reconstruction/07-27-SUMMARY.md` — exists on disk.
+- Commits `04d1c00`, `e29a5cc`, `9cc76cd` — all present in `git log`.
+- All task acceptance criteria and the plan-level `<verification>` block re-run and green; both stop-and-report conditions unreached.

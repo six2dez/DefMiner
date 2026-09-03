@@ -4,16 +4,16 @@ milestone: v2
 current_phase: 07
 current_phase_name: sourcemap-reconstruction
 status: executing
-stopped_at: Completed 07-26-PLAN.md
-last_updated: "2026-09-03T11:22:05.300Z"
+stopped_at: Completed 07-27-PLAN.md
+last_updated: "2026-09-03T11:41:45.816Z"
 last_activity: 2026-09-03
 last_activity_desc: Phase 07 plan 07-26 executed — G-07-9 and G-07-12 closed; gap-closure round 4 wave 1 done, 26 of 27 plans executed
-state_head: e5460d5b9159ec9ff68e327a81e66a24f658d12e
+state_head: 9cc76cdc8c56ae98eb2081946bb50e1d63c52e8b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 102
-  completed_plans: 97
+  completed_plans: 99
 ---
 
 # Project State
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-08-20)
 ## Current Position
 
 Phase: 07 (sourcemap-reconstruction) — EXECUTING
-Plan: 26 of 27 executed — 07-27 remains (G-07-10, G-07-11, `thresholds.spec.ts`)
-Status: Gap-closure round 4 WAVE 1 done — G-07-9 and G-07-12 closed. Wave 2 (07-27) must run next on the same working tree before /gsd-verify-work 07
-Last activity: 2026-09-03 — 07-26 executed at 95a2a73 and e5460d5; the axis-direction claim DELETED from `export.ts`'s `sources_verbatim` column comment rather than restated a fourth time (region 15 -> 13 lines, 1,104 -> 934 bytes, no direction word, both cuts still described), the KNOWN AND ACCEPTED EXCEPTION paragraph qualified to "on every REDACTED row", and the two documents that AUTHORED the claim — `07-24-PLAN.md`'s `must_haves.truths[4]` and the ROADMAP's round-3 07-24 entry — corrected with a dated ERRATA block reconstructed from `d5cd5e0`/`a901b9e`/`0e44102`. Four md5 digests unchanged; whole suite 90 files / 4322 tests, four static gates exit 0
+Plan: 27 of 27 executed — phase 07 plan execution COMPLETE
+Status: Gap-closure round 4 COMPLETE — all four gaps closed (G-07-9 and G-07-12 by 07-26; G-07-10 and G-07-11 by 07-27). Ready for /gsd-verify-work 07
+Last activity: 2026-09-03 — 07-27 executed at 04d1c00 and e29a5cc, closing gap-closure round 4. `SHIPPED_INSERT_SIDE_AT_59347C3 = 2_179` and `SUPERSEDED_SWEEP_MAX_ROWS_BEFORE_59347C3 = 512` pinned in `thresholds.spec.ts` with provenance MEASURED from `git show 59347c3:` (128 + (3 + 2,048) = 2,179) and `git show 59347c3^:` (line 152 = 512, 4227/512 = 8.26), so the non-vacuity guard's demand on a paragraph describing 2026-09-02 no longer moves when a constant does and `8.26` is pinned end to end. The guard was demonstrated load-bearing on BOTH operands: arm A (whole sentence removed) fired the FIRST expect at :1075 on 4,227, arm B (only the newly-pinned figure removed) fired the SECOND at :1086 on 2,179. `thresholds.ts` restored byte-identical at md5 6391d0d50f9741f50909ec9197dd25c9; `thresholds.spec.ts` holds at 63 tests, whole suite 90 files / 4322 tests, four static gates exit 0
 
 Progress: [██████████] 100% of phase 01 plan execution (45 of 45 plans; phase verdict pending)
 
@@ -748,6 +748,7 @@ Progress: [██████████] 100% of phase 01 plan execution (45 o
 | Phase 07 P24 | 6 min | 2 tasks | 1 files |
 | Phase 07 P25 | 6 min | 2 tasks | 1 files |
 | Phase 07 P26 | 7 min | 3 tasks | 3 files |
+| Phase 07 P27 | 12 min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -1162,6 +1163,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Those affecting current 
 - [Phase 07]: G-07-9 repaired by DELETION rather than a fourth restatement of the sources_verbatim axis-direction sentence. — The sentence had carried a false claim in three consecutive rounds (G-07-3/07-16, G-07-6/07-22, WR-01/07-24) and each repair was a restatement that became the next round defect. A restatement cannot satisfy a strictly decreasing byte count, which is why the gate was written that way: the region fell 1,104 -> 934 bytes and 15 -> 13 lines with nothing added. export.ts:255-275 already states each axis against a NAMED baseline, so no replacement text was needed.
 - [Phase 07]: The planning record that AUTHORED the false claim was corrected, not just the source file. — 07-24-PLAN.md must_haves.truths[4] and the ROADMAP round-3 07-24 entry both stated the claim, so a round-5 plan derived from either would have re-shipped the deleted sentence. A dated ERRATA block reconstructed from d5cd5e0/a901b9e/0e44102 governs the twelve body restatements, which are preserved byte-unchanged on purpose because that file records what was planned and executed and 07-24-SUMMARY.md cites it.
 - [Phase 07]: VF-01 discharged: every prose gate in this plan was a region-scoped absence assertion, a strictly decreasing byte count, or a git show comparison — never a grep -c word-presence probe. — The evidence that shipped round 3 defect was grep -c NARROWED -> 1 and grep -c WIDENED -> 1, structurally incapable of falsifying a directional claim. Each negated gate here carried a non-vacuity companion so an absence assertion could not pass over an empty stream.
+- [Phase 07]: 07-27: the new coincidence `expect` compares a locally recomputed `recomputedShipped`, not the block's `insertSide` binding — The block-wide gate on `grouped(insertSide)` is EXACTLY 4, and its purpose is to prove the substitution hit the non-vacuity guard and stopped before the presence/absence halves. Any textual `grouped(insertSide)` in the new message would have inflated that count and destroyed its ability to detect a real overreach. The local mirrors the two locals the same `it` already computes, so every operand in that test is now a recomputation from `T.*` compared against a pinned literal.
+- [Phase 07]: 07-27: remedy clauses state "the pinned historical literals" instead of a count, in the new `expect` AND in the pre-existing first `expect` — The plan prescribed "leaving the three literals", which task 2's fourth literal would have falsified; the pre-existing clause already read "the two literals", which task 1's own third pin falsified. A comment falsified by the edit beside it is the exact defect class round 4 was convened to remove, so both were rephrased as a rule rather than a tally. Deviation Rule 1, resolved in favour of the plan's own binding must_haves.
 
 ### Known Risks Carried Forward
 
@@ -1204,8 +1207,8 @@ None.
 
 ## Session
 
-**Last session:** 2026-09-03T11:22:05.160Z
-**Stopped at:** Completed 07-26-PLAN.md
+**Last session:** 2026-09-03T11:41:10.101Z
+**Stopped at:** Completed 07-27-PLAN.md
 **Resume file:** None
 
 ### Blockers
