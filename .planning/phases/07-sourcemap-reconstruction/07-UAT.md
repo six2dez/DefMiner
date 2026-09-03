@@ -2,10 +2,10 @@
 status: diagnosed
 phase: 07-sourcemap-reconstruction
 source: [07-VERIFICATION.md]
-started: 2026-09-02T14:10:00Z
-updated: 2026-09-02T14:45:00Z
-round: 2
-supersedes: 07-UAT-round1.md
+started: 2026-09-03T00:00:00Z
+updated: 2026-09-03T00:20:00Z
+round: 3
+supersedes: 07-UAT-round2.md
 ---
 
 ## Current Test
@@ -14,96 +14,135 @@ supersedes: 07-UAT-round1.md
 
 ## Tests
 
-### 1. Decide WR-01 — rewrite `RETENTION_SWEEP_MAX_PASSES`'s derivation, or lower the constant
-expected: `thresholds.ts`'s docblock and `retention.ts:178-180` agree on one number, and the choice of 16 is re-derived from the real quotient.
+### 1. Decide WR-01 — delete the `too_large` half of both production comments in `consumer.ts`, or accept a justification that is half fictional
+expected: `consumer.ts:1266-1269` and `:1445-1448` say what `consumer.spec.ts:2690-2695` says — that `too_large` is unreachable through the ingest path — or the operator records that the imprecision is accepted.
 detail: |
-  `ROWS_INSERTED_PER_ITERATION_MAX = 3 + 2048 = 2051` (thresholds.ts:490-491), so the
-  inequality's right-hand side is `128 + 2051 = 2179`. The `RETENTION_SWEEP_MAX_PASSES`
-  docblock (thresholds.ts:166, 177, 191) still computes the pre-07-14 `4,227` in three
-  sentences and concludes "Nine is the smallest integer that satisfies the inequality
-  (4,227 / 512 = 8.26)". True quotient is 4.26; smallest satisfying integer is 5; next
-  power of two is 8, not 16. `retention.ts:178-180` writes the correct figure. Two files
-  in one repository disagree.
-  The constant 16 OVER-satisfies, so nothing is unsafe at runtime — but its stated
-  derivation no longer produces it, and `thresholds.spec.ts:260-281` computes the
-  inequality FROM the constants, so it is structurally unable to fail on this.
-  Drift is this round's own: correct at `4bd99c1`, left behind by `59347c3`.
+  Traced end to end from the code, not taken from the review. `consumer.ts:1124` is the SOLE
+  production decode site and it is `decodeInlineMap(announcement.url, MAP_MAX_BYTES)`;
+  `parse.ts:227` refuses on `Buffer.byteLength(json, 'utf8') > maxBytes`, so the decoded map
+  document is at most `MAP_MAX_BYTES` bytes. `parseSourceMap(inline.json, ...)` at `:1147` is
+  the only producer of `parsed.recovered`. `derive.ts:142` sets
+  `DERIVED_SOURCE_MAX_BYTES = MAP_MAX_BYTES` and `:233` refuses on `>`. A decoded
+  `sourcesContent` entry is a strict byte-subset of the JSON that carried it — JSON string
+  encoding never shrinks a character below its UTF-8 width, and every escape costs strictly
+  more — so `byteLen > MAP_MAX_BYTES` cannot hold for any source reaching that gate.
+  BOTH sides are `+` lines in `git diff 11ab9e2..HEAD`: the false production claims at diff
+  lines 23 and 69 of `consumer.ts`, the correct spec statement at diff lines 77-78 of
+  `consumer.spec.ts`. One plan, one commit range, two contradictory statements.
+  This is a judgement about a comment, not a behaviour — the guard is correct and the `empty`
+  half of the justification carries it alone.
 severity: warning
-introduced_by: this round (07-14, commit 59347c3)
+introduced_by: this round (07-19)
 result: issue
-reported: "Fix it — operator chose gap-closure round 2 over accepting the drift"
+reported: "Fix — delete the `too_large` half"
 severity: minor
 
-
-### 2. Decide WR-02 — put `source_sightings` inside `deleteDigest`'s cascade, or scope the module header's invariant to the two children it covers
-expected: Either every eviction removes its sightings in the same statement sequence as its observations and analyses, or `retention.ts:42-45` and `:389-390` say plainly that sightings are reaped as orphans by design and that the window closes on the next pass.
+### 2. Decide WR-02 — `export.ts:424` still says the label column applies "the SAME redactor"
+expected: The column comment says what the function now does — the same MARKER applied per AXIS, with a URL-shaped label delegating and any other label cut at its first `?` — or the operator records that the summary is acceptable as-is.
 detail: |
-  `deleteDigest` enumerates `OBSERVATION_KEYS_FOR_DIGEST_SQL` and
-  `ANALYSIS_KEYS_FOR_DIGEST_SQL` then runs `DELETE_ARTIFACT_SQL`; it never touches
-  `source_sightings`. Step 3d's orphan collection is guarded by `budget() > 0`
-  (retention.ts:927) with an `else { sightingsCapped = true; }` arm, so a pass that
-  spends its whole budget on 512 childless artifacts returns with every one of those
-  bundles' sightings orphaned. `workRemains` re-detects it via `ORPHAN_SIGHTINGS_SQL`
-  so it converges ACROSS passes — but the module header states three times that the
-  cascade cannot create that state, and this is now the ORDINARY path for every evicted
-  map-bearing bundle, not a crash-recovery corner.
-  No data loss: `readSightingOrigin` LEFT JOINs `artifacts`, and the anti-join errs
-  toward keeping `sources` rows alive.
-  The decision turns on whether your UAT cascade choice meant "in the same statement
-  sequence" or "in the same pass".
+  Read both sides at HEAD. `export.ts:424-427` reads "Hence {@link redactSourceLabelForExport}:
+  the SAME redactor, the SAME marker, applied where its subject exists. Not an exemption — a
+  narrowed application". The function at `:309-318` now reads "Hence the first `?` by hand
+  rather than delegating — the SAME marker, a narrower cut".
+  Under 07-16 every branch either delegated or returned the label whole, so "the SAME redactor"
+  was TRUE; 07-22 made it FALSE by adding a second, hand-rolled cut with different semantics
+  (`?` only, not `?`-or-`#`). "A narrowed application" is also now backwards on the query axis,
+  which 07-22 WIDENED to every label.
+  This is the comment attached to the column declaration — the first thing a reviewer auditing
+  the export's redaction policy reads — and it is a sentence 07-22 edited around. Same defect
+  class as G-07-3, same file.
 severity: warning
-introduced_by: this round (07-13)
+introduced_by: this round (07-22)
 result: issue
-reported: "Fix it — operator chose gap-closure round 2"
+reported: "Fix — restate per axis"
+severity: minor
+
+### 3. Decide WR-03 — `export.ts:297-299` states the never-claim-a-false-redaction principle unqualified, while the shipped URL branch prints `<query-redacted>` over a fragment-only URL
+expected: Either the principle is scoped to the branch that honours it, or the marker is made true on both branches (a vocabulary change touching `observations.url`, and a decision rather than a drive-by).
+detail: |
+  Reproduced from the code and from the spec, not from the review. `redactUrlForExport`
+  (`export.ts:199-202`, byte-identical in the diff) cuts on `url.search(/[?#]/)` and appends
+  the QUERY marker for either hit. `export.spec.ts:883-889` pins
+  `webpack:///./src/app.js#L5` -> `webpack:///./src/app.js<query-redacted>` as EXPECTED.
+  That value has no query axis.
+  Meanwhile `export.ts:422` calls exactly that output — "printed a marker claiming a query had
+  been withheld from a value with no query axis" — the wrong thing LO-04's fix removed on the
+  path branch, and `:297-299` states unconditionally that such a marker makes a redaction
+  "unreliable". So the file criticises on one branch precisely what it retains and pins on the
+  other.
+  Counterweight, so this is not overread: this is pre-existing `redactUrlForExport` behaviour,
+  it is `observations.url`'s shipped behaviour, and it discloses LESS than the truth — the
+  impact is operator trust and reviewability, not disclosure. Nothing leaks.
+severity: warning
+introduced_by: pre-existing (surfaced by this round)
+result: issue
+reported: "Scope the principle to its branch"
+severity: minor
+
+### 4. Decide WR-04 — the new gate's non-vacuity companion pins a HISTORICAL figure to a RECOMPUTED expression
+expected: The two superseded figures become named literals with their provenance stated, plus a one-line assertion that the literal still equals the recomputed expression as of today; the SHIPPED figures stay derived.
+detail: |
+  Verified against the code and the arithmetic. `thresholds.spec.ts:868-874` computes
+  `supersededInsertSide = 128 + 3 + 2 * 2048 = 4,227`, which is not a property of today's
+  constants — it is what the insert side READ at `59347c3`.
+  If `SOURCE_ROWS_PER_MAP_MAX` is ever re-measured, the companion at `:952-971` will demand
+  that the recomputed figure be written into a paragraph describing what happened on
+  2026-09-02, when the figure that day was 4,227; and the absence half at `:926-949` will
+  simultaneously begin asserting the absence of a string that was never in the docblock — the
+  exact "asserting the absence of an arbitrary string" failure its own comment says it exists
+  to avoid. The gate built to stop prose drift would become the thing forcing it.
+  Latent, not live: it is correct at HEAD and the verifier ran it green. Recorded also as this
+  round's one coincidental-reliance item.
+severity: warning
+introduced_by: this round (07-18)
+result: issue
+reported: "Fix — pin history as named literals"
 severity: major
 
-
-### 3. Decide WR-03 — is a vite/webpack loader query analytic content the operator should see, or a residual the redactor should cut?
-expected: Either the docblock stops claiming that a non-URL label has no query axis and `SOURCES_LABEL_CASES` gains a relative `?` case, or `redactSourceLabelForExport` cuts wherever a query axis is present rather than wherever the label is protocol-shaped.
+### 5. Decide IN-04 — while `DERIVED_MAX_DEPTH` is 1, is `derivedRejected.depth_exceeded` worth a health surface?
+expected: One sentence in `telemetry.ts`'s `derivedRejected` docblock recording that the counter measures corpus shape rather than run behaviour until the bound is raised — or an explicit decision that it needs none. No code change either way.
 detail: |
-  `redactSourceLabelForExport` (export.ts:273-275) delegates to `redactUrlForExport`
-  only when `isProtocolShapedLabel` is true. The stated premise at export.ts:255-256 —
-  "A label that is not a URL has neither axis" — is false for the ordinary vite/webpack
-  shape `src/App.vue?vue&type=script&lang.ts`, which `classify()` puts in `relative`.
-  Those tails now export VERBATIM in redacted mode where they were previously cut at
-  the `?`.
-  `SOURCES_LABEL_CASES` holds 23 entries and NOT ONE contains a `?`, so the corpus
-  passes identically in both modes and the narrowing is untested in the direction that
-  changed.
-  Counterweight, so this is not overread: the value still passes `stripForExport` and
-  `csvField`, so there is no injection, and a bundler's loader query is not the
-  credential class `redactUrlForExport` was written for. This is the SAFE mode
-  disclosing more than it did, on a premise that is factually wrong, with no coverage.
-severity: warning
-introduced_by: this round (07-16)
-result: issue
-reported: "Fix it — operator chose gap-closure round 2"
-severity: major
-
-
-### 4. Accept or repair IN-01 — `derivedRejected.depth_exceeded` fires on `parsed.recovered.length > 0` rather than on whether anything was actually admitted for recursion
-expected: A decision, plus the pinning case `consumer.spec.ts` lacks — a map whose every `sourcesContent` entry is empty, asserting `depth_exceeded === 0`.
-detail: |
-  At `consumer.ts:1272-1287` the comment above the gate names ONE inaccuracy (the log
-  message's count over-states). The COUNTER shares the same condition, so if every
-  recovered source is subsequently refused by `admitDerived` — all empty, or all over
-  `DERIVED_SOURCE_MAX_BYTES`, both reachable from one hostile map — no recursion would
-  have been attempted and the counter still increments.
-  `telemetry.ts:317-322` states the unit as "one reconstruction stage that DECLINED TO
-  RECURSE".
-  Magnitude is one increment per map-bearing artifact against the 781 that MD-03's fix
-  removed, and no health surface carries the counter — so this is not a reason to
-  reopen MD-03. Whether the residual is worth a second local is a judgement.
+  Confirmed from the code. `reconstruct` has exactly two call sites: `:1519` enters at
+  `depth: 0` and `:1422` is the recursive one, guarded by `nextDepth.ok`.
+  `admitDerivedDepth(0 + 1)` is `1 >= DERIVED_MAX_DEPTH (1)` -> refused (`derive.ts:204`), so
+  `nextDepth.ok` is ALWAYS false on the only reachable path: the recursion block at
+  `:1421-1437` never executes in production and the refusal at `:1459` fires for EVERY stage
+  that admitted at least one source.
+  G-07-4's fix is nonetheless correct and its truth holds — telemetry's stated unit is now
+  honoured, because a stage that admitted a source genuinely did decline to recurse.
+  The residual is that the counter's VALUE is within one of `sourcesRecovered > 0`, which is
+  MD-03's own "a counter equal by construction to another counter" objection at 1-per-artifact
+  instead of 781-per-artifact. Not a regression, not a reason to reopen anything — but it
+  should be said where the counter is defined so nobody wires it to a health surface expecting
+  signal.
 severity: info
-result: issue
-reported: "Fix it — operator chose gap-closure round 2"
-severity: minor
+introduced_by: pre-existing (surfaced by this round)
+result: pass
+reported: "No note needed — decided"
 
+### 6. Confirm 07-22's task 1 is discharged — the docblock's withholding sentence is option A's own defining text, quoted by reference, not a sentence you composed
+expected: Either you accept the quoted-by-reference substitution as discharging the criterion, or you supply the one-sentence statement in your own words and it replaces the quoted text at `export.ts:296-299`.
+detail: |
+  Not a defect and not a gap — an outstanding item the executor routed here rather than
+  fabricating. `07-22-SUMMARY.md:310-311` records it plainly: task 1's acceptance criteria
+  required "the operator's one-sentence statement of what a redacted label withholds" recorded
+  verbatim, and you answered with the option letter and a verdict on the premise without
+  composing a separate sentence.
+  Rather than invent a quotation, the executor wrote option A's defining text — "A non-protocol
+  label is cut at the first `?` only, with the SHIPPED marker appended, and keeps its `#` tail."
+  — and labelled it in the docblock as "in the words the decision was made against", with
+  coverage entry D8 carrying `human_judgment: true`.
+  The verifier read the docblock at HEAD and confirmed the labelling is accurate; nothing is
+  passed off as yours that is not.
+severity: n/a
+introduced_by: n/a — outstanding operator item
+result: pass
+reported: "Accept the quoted-by-reference text"
 
 ## Summary
 
-total: 4
-passed: 0
+total: 6
+passed: 2
 issues: 4
 pending: 0
 skipped: 0
@@ -111,72 +150,71 @@ blocked: 0
 
 ## Gaps
 
-- gap_id: G-07-1
-  truth: "`thresholds.ts`'s `RETENTION_SWEEP_MAX_PASSES` docblock and `retention.ts:178-180` agree on one number, and the choice of 16 is re-derived from the real quotient"
+- gap_id: G-07-5
+  truth: "`consumer.ts:1266-1269` and `:1445-1448` say what `consumer.spec.ts:2690-2695` says — that `too_large` is unreachable through the ingest path"
   status: failed
-  reason: "User reported: Fix it — operator chose gap-closure round 2 over accepting the drift"
+  reason: "User reported: Fix — delete the `too_large` half"
   severity: minor
   test: 1
-  root_cause: "07-14 commit `59347c3` retired the `2 *` compensating factor from `ROWS_INSERTED_PER_ITERATION_MAX` and updated ONE thresholds.ts docblock, leaving the neighbouring `RETENTION_SWEEP_MAX_PASSES` derivation still computing the pre-fix 4,227 in three sentences. Correct at `4bd99c1`. `thresholds.spec.ts:260-281` computes the inequality FROM the constants, so it is structurally unable to fail on this."
-  artifacts:
-    - path: "packages/engine/src/thresholds.ts"
-      issue: "lines 166, 177, 190-191 — derivation states 4,227 / 512 = 8.26 and concludes 9; real values are 2,179 / 512 = 4.26 concluding 5, next power of two 8"
-  missing:
-    - "Rewrite the RETENTION_SWEEP_MAX_PASSES derivation to compute from the shipped 2,179"
-    - "State explicitly that 16 is retained as deliberate headroom rather than as the derived value (operator did NOT approve lowering the constant)"
-    - "Add a spec that pins the DOCUMENTED quotient against the constants, since the existing spec computes from them and cannot catch prose drift"
-  debug_session: ""
-
-- gap_id: G-07-2
-  truth: "Either every eviction removes its sightings in the same statement sequence as its observations and analyses, or `retention.ts:42-45` and `:389-390` say plainly that sightings are reaped as orphans by design and the window closes on the next pass"
-  status: failed
-  reason: "User reported: Fix it — operator chose gap-closure round 2"
-  severity: major
-  test: 2
-  root_cause: "07-13 added `source_sightings` as a third child table but did not extend `deleteDigest` (retention.ts:1112-1193), which still enumerates only OBSERVATION_KEYS_FOR_DIGEST_SQL and ANALYSIS_KEYS_FOR_DIGEST_SQL before DELETE_ARTIFACT_SQL. Step 3d's orphan collection is guarded by `budget() > 0` (retention.ts:927) with an `else { sightingsCapped = true; }` arm, so a pass whose budget is consumed by 512 childless artifacts returns having orphaned every evicted bundle's sightings. Converges across passes via `workRemains` / ORPHAN_SIGHTINGS_SQL, so no data loss — but the module header states three times that the cascade cannot create that state."
-  artifacts:
-    - path: "packages/backend/src/store/retention.ts"
-      issue: "lines 42-45 and 389-390 state an invariant one pass does not honour; `deleteDigest` at 1112-1193 cascades two children of three"
-    - path: "packages/backend/src/store/retention.spec.ts"
-      issue: "line 1337 drives sweepToConvergence, so the single-pass property is not under test"
-  missing:
-    - "Pick ONE of the two repairs: add source_sightings to deleteDigest's cascade in dependency order, OR scope the module header's claim to the two children it actually covers"
-    - "NOTE: adding to the cascade must NOT introduce a foreign key or ON DELETE CASCADE — operator approved exactly one schema change this round (07-12's PK widening) and explicitly excluded both"
-    - "Add a SINGLE-PASS test, not a sweepToConvergence one, so whichever property is chosen is actually pinned"
-  debug_session: ""
-
-- gap_id: G-07-3
-  truth: "Either the docblock stops claiming that a non-URL label has no query axis and `SOURCES_LABEL_CASES` gains a relative `?` case, or `redactSourceLabelForExport` cuts wherever a query axis is present rather than wherever the label is protocol-shaped"
-  status: failed
-  reason: "User reported: Fix it — operator chose gap-closure round 2"
-  severity: major
-  test: 3
-  root_cause: "07-16 narrowed LO-04's fix to protocol-shaped labels only, justified by the premise at export.ts:255-256 that 'a label that is not a URL has neither axis'. That premise is false for the ordinary vite/webpack loader-query shape `src/App.vue?vue&type=script&lang.ts`, which classify() puts in `relative`. Those tails now export VERBATIM in redacted mode where they were previously cut at the `?`. SOURCES_LABEL_CASES holds 23 entries and NOT ONE contains a `?`, so the corpus passes identically in both modes and the narrowing is untested in the direction that changed."
-  artifacts:
-    - path: "packages/backend/src/store/export.ts"
-      issue: "lines 255-256 premise is falsified by an ordinary bundler shape; 273-275 gates on isProtocolShapedLabel"
-    - path: "packages/backend/src/store/export.spec.ts"
-      issue: "SOURCES_LABEL_CASES has no `?` in any of its 23 entries, so the changed behaviour is pinned by nothing"
-  missing:
-    - "Add a relative `?` corpus case FIRST — it pins whichever direction is chosen and is worth doing regardless"
-    - "Then decide: correct the docblock premise and accept loader-query disclosure, or cut wherever a query axis is present"
-    - "This is the only one of the four with a disclosure direction: the SAFE export mode currently reveals more than it did"
-  debug_session: ""
-
-- gap_id: G-07-4
-  truth: "`derivedRejected.depth_exceeded` fires only when something was actually admitted for recursion, matching `telemetry.ts:317-322`'s stated unit"
-  status: failed
-  reason: "User reported: Fix it — operator chose gap-closure round 2"
-  severity: minor
-  test: 4
-  root_cause: "07-15 hoisted D-13's depth gate to the recursion call site and guarded it on `parsed.recovered.length > 0`, but recursion only happens for sources `admitDerived` admits. 07-15's own executor reproduced it empirically: a map whose every sourcesContent entry is empty gives recovered.length 3, admitted-for-recursion 0, guard fires true — so depth_exceeded increments for a stage where zero recursions were attempted. Contradicts telemetry.ts's claim that a non-zero value always means at least one map-bearing artifact reached the bound. The executor documented the weaker half (the log message over-states) and missed the counter itself."
+  root_cause: "07-19 hoisted the depth-refusal justification into two production comments that name BOTH `empty` and `too_large` as reasons `admitDerived` can refuse a source. `too_large` is structurally unreachable: `consumer.ts:1124` is the sole production decode site and passes `MAP_MAX_BYTES`; `parse.ts:227` refuses on `Buffer.byteLength(json,'utf8') > maxBytes`; `derive.ts:142` sets `DERIVED_SOURCE_MAX_BYTES = MAP_MAX_BYTES` and `:233` refuses on `>`. A decoded `sourcesContent` entry is a strict byte-subset of the JSON that carried it, so `byteLen > MAP_MAX_BYTES` cannot hold at that gate. The same plan committed the CORRECT statement at `consumer.spec.ts:2690-2695`. Both sides are `+` lines in `11ab9e2..HEAD`. This is recorded finding F-1, upgraded from noted to shipped."
   artifacts:
     - path: "packages/backend/src/ingest/consumer.ts"
-      issue: "lines 1272-1287 — counter and log both fire on parsed.recovered.length rather than on what was admitted"
-    - path: "packages/backend/src/telemetry.ts"
-      issue: "lines 317-322 state a unit the counter does not deliver"
+      issue: "lines 1266-1269 and 1445-1448 name `too_large` as a reachable refusal reason; it is structurally unreachable through the ingest path"
+    - path: "packages/backend/src/ingest/consumer.spec.ts"
+      issue: "lines 2690-2695 state the truth the production comments contradict — the correct text to align to, not a file to change"
   missing:
-    - "Count admittedForRecursion inside the loop and emit after it, per the reviewer's named fix"
-    - "Add the pinning case consumer.spec.ts lacks: a map whose every sourcesContent entry is empty, asserting depth_exceeded === 0"
-    - "Magnitude is one increment per map-bearing artifact against the 781 MD-03 removed, and no health surface carries the counter — this does NOT reopen MD-03"
+    - "Delete the `too_large` half of the justification from both production comments; the `empty` half carries the guard alone"
+    - "Do NOT change the guard itself — the behaviour is correct and verified; this is a comment-only fix"
+    - "Keep `consumer.spec.ts:2690-2695` as-is; it is the statement the comments must agree with"
+  debug_session: ""
+
+- gap_id: G-07-6
+  truth: "`export.ts:424` describes what `redactSourceLabelForExport` now does — the same MARKER applied per AXIS, a URL-shaped label delegating and any other label cut at its first `?`"
+  status: failed
+  reason: "User reported: Fix — restate per axis"
+  severity: minor
+  test: 2
+  root_cause: "`export.ts:424-427` reads 'the SAME redactor, the SAME marker, applied where its subject exists. Not an exemption — a narrowed application'. That was TRUE under 07-16, when every branch either delegated to `redactUrlForExport` or returned the label whole. 07-22 made it false by adding a second, hand-rolled cut with different semantics (`?` only, not `?`-or-`#`), and by WIDENING the query axis to every label — so 'a narrowed application' is backwards on that axis. 07-22 edited around this sentence without updating it. The function's own docblock at `:309-318` already states the truth."
+  artifacts:
+    - path: "packages/backend/src/store/export.ts"
+      issue: "lines 424-427 — the column-declaration comment, first thing a redaction-policy audit reads, describes pre-07-22 behaviour"
+  missing:
+    - "Restate lines 424-427 per axis: the same MARKER, applied per AXIS — protocol-shaped labels delegate to `redactUrlForExport`; every other label is cut at its first `?`"
+    - "Drop or correct 'a narrowed application' — the query axis was widened, not narrowed"
+    - "Align with the function docblock at `:309-318`, which already says it correctly"
+  debug_session: ""
+
+- gap_id: G-07-7
+  truth: "The never-claim-a-false-redaction principle at `export.ts:297-299` is scoped to the branch that honours it, and `redactUrlForExport`'s shared marker is recorded as a known exception"
+  status: failed
+  reason: "User reported: Scope the principle to its branch"
+  severity: minor
+  test: 3
+  root_cause: "`redactUrlForExport` (`export.ts:199-202`, byte-identical across this round) cuts on `url.search(/[?#]/)` and appends the QUERY marker for either hit, so `webpack:///./src/app.js#L5` exports as `webpack:///./src/app.js<query-redacted>` — pinned as EXPECTED at `export.spec.ts:883-889` over a value with no query axis. Meanwhile `:297-299` states unconditionally that a marker claiming a withheld query makes redaction 'unreliable', and `:422` names exactly that output as the wrong thing LO-04's fix removed on the path branch. The file criticises on one branch what it retains and pins on the other. Pre-existing behaviour, surfaced by this round. Operator chose the comment-scoping repair over the vocabulary change."
+  artifacts:
+    - path: "packages/backend/src/store/export.ts"
+      issue: "lines 297-299 state the principle unqualified; lines 199-202 are the branch that does not honour it"
+    - path: "packages/backend/src/store/export.spec.ts"
+      issue: "lines 883-889 pin the false marker as expected output — evidence, not a file to change under this repair"
+  missing:
+    - "Qualify `export.ts:297-299` so the principle names the branch that honours it (the label branch), rather than stating it of the export as a whole"
+    - "Record `redactUrlForExport`'s shared `<query-redacted>` marker over a fragment-only URL as a KNOWN and accepted exception, with the reason: it discloses LESS than the truth, so the cost is operator trust and reviewability, not disclosure"
+    - "Comment-only. Do NOT change `redactUrlForExport`, the export vocabulary, or `observations.url`'s shipped output — the operator explicitly declined that repair as needing its own round"
+  debug_session: ""
+
+- gap_id: G-07-8
+  truth: "The superseded figures in `thresholds.spec.ts`'s non-vacuity companion are named literals with stated provenance, asserted equal to the recomputed expression as of today; the SHIPPED figures stay derived"
+  status: failed
+  reason: "User reported: Fix — pin history as named literals"
+  severity: major
+  test: 4
+  root_cause: "07-18's gate 5 non-vacuity companion computes `supersededInsertSide = 128 + 3 + 2 * 2048 = 4,227` at `thresholds.spec.ts:868-874` — from TODAY's constants. But 4,227 is not a property of today's constants; it is what the insert side READ at `59347c3`. If `SOURCE_ROWS_PER_MAP_MAX` is re-measured, the companion at `:952-971` will demand that the RECOMPUTED figure be written into a paragraph describing 2026-09-02, when the figure that day was 4,227 — and the absence half at `:926-949` will simultaneously start asserting the absence of a string never in the docblock, the exact 'asserting the absence of an arbitrary string' failure its own comment says it exists to avoid. The drift-detector becomes the drift-generator. Latent, not live: correct at HEAD, runs green. Also recorded as this round's one coincidental-reliance item (`undeclared-precondition`)."
+  artifacts:
+    - path: "packages/engine/src/thresholds.spec.ts"
+      issue: "lines 868-874 recompute a historical figure from current constants; lines 926-949 (absence half) and 952-971 (presence half) both consume it"
+  missing:
+    - "Make the two superseded figures named literals with their provenance stated in the name or an adjacent comment (what they read, and at which commit)"
+    - "Add a one-line assertion that each literal still equals the recomputed expression as of today, so the divergence surfaces as a test failure rather than as a silently-wrong demand"
+    - "Leave the SHIPPED figures derived from the constants — only the HISTORICAL ones become literals"
+    - "Preserve the non-vacuity property itself: the guard must still fail if the docblock region is emptied"
   debug_session: ""
