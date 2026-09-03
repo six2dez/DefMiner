@@ -2,7 +2,7 @@
 phase: 07-sourcemap-reconstruction
 verified: 2026-09-03T11:52:00Z
 verified_at_commit: d5fb7b1
-status: gaps_found
+status: superseded
 score: 29/30 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0

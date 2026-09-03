@@ -1,5 +1,5 @@
 ---
-status: diagnosed
+status: superseded
 phase: 07-sourcemap-reconstruction
 source: [07-VERIFICATION.md]
 started: 2026-09-02T14:10:00Z

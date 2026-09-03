@@ -2,7 +2,7 @@
 phase: 07-sourcemap-reconstruction
 verified: 2026-09-03T12:20:01Z
 verified_at_commit: eeb9c2c
-status: human_needed
+status: passed
 score: 33/33 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
@@ -20,6 +20,7 @@ re_verification:
   gaps_remaining: []
   regressions: []
 gates_run_by_verifier:
+
   - command: "pnpm vitest run --reporter=dot"
     result: "90 files / 4,322 tests passed, exit 0, 14.38 s — EXACTLY the round-4 baseline. No test added, none removed, as both plans required."
   - command: "pnpm typecheck"
@@ -59,6 +60,7 @@ gates_run_by_verifier:
   - command: "requirement-to-plan cross-reference over all 27 phase plans"
     result: "MAP-01 … MAP-07 and UI-05 each claimed by at least one plan's `requirements:` frontmatter. Zero orphaned IDs. All eight are `[x]` in REQUIREMENTS.md at :838-844 and :884."
 deferred:
+
   - truth: "SC5 second half — the FP corpora are extended to include reconstructed source as an input class, and a false-positive rate is measured"
     addressed_in: "Phase 3, published in Phase 11"
     evidence: "RE-CONFIRMED at HEAD for the third consecutive round rather than carried on the prior report's word. Both detector seams are still literal no-ops: `consumer.ts:998` (`/* Phase 3 puts the detector here too. */`) and `:1511` (`/* Phase 3 puts the detector here. */`). No detector exists, so no positive — true or false — can be produced over any corpus."
@@ -66,10 +68,12 @@ deferred:
     addressed_in: "Phase 8"
     evidence: "RE-CONFIRMED at HEAD. Both production decode sites are `decodeInlineMap`, both returning null on a non-inline announcement; D-01 refuses every outbound fetch by design; `announcedExternal` is the measurement of what is handed over. REQUIREMENTS.md:838 records the two halves explicitly."
 coincidental_reliance_items:
+
   - truth: "G-07-10 — the documented-derivation block pins the shipped-by-coincidence historical operand, so no historical demand is recomputed from today's constants"
     reason: undeclared-precondition
     harden: "The truth itself holds unconditionally — I verified every `toContain`/`not.toContain` argument in the block is now either a pinned literal or a figure that genuinely describes today. What relies on an undeclared precondition is the new assertion's SELF-DESCRIPTION: `:939-940`'s `recomputedShipped` is a byte-identical duplicate of `:857-858`'s `insertSide`, and the message at `:975` calls it 'the shipped insert side'. That name is true only while the two expressions agree, and nothing in the file makes them agree. I mutated the real file to demonstrate the consequence: on a desync, exactly one test goes red and it is the passes-docblock presence check, whose remedy points at the docblock — the coincidence assertion goes on claiming coverage of a quantity it has stopped tracking. Harden with the reviewer's one-liner, `expect(recomputedShipped).toBe(insertSide)`, or by reading the block binding directly. Advisory: this changes no score and no status."
 findings:
+
   - id: WR-01
     severity: warning
     title: "`thresholds.spec.ts:939-940` duplicates the block-level `insertSide` derivation (`:857-858`) byte-for-byte with nothing asserting the two agree"
@@ -153,6 +157,7 @@ findings:
 gaps: []
 behavior_unverified_items: []
 human_verification:
+
   - test: "Decide WR-01 — remove the duplicate derivation at `thresholds.spec.ts:939-940`, or link it."
     expected: "Either `expect(recomputedShipped, …).toBe(SHIPPED_INSERT_SIDE_AT_59347C3)` rewritten to read the block-level `insertSide` and the local dropped; or the local kept for symmetry with `recomputed`/`recomputedQuotient` plus one line — `expect(recomputedShipped).toBe(insertSide);` — so a desync is detectable where it matters. Or an override recording that a duplicate of a two-term sum is an acceptable maintenance cost."
     why_human: "Demonstrated, not reasoned: I desynced the two bindings in the real file and ran the spec. Exactly one test goes red, and it is the passes-docblock presence check, whose remedy tells the maintainer to rewrite the docblock — while the coincidence assertion that NAMES the quantity stays green covering a stale formula. The hazard is real; its probability is low (both expressions read the same two `T.*` imports, so a constant move hits both). The cause is worth the operator's attention beyond the fix: the duplicate exists to keep a `grep -c 'grouped(insertSide)' == 4` tally that lives in `07-27-PLAN.md` and nowhere else. VF-01 was a gate too WEAK to falsify a claim; this is a gate strong enough to shape the code around itself. Both are gate-design defects, one round apart."
@@ -166,12 +171,14 @@ human_verification:
     expected: "A decision to close phase 07 at 33/33 with the residuals above accepted, or to authorise a round 5 scoped to WR-01 and WR-03 (roughly four lines of change between them)."
     why_human: "Process economics only the operator can price. My read, with the evidence for both sides in the body: the gate change WORKED on the thing it targeted — round 4 shipped zero false sentences, and I verified every historical claim in its diff from git independently, including five cross-commit line-number citations that are all correct. The defect class did NOT reappear in round 4's own additions; the review's candidate for that (WR-02) is refuted above. What round 4 did produce is milder and different in kind: one duplication and one terminology collision. The single live falsehood left (WR-03) predates the round by two rounds."
 still_open_by_operator_decision:
+
   - "W-4 — `vue-tsc` wired into no gate that runs. Re-measured at HEAD: 6 errors, identical to the baseline, none added by round 4. Root `typecheck` is `tsc --build` and exits 0."
   - "W-6 — `MAP_MAX_BYTES` under-serves recovery ~2x. Still `2_621_440`; zero occurrences in the round's added lines."
   - "Round-1 UAT gap 3 — `tests/frontend-load.spec.ts` frame-budget backstop not wired. Untouched."
   - "IN-04 — `derivedRejected.depth_exceeded` needs no docblock caveat. Decided round 3; `telemetry.ts` diffstat EMPTY."
   - "SC5's second half -> Phase 3 / Phase 11. Re-confirmed at HEAD, see `deferred`."
   - "MAP-01's external half -> Phase 8. Re-confirmed at HEAD, see `deferred`."
+
 ---
 
 # Phase 7: Sourcemap Reconstruction — Verification Report (round 5)
