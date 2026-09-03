@@ -861,17 +861,27 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
   const nextPowerOfTwo = 2 ** Math.ceil(Math.log2(smallestSatisfying));
   const headroom = (deleteSide / insertSide).toFixed(2);
 
-  // THE INSERT SIDE AS IT READ BEFORE `59347c3`, recomputed rather than quoted —
-  // the same expression gate 3's ordering test builds. Written as a literal it
-  // would stop tracking the constants the day one of them moves, and the absence
-  // check below would then assert the absence of an arbitrary string.
-  const supersededInsertSide =
-    T.RETENTION_SWEEP_EVERY_N +
-    T.ROWS_INSERTED_PER_ARTIFACT_MAX +
-    2 * T.SOURCE_ROWS_PER_MAP_MAX;
-  const supersededQuotient = (
-    supersededInsertSide / T.RETENTION_SWEEP_MAX_ROWS
-  ).toFixed(2);
+  // THE INSERT SIDE AS IT READ BEFORE `59347c3`, PINNED AS THE HISTORICAL FIGURE
+  // IT IS. 4,227 is what `RETENTION_SWEEP_EVERY_N + ROWS_INSERTED_PER_ARTIFACT_MAX
+  // + 2 * SOURCE_ROWS_PER_MAP_MAX` evaluated to at that commit's parent, and it is
+  // the figure `ROWS_INSERTED_PER_ITERATION_MAX`'s history paragraph records for
+  // 2026-09-02.
+  //
+  // RECOMPUTING IT WAS THE PREVIOUS SHAPE HERE, AND IT WAS WRONG IN A WAY THAT
+  // ONLY SHOWS THE DAY A CONSTANT MOVES. Re-measure `SOURCE_ROWS_PER_MAP_MAX` and
+  // the presence half below would demand the NEW number be written into a
+  // paragraph describing a day when the number was 4,227, while the absence half
+  // would begin asserting the absence of a string that had never been in the
+  // docblock — the exact "absence of an arbitrary string" failure the old comment
+  // here said this gate existed to avoid. The drift detector would have become
+  // the drift generator (07-UAT.md G-07-8).
+  //
+  // THE COINCIDENCE IS ASSERTED RATHER THAN ASSUMED, immediately below, so the
+  // day it ends is a test failure carrying its own remedy instead of a silently
+  // wrong demand. The SHIPPED figures above stay derived; only these two are
+  // pinned.
+  const SUPERSEDED_INSERT_SIDE_BEFORE_59347C3 = 4_227;
+  const SUPERSEDED_QUOTIENT_BEFORE_59347C3 = "8.26";
 
   /** The remedy every message in this block ends with. The fix for a failure
    *  here is the PROSE — repairing a derivation by moving the constant to fit
@@ -881,6 +891,44 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
     `RETENTION_SWEEP_MAX_PASSES docblock so it computes from the shipped insert ` +
     `side. 16 is retained headroom by deliberate decision and lowering it was ` +
     `considered and NOT approved (07-VERIFICATION.md WR-01).`;
+
+  it("the superseded figures STILL equal what today's constants recompute, and when they stop it is THIS assertion that retires — not the history", () => {
+    const recomputed =
+      T.RETENTION_SWEEP_EVERY_N +
+      T.ROWS_INSERTED_PER_ARTIFACT_MAX +
+      2 * T.SOURCE_ROWS_PER_MAP_MAX;
+    const recomputedQuotient = (
+      recomputed / T.RETENTION_SWEEP_MAX_ROWS
+    ).toFixed(2);
+    expect(
+      recomputed,
+      `Today's constants recompute the pre-59347c3 insert side as ` +
+        `${grouped(recomputed)}, but the pinned historical figure is ` +
+        `${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}. THE LITERAL IS STILL ` +
+        `CORRECT AND IT STAYS — it records what the insert side READ at 59347c3's ` +
+        `parent, and ROWS_INSERTED_PER_ITERATION_MAX's docblock in ` +
+        `${THRESHOLDS_MODULE} describes 2026-09-02, when the figure was ` +
+        `${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}. Do NOT rewrite that ` +
+        `history paragraph to ${grouped(recomputed)}: a paragraph describing a past ` +
+        `day does not change because a constant moved today. What ended is the ` +
+        `COINCIDENCE that today's constants happen to reproduce the historical ` +
+        `figure. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line note of ` +
+        `the date and the new recomputed value, leaving the two literals, the ` +
+        `absence half and the presence half exactly as they are.`,
+    ).toBe(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3);
+    expect(
+      recomputedQuotient,
+      `Today's constants recompute the pre-59347c3 quotient as ` +
+        `${recomputedQuotient}, but the pinned historical figure is ` +
+        `${SUPERSEDED_QUOTIENT_BEFORE_59347C3}. THE LITERAL IS STILL CORRECT AND IT ` +
+        `STAYS — it is ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)} over ` +
+        `RETENTION_SWEEP_MAX_ROWS (${T.RETENTION_SWEEP_MAX_ROWS}) as both stood ` +
+        `before 59347c3. Do NOT rewrite ROWS_INSERTED_PER_ITERATION_MAX's history ` +
+        `paragraph to the new figure; what ended is the COINCIDENCE, not the ` +
+        `history. THE REMEDY IS TO RETIRE THIS ASSERTION, with a one-line dated ` +
+        `note of the new recomputed value.`,
+    ).toBe(SUPERSEDED_QUOTIENT_BEFORE_59347C3);
+  });
 
   it("the passes docblock states the insert side, the quotient and the smallest satisfying integer that the constants actually produce", () => {
     const docblock = passesDocblock();
@@ -926,13 +974,14 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
     const docblock = passesDocblock();
     const retired: readonly (readonly [string, string])[] = [
       [
-        grouped(supersededInsertSide),
-        `the pre-59347c3 insert side (RETENTION_SWEEP_EVERY_N + ` +
-          `ROWS_INSERTED_PER_ARTIFACT_MAX + 2 x SOURCE_ROWS_PER_MAP_MAX)`,
+        grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3),
+        "the pre-59347c3 insert side, pinned as the historical figure it is rather " +
+          "than recomputed from today's constants",
       ],
       [
-        supersededQuotient,
-        "the quotient that superseded insert side produced against RETENTION_SWEEP_MAX_ROWS",
+        SUPERSEDED_QUOTIENT_BEFORE_59347C3,
+        "the quotient that pinned historical insert side produced against " +
+          "RETENTION_SWEEP_MAX_ROWS",
       ],
     ];
 
@@ -957,18 +1006,18 @@ describe("the DOCUMENTED derivation matches the SHIPPED constants", () => {
     expect(
       history,
       `ROWS_INSERTED_PER_ITERATION_MAX's docblock in ${THRESHOLDS_MODULE} no longer ` +
-        `names ${grouped(supersededInsertSide)}. That paragraph is the record of ` +
+        `names ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}. That paragraph is the record of ` +
         `why 07-14's row-unit gate had to land BEFORE the \`2 *\` factor was ` +
-        `retired — the gate first at ${grouped(supersededInsertSide)} (over-stated ` +
+        `retired — the gate first at ${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)} (over-stated ` +
         `and therefore safe), the factor second at ${grouped(insertSide)} (exact). ` +
         `It is ALSO the reason the absence check above is scoped to a region rather ` +
         `than to the file. Restore the paragraph rather than relaxing the scope.`,
-    ).toContain(grouped(supersededInsertSide));
+    ).toContain(grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3));
     expect(
       history,
       `ROWS_INSERTED_PER_ITERATION_MAX's docblock no longer names the shipped ` +
         `insert side ${grouped(insertSide)} alongside the superseded ` +
-        `${grouped(supersededInsertSide)}, so the ordering argument it makes can no ` +
+        `${grouped(SUPERSEDED_INSERT_SIDE_BEFORE_59347C3)}, so the ordering argument it makes can no ` +
         `longer be checked against the constants.`,
     ).toContain(grouped(insertSide));
   });
