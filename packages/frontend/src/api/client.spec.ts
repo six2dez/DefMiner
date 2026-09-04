@@ -633,7 +633,13 @@ describe("createBackendClient — the typed route to the backend", () => {
     // second literal here is how the copy comes to promise ten while the client
     // waits thirty.
     expect(RPC_ERROR_STATE_BODY).toContain(`${RPC_TIMEOUT_MS / 1000} seconds`);
-    expect(RPC_ERROR_STATE_BODY).toContain("Could not load secrets");
+    expect(RPC_ERROR_STATE_BODY).toContain("Could not load the inventory");
+    // AND NEVER AGAIN NAMES A FEATURE THAT DOES NOT SHIP. This assertion pinned
+    // "Could not load secrets" while no secret detector existed anywhere in the
+    // plugin, which made a false claim on the most prominent error surface a
+    // thing a test would have DEFENDED. The detection engine is a later phase;
+    // until it ships, no operator-facing copy may imply otherwise.
+    expect(RPC_ERROR_STATE_BODY.toLowerCase()).not.toContain("secret");
   });
 });
 

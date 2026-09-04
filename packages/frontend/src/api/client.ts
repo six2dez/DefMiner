@@ -179,8 +179,16 @@ export const RPC_TIMEOUT_MS = 10_000;
  *
  * DefMiner-authored end to end. No interpolated backend string, no host, no
  * path — the copywriting contract's rule that outranks its own table.
+ *
+ * IT SAID "secrets" UNTIL THE STORE RELEASE, AND THAT WAS FALSE. This body
+ * renders on {@link InventoryTable}, which is the Artifacts and Observations
+ * tables; DefMiner ships no secret detector at all — the detection engine is a
+ * later phase — so the most prominent error surface in the plugin named a
+ * feature that does not exist. `client.spec.ts` had pinned the wrong word, so
+ * the claim was load-bearing in a test rather than merely present in a string.
+ * The noun here must name what this surface actually failed to load.
  */
-export const RPC_ERROR_STATE_BODY = `Could not load secrets. The DefMiner backend did not answer within ${RPC_TIMEOUT_MS / 1000} seconds — it may be busy analysing a large bundle, which blocks its single thread. Retry, or open Settings → Health to see queue depth and dropped count.`;
+export const RPC_ERROR_STATE_BODY = `Could not load the inventory. The DefMiner backend did not answer within ${RPC_TIMEOUT_MS / 1000} seconds — it may be busy analysing a large bundle, which blocks its single thread. Retry, or open Settings → Health to see queue depth and dropped count.`;
 
 // ---------------------------------------------------------------------------
 // THE ROW AND REQUEST SHAPES THIS PACKAGE NEEDS

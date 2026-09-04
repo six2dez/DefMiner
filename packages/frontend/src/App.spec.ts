@@ -43,7 +43,7 @@ import type {
   StartScanOutcome,
   StorageFootprint,
 } from "./api/client";
-import { FRONTEND_CONTRACT_VERSION } from "./api/client";
+import { FRONTEND_CONTRACT_VERSION, RPC_ERROR_STATE_BODY } from "./api/client";
 import App from "./App.vue";
 import type { ArtifactRow } from "./backend";
 import { SDK_INJECTION_KEY } from "./backend";
@@ -119,7 +119,14 @@ const ROWS: ArtifactRow[] = [
  * existing index at the cost of reading as an afterthought, and the
  * muscle-memory cost is paid once, at upgrade.
  */
-const TAB_LABELS = ["Artifacts", "Observations", "Scan", "Health", "Settings"];
+const TAB_LABELS = [
+  "Artifacts",
+  "Observations",
+  "Scan",
+  "Health",
+  "Settings",
+  "Help",
+];
 
 const TOTAL: VisibleTotal = {
   visible: 2,
@@ -538,7 +545,7 @@ describe("App", () => {
     const tabs = wrapper.findAll('[role="tab"]');
     expect(tabs.map((t) => t.text())).toEqual(TAB_LABELS);
 
-    expect(wrapper.text()).toContain("Could not load secrets");
+    expect(wrapper.text()).toContain(RPC_ERROR_STATE_BODY);
     expect(wrapper.text()).toContain("blocks its single thread");
 
     // And the rejection's own message is NOT rendered. An error crossing the
@@ -600,7 +607,7 @@ describe("App", () => {
     await settle(wrapper);
 
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(TAB_LABELS.length);
-    expect(wrapper.text()).toContain("Could not load secrets");
+    expect(wrapper.text()).toContain(RPC_ERROR_STATE_BODY);
     expect(wrapper.text()).not.toContain("Nothing analysed on this target yet");
   });
 
@@ -1242,21 +1249,24 @@ describe("the compatibility refusal surface (COMPAT-01, debt P1-D5)", () => {
 // ===========================================================================
 
 describe("App — the Scan tab", () => {
-  it("renders the five tabs in the declared order, Scan THIRD", async () => {
+  it("renders the six tabs in the declared order, Scan THIRD and Help LAST", async () => {
     // Order is declaration order and is never sorted at runtime, so the tab an
     // operator reaches for by muscle memory does not move under them. THIRD is
-    // the decision: entity tabs contiguous and first, operational tabs
-    // contiguous, Settings last.
+    // the decision for Scan: entity tabs contiguous and first, operational tabs
+    // contiguous, Settings last. Help is LAST because appending costs no
+    // existing index, which is the muscle-memory argument Scan deliberately
+    // paid once and there is no reason to pay twice.
+    //
+    // READS `TAB_LABELS` RATHER THAN RE-TYPING THE LIST. This `it` held its own
+    // copy of the five labels, so adding a sixth tab updated the constant at the
+    // top of the file and left this assertion asserting the old strip — a
+    // second source of truth for the one thing the whole test is about.
     const wrapper = mountWith(stubSdk());
     await settle(wrapper);
 
-    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual([
-      "Artifacts",
-      "Observations",
-      "Scan",
-      "Health",
-      "Settings",
-    ]);
+    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(
+      TAB_LABELS,
+    );
   });
 
   it("mounts ScanPanel on the Scan arm, and NOT the bare v-else Health branch", async () => {

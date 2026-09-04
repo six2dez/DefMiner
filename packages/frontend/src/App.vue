@@ -57,6 +57,7 @@ import EvidencePanel from "./components/EvidencePanel.vue";
 import { EXPORT_CTA } from "./components/export-contract";
 import ExportDialog from "./components/ExportDialog.vue";
 import HealthPanel from "./components/HealthPanel.vue";
+import HelpPanel from "./components/HelpPanel.vue";
 import ObservationsTable from "./components/ObservationsTable.vue";
 import type { ScanIndicator } from "./components/scan-contract";
 import {
@@ -113,6 +114,13 @@ const TABS = Object.freeze([
   { id: "scan", label: "Scan" },
   { id: "health", label: "Health" },
   { id: "settings", label: "Settings" },
+  // LAST, AND UNLIKE `scan` THAT COSTS NOTHING. The argument above for placing
+  // Scan third was that it is operational chrome belonging beside the other
+  // operational tabs; Help is not chrome for any operation, it is the manual.
+  // Appending it preserves every existing index, so no operator's muscle memory
+  // moves — the cost Scan's placement deliberately paid, and which there is no
+  // reason to pay twice.
+  { id: "help", label: "Help" },
 ] as const);
 
 type TabId = (typeof TABS)[number]["id"];
@@ -1282,16 +1290,26 @@ async function loadCompat(): Promise<void> {
           :load-footprint="loadStorageFootprint"
         />
 
+        <!-- THE HELP BODY. Its own `v-else-if` arm, added in the SAME commit as
+             the `TABS` entry, for the reason the Scan arm above states.
+             NO PROPS, AND THAT IS THE FEATURE. Every other arm here is wired to
+             a loader that can fail; this one renders frozen text. The operator
+             most likely to open Help is the one looking at four tabs of "the
+             backend did not answer", so a Help body that needed the backend
+             would be missing exactly when it is wanted. -->
+        <HelpPanel v-else-if="activeTab === 'help'" />
+
         <!-- OBS-01's HEALTH BODY, replacing the tracer's placeholder.
-             `v-else` rather than a fifth `v-else-if`: `TabId` is a closed union
-             of FIVE and the four above are spent, so a sixth tab added without
+             `v-else` rather than a sixth `v-else-if`: `TabId` is a closed union
+             of SIX and the five above are spent, so a seventh tab added without
              a body would land here visibly rather than rendering an empty
              panel. That is exactly what happened to be checked when plan 06-01
              added `scan` — the entry and its arm land together, which is why
-             this comment moved from "four" to "five" in the same commit rather
-             than being left describing the union it used to be. Health ROUTES
-             and RENDERS from the first paint, as it always did — a tab is never
-             removed, never disabled and never hidden on account of its body. -->
+             this comment moved from "four" to "five" and now to "six" in the
+             same commit rather than being left describing the union it used to
+             be. Health ROUTES and RENDERS from the first paint, as it always
+             did — a tab is never removed, never disabled and never hidden on
+             account of its body. -->
         <HealthPanel v-else :load="loadHealth" />
       </section>
 
