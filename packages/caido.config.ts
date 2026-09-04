@@ -45,6 +45,19 @@ export default defineConfig({
       id: "defminer-frontend",
       name: "DefMiner",
       root: "frontend",
+      // THE CABLE BETWEEN THE TWO PLUGINS, AND IT IS OPTIONAL IN THE SCHEMA —
+      // which is exactly how its absence shipped. `frontendPluginConfigSchema`
+      // declares `backend: backendReferenceConfigSchema.nullable().optional()`,
+      // so omitting it is VALID: the build succeeds, the zip is well-formed, and
+      // the manifest emitter writes `backend: buildOutput.backendId ? { id } :
+      // null` — a literal `"backend": null`. The frontend then has no route to
+      // the backend at all, so every `sdk.backend.*` call has nowhere to go and
+      // never resolves. The operator sees four tabs of "the backend did not
+      // answer" — including Health, whose call touches no database, which is the
+      // tell: a busy thread would still have answered that one.
+      // The value is an OBJECT (`{ id }`), not a bare string; the schema is a
+      // `z.strictObject` and would reject anything else.
+      backend: { id: "defminer-backend" },
     },
   ],
 });
