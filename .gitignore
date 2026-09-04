@@ -132,3 +132,13 @@ packages/frontend/src/__r1_fixtures__/
 # browser can measure the geometry jsdom cannot, and a crashed run must not leave
 # a build artifact behind that `pnpm lint` then reports.
 packages/frontend/.load-harness/
+
+# SIGNING KEYS — NEVER COMMITTED.
+# The store release workflow signs with an Ed25519 key held only as the GitHub
+# Actions secret PRIVATE_KEY. A key file that reaches this repository is a key
+# that must be rotated, so the pattern is broad on purpose: it costs nothing and
+# the failure it prevents is unrecoverable.
+*.pem
+*.key
+private_key*
+public_key*

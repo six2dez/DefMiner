@@ -1,83 +1,141 @@
 # DefMiner
 
-DefMiner is a Caido backend plugin that passively inventories JavaScript seen in
-proxied responses. It hashes raw response bytes, stores artifacts by digest and
-records where each artifact was observed.
+**A passive JavaScript inventory for [Caido](https://caido.io).** It watches the
+scripts a target actually serves you, stores each one once, and reconstructs
+their original source when a source map is available — without ever sending a
+request of its own.
 
-## Status
+---
 
-The Phase 1 backend foundation is implemented. It includes admission, bounded
-queuing, project isolation, SQLite persistence, retention, compatibility checks
-and status/read RPCs.
+## What it does
 
-It does **not** yet run secret or endpoint detectors, attribute findings through
-source maps or provide a frontend. Those are later phases; the current package
-should be treated as a tested ingestion and persistence foundation, not as a
-finished finding miner.
+As you browse through Caido, DefMiner looks at every proxied response and keeps
+the JavaScript.
 
-Coverage is intentionally proxy-only. Replay, Automate, workflows,
-plugin-originated sends, `caido:http` fetches and browser-cache hits do not reach
-the passive hook. DefMiner reports what it observed, never everything that
-exists on a target.
+- **Inventory by content, not by URL.** Each script is hashed and stored once per
+  digest. The same bundle served from ten paths is one artifact with ten
+  observations, so you see distinct scripts rather than repeated requests.
+- **Original source, recovered.** When a script carries an inline source map,
+  DefMiner reconstructs the pre-minification sources and shows them as a
+  browsable tree — the real file names, the real directory structure, the real
+  code.
+- **Retroactive scanning.** Installed DefMiner after the interesting browsing
+  already happened? The Scan tab replays the same analysis over traffic Caido
+  captured earlier, walking backwards from now.
+- **Evidence you can hand over.** Export the inventory to a file, with a redacted
+  mode that strips query strings from URLs and source labels.
+- **Honest about its own health.** A single-threaded backend chewing a large
+  bundle looks exactly like a frozen UI. The Health tab shows queue depth,
+  dropped count, jobs in flight and the largest synchronous slice, so you can
+  tell those two apart.
+- **Built-in Help.** A Help tab explains the behaviours that surprise people,
+  and it renders even when the backend is not answering.
 
-## Current behavior
+## What it does *not* do
 
-- Keeps `onInterceptResponse` synchronous and performs only cheap admission
-  checks there.
-- Accepts in-scope JavaScript responses up to the measured 8 MiB ceiling and
-  puts scalar-only entries on a bounded, drop-oldest queue.
-- Reloads responses outside the hook, hashes raw bytes with native SHA-256 and
-  stores project-scoped artifacts, observations and analysis state in SQLite.
-- Redacts query values from durable observation URLs and redacts URL/path data
-  from externally visible error strings.
-- Runs bounded retention passes and exposes compatibility, status, artifact and
-  observation RPCs.
-- Issues no outbound network request from shipped source; a source gate and a
-  built-bundle import allowlist enforce that constraint.
+Worth being blunt, because the name suggests more:
 
-## Build and verification
+- **It does not scan for secrets, endpoints or other findings.** The detection
+  engine is a planned later phase. Today DefMiner tells you *what JavaScript
+  exists* and *what its original source says*. You do the finding.
+- **It never makes an outbound request.** Every byte it analyses came from
+  traffic Caido already captured. An external `.map` referenced by URL is
+  counted, never fetched.
+- **Coverage is proxy-only.** Replay, Automate, workflows, plugin-originated
+  sends and browser-cache hits do not reach the passive hook. DefMiner reports
+  what it observed, never everything that exists on a target.
 
-Development requires Node.js 22 or newer and pnpm 11. The plugin refuses passive
-analysis below Caido 0.57.1 and reports the compatibility reason.
+## Install
+
+From the Caido plugin store: open **Plugins**, find **DefMiner**, install.
+
+To build from source:
 
 ```bash
 pnpm install
-pnpm test
-pnpm typecheck
-pnpm lint
-pnpm knip
-pnpm check:bundle
+pnpm build
 ```
 
-`pnpm test` builds the backend first so the bundle gate always inspects a fresh
-artifact. To build without running tests:
+That writes `packages/dist/plugin_package.zip`, which you can install through
+Caido's **Plugins → Install from file**.
+
+> The `dist/` directory at the repository root belongs to the Phase 0
+> measurement probes and is **not** the plugin. The installable package is
+> always `packages/dist/plugin_package.zip`.
+
+## Using it
+
+### 1. Set your scope
+
+DefMiner applies **Caido's scope with no override of its own**. A host outside
+the active scope is rejected — while browsing and while scanning alike.
+
+This is the single most common reason a new user sees nothing: the traffic is
+there, the scripts are there, and every one of them is out of scope.
+
+### 2. Browse
+
+Artifacts appear as you go. Open one to see where it was observed, and — if it
+shipped a source map — its reconstructed source tree.
+
+### 3. Or scan what you already captured
+
+The **Scan** tab walks stored traffic backwards from now. You may add an HTTPQL
+clause to narrow it; it is combined with DefMiner's own filter using `AND`. You
+can narrow a scan, never widen it, and the composed filter is shown before you
+start so you can verify that yourself.
+
+**Reading the result matters.** A scan that reports `Finished · 110 seen` may
+have admitted *nothing* — `seen` counts what the walk looked at, not what it
+kept. Open the scan's detail for `Admitted` and `Rejected`. A healthy scan can
+legitimately admit zero, and when it does, the scope is the first thing to
+check.
+
+## Behaviours worth knowing before they surprise you
+
+| Behaviour | Why |
+|---|---|
+| A host that **leaves** scope makes its already-captured traffic unscannable | Admission re-checks scope at analysis time. No filter reaches it; the host has to be back in scope. |
+| Scans report no percentage | Counting matching requests would mean transferring every response body — that *is* the scan. DefMiner reports what it has done rather than guessing what is left. |
+| Responses over **8 MiB** are not analysed | The backend is single-threaded; the ceiling protects Caido's responsiveness. |
+| Source maps over **2.5 MiB** are refused, not truncated | A partly-read map yields sources that look complete and are not. |
+| Re-running a scan does not redo finished work | Anything partial or failed *is* re-offered, so a second scan repairs earlier failures rather than cementing them. |
+| Data is per-project and bounded | Switching Caido projects switches the inventory. Old rows are evicted on a retention sweep. |
+
+## Where your data lives
+
+DefMiner's SQLite database lives **on the Caido server**, not on the machine
+you are looking at. On a remote or containerised Caido that is a different
+disk. Nothing is sent anywhere else — the plugin makes no network requests.
+
+## Development
+
+A pnpm workspace with three packages:
+
+| Package | What it is |
+|---|---|
+| `packages/engine` | Pure analysis: parsing, source maps, digests, thresholds. No SDK, no I/O. |
+| `packages/backend` | The Caido backend plugin: admission, queueing, SQLite, RPCs. |
+| `packages/frontend` | The Vue workspace page. |
 
 ```bash
-pnpm build:backend
+pnpm test        # full suite
+pnpm typecheck
+pnpm lint
+pnpm knip        # unused exports
+pnpm build       # -> packages/dist/plugin_package.zip
 ```
 
-The installable package is written to `packages/dist/plugin_package.zip`.
+The codebase leans hard on executable assertions over prose. Thresholds stated
+in user-facing copy are asserted against the constants themselves, so a limit
+that moves fails a test rather than quietly making a sentence wrong.
 
-## Layout
+## Contributing
 
-| Path                                 | Purpose                                                                |
-| ------------------------------------ | ---------------------------------------------------------------------- |
-| `packages/backend/`                  | Caido backend entrypoint, hooks, lifecycle, ingestion and SQLite store |
-| `packages/engine/`                   | SDK-free queue, hashing, chunking, deadlines and yield-aware pipeline  |
-| `packages/caido.config.ts`           | DefMiner package manifest and build configuration                      |
-| `scripts/ci/`                        | Generated-threshold and shipped-bundle gates                           |
-| `tests/`                             | Cross-package pins and Phase 0 artifact gates                          |
-| `scripts/spike/`, `probe/`, `tier1/` | Preserved Phase 0 runtime measurement harness                          |
-| `.planning/`                         | Requirements, decisions, plans and measured evidence                   |
-
-## Phase 0 measurements
-
-The original runtime harness remains reproducible. Fetch its SHA-256-pinned
-corpus with `bash scripts/spike/fetch-corpus.sh`, then run individual
-`scripts/spike/run-spike-*.sh` drivers against an isolated Caido instance. The
-aggregated contract consumed by production thresholds is recorded under
-`.planning/phases/00-runtime-reality-check/results/`.
+Issues and pull requests are welcome. When reporting a problem, the **Health**
+tab's four numbers and the scan's `Admitted` / `Rejected` counts are the two
+most useful things to include.
 
 ## License
 
-UNLICENSED — not currently distributed.
+[MIT](LICENSE) © six2dez

@@ -1,6 +1,6 @@
 {
   "name": "defminer",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "DefMiner — passive JavaScript analysis for Caido",
   "scripts": {
     "pretest": "pnpm build:backend",
@@ -16,7 +16,7 @@
     "check:css": "node scripts/ci/prefixwrap.mjs packages/dist/plugin_package/defminer-frontend/index.css",
     "check:externals": "node scripts/ci/frontend-externals.mjs packages/dist/plugin_package/defminer-frontend/index.js"
   },
-  "license": "UNLICENSED",
+  "license": "MIT",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",

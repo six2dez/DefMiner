@@ -1,0 +1,121 @@
+name: 🚀 Release
+
+# MANUAL, NOT ON PUSH. A release mints a tag and publishes a signed artifact to
+# the Caido store's update path; that should be a decision, not a side effect of
+# merging.
+on:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 20
+  PNPM_VERSION: 9
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: true
+
+      # THE GATES RUN BEFORE THE ARTIFACT IS BUILT, so a release cannot ship a
+      # tree that does not typecheck. `tests/frontend-load.spec.ts` is a frame
+      # budget measured on the runner and is excluded here on purpose: it is a
+      # performance backstop, not a correctness gate, and a shared CI runner
+      # under load fails it while the same test passes 12/12 in isolation.
+      # Excluding it is recorded rather than silent so nobody reads a green
+      # release as evidence the frame budget held.
+      - name: Check
+        run: |
+          pnpm typecheck
+          pnpm lint
+          pnpm vitest run --reporter=dot --exclude tests/frontend-load.spec.ts
+
+      # Writes packages/dist/plugin_package.zip AND
+      # packages/dist/plugin_package/manifest.json.
+      #
+      # NOT `dist/` AT THE REPOSITORY ROOT. That directory belongs to the Phase 0
+      # measurement probes (parse-probe, redos-probe, mapbytes-probe) and holds a
+      # completely different, installable zip. A path typo here would publish the
+      # probes to the store under DefMiner's name, so the step below verifies the
+      # manifest it is about to release actually says "defminer".
+      - name: Build package
+        run: pnpm build
+
+      # THE VERSION COMES FROM THE BUILT MANIFEST, not from a file somebody might
+      # forget to keep in step with it. `packages/caido.config.ts` is TypeScript
+      # and cannot be read with jq; the generated manifest is the value that
+      # actually ships, so reading it here means the git tag and the artifact can
+      # never disagree.
+      - name: Read version from the built manifest
+        id: meta
+        run: |
+          MANIFEST=packages/dist/plugin_package/manifest.json
+          test -f "$MANIFEST" || { echo "::error::$MANIFEST missing — did pnpm build write to packages/dist?"; exit 1; }
+
+          ID=$(jq -r .id "$MANIFEST")
+          if [ "$ID" != "defminer" ]; then
+            echo "::error::manifest id is '$ID', expected 'defminer' — this is the wrong package"
+            exit 1
+          fi
+
+          # The frontend must be wired to the backend. `backend` is OPTIONAL in
+          # the builder's schema, so omitting it is valid and silently produces
+          # "backend": null — a plugin whose every RPC times out with no error
+          # anywhere. That shipped once; it does not ship again.
+          LINK=$(jq -r '.plugins[] | select(.kind=="frontend") | .backend.id // "null"' "$MANIFEST")
+          if [ "$LINK" != "defminer-backend" ]; then
+            echo "::error::frontend plugin is not linked to a backend (backend.id = '$LINK')"
+            exit 1
+          fi
+
+          VERSION=$(jq -r .version "$MANIFEST")
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::version '$VERSION' is not three-part semver"; exit 1 ;;
+          esac
+
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag $VERSION already exists — bump version in packages/caido.config.ts"
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Releasing DefMiner ${VERSION}"
+
+      # Ed25519 over the raw zip bytes. The store verifies this signature against
+      # the public_key in caido/store's plugin_packages.json, so the key that
+      # signs here must be the one whose public half was submitted.
+      - name: Sign package
+        working-directory: packages/dist
+        run: |
+          if [[ -z "${{ secrets.PRIVATE_KEY }}" ]]; then
+            echo "::error::PRIVATE_KEY secret is not set — the store will reject an unsigned package"
+            exit 1
+          fi
+          echo "${{ secrets.PRIVATE_KEY }}" > private_key.pem
+          openssl pkeyutl -sign -inkey private_key.pem -out plugin_package.zip.sig -rawin -in plugin_package.zip
+          rm private_key.pem
+          test -s plugin_package.zip.sig || { echo "::error::signature is empty"; exit 1; }
+
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.version }}
+          commit: ${{ github.sha }}
+          body: 'Release ${{ steps.meta.outputs.version }}'
+          artifacts: 'packages/dist/plugin_package.zip,packages/dist/plugin_package.zip.sig'
