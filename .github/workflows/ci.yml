@@ -1,0 +1,61 @@
+name: CI
+
+# THE SUITE LIVES HERE, NOT ON THE RELEASE PATH. A hang in a test is a nuisance
+# to a push; on the release workflow it was the thing standing between a
+# finished plugin and its users.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: 20
+  PNPM_VERSION: 9
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    # The suite is ~15 s locally and the release job's first attempt proved this
+    # runner can wedge it indefinitely. Fail loudly at 15 minutes instead.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: true
+
+      - name: Typecheck and lint
+        run: |
+          pnpm typecheck
+          pnpm lint
+
+      # `corpus/` is gitignored, so a fresh checkout has none of the vendor
+      # bundles the map fixtures read. Without this the suite fails 11 tests
+      # for a missing 40 MB of downloads rather than for anything real.
+      - name: Fetch the vendor corpus
+        run: bash scripts/phase7/fetch-maps.sh
+
+      # THE DEFAULT REPORTER, NOT `dot`. `dot` buffers on a non-TTY, which is
+      # why the six-hour release hang produced no clue about WHERE it stopped.
+      # Per-file progress costs nothing and makes the next hang diagnosable.
+      #
+      # `**/frontend-load.spec.ts` is excluded by glob rather than by relative
+      # path: it is a frame budget that fails on a loaded shared runner while
+      # passing 12/12 in isolation, AND the only spec that spawns a nested
+      # package manager from inside a vitest worker — the leading suspect for
+      # that hang. Excluded loudly, so nobody reads a green CI run as evidence
+      # the frame budget held.
+      - name: Test
+        run: pnpm vitest run --exclude '**/frontend-load.spec.ts'
+
+      - name: Build
+        run: pnpm build

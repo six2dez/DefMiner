@@ -82,7 +82,7 @@ gh workflow run "🚀 Release"
 
 The workflow, in order:
 
-1. Runs `typecheck`, `lint` and the test suite.
+1. Runs `typecheck` and `lint`. **Not the test suite** — see below.
 2. Runs `pnpm build`, writing `packages/dist/plugin_package.zip`.
 3. Reads the version **from the built manifest**, and refuses to continue if the
    manifest id is not `defminer`, if the frontend is not linked to the backend,
@@ -167,10 +167,46 @@ error anywhere. That shipped in this repository and survived five verification
 rounds, because every gate read source text or ran unit tests and none loaded
 the packaged plugin. The check costs three lines.
 
+## The six-hour hang, and why the suite is not on the release path
+
+The first release attempt (`2026-09-04T23:11`) was killed by the Actions 6-hour
+maximum. The log is unambiguous about where: `typecheck` finished in 8 s, `lint`
+in 38 s, vitest printed its banner at `23:13:00.05` — and then produced **not one
+further line** until the platform killed it at `05:12:08`.
+
+It was never reproduced off the runner. The identical command completes locally
+in thirteen seconds, and CI-shaped conditions (no `corpus/`, no `dist/`) make the
+suite *fail* in thirteen seconds rather than hang.
+
+The best-supported hypothesis is `tests/frontend-load.spec.ts`. It is the only
+spec in the repository that spawns a **nested package manager** — `pnpm exec vite
+build` — from inside a vitest worker, and a nested pnpm waiting on a store lock
+held by its parent is a silent, unbounded hang that cannot happen with a warm
+store. That is exactly the local/CI asymmetry. The catch: it was *already*
+excluded by path on the failing run, so either the exclusion did not take on the
+runner or the cause is something else again. Stated as a hypothesis rather than
+a finding, because that is what it is.
+
+Three changes followed, none of which depend on the hypothesis being right:
+
+- **`timeout-minutes` on both jobs.** A job that hangs now fails in 15–20
+  minutes. The failure mode "silent until the platform limit" is unreachable.
+- **The suite moved to `ci.yml`**, on every push and PR. The upstream starterkit
+  runs no tests on its release path either; a hang there is a nuisance, not the
+  thing between a finished plugin and its users. `typecheck` and `lint` stay on
+  the release path — they are deterministic, fast, and genuinely able to
+  invalidate a build artifact.
+- **The default reporter instead of `dot`.** `dot` buffers on a non-TTY, which
+  is precisely why six hours of hang produced no clue about where it stopped.
+
 ## Known state at the time of writing
 
-- The full suite is 91 files / 4,332 tests. `tests/frontend-load.spec.ts` is a
-  frame-budget backstop that fails under parallel load and passes 12/12 in
-  isolation; the release workflow excludes it explicitly rather than silently.
+- The full suite is 91 files / 4,332 tests. `tests/frontend-load.spec.ts` is
+  excluded from CI by glob: it is a frame-budget backstop that fails under
+  parallel load and passes 12/12 in isolation, and it is the leading suspect for
+  the hang above.
+- `corpus/` is gitignored, so CI fetches the vendor bundles with
+  `scripts/phase7/fetch-maps.sh` before running the suite. Without it 11 tests
+  fail for a missing 40 MB of downloads rather than for anything real.
 - The detection engine (secrets, endpoints) is **not implemented**. The README
   and the Help tab both say so. Do not let store copy imply otherwise.
