@@ -197,44 +197,62 @@ error anywhere. That shipped in this repository and survived five verification
 rounds, because every gate read source text or ran unit tests and none loaded
 the packaged plugin. The check costs three lines.
 
-## The six-hour hang, and why the suite is not on the release path
+## The six-hour hang: Node 20
 
 The first release attempt (`2026-09-04T23:11`) was killed by the Actions 6-hour
 maximum. The log is unambiguous about where: `typecheck` finished in 8 s, `lint`
 in 38 s, vitest printed its banner at `23:13:00.05` — and then produced **not one
 further line** until the platform killed it at `05:12:08`.
 
-It was never reproduced off the runner. The identical command completes locally
-in thirteen seconds, and CI-shaped conditions (no `corpus/`, no `dist/`) make the
-suite *fail* in thirteen seconds rather than hang.
+It was blamed on `tests/frontend-load.spec.ts` for two weeks, on the theory that
+a nested `pnpm exec vite build` inside a vitest worker deadlocked on a cold pnpm
+store. That was wrong. The real cause, reproduced on demand:
 
-The best-supported hypothesis is `tests/frontend-load.spec.ts`. It is the only
-spec in the repository that spawns a **nested package manager** — `pnpm exec vite
-build` — from inside a vitest worker, and a nested pnpm waiting on a store lock
-held by its parent is a silent, unbounded hang that cannot happen with a warm
-store. That is exactly the local/CI asymmetry. The catch: it was *already*
-excluded by path on the failing run, so either the exclusion did not take on the
-runner or the cause is something else again. Stated as a hypothesis rather than
-a finding, because that is what it is.
+```
+Failed to start forks worker for .../coalescer.spec.ts
+Caused by: TypeError: webidl.util.markAsUncloneable is not a function
+   at new CacheStorage (undici@8.10.0/lib/web/cache/cachestorage.js:20)
+   at jsdom@30.0.1/lib/api.js:12
+```
 
-Three changes followed, none of which depend on the hypothesis being right:
+`jsdom@30` imports `undici@8`, which calls `v8.markAsUncloneable` — **absent in
+Node 20**. Both workflows ran `NODE_VERSION: 20`. Every spec carrying a
+`// @vitest-environment jsdom` docblock therefore failed to start its worker,
+and with 24 such files the vitest pool stopped making progress rather than
+reporting the failure: thirteen minutes of silence, then the timeout.
 
-- **`timeout-minutes` on both jobs.** A job that hangs now fails in 15–20
-  minutes. The failure mode "silent until the platform limit" is unreachable.
-- **The suite moved to `ci.yml`**, on every push and PR. The upstream starterkit
-  runs no tests on its release path either; a hang there is a nuisance, not the
-  thing between a finished plugin and its users. `typecheck` and `lint` stay on
-  the release path — they are deterministic, fast, and genuinely able to
-  invalidate a build artifact.
+Two CI runs, three weeks apart, died on **exactly the same 24 files**. The
+frontend suite had never executed on a runner — not once — and CI's green-ish
+history was 68 of 90 files. The asymmetry that made it unreproducible was never
+the runner: it was `node -v`. Locally that is 26.
+
+The fix is `NODE_VERSION: 26` in both workflows, plus `.nvmrc`. Not 24: 24 runs
+the jsdom specs fine but fails D-06 in
+`packages/backend/src/store/sources.spec.ts`, which asserts a NUL byte
+round-trips byte-identically — the SQLite bundled with Node 24's `node:sqlite`
+does not honour it. That driver is the test fixture's, never the shipped path
+(the backend uses Caido's database), but the floor is 26 all the same.
+
+On Node 26: **90 files, 4,320 tests, 21 s.**
+
+Three changes survive from the wrong diagnosis, all still worth having:
+
+- **`timeout-minutes` on both jobs.** A job that hangs fails in 15–20 minutes.
+  The failure mode "silent until the platform limit" is unreachable.
+- **The suite stays on `ci.yml`, not the release path.** The upstream starterkit
+  runs no tests on its release path either; `typecheck` and `lint` stay there —
+  deterministic, fast, and genuinely able to invalidate a build artifact.
 - **The default reporter instead of `dot`.** `dot` buffers on a non-TTY, which
   is precisely why six hours of hang produced no clue about where it stopped.
+  Per-file progress is what finally located this one, by naming the last file
+  that reported.
 
 ## Known state at the time of writing
 
 - The full suite is 91 files / 4,332 tests. `tests/frontend-load.spec.ts` is
   excluded from CI by glob: it is a frame-budget backstop that fails under
-  parallel load and passes 12/12 in isolation, and it is the leading suspect for
-  the hang above.
+  parallel load and passes 12/12 in isolation. It was the long-standing suspect
+  for the hang above and it was not the cause.
 - `corpus/` is gitignored, so CI fetches the vendor bundles with
   `scripts/phase7/fetch-maps.sh` before running the suite. Without it 11 tests
   fail for a missing 40 MB of downloads rather than for anything real.

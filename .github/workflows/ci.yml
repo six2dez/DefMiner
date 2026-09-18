@@ -10,15 +10,31 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: 20
+  # NODE 26, NOT 20 — 20 COST THIS REPOSITORY EVERY CI RUN IT EVER MADE.
+  #
+  # `jsdom@30` imports `undici@8`, which calls `webidl.util.markAsUncloneable`,
+  # a Node API that does not exist in 20. The forks worker for every jsdom spec
+  # then fails to start, and with 24 of them the vitest pool stops making
+  # progress instead of reporting the error: thirteen minutes of total silence
+  # and then the timeout. Both CI runs on record died there, on the same 24
+  # files — the frontend suite has never once executed on this runner.
+  # Reproduced exactly on Node 20 locally; green on 24 and 26.
+  #
+  # 26 and not 24, because `packages/backend/src/store/sources.spec.ts` asserts
+  # that a NUL byte round-trips byte-identically, and the SQLite bundled with
+  # Node 24's `node:sqlite` does not honour it. That driver is the TEST FIXTURE
+  # only — the shipped backend uses Caido's database — but a red suite is a red
+  # suite.
+  NODE_VERSION: 26
   PNPM_VERSION: 9
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    # The suite is ~15 s locally and the release job's first attempt proved this
-    # runner can wedge it indefinitely. Fail loudly at 15 minutes instead.
+    # The suite is ~21 s. The wedge that made this ceiling necessary is
+    # understood and fixed (see NODE_VERSION), but the ceiling stays: a hang
+    # that reports nothing is exactly the failure worth bounding.
     timeout-minutes: 15
 
     steps:
@@ -50,10 +66,11 @@ jobs:
       #
       # `**/frontend-load.spec.ts` is excluded by glob rather than by relative
       # path: it is a frame budget that fails on a loaded shared runner while
-      # passing 12/12 in isolation, AND the only spec that spawns a nested
-      # package manager from inside a vitest worker — the leading suspect for
-      # that hang. Excluded loudly, so nobody reads a green CI run as evidence
-      # the frame budget held.
+      # passing 12/12 in isolation. It was also the long-standing suspect for
+      # the hang — the only spec that spawns a nested package manager from
+      # inside a vitest worker — and it was NOT the cause; Node 20 was. It stays
+      # excluded for the frame-budget reason alone, and loudly, so nobody reads
+      # a green CI run as evidence the budget held.
       - name: Test
         run: pnpm vitest run --exclude '**/frontend-load.spec.ts'
 

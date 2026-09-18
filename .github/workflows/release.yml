@@ -7,7 +7,10 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: 20
+  # 26, matching ci.yml — see the note there. This job does not run the suite,
+  # so 20 built fine; keeping the two workflows on one runtime means the thing
+  # that gets tested is the thing that gets shipped.
+  NODE_VERSION: 26
   PNPM_VERSION: 9
 
 jobs:
@@ -42,16 +45,13 @@ jobs:
       #
       # The first release attempt ran the full suite here and hung: vitest
       # printed its banner at 23:13:00 and emitted nothing for six hours. The
-      # same command completes locally in thirteen seconds, and the cause was
-      # never reproduced off the runner. The best-supported hypothesis is
-      # `tests/frontend-load.spec.ts`, the only spec in the repository that
-      # spawns a NESTED PACKAGE MANAGER (`pnpm exec vite build`) from inside a
-      # vitest worker — a shape that deadlocks on a cold pnpm store and cannot
-      # deadlock on a warm one, which is exactly the local/CI asymmetry. It was
-      # already excluded by path on the failing run, so either that exclusion
-      # did not take on the runner or the cause is something else again.
+      # cause is known now, and it was never this workflow's shape: the job ran
+      # NODE 20, where `jsdom@30`'s `undici@8` calls a `markAsUncloneable` that
+      # does not exist, every jsdom worker fails to start, and the vitest pool
+      # goes quiet instead of reporting it. NODE_VERSION is 26 above and the
+      # suite is green.
       #
-      # Either way the suite does not belong on the release path. The upstream
+      # It still does not belong on the release path. The upstream
       # starterkit's release workflow runs no tests at all; ci.yml runs the
       # suite on every push, where a hang is a nuisance rather than the thing
       # standing between a finished plugin and its users. What stays here are
