@@ -1,6 +1,6 @@
 {
   "name": "defminer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DefMiner — passive JavaScript analysis for Caido",
   "scripts": {
     "pretest": "pnpm build:backend",

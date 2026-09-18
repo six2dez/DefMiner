@@ -33,6 +33,29 @@ git push -u origin main
 
 `--public` is required: the store cannot fetch releases from a private repo.
 
+### Immutable releases, and what they cost
+
+The store **requires** the setting
+([Caido's guide](https://developer.caido.io/plugins/guides/repository.html#_3-enable-immutable-releases)):
+Settings → General → Releases → Immutable releases, or
+
+```bash
+gh api -X PUT repos/six2dez/DefMiner/immutable-releases
+```
+
+Turn it on **before the first release**, and know what you are agreeing to:
+
+- A published release can never gain, lose or change an asset.
+- Deleting one is still allowed — but **the tag name is burned forever**. Reusing
+  it fails with `tag_name was used by an immutable release`, and the only way
+  forward is a version bump.
+
+`0.1.0` was lost exactly that way. The setting was enabled while the workflow
+still published the release *before* uploading to it, so the release was created,
+both uploads were rejected with `Cannot upload assets to an immutable release`
+— and the job reported success with an empty, frozen release. Deleting it did
+not give the number back. `0.1.1` is the first version that ever shipped.
+
 > **Read the diff before you push.** `.planning/` contains the full development
 > history — roadmaps, verification reports, threat registers. There is nothing
 > secret in it, but it is verbose and it will be public. If you would rather it
@@ -89,10 +112,13 @@ The workflow, in order:
    if the version is not three-part semver, or if the tag already exists.
 4. Signs the zip with `PRIVATE_KEY` using
    `openssl pkeyutl -sign -rawin`.
-5. Creates a GitHub release tagged with the version, attaching
-   `plugin_package.zip` and `plugin_package.zip.sig`.
+5. Creates the release as a **draft** with `plugin_package.zip` and
+   `plugin_package.zip.sig` attached — drafts stay mutable, published immutable
+   releases do not accept uploads.
+6. Publishes the draft, then asserts it carries exactly two assets. A green job
+   over an empty release is the one failure worth failing loudly for.
 
-The tag is the bare version — `0.1.0`, no `v` prefix — matching the starterkit.
+The tag is the bare version — `0.1.1`, no `v` prefix — matching the starterkit.
 
 ## 4. Submit to the store
 
@@ -134,6 +160,10 @@ Once listed, you never touch `caido/store` again. To ship an update:
 3. `gh workflow run "🚀 Release"`.
 
 The store polls the repository for new releases and picks them up.
+
+If a release fails *after* the draft is published, that version number is spent:
+immutability burns the tag whether or not the release survives. Bump again and
+move on — nothing downstream pins a version.
 
 ---
 
