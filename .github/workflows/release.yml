@@ -129,10 +129,41 @@ jobs:
           rm private_key.pem
           test -s plugin_package.zip.sig || { echo "::error::signature is empty"; exit 1; }
 
-      - name: Create release
+      # A DRAFT FIRST, BECAUSE THIS REPOSITORY HAS IMMUTABLE RELEASES ON.
+      #
+      # Caido's store requires the setting (Settings → General → Releases →
+      # Immutable releases), and a PUBLISHED immutable release accepts no asset
+      # uploads afterwards. This action creates the release and only then
+      # uploads, so with immutability on it failed both uploads with "Cannot
+      # upload assets to an immutable release" and left 0.1.0 published, frozen
+      # and EMPTY — a release the store cannot install anything from, while the
+      # job itself reported success.
+      #
+      # Drafts stay mutable. The zip and its signature are attached here, and
+      # the release is published in the next step, once it is complete.
+      - name: Create draft release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.meta.outputs.version }}
           commit: ${{ github.sha }}
           body: 'Release ${{ steps.meta.outputs.version }}'
+          draft: true
           artifacts: 'packages/dist/plugin_package.zip,packages/dist/plugin_package.zip.sig'
+
+      # PUBLISHING IS WHAT FREEZES IT, so nothing may be missing by this point.
+      # The asset count is checked after publishing because a green job with an
+      # empty release is precisely the failure that got here once already.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh release edit "$TAG" --repo "$REPO" --draft=false --latest
+
+          COUNT=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets | length')
+          if [ "$COUNT" -ne 2 ]; then
+            echo "::error::published release has $COUNT assets, expected plugin_package.zip and plugin_package.zip.sig"
+            exit 1
+          fi
+          echo "Published $TAG with $COUNT assets"
