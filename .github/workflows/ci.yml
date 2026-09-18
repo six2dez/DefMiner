@@ -26,7 +26,17 @@ env:
   # only — the shipped backend uses Caido's database — but a red suite is a red
   # suite.
   NODE_VERSION: 26
-  PNPM_VERSION: 9
+  # 11, WHICH IS WHAT THIS REPOSITORY ACTUALLY REQUIRES: package.json's
+  # `devEngines.packageManager` says `^11.22.0`. Pinning 9 was not a smaller
+  # version, it was a DIFFERENT PACKAGE MANAGER — pnpm 9 cannot read a pnpm 11
+  # lockfile and says so ("Ignoring broken lockfile … expected a single document
+  # in the stream, but found more"), then resolves the entire tree from scratch.
+  # It also reads neither `overrides:` nor `allowBuilds:` from
+  # pnpm-workspace.yaml, because both moved there in pnpm 10. So every run until
+  # now installed an UNLOCKED tree with DIST-06's CVE pins inert and dependency
+  # install scripts un-allowlisted, and tests/pins.spec.ts failed on the one
+  # thing it exists to catch.
+  PNPM_VERSION: 11
 
 jobs:
   test:
@@ -55,10 +65,17 @@ jobs:
           pnpm lint
 
       # `corpus/` is gitignored, so a fresh checkout has none of the vendor
-      # bundles the map fixtures read. Without this the suite fails 11 tests
-      # for a missing 40 MB of downloads rather than for anything real.
+      # bundles the fixtures read. THREE commands, not one: fetch-maps.sh covers
+      # the Phase 7 source maps, and the encoded fixtures that
+      # packages/engine/src/decode.spec.ts measures come from the spike corpus,
+      # which nothing here was fetching — 8 of its tests failed on a missing
+      # 222-byte file in the first CI run that ever got far enough to reach them.
+      # All three are idempotent and gated on pinned SHA-256s.
       - name: Fetch the vendor corpus
-        run: bash scripts/phase7/fetch-maps.sh
+        run: |
+          bash scripts/phase7/fetch-maps.sh
+          bash scripts/spike/fetch-corpus.sh
+          node scripts/spike/make-encoded-fixtures.mjs
 
       # THE DEFAULT REPORTER, NOT `dot`. `dot` buffers on a non-TTY, which is
       # why the six-hour release hang produced no clue about WHERE it stopped.
@@ -71,8 +88,15 @@ jobs:
       # inside a vitest worker — and it was NOT the cause; Node 20 was. It stays
       # excluded for the frame-budget reason alone, and loudly, so nobody reads
       # a green CI run as evidence the budget held.
-      - name: Test
-        run: pnpm vitest run --exclude '**/frontend-load.spec.ts'
-
+      # BEFORE THE SUITE, BECAUSE THE SUITE MEASURES THE BUILD. Locally this
+      # comes free from package.json's `pretest` hook, which only fires for
+      # `pnpm test`; CI invokes vitest directly — to pass `--exclude` and keep
+      # the default reporter — and so has to build by hand. Without it DIST-05
+      # (check-bundle-imports), the frontend externals gate and the prefixwrap
+      # gate all fail against a bundle that was never built, which is exactly
+      # how they failed here.
       - name: Build
         run: pnpm build
+
+      - name: Test
+        run: pnpm vitest run --exclude '**/frontend-load.spec.ts'

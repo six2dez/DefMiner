@@ -247,14 +247,44 @@ Three changes survive from the wrong diagnosis, all still worth having:
   Per-file progress is what finally located this one, by naming the last file
   that reported.
 
+## The pnpm pin, and what it quietly disabled
+
+Both workflows pinned `PNPM_VERSION: 9` while `package.json` declares
+`devEngines.packageManager: ^11.22.0`. That is not an old version, it is a
+different package manager, and the install said so on every run:
+
+```
+WARN Ignoring broken lockfile at /home/runner/work/DefMiner/DefMiner:
+     ... expected a single document in the stream, but found more
+```
+
+pnpm 9 cannot parse a pnpm 11 lockfile, so it discarded it and resolved the
+whole tree from scratch. It also reads neither `overrides:` nor `allowBuilds:`
+from `pnpm-workspace.yaml` — both moved there in pnpm 10. So on every CI run,
+and in **the release job that built the published artifact**:
+
+- DIST-06's pins were inert: `primevue`, `tailwindcss`, and the CVE overrides on
+  `cookie`, `esbuild`, `glob`, `qs`, `sharp`, `vite` and `ws`.
+- `allowBuilds` was inert, so dependency install scripts ran un-allowlisted —
+  including `sharp`, which was declined deliberately.
+- `tests/pins.spec.ts` failed on exactly the thing it exists to catch, and
+  nobody saw it, because the run never got that far.
+
+Both workflows are on 11 now. Anything released before that was built from an
+unlocked tree.
+
 ## Known state at the time of writing
 
 - The full suite is 91 files / 4,332 tests. `tests/frontend-load.spec.ts` is
   excluded from CI by glob: it is a frame-budget backstop that fails under
   parallel load and passes 12/12 in isolation. It was the long-standing suspect
   for the hang above and it was not the cause.
-- `corpus/` is gitignored, so CI fetches the vendor bundles with
-  `scripts/phase7/fetch-maps.sh` before running the suite. Without it 11 tests
-  fail for a missing 40 MB of downloads rather than for anything real.
+- `corpus/` is gitignored, so CI rebuilds it before the suite:
+  `scripts/phase7/fetch-maps.sh`, `scripts/spike/fetch-corpus.sh` and
+  `node scripts/spike/make-encoded-fixtures.mjs`. The last two were missing from
+  CI until the suite first ran far enough to notice.
+- CI builds **before** it tests. Locally that comes free from `pretest`, which
+  fires only for `pnpm test`; CI calls vitest directly, so the DIST-05, externals
+  and prefixwrap gates would otherwise measure a bundle nobody built.
 - The detection engine (secrets, endpoints) is **not implemented**. The README
   and the Help tab both say so. Do not let store copy imply otherwise.

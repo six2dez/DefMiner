@@ -11,7 +11,10 @@ env:
   # so 20 built fine; keeping the two workflows on one runtime means the thing
   # that gets tested is the thing that gets shipped.
   NODE_VERSION: 26
-  PNPM_VERSION: 9
+  # 11 — see the note in ci.yml. This matters more here than there: under
+  # pnpm 9 this workflow built the SHIPPED artifact from an unlocked tree with
+  # the DIST-06 pins inert.
+  PNPM_VERSION: 11
 
 jobs:
   release:
