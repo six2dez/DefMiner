@@ -27,7 +27,7 @@ export default defineConfig({
   id: "defminer",
   name: "DefMiner",
   description: "Passive JavaScript artifact inventory for Caido",
-  version: "0.1.1",
+  version: "0.1.2",
   author: { name: "DefMiner" },
   plugins: [
     {
