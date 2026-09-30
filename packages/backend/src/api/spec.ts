@@ -26,6 +26,7 @@
 
 import type { DefinePluginPackageSpec } from "@caido/sdk-shared";
 import type {
+  ActiveProjectPayload,
   DeriveSourceResult,
   ExportFormat,
   ExportRedactionMode,
@@ -198,9 +199,19 @@ import type { SlimStatus } from "../telemetry";
  * failure is total, silent, and indistinguishable from the target having
  * redeployed. One forced reload is the cheaper half of that trade.
  *
+ * BUMPED TO 8 FOR THE STORE RELEASE THAT MADE THE PAGE FOLLOW A PROJECT SWITCH,
+ * AND IT IS THE RULE AT THE TOP APPLIED VERBATIM: the payload type in the
+ * `events` map changed. `InvalidationEventPayload` gained a third variant, the
+ * backend's own announcement that it switched project. A version-7 bundle's
+ * single subscription site knows two variants and hands anything that is not
+ * scan progress to the coalescer as an invalidation summary — so without the
+ * bump a project switch would arrive there as a summary with no category. The
+ * `getActiveProject` endpoint added beside it is a new name and obliges nothing
+ * on its own.
+ *
  * Monotonically increasing. Never reused, never decremented.
  */
-export const CONTRACT_VERSION = 7;
+export const CONTRACT_VERSION = 8;
 
 /**
  * What `getStatus` returns.
@@ -824,6 +835,12 @@ export type ScanCommandOutcome = {
  * rows A2 and A3). An exceeded contract nobody edited is how a security
  * property becomes folklore.
  *
+ * A THIRD VARIANT ARRIVED WITH THE STORE RELEASE, and it carries less than
+ * either of the others: a discriminator and the project id the backend switched
+ * to. It is sent from the lifecycle's `onProjectChange` handler after the swap
+ * has been applied, so the page reloads from a backend that already answers for
+ * the new project. Still no rows, no bodies, and nothing a target influenced.
+ *
  * ONE EVENT AND NOT TWO, WHICH IS D-15's ACTUAL REASON. A second event name
  * would mean a second subscription list edited by every phase that adds a
  * surface. What D-15 asked for LITERALLY — a `scans` `InvalidationCategory` —
@@ -992,6 +1009,11 @@ type Spec = DefinePluginPackageSpec<{
      *  one hidden below a display cap is unfinished work the operator has no way
      *  to learn about (U6-1, D-26). */
     listScans: (req: ScanListRequest) => Promise<readonly ScanHistoryRow[]>;
+    /** The project every read is scoped to right now, or `null` when none is
+     *  selected. The page reads it on mount and whenever Caido reports a
+     *  project change, so what it shows is always the backend's answer to
+     *  "which project" and never its own guess. */
+    getActiveProject: () => ActiveProjectPayload;
     /** {@link CONTRACT_VERSION}. Cheap, and the only thing that prevents a stale
      *  frontend bundle silently misreading a changed return shape. */
     getContractVersion: () => number;

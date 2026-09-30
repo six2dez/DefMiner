@@ -64,6 +64,8 @@ import type {
   VisibleTotal,
 } from "@defminer/engine/contract";
 import {
+  INVALIDATION_EVENT,
+  PROJECT_CHANGED_KIND,
   SOURCE_PRODUCIBILITY_STATES,
   SOURCE_TREE_LOAD_MAX,
 } from "@defminer/engine/contract";
@@ -1138,6 +1140,24 @@ export async function init(sdk: PluginSdk): Promise<void> {
       log: (msg) => {
         sdk.console.log(msg);
       },
+      // THE PAGE IS TOLD, AFTER THE SWAP. Caido keeps the frontend mounted
+      // across a project switch, and without this it keeps rendering the
+      // previous project until the operator reloads the application. Sent
+      // from here rather than left to Caido's frontend notification because
+      // this one is ORDERED: the swap has been applied, so every read the page
+      // issues in response is answered from the new project. The payload is a
+      // literal with exactly two keys, for the reason the consumer builds its
+      // summary as one.
+      onChange: (applied) => {
+        try {
+          sdk.api.send(INVALIDATION_EVENT, {
+            kind: PROJECT_CHANGED_KIND,
+            projectId: applied.next,
+          });
+        } catch (e) {
+          log(sdk, "project change emit failed: " + describeError(e));
+        }
+      },
     });
 
     // 5b — ISOLATION IS A PRECONDITION FOR INGESTING, NOT A FEATURE OF IT.
@@ -1989,6 +2009,13 @@ export async function init(sdk: PluginSdk): Promise<void> {
       const rows = await listScans(db, pid, req.limit ?? undefined);
       return rows.map(toHistoryRow);
     });
+    // THE PAGE'S ANSWER TO "WHICH PROJECT", and the lifecycle's own value — the
+    // same `currentProjectId()` every read above substitutes for the caller's.
+    // Not `async` and no database: it must answer even while nothing else can,
+    // so the page never has to guess which project its rows belong to.
+    sdk.api.register("getActiveProject", () => ({
+      projectId: currentProjectId(),
+    }));
     // Not `async`, and it touches nothing: a version check that could fail for
     // any reason other than the plugin being absent would be a check the
     // frontend has to interpret rather than compare.

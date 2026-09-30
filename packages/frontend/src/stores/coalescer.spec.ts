@@ -349,6 +349,24 @@ describe("suppression while the operator is mid-triage", () => {
     expect(f.coalescer.pendingByCategory.value).toEqual(pendingZeroed());
     expect(f.gate.refreshes()).toBe(1);
   });
+
+  it("FORGETS the pending count on a project switch, WITHOUT requerying", async () => {
+    // The page's switch reloads both tables itself; a count accrued under the
+    // previous project describes rows the operator can no longer see, and
+    // applying it would be a second reload of the new one.
+    const f = fixture();
+    f.gate.select("row-1");
+    f.bus.emit(summary({ changedCount: 4 }));
+    await vi.advanceTimersByTimeAsync(COALESCE_TRAILING_WINDOW_MS);
+    expect(f.coalescer.pendingTotal.value).toBe(4);
+
+    f.coalescer.clearPending();
+
+    expect(f.coalescer.pendingTotal.value).toBe(0);
+    expect(f.coalescer.pendingByCategory.value).toEqual(pendingZeroed());
+    expect(f.gate.refreshes()).toBe(0);
+    expect(f.coalescer.reactionCount.value).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

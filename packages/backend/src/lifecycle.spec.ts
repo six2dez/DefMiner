@@ -18,6 +18,10 @@
 
 import { readFileSync } from "node:fs";
 
+import {
+  INVALIDATION_EVENT,
+  PROJECT_CHANGED_KIND,
+} from "@defminer/engine/contract";
 import { artifactDeadline, Cancelled, walk } from "@defminer/engine/pipeline";
 import { BoundedQueue } from "@defminer/engine/queue";
 import { QUEUE_CAP } from "@defminer/engine/thresholds";
@@ -489,6 +493,117 @@ describe("getStatus over a real init()", () => {
     const rpc = await bootInit(null);
     await expect(rpc.getArtifacts()).resolves.toEqual([]);
     await expect(rpc.getObservations()).resolves.toEqual([]);
+  });
+});
+
+// ===========================================================================
+// 5b. THE PAGE IS TOLD — AFTER THE SWAP, NEVER BEFORE
+// ===========================================================================
+//
+// Caido keeps the plugin's page mounted across a project switch. The page can
+// only reload the right project if it hears about the switch from a backend
+// that has ALREADY applied it: a reload that raced the swap would re-read the
+// previous project and render it under the new one. These cases pin the
+// ordering at both levels — the lifecycle's own notifier, and the event
+// `init()` sends from it.
+
+describe("the page is told about a project change, after the swap", () => {
+  it("notifies once per applied change, with the swap already visible", async () => {
+    const seen: Record<string, unknown>[] = [];
+    const sdk = makeFakeSdk({ projectId: A });
+    await installLifecycle(sdk, {
+      ...deps(),
+      // Read the lifecycle's state FROM INSIDE the notifier. A notifier that
+      // ran before step 3 would see the previous project here.
+      onChange: (applied) => {
+        seen.push({ ...applied, current: currentProjectId() });
+      },
+    });
+
+    await emitProjectChange(sdk, makeFakeProject(B));
+    await emitProjectChange(sdk, null);
+
+    expect(seen).toEqual([
+      { previous: A, next: B, discarded: 0, current: B },
+      { previous: B, next: null, discarded: 0, current: null },
+    ]);
+  });
+
+  it("does NOT notify for the initial resolution — no page was showing a previous project", async () => {
+    let notified = 0;
+    const sdk = makeFakeSdk({ projectId: A });
+    await installLifecycle(sdk, {
+      ...deps(),
+      onChange: () => {
+        notified += 1;
+      },
+    });
+
+    expect(currentProjectId()).toBe(A);
+    expect(notified).toBe(0);
+  });
+
+  it("keeps the change applied when the notifier throws, and says so in the log", async () => {
+    const logged: string[] = [];
+    const sdk = makeFakeSdk({ projectId: A });
+    await installLifecycle(sdk, {
+      ...deps(),
+      log: (msg) => logged.push(msg),
+      onChange: () => {
+        throw new Error("event channel gone");
+      },
+    });
+
+    await emitProjectChange(sdk, makeFakeProject(B));
+
+    expect(currentProjectId()).toBe(B);
+    expect(admissionAllowed()).toBe(true);
+    expect(logged.join("\n")).toContain("project change notification failed");
+  });
+
+  it("init() announces the switch on the event, as a two-key payload, after the swap", async () => {
+    const answeredDuringSend: unknown[] = [];
+    const registered: Record<string, (...a: unknown[]) => unknown> = {};
+    const sdk = makeFakeSdk({
+      projectId: A,
+      db: async () => fx.db,
+      register: (name: string, fn: unknown) => {
+        registered[name] = fn as (...a: unknown[]) => unknown;
+      },
+      // What `getActiveProject` answers AT THE MOMENT the event is sent is the
+      // ordering claim itself: the page reloads on receipt, and every read it
+      // issues must already be answered from the new project.
+      send: () => {
+        answeredDuringSend.push(registered.getActiveProject?.());
+      },
+    });
+    await init(sdk);
+    expect(registered.getActiveProject?.()).toEqual({ projectId: A });
+
+    await emitProjectChange(sdk, makeFakeProject(B));
+    await emitProjectChange(sdk, null);
+
+    const announcements = sdk.calls.apiSend.filter((call) => {
+      const payload = call.args[0] as { kind?: unknown };
+      return payload.kind === PROJECT_CHANGED_KIND;
+    });
+    expect(announcements.map((call) => call.event)).toEqual([
+      INVALIDATION_EVENT,
+      INVALIDATION_EVENT,
+    ]);
+    expect(announcements.map((call) => call.args[0])).toEqual([
+      { kind: PROJECT_CHANGED_KIND, projectId: B },
+      { kind: PROJECT_CHANGED_KIND, projectId: null },
+    ]);
+    // THE KEY SET, not the fields: a row, a URL or a name added to this payload
+    // later fails here without anyone having to predict its name.
+    for (const call of announcements) {
+      expect(Object.keys(call.args[0] as object).sort()).toEqual([
+        "kind",
+        "projectId",
+      ]);
+    }
+    expect(answeredDuringSend).toEqual([{ projectId: B }, { projectId: null }]);
   });
 });
 

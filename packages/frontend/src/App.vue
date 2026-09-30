@@ -142,20 +142,89 @@ const sdk = inject<DefMinerBackendSdk | undefined>(
 );
 
 /**
- * The project id the page ASKS under.
+ * The project id the page asks under BEFORE THE BACKEND HAS SAID WHICH PROJECT
+ * IS ACTIVE, and while none is selected.
  *
- * DELIBERATELY A PLACEHOLDER AND NOT A REAL ID. The backend discards the
- * caller's `projectId` on every paged read and substitutes its own
- * lifecycle-resolved value — `scopedTo(req, currentProjectId())` in
+ * A PLACEHOLDER, AND THE REQUEST FIELD IT FILLS IS STILL NOT THE ANSWER. The
+ * backend discards the caller's `projectId` on every read and substitutes its
+ * own lifecycle-resolved value — `scopedTo(req, currentProjectId())` in
  * packages/backend/src/index.ts, whose comment says why: trusting the field
  * would let anything holding the RPC handle page another project's rows out of
- * the one shared SQLite file (T-05-34). So this value is never the answer to
- * "which project"; it is a required field on a request whose scope the server
- * decides. Naming it makes that visible instead of leaving a mystery literal.
+ * the one shared SQLite file (T-05-34).
+ *
+ * WHAT THE PLACEHOLDER COST, AND WHY THE PAGE NOW LEARNS THE REAL ID. Two
+ * listeners compare a payload's project against this field: the coalescer, so
+ * a summary from a project the operator has left is not counted, and the scan
+ * readout, so another project's progress is not shown. Against a placeholder
+ * both comparisons failed for EVERY payload, and the tables never learned about
+ * new rows and the scan strip never moved. {@link activeProject} is the
+ * backend's own answer, and it is what every request and both comparisons read
+ * once it has arrived.
  */
 const SERVER_SCOPED_PROJECT = "server-scoped";
 
 const client = sdk === undefined ? null : createBackendClient(sdk);
+
+// ---------------------------------------------------------------------------
+// THE ACTIVE PROJECT — FOLLOWED, NEVER ASSUMED
+// ---------------------------------------------------------------------------
+//
+// CAIDO KEEPS THIS PAGE MOUNTED ACROSS A PROJECT SWITCH. Everything below the
+// tab strip was loaded under the project that was active when it loaded, so a
+// page that loaded once, on mount, went on showing the previous project's
+// rows, settings and scan until the operator reloaded the whole application.
+//
+// THE BACKEND IS THE ONLY AUTHORITY ON WHICH PROJECT IS ACTIVE, because it is
+// the party that scopes every read. The page learns the answer three ways, and
+// every one of them ends in {@link followProject}:
+//
+//   1. It ASKS, on mount — `getActiveProject`.
+//   2. The backend ANNOUNCES a switch on its event, AFTER applying it, so the
+//      reload that follows is answered from the new project.
+//   3. Caido's own frontend notification makes it ASK AGAIN. That notification
+//      is not ordered against the backend's switch, so its project id is never
+//      used: at worst the second read is redundant.
+
+/**
+ * The project the page is showing, AS THE BACKEND LAST REPORTED IT.
+ *
+ * `undefined` until the first report, and that is a different claim from
+ * `null`: `null` is the backend saying no project is selected, `undefined` is
+ * the page not knowing yet.
+ */
+const activeProject = ref<string | null | undefined>(undefined);
+
+/** The project id every request carries: the backend's, once it has said. */
+const requestProjectId = computed<string>(
+  () => activeProject.value ?? SERVER_SCOPED_PROJECT,
+);
+
+/**
+ * Bumped on every project SWITCH, and the key of the regions that load their
+ * own data on mount — the tab body and the evidence panel.
+ *
+ * RE-MOUNTING IS THE RELOAD. Settings, Health, Scan and the source browser each
+ * read the backend when they mount, and hold what they read in local state a
+ * parent cannot reach. A new key discards all of it — an unsaved settings
+ * draft typed against the previous project included — and mounts a fresh copy
+ * that asks again, under the project that is active now.
+ *
+ * It is also the guard on this component's own reads — the `Sources` counts,
+ * the scan indicator, the export's contributing counts. Each captures it before
+ * its await and drops an answer that arrives after a switch: that answer was
+ * about the project the operator left.
+ */
+const projectGeneration = ref(0);
+
+/** Whether the page has shown ANY project yet. The first show is a load; every
+ *  later one is a switch, and only a switch has anything to throw away. */
+let shownOnce = false;
+
+/**
+ * Bumped whenever a report is FOLLOWED, so a `getActiveProject` read that was
+ * issued before it can recognise its own answer as stale and drop it.
+ */
+let projectReports = 0;
 
 /**
  * A reader for a table the SDK cannot serve.
@@ -347,7 +416,11 @@ const sourceCounts = ref<ReadonlyMap<string, number> | null>(null);
 
 async function loadSourceCounts(): Promise<void> {
   if (client === null) return;
+  const asked = projectGeneration.value;
   const result = await client.countRecoveredSources();
+  // An answer about the project the operator has since left is dropped, for
+  // the reason `projectGeneration` gives.
+  if (asked !== projectGeneration.value) return;
   // FAIL TO `null`, NOT TO AN EMPTY MAP. Both render as unknown today, and the
   // `null` says WHY at the one place a later reader would look.
   sourceCounts.value = result.ok ? new Map(Object.entries(result.value)) : null;
@@ -458,7 +531,7 @@ async function loadPanelAnalysis(sha256: string | null): Promise<void> {
 
   panelLoading.value = true;
   const result = await client.getArtifactAnalysis({
-    projectId: SERVER_SCOPED_PROJECT,
+    projectId: requestProjectId.value,
     sha256,
   });
   if (panelGeneration !== mine) return;
@@ -517,6 +590,106 @@ function onRetried(state: ScanState | null): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// FOLLOWING THE PROJECT
+// ---------------------------------------------------------------------------
+
+/**
+ * Put one project on screen: everything below the tab strip is loaded again
+ * under it.
+ *
+ * ON A SWITCH, EVERYTHING SCOPED TO THE PREVIOUS PROJECT IS DROPPED FIRST —
+ * not refreshed in place. The selection, the open panel and the filter are
+ * cleared by the stores; the drill-down and the export dialog close; the pill's
+ * pending count, the retry overlay, the `Sources` counts and the scan indicator
+ * are forgotten; and the tab body and evidence panel re-mount under a new key.
+ * A value left over from the previous project is not a stale value, it is a
+ * WRONG one — a count, a setting or an analysis state shown beside rows it does
+ * not describe.
+ *
+ * The active TAB is kept. The operator who switched project from Settings
+ * expects to be looking at Settings, for the project they switched to.
+ */
+function showProject(next: string | null | undefined): void {
+  const switching = shownOnce;
+  shownOnce = true;
+  activeProject.value = next;
+
+  if (switching) {
+    projectGeneration.value += 1;
+    browsingSources.value = null;
+    closeExport();
+    retriedStates.value = new Map();
+    sourceCounts.value = null;
+    // ABSENT, NOT HELD. `readScanIndicator` holds its value across a failed
+    // read because a failed read is not evidence that no scan is running — but
+    // that value described the PREVIOUS project, and holding it would claim a
+    // scan in this one.
+    scanIndicator.value = null;
+    coalescer?.clearPending();
+    void readScanIndicator();
+  }
+
+  void artifacts.setProject(requestProjectId.value);
+  void observations.setProject(requestProjectId.value);
+  void loadSourceCounts();
+}
+
+/**
+ * Follow one report of the active project. A report of the project already on
+ * screen changes nothing: the backend's announcement and Caido's notification
+ * usually both arrive for one switch, and the second must not reload twice.
+ */
+function followProject(next: string | null): void {
+  projectReports += 1;
+  if (shownOnce && activeProject.value === next) return;
+  showProject(next);
+}
+
+/**
+ * Ask the backend which project is active, and follow the answer.
+ *
+ * AN ANSWER THAT WAS OVERTAKEN IS DROPPED. If a report was followed while this
+ * read was in flight, that report is at least as new as whatever the backend
+ * saw when it answered this one, and following this one afterwards could put
+ * the page back on a project the operator has already left.
+ *
+ * A FAILED READ CHANGES NOTHING. It is not evidence that the project changed,
+ * any more than a failed status read is evidence that no scan is running.
+ */
+async function readActiveProject(): Promise<void> {
+  if (client === null) return;
+  const mine = projectReports;
+  const result = await client.getActiveProject();
+  if (!result.ok || mine !== projectReports) return;
+  followProject(result.value.projectId);
+}
+
+/** The first show: ASK, then load. If nothing was followed — no SDK, or the
+ *  read did not answer — the page loads anyway, under the placeholder, so the
+ *  tables reach a real state (rows, empty, or the error screen) rather than
+ *  waiting for an answer that is not coming. */
+async function openWorkspace(): Promise<void> {
+  await readActiveProject();
+  if (!shownOnce) showProject(undefined);
+}
+
+// THE TWO STOP HANDLES ARE OWNED, NOT DROPPED — research P-04's leak, for the
+// same reason the coalescer's is.
+const projectSubscriptions: InvalidationSubscription[] =
+  client === null
+    ? []
+    : [
+        client.subscribeProjectChange(followProject),
+        client.onCaidoProjectChange(() => {
+          void readActiveProject();
+        }),
+      ];
+
+onUnmounted(() => {
+  for (const subscription of projectSubscriptions) subscription.stop();
+});
+
 onMounted(() => {
   // Deliberately not `await`ed in an async `onMounted`: the tab strip and the
   // rest of the shell must be on screen before any of this resolves, and a
@@ -527,13 +700,14 @@ onMounted(() => {
   if (client !== null) {
     void client.checkContractVersion();
   }
-  // BEFORE the two page reads in source order, and deliberately: on a refusing
-  // build both of those reject, and the compatibility report is the only thing
-  // that can explain why. It does not depend on either of them resolving.
+  // BEFORE the page reads in source order, and deliberately: on a refusing
+  // build those reject, and the compatibility report is the only thing that
+  // can explain why. It does not depend on any of them resolving.
   void loadCompat();
-  void artifacts.loadFirstPage();
-  void observations.loadFirstPage();
-  void loadSourceCounts();
+  // THE PAGE READS WAIT FOR THE PROJECT. Until the backend has said which
+  // project is active, a row read cannot be attributed to one — and the tables
+  // render their loading skeleton, never the empty screen, in the meantime.
+  void openWorkspace();
 });
 
 // ---------------------------------------------------------------------------
@@ -590,17 +764,20 @@ const contributingDegraded = ref(0);
 
 async function loadContributingCounts(): Promise<void> {
   if (client === null) return;
+  const asked = projectGeneration.value;
   const total = await client.countInventory({
-    projectId: SERVER_SCOPED_PROJECT,
+    projectId: requestProjectId.value,
     table: "artifacts",
     filter: null,
   });
+  if (asked !== projectGeneration.value) return;
   if (total.ok) contributingTotal.value = total.value.visible;
   const degraded = await client.countInventory({
-    projectId: SERVER_SCOPED_PROJECT,
+    projectId: requestProjectId.value,
     table: "artifacts",
     filter: AFFECTED_FILTER,
   });
+  if (asked !== projectGeneration.value) return;
   if (degraded.ok) contributingDegraded.value = degraded.value.visible;
 }
 
@@ -724,7 +901,7 @@ function loadSettings(): Promise<RpcResult<readonly SettingRow[]>> {
       versions: null,
     });
   }
-  return client.listSettings({ projectId: SERVER_SCOPED_PROJECT });
+  return client.listSettings({ projectId: requestProjectId.value });
 }
 
 function saveSetting(
@@ -850,7 +1027,7 @@ function scanCommand(
           reason: "rpc-rejected",
           versions: null,
         })
-      : call({ projectId: SERVER_SCOPED_PROJECT, scanId });
+      : call({ projectId: requestProjectId.value, scanId });
 }
 
 const pauseScan = scanCommand((request) => client!.pauseScan(request));
@@ -876,7 +1053,7 @@ function loadScanHistory(
       versions: null,
     });
   }
-  return client.listScans({ projectId: SERVER_SCOPED_PROJECT, limit });
+  return client.listScans({ projectId: requestProjectId.value, limit });
 }
 
 /**
@@ -946,8 +1123,11 @@ const scanIndicator = ref<ScanIndicator | null>(null);
  * backend answered, and its answer is that this project has no active scan.
  */
 async function readScanIndicator(): Promise<void> {
+  const asked = projectGeneration.value;
   const result = await loadScan();
-  if (!result.ok) return;
+  // A status read about the project the operator left says nothing about the
+  // one they are on — the switch already cleared the indicator and asked again.
+  if (!result.ok || asked !== projectGeneration.value) return;
   const payload = result.value;
   scanIndicator.value =
     payload === null
@@ -1196,7 +1376,7 @@ async function loadCompat(): Promise<void> {
         :filter="exportStore.filter.value"
         :sort-key="exportStore.sortKey.value"
         :direction="exportStore.direction.value"
-        :project-id="SERVER_SCOPED_PROJECT"
+        :project-id="requestProjectId"
         :reachable-count="exportDialogReachable"
         :contributing-total="contributingTotal"
         :contributing-degraded="contributingDegraded"
@@ -1209,8 +1389,13 @@ async function loadCompat(): Promise<void> {
          overlay: an overlay forces the operator to close it between rows, which
          is the wrong ergonomics for triaging thousands of items. -->
     <div class="flex min-h-0 flex-1 gap-4 p-4">
+      <!-- KEYED BY THE PROJECT GENERATION. A project switch re-mounts whichever
+           body is open, and every body reads the backend when it mounts — so
+           Settings, Health and Scan come back reading the new project rather
+           than showing the previous one's answers. -->
       <section
         :id="activePanelId"
+        :key="projectGeneration"
         class="flex min-w-0 flex-1 flex-col"
         role="tabpanel"
         :aria-labelledby="`defminer-tab-${activeTab}`"
@@ -1233,7 +1418,7 @@ async function loadCompat(): Promise<void> {
         <template v-if="activeTab === 'artifacts'">
           <SourceBrowser
             v-if="browsingSources !== null && client !== null"
-            :project-id="SERVER_SCOPED_PROJECT"
+            :project-id="requestProjectId"
             :artifact-sha256="browsingSources"
             :client="client"
             :analysis-stopped-early="browsedAnalysisStoppedEarly"
@@ -1268,7 +1453,7 @@ async function loadCompat(): Promise<void> {
              renders Health under a tab labelled Scan. -->
         <ScanPanel
           v-else-if="activeTab === 'scan'"
-          :project-id="SERVER_SCOPED_PROJECT"
+          :project-id="requestProjectId"
           :defminer-clause="SCAN_KIND_CLAUSE"
           :load="loadScan"
           :start="startScan"
@@ -1284,7 +1469,7 @@ async function loadCompat(): Promise<void> {
         <!-- UI-08's SETTINGS BODY, replacing the tracer's placeholder. -->
         <SettingsPanel
           v-else-if="activeTab === 'settings'"
-          :project-id="SERVER_SCOPED_PROJECT"
+          :project-id="requestProjectId"
           :load="loadSettings"
           :save="saveSetting"
           :load-footprint="loadStorageFootprint"
@@ -1319,8 +1504,12 @@ async function loadCompat(): Promise<void> {
            tab change between the two entity tables — a panel that came and
            went would reflow the body on every row click. -->
       <div class="w-1/3 shrink-0">
+        <!-- Keyed like the tab body: a retry in flight when the project
+             switched belongs to an artifact that is no longer on screen. The
+             region stays; only its contents are replaced. -->
         <EvidencePanel
-          :project-id="SERVER_SCOPED_PROJECT"
+          :key="projectGeneration"
+          :project-id="requestProjectId"
           :selected-sha256="selectedSha256"
           :analysis="panelAnalysis"
           :loading="panelLoading"

@@ -33,6 +33,7 @@ import type {
   ScanProgressPayload,
 } from "@defminer/engine/contract";
 import {
+  isProjectChangedPayload,
   isScanProgressPayload,
   SCAN_PROGRESS_KIND,
 } from "@defminer/engine/contract";
@@ -307,7 +308,11 @@ describe("the triage-lock invariant is routed AROUND, never weakened", () => {
       },
       subscribe: (handler) =>
         bus.subscribe((payload) => {
-          if (!isScanProgressPayload(payload)) handler(payload);
+          if (
+            !isScanProgressPayload(payload) &&
+            !isProjectChangedPayload(payload)
+          )
+            handler(payload);
         }),
     });
     const store = useScanProgress({
@@ -355,7 +360,11 @@ describe("the triage-lock invariant is routed AROUND, never weakened", () => {
       },
       subscribe: (handler) =>
         bus.subscribe((payload) => {
-          if (!isScanProgressPayload(payload)) handler(payload);
+          if (
+            !isScanProgressPayload(payload) &&
+            !isProjectChangedPayload(payload)
+          )
+            handler(payload);
         }),
     });
     const store = useScanProgress({

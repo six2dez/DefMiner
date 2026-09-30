@@ -107,6 +107,7 @@ const CONTRACT_ENDPOINTS: readonly string[] = [
   "resumeScan",
   "discardScan",
   "listScans",
+  "getActiveProject",
   "getContractVersion",
 ];
 

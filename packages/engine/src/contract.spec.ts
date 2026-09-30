@@ -47,7 +47,9 @@ import {
   INVALIDATION_EVENT,
   isDegradedScanState,
   isOperatorDecided,
+  isProjectChangedPayload,
   isScanProgressPayload,
+  PROJECT_CHANGED_KIND,
   RETRY_TARGET_SCAN_STATE,
   RETRYABLE_SCAN_STATES,
   SCAN_KIND_CLAUSE,
@@ -73,6 +75,7 @@ import type {
   PageCursor,
   PageRequest,
   PageResponse,
+  ProjectChangedPayload,
   RecoveredSourceRow,
   ScanLifecycleState,
   ScanProgressPayload,
@@ -1241,6 +1244,65 @@ describe("the progress payload is a VARIANT, never a fourth CATEGORY", () => {
     // finished analysis to THIS scan. 06-UI-SPEC.md D2 — "a number DefMiner
     // does not have is absent, never zero".
     expect(makeProgress().analysed).toBeNull();
+  });
+});
+
+// ===========================================================================
+// THE THIRD VARIANT — THE BACKEND SWITCHED PROJECT
+// ===========================================================================
+// A VARIANT for the reason progress is one, and asserted the same way: the
+// category list is untouched, the discriminator is not an event name, and the
+// predicates tell all three variants apart in both directions.
+
+describe("the project-change payload is a VARIANT, never a CATEGORY", () => {
+  const changed: ProjectChangedPayload = {
+    kind: PROJECT_CHANGED_KIND,
+    projectId: "p2",
+  };
+
+  it("leaves INVALIDATION_CATEGORIES with nothing project-shaped in it", () => {
+    expect(INVALIDATION_CATEGORIES).not.toContain(PROJECT_CHANGED_KIND);
+    expect(INVALIDATION_CATEGORIES).not.toContain("projects");
+  });
+
+  it("PROJECT_CHANGED_KIND is a literal distinct from the event and from progress", () => {
+    expect(PROJECT_CHANGED_KIND.length).toBeGreaterThan(0);
+    expect(PROJECT_CHANGED_KIND).not.toBe(INVALIDATION_EVENT);
+    expect(PROJECT_CHANGED_KIND).not.toBe(SCAN_PROGRESS_KIND);
+  });
+
+  it("each predicate claims its own variant and no other", () => {
+    const summary: InvalidationEventPayload = {
+      projectId: "p1",
+      category: "artifacts",
+      changedCount: 3,
+      newestId: "a".repeat(64),
+    };
+    const progress: InvalidationEventPayload = makeProgress();
+
+    expect(isProjectChangedPayload(changed)).toBe(true);
+    expect(isProjectChangedPayload(summary)).toBe(false);
+    expect(isProjectChangedPayload(progress)).toBe(false);
+    // And the progress predicate does not mistake a project change for
+    // progress — the other half of "no other".
+    expect(isScanProgressPayload(changed)).toBe(false);
+  });
+
+  it("carries a discriminator and a project id, and nothing else", () => {
+    // THE KEY SET, for the reason the progress case asserts its own: a row, a
+    // project NAME or a path added here later fails without anyone having to
+    // predict its field name. The id is Caido's identifier; a name is
+    // operator-authored text and has no business on this channel.
+    expect(Object.keys(changed).sort()).toEqual(["kind", "projectId"]);
+  });
+
+  it("says `null` — never an empty string — when no project is selected", () => {
+    const none: ProjectChangedPayload = {
+      kind: PROJECT_CHANGED_KIND,
+      projectId: null,
+    };
+    expect(isProjectChangedPayload(none)).toBe(true);
+    expect(none.projectId).toBeNull();
   });
 });
 

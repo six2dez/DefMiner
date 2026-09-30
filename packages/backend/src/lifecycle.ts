@@ -118,6 +118,21 @@ export type LifecycleDeps = {
    *  timestamps for ids nothing will ever take. */
   enqueuedAt: EnqueueClock;
   log?: (msg: string) => void;
+  /**
+   * Told about every change an `onProjectChange` EVENT applied, AFTER the swap.
+   *
+   * This is how the page learns that the project it is showing is gone: the
+   * page stays mounted across a switch, and `index.ts` forwards this to the
+   * frontend as the event's project-change variant. It runs after step 4 of
+   * {@link applyProjectChange}, so a read the page issues in response is
+   * already answered from the new project — the ordering Caido's own frontend
+   * notification cannot promise.
+   *
+   * NOT CALLED FOR THE INITIAL RESOLUTION. At boot there is no page that was
+   * showing a previous project, and one that mounts later asks for the project
+   * itself.
+   */
+  onChange?: (applied: ProjectChangeSummary) => void;
 };
 
 /**
@@ -308,6 +323,14 @@ export async function installLifecycle(
           String(applied.discarded) +
           " queued entries admitted under the previous project",
       );
+      // AFTER the swap and after the log line, and contained. A notifier that
+      // throws has still been handed a change that is fully applied; letting
+      // its failure escape would surface as nothing at all on this runtime.
+      try {
+        d.onChange?.(applied);
+      } catch (e) {
+        log("project change notification failed: " + describeError(e));
+      }
     });
   } catch (e) {
     // Registration failing must not take init() down — but it must not be

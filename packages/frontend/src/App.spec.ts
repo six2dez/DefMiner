@@ -13,7 +13,9 @@
 // reaches the page.
 
 import type {
+  ActiveProjectPayload,
   DeriveSourceResult,
+  InvalidationEventPayload,
   InvalidationSummary,
   PageRequest,
   PageResponse,
@@ -21,7 +23,11 @@ import type {
   ScanStatusPayload,
   VisibleTotal,
 } from "@defminer/engine/contract";
-import { SOURCE_TREE_LOAD_MAX } from "@defminer/engine/contract";
+import {
+  PROJECT_CHANGED_KIND,
+  SCAN_PROGRESS_KIND,
+  SOURCE_TREE_LOAD_MAX,
+} from "@defminer/engine/contract";
 import { mount } from "@vue/test-utils";
 import type { VueWrapper } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
@@ -73,6 +79,7 @@ import {
   SCAN_START_CTA,
   SCAN_STATUS_SCANNING,
   SCAN_STATUS_SUSPENDED,
+  counterId as scanCounterId,
 } from "./components/scan-contract";
 import { SCAN_LIFECYCLE_PRESENTATION } from "./components/scan-lifecycle-presentation";
 import { SCAN_STATE_PRESENTATION } from "./components/scan-state-presentation";
@@ -168,11 +175,31 @@ type StubOptions = {
   readonly retryOutcome?: RetryOutcome;
   /** Records every retry the page issued, so a case can assert the KEY. */
   readonly retries?: AnalysisKey[];
-  /** Receives the invalidation handler the page subscribed, so a case can
-   *  emit a summary the way the backend would. */
+  /**
+   * Receives an EMITTER over every listener the page subscribed to the one
+   * backend event, so a case can emit a payload the way the backend would.
+   *
+   * AN EMITTER AND NOT "THE" HANDLER, because there is more than one: the
+   * coalescer and the project follower each subscribe, and the client routes by
+   * variant at each subscription site. A stub that kept only the last callback
+   * would deliver a summary to the project follower alone, which ignores it —
+   * and the pill cases below would pass or fail by subscription order.
+   */
   readonly captureHandler?: (
-    handler: (summary: InvalidationSummary) => void,
+    emit: (payload: InvalidationEventPayload) => void,
   ) => void;
+  /**
+   * The backend's active project, read by `getActiveProject` on EVERY call.
+   * A case switches project the way the backend does: assign `current`, then
+   * announce it on the event. Defaults to `p1`, the project every fixture row
+   * belongs to.
+   */
+  readonly backendProject?: { current: string | null };
+  /** Receives Caido's own project-change notification, so a case can fire
+   *  it. */
+  readonly captureCaidoProjectChange?: (fire: () => void) => void;
+  /** Every page read the page issued, in order — to count reloads. */
+  readonly pageReads?: PageRequest[];
   /** Every export request the page issued, in order. The toolbar action must
    *  add NOTHING to this list — it opens the dialog and never exports. */
   readonly exports?: ExportChunkRequest[];
@@ -281,6 +308,13 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
   /** How many times the status endpoint has been asked, so a case can fail it
    *  from the Nth call onward. */
   let scanReads = 0;
+  const backendProject = options.backendProject ?? { current: "p1" };
+  /** Every callback subscribed to the event. `emit` delivers to all of them,
+   *  as the real event bus does. */
+  const listeners: ((payload: InvalidationEventPayload) => void)[] = [];
+  const emit = (payload: InvalidationEventPayload): void => {
+    for (const listener of [...listeners]) listener(payload);
+  };
 
   const page = <TRow>(items: readonly TRow[]): Promise<PageResponse<TRow>> =>
     options.reject === true || refusing
@@ -298,8 +332,14 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
         refusing
           ? refused<number>()
           : Promise.resolve(FRONTEND_CONTRACT_VERSION),
-      listArtifactsPage: (_request: PageRequest) => page(rows),
-      listObservationsPage: (_request: PageRequest) => page<ObservationRow>([]),
+      listArtifactsPage: (request: PageRequest) => {
+        options.pageReads?.push(request);
+        return page(rows);
+      },
+      listObservationsPage: (request: PageRequest) => {
+        options.pageReads?.push(request);
+        return page<ObservationRow>([]);
+      },
       getArtifactAnalysis: (request: { readonly sha256: string }) =>
         Promise.resolve(options.analyses?.get(request.sha256) ?? null),
       retryAnalysis: (request: AnalysisKey) => {
@@ -456,11 +496,31 @@ function stubSdk(options: StubOptions = {}): DefMinerBackendSdk {
       // stub, it is the shape of a refusing build: `init()` registers only
       // `getStatus` and `getCompat` on all three refusal paths.
       getCompat: () => Promise.resolve(options.compat ?? COMPATIBLE_REPORT),
+      // The lifecycle's own value, read at the moment of the call — which is
+      // what lets a case move it and then ask the page to follow.
+      getActiveProject: () =>
+        refusing
+          ? refused<ActiveProjectPayload>()
+          : Promise.resolve({ projectId: backendProject.current }),
       onEvent: (
         _event: "defminer:invalidated",
-        callback: (summary: InvalidationSummary) => void,
+        callback: (payload: InvalidationEventPayload) => void,
       ) => {
-        options.captureHandler?.(callback);
+        listeners.push(callback);
+        options.captureHandler?.(emit);
+        return {
+          stop: () => {
+            const at = listeners.indexOf(callback);
+            if (at >= 0) listeners.splice(at, 1);
+          },
+        };
+      },
+    },
+    projects: {
+      onCurrentProjectChange: (callback) => {
+        options.captureCaidoProjectChange?.(() => {
+          callback({ projectId: backendProject.current ?? undefined });
+        });
         return { stop: () => undefined };
       },
     },
@@ -742,8 +802,13 @@ describe("App — the split body (05-UI-SPEC § Data & Interaction Contract)", (
     // The suppression rule keys on exactly the two flags the row click sets. A
     // panel that opened WITHOUT setting them would leave the operator exposed
     // to the row shift the coalescer exists to prevent (T-05-54).
+    //
+    // `p1`, THE BACKEND'S PROJECT, NOT THE PAGE'S OLD PLACEHOLDER. This case
+    // used to emit `server-scoped` — the literal the page sent as a request
+    // field — and so passed while the running page, which receives the
+    // backend's real project id on every summary, dropped every one of them.
     emitSummary?.({
-      projectId: "server-scoped",
+      projectId: "p1",
       category: "artifacts",
       changedCount: 7,
       newestId: "d1",
@@ -774,7 +839,7 @@ describe("App — the split body (05-UI-SPEC § Data & Interaction Contract)", (
     await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
     await settle(wrapper);
     emitSummary?.({
-      projectId: "server-scoped",
+      projectId: "p1",
       category: "artifacts",
       changedCount: 3,
       newestId: "d1",
@@ -862,7 +927,7 @@ describe("App — the split body (05-UI-SPEC § Data & Interaction Contract)", (
 
     expect(retries).toEqual([
       {
-        projectId: "server-scoped",
+        projectId: "p1",
         sha256: ROWS[0].sha256,
         detectorSetHash: "phase1-no-corpus",
       },
@@ -1934,5 +1999,371 @@ describe("App — O-07 mechanism 5's replacement, over the REAL page", () => {
     // And the regions are SIBLINGS: neither contains the other.
     expect(drilldown.contains(panel)).toBe(false);
     expect(panel.contains(drilldown)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE ACTIVE PROJECT — THE PAGE FOLLOWS THE BACKEND ACROSS A SWITCH
+// ---------------------------------------------------------------------------
+//
+// CAIDO KEEPS THIS PAGE MOUNTED WHEN THE OPERATOR SWITCHES PROJECT. It used to
+// load once, on mount, and go on showing the previous project's rows, settings
+// and scan until the whole application was reloaded — the defect the Caido
+// store review reported. These cases drive the switch the way the backend
+// announces it: the lifecycle's id moves, then the event says so.
+
+describe("App — following a project switch", () => {
+  type Emit = (payload: InvalidationEventPayload) => void;
+
+  /** Mount over a stub whose backend project a case can move, and hand back
+   *  the emitter over every listener the page subscribed. */
+  async function mounted(options: StubOptions = {}): Promise<{
+    wrapper: VueWrapper;
+    emit: Emit;
+    project: { current: string | null };
+    pageReads: PageRequest[];
+  }> {
+    const project = options.backendProject ?? { current: "p1" };
+    const pageReads: PageRequest[] = [];
+    let emit: Emit | undefined;
+    const wrapper = mountWith(
+      stubSdk({
+        artifacts: ROWS,
+        ...options,
+        backendProject: project,
+        pageReads,
+        captureHandler: (handler) => {
+          emit = handler;
+        },
+      }),
+    );
+    await settle(wrapper);
+    if (emit === undefined) throw new Error("the page subscribed to nothing");
+    return { wrapper, emit, project, pageReads };
+  }
+
+  /** What the backend does on a switch: move its own id, THEN announce it. */
+  async function switchTo(
+    context: {
+      wrapper: VueWrapper;
+      emit: Emit;
+      project: { current: string | null };
+    },
+    next: string | null,
+  ): Promise<void> {
+    context.project.current = next;
+    context.emit({ kind: PROJECT_CHANGED_KIND, projectId: next });
+    await settle(context.wrapper);
+  }
+
+  it("asks the backend which project is active BEFORE its first page read, and reads under that id", async () => {
+    const order: string[] = [];
+    const sdk = stubSdk({ artifacts: ROWS });
+    const ask = sdk.backend.getActiveProject;
+    const read = sdk.backend.listArtifactsPage;
+    sdk.backend.getActiveProject = () => {
+      order.push("getActiveProject");
+      return ask();
+    };
+    sdk.backend.listArtifactsPage = (request) => {
+      order.push(`listArtifactsPage:${request.projectId}`);
+      return read(request);
+    };
+    const wrapper = mountWith(sdk);
+    await settle(wrapper);
+
+    expect(order).toEqual(["getActiveProject", "listArtifactsPage:p1"]);
+  });
+
+  it("reloads both tables under the new project when the backend announces a switch", async () => {
+    const context = await mounted();
+    const before = context.pageReads.length;
+
+    await switchTo(context, "p2");
+
+    const reloads = context.pageReads.slice(before);
+    // ONE read per table, both under the backend's new id.
+    expect(reloads).toHaveLength(2);
+    expect(reloads.map((request) => request.projectId)).toEqual(["p2", "p2"]);
+    expect(reloads.map((request) => request.cursor)).toEqual([null, null]);
+  });
+
+  it("drops the selection, the panel, the filter and the pill that belonged to the previous project", async () => {
+    const context = await mounted({
+      analyses: new Map([
+        [
+          ROWS[0].sha256,
+          {
+            sha256: ROWS[0].sha256,
+            detectorSetHash: "phase1-no-corpus",
+            scanState: "failed",
+            bytesWalked: 0,
+            byteLen: 4096,
+            startedAt: 1_756_000_000_000,
+            finishedAt: 1_756_000_100_000,
+          },
+        ],
+      ]),
+    });
+    const { wrapper } = context;
+
+    // A FILTER, a SELECTION, an OPEN PANEL and a PENDING COUNT, all under p1.
+    await wrapper
+      .findAll("button")
+      .filter((b) => b.text() === "Show only affected artifacts")[0]
+      ?.trigger("click");
+    await settle(wrapper);
+    await wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(wrapper);
+    context.emit({
+      projectId: "p1",
+      category: "artifacts",
+      changedCount: 5,
+      newestId: "d1",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await settle(wrapper);
+    expect(wrapper.get("#defminer-coalescing-pill").text()).toContain("5 new");
+    expect(wrapper.get("#defminer-evidence-panel").text()).not.toContain(
+      "No row selected",
+    );
+    const before = context.pageReads.length;
+
+    await switchTo(context, "p2");
+
+    expect(wrapper.find("#defminer-coalescing-pill").exists()).toBe(false);
+    expect(wrapper.get("#defminer-evidence-panel").text()).toContain(
+      "No row selected",
+    );
+    expect(
+      context.pageReads.slice(before).map((request) => request.filter),
+      "the previous project's filter was carried into the new one",
+    ).toEqual([null, null]);
+    expect(
+      wrapper
+        .findAll('[role="row"][tabindex="0"]')
+        .filter((row) => row.classes().includes("border-primary-500")),
+    ).toHaveLength(0);
+  });
+
+  it("re-mounts the open tab, so Settings reads the NEW project's settings", async () => {
+    const settingsReads: string[] = [];
+    const sdk = stubSdk({ artifacts: ROWS });
+    const project = { current: "p1" as string | null };
+    let emit: Emit | undefined;
+    const listeners: Emit[] = [];
+    sdk.backend.getActiveProject = () =>
+      Promise.resolve({ projectId: project.current });
+    sdk.backend.onEvent = (_event, callback) => {
+      listeners.push(callback);
+      emit = (payload) => {
+        for (const listener of [...listeners]) listener(payload);
+      };
+      return { stop: () => undefined };
+    };
+    const list = sdk.backend.listSettings;
+    sdk.backend.listSettings = (request) => {
+      settingsReads.push(request.projectId);
+      return list(request);
+    };
+    const wrapper = mountWith(sdk);
+    await settle(wrapper);
+    await wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Settings")[0]
+      ?.trigger("click");
+    await settle(wrapper);
+    expect(settingsReads).toEqual(["p1"]);
+
+    await switchTo({ wrapper, emit: (p) => emit?.(p), project }, "p2");
+
+    // STILL ON SETTINGS — the operator stays where they were — and it READ
+    // AGAIN, under the project that is active now.
+    expect(
+      wrapper
+        .findAll('[role="tab"]')
+        .find((t) => t.attributes("aria-selected") === "true")
+        ?.text(),
+    ).toBe("Settings");
+    expect(settingsReads).toEqual(["p1", "p2"]);
+  });
+
+  it("counts a summary from the project on screen, and drops one from the project it left", async () => {
+    const context = await mounted();
+    await switchTo(context, "p2");
+    // Mid-triage, so a counted summary accrues into the pill and stays there.
+    await context.wrapper.get('[role="row"][tabindex="0"]').trigger("click");
+    await settle(context.wrapper);
+
+    // A pass the backend flushed under p1 before the swap, arriving after it.
+    context.emit({
+      projectId: "p1",
+      category: "artifacts",
+      changedCount: 9,
+      newestId: "late",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await settle(context.wrapper);
+    expect(context.wrapper.find("#defminer-coalescing-pill").exists()).toBe(
+      false,
+    );
+
+    context.emit({
+      projectId: "p2",
+      category: "artifacts",
+      changedCount: 2,
+      newestId: "fresh",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    await settle(context.wrapper);
+    expect(context.wrapper.get("#defminer-coalescing-pill").text()).toContain(
+      "2 new since you opened this",
+    );
+  });
+
+  it("drops a `Sources` count about the project it left when it lands after the switch", async () => {
+    // THE PREVIOUS PROJECT'S ANSWER, LATE. Applied, it would put p1's recovered
+    // source counts on p2's rows — a button offering sources this project
+    // never recovered.
+    const project = { current: "p1" as string | null };
+    const listeners: Emit[] = [];
+    const heldForP1: (() => void)[] = [];
+    const sdk = stubSdk({ artifacts: ROWS, backendProject: project });
+    sdk.backend.onEvent = (_event, callback) => {
+      listeners.push(callback);
+      return { stop: () => undefined };
+    };
+    sdk.backend.countRecoveredSources = () => {
+      if (project.current === "p1") {
+        return new Promise((resolve) => {
+          heldForP1.push(() => {
+            resolve({ [ROWS[0].sha256]: 2 });
+          });
+        });
+      }
+      return Promise.resolve({});
+    };
+    const wrapper = mountWith(sdk);
+    await settle(wrapper);
+    expect(heldForP1).toHaveLength(1);
+
+    await switchTo(
+      {
+        wrapper,
+        emit: (payload) => {
+          for (const listener of [...listeners]) listener(payload);
+        },
+        project,
+      },
+      "p2",
+    );
+    for (const release of heldForP1) release();
+    await settle(wrapper);
+
+    expect(wrapper.findAll('button[aria-label^="Browse "]')).toHaveLength(0);
+  });
+
+  it("reloads NOTHING when the announcement names the project already on screen", async () => {
+    const context = await mounted();
+    const before = context.pageReads.length;
+
+    await switchTo(context, "p1");
+
+    expect(context.pageReads).toHaveLength(before);
+  });
+
+  it("follows Caido's own notification only as far as the BACKEND's answer", async () => {
+    let fire: (() => void) | undefined;
+    const context = await mounted({
+      captureCaidoProjectChange: (callback) => {
+        fire = callback;
+      },
+    });
+    expect(fire).toBeDefined();
+    const before = context.pageReads.length;
+
+    // CAIDO SAYS "CHANGED" BEFORE THE BACKEND HAS SWITCHED. The page asks, the
+    // backend still answers p1, and nothing reloads — a reload now would read
+    // p1's rows and label them p2.
+    fire?.();
+    await settle(context.wrapper);
+    expect(context.pageReads).toHaveLength(before);
+
+    // The backend has switched but its announcement was lost: the next hint
+    // reaches it.
+    context.project.current = "p2";
+    fire?.();
+    await settle(context.wrapper);
+    expect(
+      context.pageReads.slice(before).map((request) => request.projectId),
+    ).toEqual(["p2", "p2"]);
+  });
+
+  it("closes the export dialog — one file must never mix two projects", async () => {
+    const context = await mounted();
+    await context.wrapper.get("#defminer-export-open").trigger("click");
+    await settle(context.wrapper);
+    expect(context.wrapper.text()).toContain("Export");
+    expect(
+      context.wrapper.findComponent({ name: "ExportDialog" }).exists(),
+    ).toBe(true);
+
+    await switchTo(context, "p2");
+
+    expect(
+      context.wrapper.findComponent({ name: "ExportDialog" }).exists(),
+    ).toBe(false);
+  });
+
+  it("renders the loading skeleton, never the empty screen, while the project is being asked for", async () => {
+    let answer: ((value: { projectId: string | null }) => void) | undefined;
+    const sdk = stubSdk({ artifacts: [] });
+    sdk.backend.getActiveProject = () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      });
+    const wrapper = mountWith(sdk);
+    await settle(wrapper);
+
+    expect(wrapper.text()).not.toContain("Nothing analysed on this target yet");
+    expect(wrapper.text()).toContain("Loading the first 100 rows");
+
+    answer?.({ projectId: "p1" });
+    await settle(wrapper);
+    expect(wrapper.text()).toContain("Nothing analysed on this target yet");
+  });
+
+  it("shows the active project's scan PROGRESS — the readout used to drop every payload", async () => {
+    // THE SAME DEFECT AS THE PILL'S, ON THE SCAN TAB. The readout compares each
+    // payload's project against the one it was given, and it was given the
+    // page's placeholder — so every progress payload the backend sent, all of
+    // them carrying the real project id, was discarded.
+    const context = await mounted({ scan: scanPayload({ seen: 60 }) });
+    await context.wrapper
+      .findAll('[role="tab"]')
+      .filter((t) => t.text() === "Scan")[0]
+      ?.trigger("click");
+    await settle(context.wrapper);
+
+    context.emit({
+      kind: SCAN_PROGRESS_KIND,
+      projectId: "p1",
+      scanId: "s1",
+      state: "running",
+      pagesWalked: 9,
+      seen: 4321,
+      admitted: 12,
+      skippedDone: 4,
+      rejected: 44,
+      queued: 12,
+      analysed: null,
+      lastCreatedAt: AUG_14,
+      heldAtWatermark: false,
+    });
+    await settle(context.wrapper);
+
+    expect(context.wrapper.get(`#${scanCounterId("seen")}`).text()).toContain(
+      "4,321",
+    );
   });
 });

@@ -401,6 +401,44 @@ describe("while exporting", () => {
     await h.wrapper.vm.$nextTick();
     expect(h.delivered).toHaveLength(1);
   });
+
+  it("asks for nothing more and delivers NOTHING once the page has unmounted it", async () => {
+    // THE PAGE UNMOUNTS THE DIALOG ON A PROJECT SWITCH. Every chunk requested
+    // after that is answered from the new project, so a loop that carried on
+    // would deliver one file holding two projects' rows.
+    const h = harness({
+      manual: true,
+      outcomes: [
+        {
+          ok: true,
+          value: chunk({
+            text: "A",
+            hasMore: true,
+            nextCursor: { sortValue: 1, tieBreak: "a" },
+          }),
+        },
+        {
+          ok: true,
+          value: chunk({ text: "B", chunkIndex: 1, hasMore: false }),
+        },
+      ],
+    });
+    await confirmButton(h.wrapper).trigger("click");
+    await h.wrapper.vm.$nextTick();
+    expect(h.requests).toHaveLength(1);
+
+    h.wrapper.unmount();
+    mounted = null;
+    h.release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(h.requests, "the loop asked for a chunk after unmount").toHaveLength(
+      1,
+    );
+    expect(h.delivered).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

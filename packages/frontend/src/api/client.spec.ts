@@ -35,6 +35,7 @@ import type {
   InvalidationSummary,
   PageRequest,
   PageResponse,
+  ProjectChangedPayload,
   RecoveredSourcePage,
   ScanProgressPayload,
   SourceMappingsResult,
@@ -42,6 +43,7 @@ import type {
 } from "@defminer/engine/contract";
 import {
   INVALIDATION_EVENT,
+  PROJECT_CHANGED_KIND,
   RETENTION_MAX_ROWS_KEY,
   SCAN_PROGRESS_KIND,
   SOURCE_TREE_LOAD_MAX,
@@ -441,6 +443,7 @@ function makeStub(): Stub {
         }),
       listScans: () => answer("listScans", HISTORY),
       getCompat: () => answer("getCompat", COMPAT),
+      getActiveProject: () => answer("getActiveProject", { projectId: "p1" }),
       onEvent: (event, callback) => {
         expect(event).toBe(INVALIDATION_EVENT);
         listeners.push(callback);
@@ -758,6 +761,144 @@ describe("subscribeInvalidation — the handle is returned, not swallowed", () =
     stub.emit(SCAN_PROGRESS);
 
     expect(summaries).toEqual([]);
+  });
+
+  it("hands a project change to NEITHER handler — it is not an invalidation and not progress", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const summaries: InvalidationSummary[] = [];
+    const progress: ScanProgressPayload[] = [];
+
+    client.subscribeInvalidation(
+      (s) => summaries.push(s),
+      (p) => progress.push(p),
+    );
+    stub.emit(PROJECT_CHANGED);
+
+    expect(
+      summaries,
+      "a project change reached the coalescer. It carries no category, so it " +
+        "would be counted into `pending` as a row count nobody can attribute.",
+    ).toEqual([]);
+    expect(progress).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// THE ACTIVE PROJECT — ASKED FOR, ANNOUNCED, AND HINTED AT
+// ===========================================================================
+
+/** The backend's announcement that it switched project. */
+const PROJECT_CHANGED: ProjectChangedPayload = {
+  kind: PROJECT_CHANGED_KIND,
+  projectId: "p2",
+};
+
+describe("the active project — the backend's answer, never the page's guess", () => {
+  it("getActiveProject forwards the call and answers the backend's value", async () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+
+    await expect(client.getActiveProject()).resolves.toEqual({
+      ok: true,
+      value: { projectId: "p1" },
+    });
+    expect(stub.calls).toContain("getActiveProject");
+  });
+
+  it("getActiveProject is GUARDED — a stale bundle does not decide which project its rows belong to", async () => {
+    const stub = makeStub();
+    stub.backendVersion = FRONTEND_CONTRACT_VERSION + 1;
+    const client = createBackendClient(stub.sdk);
+    await client.checkContractVersion();
+
+    const before = stub.calls.length;
+    const result = await client.getActiveProject();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("contract-version-mismatch");
+    expect(stub.calls.length).toBe(before);
+  });
+
+  it("subscribeProjectChange delivers the backend's id, and nothing else, until stopped", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    const seen: (string | null)[] = [];
+
+    const handle = client.subscribeProjectChange((id) => seen.push(id));
+    stub.emit({
+      projectId: "p1",
+      category: "artifacts",
+      changedCount: 1,
+      newestId: "sha-1",
+    });
+    stub.emit(SCAN_PROGRESS);
+    stub.emit(PROJECT_CHANGED);
+    stub.emit({ kind: PROJECT_CHANGED_KIND, projectId: null });
+    handle.stop();
+    stub.emit(PROJECT_CHANGED);
+
+    expect(seen).toEqual(["p2", null]);
+    expect(stub.listeners).toEqual([]);
+  });
+
+  it("onCaidoProjectChange calls the handler with NO project id, and stops", () => {
+    const stub = makeStub();
+    const callbacks: ((event: { projectId?: string }) => void)[] = [];
+    let stopped = 0;
+    const sdk: DefMinerBackendSdk = {
+      ...stub.sdk,
+      projects: {
+        onCurrentProjectChange: (callback) => {
+          callbacks.push(callback);
+          return {
+            stop: () => {
+              stopped += 1;
+            },
+          };
+        },
+      },
+    };
+    const client = createBackendClient(sdk);
+    const calls: unknown[][] = [];
+
+    const handle = client.onCaidoProjectChange((...args: unknown[]) => {
+      calls.push(args);
+    });
+    callbacks[0]?.({ projectId: "p2" });
+    handle.stop();
+
+    // THE ID IS DROPPED ON PURPOSE. Caido's notification is not ordered against
+    // the backend's switch; the page asks the backend instead.
+    expect(calls).toEqual([[]]);
+    expect(stopped).toBe(1);
+  });
+
+  it("onCaidoProjectChange is INERT on a Caido build without the notification", () => {
+    const stub = makeStub();
+    const client = createBackendClient(stub.sdk);
+    expect(stub.sdk.projects).toBeUndefined();
+
+    const handle = client.onCaidoProjectChange(() => {
+      throw new Error("must never be called");
+    });
+    expect(() => handle.stop()).not.toThrow();
+  });
+
+  it("onCaidoProjectChange is INERT when registering throws, rather than taking the page down", () => {
+    const stub = makeStub();
+    const sdk: DefMinerBackendSdk = {
+      ...stub.sdk,
+      projects: {
+        onCurrentProjectChange: () => {
+          throw new Error("not in this build");
+        },
+      },
+    };
+    const client = createBackendClient(sdk);
+
+    const handle = client.onCaidoProjectChange(() => undefined);
+    expect(() => handle.stop()).not.toThrow();
   });
 });
 

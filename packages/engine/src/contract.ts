@@ -1192,16 +1192,83 @@ export type ScanProgressPayload = {
   readonly heldAtWatermark: boolean;
 };
 
+// ---------------------------------------------------------------------------
+// THE THIRD PAYLOAD VARIANT — THE BACKEND SWITCHED PROJECT
+// ---------------------------------------------------------------------------
+//
+// THE PAGE OUTLIVES THE PROJECT IT WAS OPENED IN. Caido keeps a plugin's page
+// mounted across a project switch, so a page that loads once, on mount, keeps
+// showing the previous project's rows, settings and scan until the operator
+// reloads the whole application. The backend has always switched correctly —
+// `lifecycle.ts` swaps the id every read is scoped to — and nothing told the
+// page that it had.
+//
+// THE BACKEND ANNOUNCES IT, AFTER THE SWAP, ON THE EVENT IT ALREADY HAS. Caido's
+// frontend SDK has its own project-change notification, but nothing orders it
+// against the backend's: a page that reloaded on it could re-read the OLD
+// project from a backend that has not switched yet, and render that under the
+// new one. This payload is sent from the backend's own `onProjectChange`
+// handler once the swap has been applied, so every read issued after it
+// arrives is answered from the new project. A variant rather than a second
+// event name, for the reason the progress variant gives above.
+
 /**
- * Everything {@link INVALIDATION_EVENT} can carry. TWO VARIANTS, ONE CHANNEL.
+ * The discriminator of {@link ProjectChangedPayload}. Not namespaced, for the
+ * reason {@link SCAN_PROGRESS_KIND} is not.
+ */
+export const PROJECT_CHANGED_KIND = "project-changed";
+
+/**
+ * The backend applied a project change.
+ *
+ * TWO FIELDS. `projectId` is the project the backend now scopes every read to,
+ * and `null` means none is selected — the state a deleted current project
+ * leaves behind (see `lifecycle.ts`). It is Caido's own identifier, never a
+ * target-controlled string.
+ */
+export type ProjectChangedPayload = {
+  readonly kind: typeof PROJECT_CHANGED_KIND;
+  readonly projectId: string | null;
+};
+
+/**
+ * What `getActiveProject` answers: the project the backend scopes every read
+ * to right now, or `null` when none is selected.
+ *
+ * THE PAGE LEARNS ITS PROJECT FROM THE BACKEND, NEVER THE OTHER WAY ROUND. Every
+ * read substitutes the backend's lifecycle-resolved id for whatever the caller
+ * sent (T-05-34), so the backend is the only party whose answer to "which
+ * project is this" decides what is on screen. The page reads this once on
+ * mount and again whenever Caido says the project may have changed.
+ */
+export type ActiveProjectPayload = {
+  readonly projectId: string | null;
+};
+
+/**
+ * Everything {@link INVALIDATION_EVENT} can carry. THREE VARIANTS, ONE CHANNEL.
  *
  * The events map in `packages/backend/src/api/spec.ts` is typed against THIS,
- * so a third variant added without a handler on the frontend's single
+ * so a fourth variant added without a handler on the frontend's single
  * subscription site is a typecheck failure rather than a payload nobody routes.
  */
 export type InvalidationEventPayload =
   | InvalidationSummary
-  | ScanProgressPayload;
+  | ScanProgressPayload
+  | ProjectChangedPayload;
+
+/**
+ * Narrow one event payload to the project-change variant.
+ *
+ * The frontend routes this variant to the page's project sync and to nothing
+ * else: a project change is not an invalidation to coalesce and has no scan
+ * progress to render.
+ */
+export function isProjectChangedPayload(
+  payload: InvalidationEventPayload,
+): payload is ProjectChangedPayload {
+  return payload.kind === PROJECT_CHANGED_KIND;
+}
 
 /**
  * Narrow one event payload to the progress variant.

@@ -125,6 +125,16 @@ export type InvalidationCoalescer = {
   /** Apply the pending count and requery. The pill's **Refresh**, and the
    *  page's re-entry hook. The ONLY two callers — there is no timer. */
   applyPending: () => Promise<void>;
+  /**
+   * Forget the pending count WITHOUT requerying. The page's project switch,
+   * and nothing else.
+   *
+   * NOT `applyPending`. A count accrued under the previous project describes
+   * rows the operator can no longer see, so it is discarded rather than
+   * applied — and the switch reloads both tables itself, so a requery here
+   * would be a second one.
+   */
+  clearPending: () => void;
   /** Stop the subscription and silence any window still in flight. The
    *  mounting component MUST call this on unmount (research P-04). */
   stop: () => void;
@@ -220,6 +230,9 @@ export function createCoalescer(
     pendingByCategory: computed(() => pending.value),
     reactionCount: computed(() => reactions.value),
     applyPending,
+    clearPending: () => {
+      pending.value = zeroed();
+    },
     stop: () => {
       // BOTH halves. Stopping the listener alone leaves a window already in
       // flight to fire into a store the component no longer owns, which is the

@@ -68,7 +68,7 @@ import {
   EXPORT_FORMATS,
   EXPORT_REDACTION_MODES,
 } from "@defminer/engine/contract";
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 
 import type {
   ExportChunkOutcome,
@@ -254,6 +254,22 @@ function requestClose(): void {
 }
 
 /**
+ * Whether this dialog has been unmounted.
+ *
+ * THE OPERATOR CANNOT DISMISS IT MID-WRITE, BUT THE PAGE CAN, and does on a
+ * project switch. The chunk loop below would otherwise go on without it — and
+ * every chunk requested after the switch is answered from the NEW project,
+ * because the backend scopes each call to whichever project is active when it
+ * arrives. The file delivered at the end would then hold two projects' rows
+ * under one filename. So a dialog that is gone asks for nothing more and
+ * delivers nothing at all.
+ */
+let disposed = false;
+onUnmounted(() => {
+  disposed = true;
+});
+
+/**
  * Request chunks in order until the backend reports no more, concatenate in
  * order, and hand the result to the delivery.
  *
@@ -290,6 +306,9 @@ async function assembleAndDeliver(
       // what crosses the boundary in one call.
       chunkRows: null,
     });
+    // Checked after EVERY call, before anything from it is kept: the chunk
+    // that just arrived may already be the new project's.
+    if (disposed) return null;
     if (!result.ok) return EXPORT_FAILED_BODY;
 
     const outcome = result.value;
@@ -321,6 +340,7 @@ async function runWith(chosen: ExportRedactionMode): Promise<void> {
   exporting.value = true;
   failure.value = null;
   const problem = await assembleAndDeliver(chosen);
+  if (disposed) return;
   exporting.value = false;
   if (problem !== null) {
     // THE CHOICE IS NOT TOUCHED. Not reset, not defaulted, not "helpfully"

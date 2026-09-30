@@ -60,6 +60,7 @@
 //     superseded on this page by the paged pair.
 
 import type {
+  ActiveProjectPayload,
   BoundRejection,
   DeriveSourceResult,
   ExportFormat,
@@ -84,6 +85,7 @@ import type {
 } from "@defminer/engine/contract";
 import {
   INVALIDATION_EVENT,
+  isProjectChangedPayload,
   isScanProgressPayload,
 } from "@defminer/engine/contract";
 
@@ -155,8 +157,14 @@ import type { ArtifactRow } from "../backend";
  * bundle answers `unavailable` — a source the operator can see listed, refusing
  * to open, indistinguishable on the surface from the target having redeployed.
  * The mismatch banner is the cheaper half of that trade.
+ *
+ * BUMPED TO 8 IN LOCKSTEP WITH THE BACKEND, for the project-switch release. The
+ * event's payload union grew a third variant — the backend announcing that it
+ * switched project — and a version-7 bundle's subscription site would hand it
+ * to the coalescer as an invalidation summary with no category. The shape rule,
+ * applied to the `events` map.
  */
-export const FRONTEND_CONTRACT_VERSION = 7;
+export const FRONTEND_CONTRACT_VERSION = 8;
 
 /**
  * How long a single RPC call may take before the client answers `rpc-timeout`.
@@ -811,9 +819,27 @@ export type DefMinerBackendSdk = {
       request: ScanHistoryRequest,
     ) => Promise<readonly ScanHistoryRow[]>;
     getCompat: () => Promise<CompatReport>;
+    getActiveProject: () => Promise<ActiveProjectPayload>;
     onEvent: (
       event: typeof INVALIDATION_EVENT,
       callback: (payload: InvalidationEventPayload) => void,
+    ) => InvalidationSubscription;
+  };
+  /**
+   * Caido's own project-change notification.
+   *
+   * OPTIONAL BY DECLARATION, because a Caido build older than the frontend SDK
+   * that introduced it does not have it, and a call into a missing member would
+   * throw during the page's setup. {@link BackendClient.onCaidoProjectChange}
+   * is the only reader and treats absence as "nothing to listen to".
+   *
+   * IT IS A HINT, NEVER AN ANSWER. Nothing orders it against the backend's own
+   * switch, so the page never takes the project id from it — it asks the backend
+   * which project is active instead. See `getActiveProject`.
+   */
+  readonly projects?: {
+    onCurrentProjectChange: (
+      callback: (event: { readonly projectId?: string | undefined }) => void,
     ) => InvalidationSubscription;
   };
 };
@@ -992,6 +1018,38 @@ export type BackendClient = {
     handler: (summary: InvalidationSummary) => void,
     onScanProgress?: (payload: ScanProgressPayload) => void,
   ) => InvalidationSubscription;
+  /**
+   * The project the backend scopes every read to right now, or `null` when
+   * none is selected. The page's only source for that answer.
+   */
+  getActiveProject: () => Promise<RpcResult<ActiveProjectPayload>>;
+  /**
+   * Subscribe to the backend's announcement that it SWITCHED project,
+   * RETURNING THE STOP HANDLE.
+   *
+   * A SEPARATE SUBSCRIPTION TO THE SAME EVENT, for the reason
+   * {@link subscribeInvalidation}'s progress handle is: the discrimination
+   * happens at the subscription site, so this handler receives only the
+   * project-change variant and neither the coalescer nor the scan readout ever
+   * sees one. The id is the backend's, sent after its swap was applied.
+   */
+  subscribeProjectChange: (
+    handler: (projectId: string | null) => void,
+  ) => InvalidationSubscription;
+  /**
+   * Caido's own project-change notification, RETURNING THE STOP HANDLE.
+   *
+   * THE HANDLER IS GIVEN NO PROJECT ID, deliberately. Caido's frontend and the
+   * plugin's backend learn about a switch on two different paths with nothing
+   * ordering them, so an id taken from here could name a project the backend
+   * has not switched to yet — and a page that reloaded on it would render the
+   * previous project's rows under the new one. The page treats this as "ask
+   * the backend again", which is only ever a redundant read.
+   *
+   * On a Caido build without the notification, or one whose registration
+   * throws, the handle is inert: the backend's own announcement still arrives.
+   */
+  onCaidoProjectChange: (handler: () => void) => InvalidationSubscription;
 };
 
 // ---------------------------------------------------------------------------
@@ -1202,7 +1260,35 @@ export function createBackendClient(sdk: DefMinerBackendSdk): BackendClient {
           onScanProgress?.(payload);
           return;
         }
+        // A PROJECT SWITCH IS NOT AN INVALIDATION. It has its own subscriber
+        // below, and a coalescer handed one would count it into the pill.
+        if (isProjectChangedPayload(payload)) return;
         handler(payload);
       }),
+
+    // GUARDED like every other read. A bundle known to be misreading the
+    // contract must not decide which project its rows belong to either.
+    getActiveProject: () => guarded(() => sdk.backend.getActiveProject()),
+
+    // NOT guarded and not timed, for the reason `subscribeInvalidation` is not.
+    subscribeProjectChange: (handler) =>
+      sdk.backend.onEvent(INVALIDATION_EVENT, (payload) => {
+        if (isProjectChangedPayload(payload)) handler(payload.projectId);
+      }),
+
+    onCaidoProjectChange: (handler) => {
+      const inert: InvalidationSubscription = { stop: () => undefined };
+      const projects = sdk.projects;
+      if (projects === undefined) return inert;
+      try {
+        return projects.onCurrentProjectChange(() => {
+          handler();
+        });
+      } catch {
+        // A registration that throws leaves the backend's own announcement as
+        // the only signal, which is the ordered one anyway.
+        return inert;
+      }
+    },
   };
 }
