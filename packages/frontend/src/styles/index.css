@@ -20,7 +20,19 @@
  * `#plugin--defminer` — see postcss.config.cjs — and that containment is
  * asserted against the BUILT css by scripts/ci/prefixwrap.mjs, not against the
  * config that is supposed to produce it.
+ *
+ * THE ONE IMPORT IS NOT AUTHORED CSS, AND IT IS NOT OPTIONAL. `RecycleScroller`
+ * ships its layout as a stylesheet — `overflow-y: auto` on the scroller and
+ * absolute positioning on every row view — and nothing ever loaded it. Inside
+ * Caido the scroller was therefore not a scroll container at all: it grew to
+ * the height of its rows, the host page scrolled instead, the scroller never
+ * saw a scroll event, and the inventory stopped at the first page it rendered.
+ * The load harness imported the file itself, which is why it never noticed.
+ * Imported HERE, it passes through the same pipeline as everything else and is
+ * scoped under `#plugin--defminer` like every other rule.
  */
+
+@import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
 
 @tailwind base;
 @tailwind components;

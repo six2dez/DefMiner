@@ -137,6 +137,23 @@ const SCROLL_ELAPSED_BOUND_MS = 60_000;
 /** Every nth row carries a hostile value from the shared corpus. */
 const HOSTILE_EVERY = 250;
 
+/**
+ * How many rows the SELF-PAGING walk covers.
+ *
+ * Past the window bound by several pages, because the defect this walk exists
+ * for has two halves and the second only exists past the bound: the table never
+ * asked for page two at all, and once it does, every page past 2,000 rows
+ * evicts one off the head and shifts every row on screen by a page unless the
+ * offset is corrected. A walk that stayed under the bound would test the first
+ * half and pass on the second.
+ */
+const PAGING_ROWS = IN_MEMORY_WINDOW_ROWS + 6 * KEYSET_PAGE_ROWS;
+
+/** The self-paging scroller's height. Taller than the load harness's so each
+ *  step of the walk covers more rows; the scroller measures its own box, so it
+ *  need not fit the browser viewport. */
+const PAGING_SCROLLER_PX = 1600;
+
 // ---------------------------------------------------------------------------
 // PATHS
 // ---------------------------------------------------------------------------
@@ -211,12 +228,19 @@ import type { ColumnDefinition } from "../src/components/table-contract";
 import { createInventoryStore } from "../src/stores/inventory";
 import { IN_MEMORY_WINDOW_ROWS, KEYSET_PAGE_ROWS } from "../src/stores/inventory";
 import { TABLE_ROW_HEIGHT_PX } from "../src/safety/display";
+// THE SHIPPED STYLESHEET ONLY. The scroller's own layout rules arrive through
+// it — \`src/styles/index.css\` imports them — and importing them again here is
+// what once let this harness scroll a table that could not scroll inside Caido.
 import "../src/styles/index.css";
-import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
 
 type Row = { id: string; value: string; kind: string };
 
-const TARGET_ROWS = ${String(TARGET_ROWS)};
+// \`?paging\` MOUNTS THE SAME SHELL FOR THE SELF-PAGING WALK: fewer rows, no
+// hostile values (the walk reads each row's number out of its URL), a taller
+// scroller so each step covers more rows, and NOTHING that pages on its own —
+// the spec only scrolls, so every page it reaches, the table asked for.
+const PAGING = new URLSearchParams(location.search).has("paging");
+const TARGET_ROWS = PAGING ? ${String(PAGING_ROWS)} : ${String(TARGET_ROWS)};
 const HOSTILE_EVERY = ${String(HOSTILE_EVERY)};
 
 // The three long-text cases the backstop row names, taken from the SHARED
@@ -237,7 +261,7 @@ const LONG_TEXT = LONG_TEXT_IDS.map((id) => {
 });
 
 function rowAt(index: number): Row {
-  const hostile = index % HOSTILE_EVERY === 0;
+  const hostile = !PAGING && index % HOSTILE_EVERY === 0;
   return {
     id: "row-" + String(index),
     value: hostile
@@ -302,6 +326,7 @@ const store = createInventoryStore<Row>({
 
 const mount = document.getElementById("plugin--defminer");
 if (mount === null) throw new Error("mount element missing");
+if (PAGING) mount.style.height = "${String(PAGING_SCROLLER_PX)}px";
 
 createApp({
   render: () =>
@@ -313,15 +338,34 @@ createApp({
     }),
 }).mount(mount);
 
-// The surface the spec drives. Deliberately three functions and two numbers —
-// nothing here reaches into the component's internals.
+// The surface the spec drives. Deliberately small, and nothing here reaches
+// into the component's internals: the store's public state, the DOM the
+// component rendered, and the constants the bounds are read from.
 (globalThis as unknown as { __defminer: unknown }).__defminer = {
   ready: store.loadFirstPage(),
   loadNext: () => store.loadNextPage(),
   served: () => served,
   residentRows: () => store.rows.value.length,
   scroller: () => document.querySelector(".vue-recycle-scroller"),
+  loading: () => store.loadState.value === "loading",
+  firstRowIndex: () => store.firstRowIndex.value,
+  // The row numbers whose rendered box intersects the scroller's viewport. A
+  // pooled view the scroller parked off-screen is outside it by construction.
+  visibleRows: () => {
+    const scroller = document.querySelector(".vue-recycle-scroller");
+    if (scroller === null) return [];
+    const box = scroller.getBoundingClientRect();
+    const out: number[] = [];
+    for (const row of document.querySelectorAll('[role="row"][tabindex="0"]')) {
+      const rect = row.getBoundingClientRect();
+      if (rect.bottom <= box.top || rect.top >= box.bottom) continue;
+      const match = /bundle-(\\d+)\\.js/.exec(row.textContent ?? "");
+      if (match !== null) out.push(Number(match[1]));
+    }
+    return out;
+  },
   windowBound: IN_MEMORY_WINDOW_ROWS,
+  pageRows: KEYSET_PAGE_ROWS,
   rowHeight: TABLE_ROW_HEIGHT_PX,
   target: TARGET_ROWS,
 };
@@ -356,6 +400,22 @@ type Measurements = {
 };
 
 let measurements: Measurements | null = null;
+
+/** What the self-paging walk observed. Row NUMBERS, never row text. */
+type PagingMeasurements = {
+  readonly target: number;
+  readonly servedAfterDown: number;
+  readonly firstRowIndexAtBottom: number;
+  readonly firstRowIndexAtTop: number;
+  readonly seenDown: number;
+  readonly seenUp: number;
+  readonly missingDown: number[];
+  readonly missingUp: number[];
+  readonly peakResidentRows: number;
+  readonly elapsedMs: number;
+};
+
+let pagingMeasurements: PagingMeasurements | null = null;
 let startupFailure: string | null = null;
 let server: Server | null = null;
 
@@ -583,19 +643,44 @@ describe("the 10,000-row browser backstop", () => {
           }
         };
 
+        // DEEP SAMPLES ARE KEYED ON ROWS SERVED, NOT ON LOOP TURNS. Parking the
+        // offset at the bottom now makes the table ask for the next page
+        // itself, and this loop's own \`loadNext\` joins or follows that
+        // request — so one turn can cover two pages, and a turn counter would
+        // silently halve how many hostile rows the height assertion sees.
+        const DEEP_EVERY_ROWS = 10 * h.pageRows;
+        let nextDeepAt = 0;
         const started = performance.now();
-        let page = 0;
         while (h.served() < h.target) {
           await h.loadNext();
           const el = h.scroller();
           const span = el.scrollHeight - el.clientHeight;
           el.scrollTop = span;
           await nextFrame();
-          sample(page % 10 === 0);
+          const deep = h.served() >= nextDeepAt;
+          if (deep) nextDeepAt = h.served() + DEEP_EVERY_ROWS;
+          sample(deep);
           el.scrollTop = span * 0.5;
           await nextFrame();
           sample(false);
-          page++;
+        }
+        // THE HOSTILE ROWS, VISITED ON PURPOSE. Which rows a deep sample above
+        // happens to catch depends on where the page boundaries fall against
+        // the scroller's pool, and the table paging itself moved them; a
+        // height assertion whose adversarial coverage is left to alignment is
+        // one refactor from measuring none. So every hostile row in the
+        // resident window is scrolled into view and measured. Rows in the
+        // window's first page are skipped: parking the offset there would ask
+        // for an evicted page and move the window mid-visit.
+        {
+          const el = h.scroller();
+          const head = h.firstRowIndex();
+          for (let index = h.target - 1; index >= head + h.pageRows; index--) {
+            if (index % ${String(HOSTILE_EVERY)} !== 0) continue;
+            el.scrollTop = (index - head) * h.rowHeight;
+            await nextFrame();
+            sample(true);
+          }
         }
         // One last deep sample at the very bottom, where the last page lives.
         sample(true);
@@ -634,6 +719,109 @@ describe("the 10,000-row browser backstop", () => {
         `    distinct rendered heights ... ${JSON.stringify([...new Set(m.rowHeights)])}`,
         `    max cell graphemes .......... ${String(m.maxCellGraphemes)} (cap ${String(TABLE_CELL_MAX_GRAPHEMES)})`,
         `    hostile rows rendered ....... ${String(m.hostileRowsSeen)}`,
+        "",
+      ].join("\n"),
+    );
+
+    // =======================================================================
+    // THE SELF-PAGING WALK — THE SPEC SCROLLS, AND NOTHING ELSE
+    // =======================================================================
+    // The run above calls the store's `loadNext` itself, which is exactly why
+    // it passed for as long as the table never asked for a second page. This
+    // one never pages: it moves the scroll offset one viewport at a time, down
+    // to the last row and back up to the first, and records every row number
+    // that crossed the viewport. A table that did not page would never reach
+    // the last row; one that paged but let the window shift under the operator
+    // would skip a page's worth of numbers at every eviction.
+    await driven.goto(`${url}?paging`);
+    await driven.waitForFunction(
+      "globalThis.__defminer !== undefined && document.querySelector('.vue-recycle-scroller') !== null",
+    );
+    pagingMeasurements = await driven.evaluate(
+      `(async () => {
+        const h = globalThis.__defminer;
+        await h.ready;
+
+        const frames = () =>
+          new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+        // A page request the table made, answered, applied, and the offset
+        // corrected — then two more frames for the scroller to re-render.
+        const settled = async () => {
+          for (let spins = 0; spins < 500; spins++) {
+            await frames();
+            if (!h.loading()) {
+              await frames();
+              return;
+            }
+          }
+          throw new Error("a page request never settled");
+        };
+        const missing = (seen) => {
+          const out = [];
+          for (let n = 0; n < h.target && out.length < 10; n++) {
+            if (!seen.has(n)) out.push(n);
+          }
+          return out;
+        };
+
+        const el = h.scroller();
+        // ONE ROW OF OVERLAP each way, so a row sitting on a step boundary is
+        // inside the viewport on one side of it or the other.
+        const step = el.clientHeight - 2 * h.rowHeight;
+        const started = performance.now();
+        let peakResidentRows = 0;
+
+        const seenDown = new Set();
+        for (let steps = 0; ; steps++) {
+          await settled();
+          for (const n of h.visibleRows()) seenDown.add(n);
+          peakResidentRows = Math.max(peakResidentRows, h.residentRows());
+          if (seenDown.has(h.target - 1)) break;
+          if (steps > 2000) break;
+          el.scrollTop += step;
+        }
+        const servedAfterDown = h.served();
+        const firstRowIndexAtBottom = h.firstRowIndex();
+
+        const seenUp = new Set();
+        for (let steps = 0; ; steps++) {
+          await settled();
+          for (const n of h.visibleRows()) seenUp.add(n);
+          peakResidentRows = Math.max(peakResidentRows, h.residentRows());
+          if (el.scrollTop === 0 && h.firstRowIndex() === 0) break;
+          if (steps > 2000) break;
+          el.scrollTop -= step;
+        }
+
+        return {
+          target: h.target,
+          servedAfterDown,
+          firstRowIndexAtBottom,
+          firstRowIndexAtTop: h.firstRowIndex(),
+          seenDown: seenDown.size,
+          seenUp: seenUp.size,
+          missingDown: missing(seenDown),
+          missingUp: missing(seenUp),
+          peakResidentRows,
+          elapsedMs: performance.now() - started,
+        };
+      })()`,
+    );
+
+    const walk = pagingMeasurements;
+    console.log(
+      [
+        "",
+        "  SELF-PAGING WALK — SCROLLED, NEVER DRIVEN",
+        `    rows in the list ............ ${String(walk.target)}`,
+        `    rows served by scrolling .... ${String(walk.servedAfterDown)}`,
+        `    rows seen walking down ...... ${String(walk.seenDown)}`,
+        `    rows seen walking up ........ ${String(walk.seenUp)}`,
+        `    evicted off the head ........ ${String(walk.firstRowIndexAtBottom)}`,
+        `    peak resident rows .......... ${String(walk.peakResidentRows)} (window bound ${String(IN_MEMORY_WINDOW_ROWS)})`,
+        `    walk elapsed ................ ${walk.elapsedMs.toFixed(0)} ms`,
         "",
       ].join("\n"),
     );
@@ -727,6 +915,51 @@ describe("the 10,000-row browser backstop", () => {
   it("asked for a hundred rows per page, as the contract fixes", () => {
     const m = measured();
     expect(m.rowsPagedThrough % KEYSET_PAGE_ROWS).toBe(0);
+  });
+
+  /** The self-paging walk's numbers, failing with the capability named. */
+  function walked(): PagingMeasurements {
+    if (startupFailure !== null) throw new Error(startupFailure);
+    if (pagingMeasurements === null) {
+      throw new Error(
+        "the self-paging walk produced no measurements — see the startup output.",
+      );
+    }
+    return pagingMeasurements;
+  }
+
+  it("reads the WHOLE list by scrolling alone — the table asks for every page itself", () => {
+    const w = walked();
+    expect(w.target).toBe(PAGING_ROWS);
+    expect(
+      w.servedAfterDown,
+      "scrolling to the bottom did not reach the last row: the table stopped " +
+        "asking for pages — the first-hundred-rows defect",
+    ).toBe(PAGING_ROWS);
+  });
+
+  it("passes EVERY row through the viewport on the way down — eviction skips none", () => {
+    const w = walked();
+    // Non-vacuity: the walk went past the bound, so pages really were evicted.
+    expect(w.firstRowIndexAtBottom).toBeGreaterThan(0);
+    expect(
+      w.missingDown,
+      "rows never crossed the viewport — the window shifted under the scroll " +
+        "offset when a page was evicted off its head",
+    ).toEqual([]);
+    expect(w.seenDown).toBe(PAGING_ROWS);
+  });
+
+  it("refetches every evicted page on the way back up, again without a gap", () => {
+    const w = walked();
+    expect(w.firstRowIndexAtTop).toBe(0);
+    expect(w.missingUp).toEqual([]);
+    expect(w.seenUp).toBe(PAGING_ROWS);
+  });
+
+  it("holds the window bound while it pages itself", () => {
+    const w = walked();
+    expect(w.peakResidentRows).toBeLessThanOrEqual(IN_MEMORY_WINDOW_ROWS);
   });
 });
 

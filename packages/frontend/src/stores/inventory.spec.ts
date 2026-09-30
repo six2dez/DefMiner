@@ -486,3 +486,151 @@ describe("createInventoryStore — the triage gate the coalescer reads", () => {
     expect(h.store.rows.value[0]?.id).toBe("c2-r0");
   });
 });
+
+// ===========================================================================
+// ONE PAGE REQUEST AT A TIME — THE TABLE ASKS FROM SCROLL HANDLERS
+// ===========================================================================
+// The table pages on `scroll-end` and `scroll-start`, which fire as rows enter
+// the rendered range. Two concurrent requests would read the same cursor and
+// append the same rows twice; one per direction would leave the eviction stack
+// describing a window that no longer exists. The store serialises, so the
+// scroll handlers do not have to.
+
+/** A reader whose answers are released by hand, to hold requests in flight. */
+function heldHarness(): Harness & { readonly releaseAll: () => void } {
+  const requests: PageRequest[] = [];
+  const counts: CountRequest[] = [];
+  const held: (() => void)[] = [];
+  let call = 0;
+  const store = createInventoryStore<Row>({
+    projectId: "p1",
+    table: "artifacts",
+    sortKey: "last_seen",
+    direction: "desc",
+    readPage: (request) => {
+      requests.push(request);
+      const mine = call;
+      call++;
+      return new Promise((resolve) => {
+        held.push(() => {
+          resolve(fullPages(mine, request));
+        });
+      });
+    },
+    countRows: (request) => {
+      counts.push(request);
+      return Promise.resolve({ ok: true, value: TOTAL });
+    },
+  });
+  return {
+    store,
+    requests,
+    counts,
+    releaseAll: () => {
+      for (const release of held.splice(0)) release();
+    },
+  };
+}
+
+describe("createInventoryStore — one page request at a time", () => {
+  it("JOINS a second next-page call to the one in flight: one request, one append", async () => {
+    const h = heldHarness();
+    const first = h.store.loadFirstPage();
+    await Promise.resolve();
+    h.releaseAll();
+    await first;
+
+    const a = h.store.loadNextPage();
+    const b = h.store.loadNextPage();
+    expect(h.requests).toHaveLength(2);
+    h.releaseAll();
+    await Promise.all([a, b]);
+
+    expect(h.store.rows.value).toHaveLength(2 * KEYSET_PAGE_ROWS);
+    const ids = h.store.rows.value.map((row) => row.id);
+    expect(new Set(ids).size, "a page was appended twice").toBe(ids.length);
+  });
+
+  it("does not start a previous-page request while a next-page one is in flight", async () => {
+    const h = harness(fullPages);
+    const pages = IN_MEMORY_WINDOW_ROWS / KEYSET_PAGE_ROWS + 1;
+    await h.store.loadFirstPage();
+    for (let index = 1; index < pages; index++) await h.store.loadNextPage();
+    expect(h.store.canLoadPrevious.value).toBe(true);
+
+    const before = h.requests.length;
+    const forward = h.store.loadNextPage();
+    const backward = h.store.loadPreviousPage();
+    await Promise.all([forward, backward]);
+
+    expect(h.requests).toHaveLength(before + 1);
+    expect(h.requests[before]?.cursor).not.toBeNull();
+  });
+
+  it("does not let a request the window was discarded under block the next one", async () => {
+    const h = heldHarness();
+    const first = h.store.loadFirstPage();
+    await Promise.resolve();
+    h.releaseAll();
+    await first;
+
+    // In flight when the window is rebuilt: it will come back stale.
+    const stale = h.store.loadNextPage();
+    const rebuilt = h.store.refresh();
+    await Promise.resolve();
+    h.releaseAll();
+    await Promise.all([stale, rebuilt]);
+    const before = h.requests.length;
+
+    const next = h.store.loadNextPage();
+    expect(
+      h.requests,
+      "the new request joined a stale one and was dropped",
+    ).toHaveLength(before + 1);
+    h.releaseAll();
+    await next;
+    expect(h.store.rows.value).toHaveLength(2 * KEYSET_PAGE_ROWS);
+  });
+});
+
+describe("createInventoryStore — the window's place in the whole set", () => {
+  it("counts the rows evicted off the head, and gives them back on a refetch", async () => {
+    const h = harness(fullPages);
+    const pages = IN_MEMORY_WINDOW_ROWS / KEYSET_PAGE_ROWS + 2;
+    await h.store.loadFirstPage();
+    expect(h.store.firstRowIndex.value).toBe(0);
+
+    for (let index = 1; index < pages; index++) await h.store.loadNextPage();
+    expect(h.store.firstRowIndex.value).toBe(2 * KEYSET_PAGE_ROWS);
+
+    await h.store.loadPreviousPage();
+    expect(h.store.firstRowIndex.value).toBe(KEYSET_PAGE_ROWS);
+
+    await h.store.refresh();
+    expect(h.store.firstRowIndex.value).toBe(0);
+  });
+});
+
+describe("createInventoryStore — a project switch starts over", () => {
+  it("clears the filter with the selection and the panel, and keeps the sort", async () => {
+    const h = harness(fullPages);
+    await h.store.loadFirstPage();
+    await h.store.setSort("byte_len", "asc");
+    await h.store.setFilter({ column: "kind", value: "script" });
+    h.store.selectRow("c3-r0");
+    h.store.openPanel();
+
+    await h.store.setProject("p2");
+
+    expect(h.store.filter.value).toBeNull();
+    expect(last(h.requests)?.filter).toBeNull();
+    expect(last(h.requests)?.projectId).toBe("p2");
+    expect(last(h.counts)?.filter).toBeNull();
+    expect(h.store.selectedRowKey.value).toBeNull();
+    expect(h.store.panelOpen.value).toBe(false);
+    // THE SORT STAYS. It is how the operator reads the table, not a fact about
+    // the project they left.
+    expect(h.store.sortKey.value).toBe("byte_len");
+    expect(h.store.direction.value).toBe("asc");
+  });
+});

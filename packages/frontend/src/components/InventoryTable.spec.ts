@@ -45,12 +45,17 @@ import type { CountRequest, RpcResult } from "../api/client";
 import { RPC_ERROR_STATE_BODY } from "../api/client";
 import { TABLE_ROW_HEIGHT_PX } from "../safety/display";
 import type { InventoryStore, PageReader } from "../stores/inventory";
-import { createInventoryStore, KEYSET_PAGE_ROWS } from "../stores/inventory";
+import {
+  createInventoryStore,
+  IN_MEMORY_WINDOW_ROWS,
+  KEYSET_PAGE_ROWS,
+} from "../stores/inventory";
 
 import InventoryTable from "./InventoryTable.vue";
 import type { ColumnDefinition } from "./table-contract";
 import {
   FOCUS_RING_CLASS,
+  groupThousands,
   ROW_HEIGHT_CLASS,
   SELECTED_ROW_ACCENT_CLASS,
 } from "./table-contract";
@@ -670,5 +675,261 @@ describe("InventoryTable — the column contract is enforced by the shell", () =
         { ...COLUMNS[1], targetControlled: false },
       ]),
     ).toThrow(/duplicate column id/);
+  });
+});
+
+// ===========================================================================
+// THE TABLE PAGES ITSELF
+// ===========================================================================
+// THE DEFECT THIS BLOCK EXISTS FOR: the store could always fetch page two, and
+// nothing on screen ever asked it to, so the first hundred rows were the only
+// hundred an operator could read. The real scroller cannot be laid out in jsdom
+// (see this file's header), so the stub stands in for it and EMITS the two
+// events the real one emits when its first or last item enters the rendered
+// range; `tests/frontend-load.spec.ts` drives the real one in a browser.
+
+/**
+ * A store over `total` rows served in keyset pages, with an optional scripted
+ * failure of one request by its call index.
+ */
+function pagedHarness(
+  total: number,
+  options: { readonly failCall?: number } = {},
+): StoreHarness {
+  const requests: PageRequest[] = [];
+  let call = 0;
+  const readPage: PageReader<Row> = (request) => {
+    requests.push(request);
+    const mine = call;
+    call++;
+    if (mine === options.failCall) {
+      return Promise.resolve({
+        ok: false,
+        reason: "rpc-timeout",
+        versions: null,
+      } satisfies RpcResult<PageResponse<Row>>);
+    }
+    const start =
+      request.cursor === null ? 0 : Number(request.cursor.sortValue);
+    const end = Math.min(start + request.limit, total);
+    const rows: Row[] = [];
+    for (let index = start; index < end; index++) {
+      rows.push({
+        id: `r${String(index)}`,
+        value: `v${String(index)}`,
+        kind: "script",
+      });
+    }
+    const exhausted = end >= total;
+    return Promise.resolve({
+      ok: true,
+      value: {
+        rows,
+        nextCursor: exhausted
+          ? null
+          : { sortValue: end, tieBreak: `r${String(end)}` },
+        scanned: rows.length,
+        exhausted,
+      },
+    } satisfies RpcResult<PageResponse<Row>>);
+  };
+  const store = createInventoryStore<Row>({
+    projectId: "p1",
+    table: "artifacts",
+    sortKey: "last_seen",
+    direction: "desc",
+    readPage,
+    countRows: () =>
+      Promise.resolve({
+        ok: true,
+        value: {
+          visible: total,
+          hiddenBySuppression: 0,
+          suppressionRuleCount: 0,
+        },
+      }),
+  });
+  return { store, requests };
+}
+
+/** Emit one of the real scroller's range events from the stub. */
+async function reach(
+  wrapper: VueWrapper,
+  event: "scroll-end" | "scroll-start",
+): Promise<void> {
+  wrapper.findComponent(ScrollerStub).vm.$emit(event);
+  await settle(wrapper);
+}
+
+function footerText(wrapper: VueWrapper): string {
+  return wrapper.get("[data-defminer-table-footer]").text();
+}
+
+describe("InventoryTable — scrolling to the end reads the rest of the list", () => {
+  it("asks for the NEXT page when the last row enters the rendered range", async () => {
+    const h = pagedHarness(250);
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+    expect(wrapper.findAll('[role="row"][tabindex="0"]')).toHaveLength(
+      KEYSET_PAGE_ROWS,
+    );
+
+    await reach(wrapper, "scroll-end");
+
+    expect(h.requests).toHaveLength(2);
+    expect(h.requests[1]?.cursor).not.toBeNull();
+    expect(wrapper.findAll('[role="row"][tabindex="0"]')).toHaveLength(
+      2 * KEYSET_PAGE_ROWS,
+    );
+    expect(wrapper.text()).toContain("v199");
+  });
+
+  it("reaches the LAST row of the list, and then stops asking", async () => {
+    const h = pagedHarness(250);
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+
+    await reach(wrapper, "scroll-end");
+    await reach(wrapper, "scroll-end");
+    expect(wrapper.text()).toContain("v249");
+    expect(h.store.complete.value).toBe(true);
+
+    const before = h.requests.length;
+    await reach(wrapper, "scroll-end");
+    expect(h.requests, "a complete list was asked for more").toHaveLength(
+      before,
+    );
+  });
+
+  it("states which rows of how many are on screen, and offers the next page as a button", async () => {
+    const h = pagedHarness(250);
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+
+    expect(footerText(wrapper)).toContain("Rows 1–100 of 250");
+    const loadMore = wrapper.get("[data-defminer-load-more]");
+    expect(loadMore.text()).toBe("Load more rows");
+    for (const token of FOCUS_RING_CLASS.split(" ")) {
+      expect(loadMore.classes()).toContain(token);
+    }
+
+    await loadMore.trigger("click");
+    await settle(wrapper);
+    expect(footerText(wrapper)).toContain("Rows 1–200 of 250");
+
+    await wrapper.get("[data-defminer-load-more]").trigger("click");
+    await settle(wrapper);
+    expect(footerText(wrapper)).toContain("Rows 1–250 of 250");
+    // THE END OF THE LIST OFFERS NOTHING MORE.
+    expect(wrapper.find("[data-defminer-load-more]").exists()).toBe(false);
+  });
+
+  it("keeps the rows on screen when a PAGE fails, and does not re-ask until Retry", async () => {
+    const h = pagedHarness(250, { failCall: 1 });
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+
+    await reach(wrapper, "scroll-end");
+
+    // THE ROWS STAY. A failed next page is not a failed table.
+    expect(wrapper.findAll('[role="row"][tabindex="0"]')).toHaveLength(
+      KEYSET_PAGE_ROWS,
+    );
+    expect(wrapper.text()).not.toContain(RPC_ERROR_STATE_BODY);
+    expect(footerText(wrapper)).toContain(
+      "The DefMiner backend did not return these rows.",
+    );
+
+    // A nudge of the scroll bar does not re-ask a backend that did not answer.
+    const before = h.requests.length;
+    await reach(wrapper, "scroll-end");
+    expect(h.requests).toHaveLength(before);
+
+    await wrapper.get("[data-defminer-paging-retry]").trigger("click");
+    await settle(wrapper);
+    expect(h.requests).toHaveLength(before + 1);
+    expect(wrapper.findAll('[role="row"][tabindex="0"]')).toHaveLength(
+      2 * KEYSET_PAGE_ROWS,
+    );
+    expect(footerText(wrapper)).not.toContain("did not return");
+  });
+});
+
+describe("InventoryTable — the window moves, and the numbering does not", () => {
+  const PAGES_TO_EVICT = IN_MEMORY_WINDOW_ROWS / KEYSET_PAGE_ROWS + 1;
+
+  async function scrolledPastTheBound(): Promise<{
+    h: StoreHarness;
+    wrapper: VueWrapper;
+  }> {
+    const h = pagedHarness(IN_MEMORY_WINDOW_ROWS + 5 * KEYSET_PAGE_ROWS);
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+    for (let page = 1; page < PAGES_TO_EVICT; page++) {
+      await reach(wrapper, "scroll-end");
+    }
+    return { h, wrapper };
+  }
+
+  it("refetches an EVICTED page when the first row enters the range — and not before", async () => {
+    const h = pagedHarness(IN_MEMORY_WINDOW_ROWS + 5 * KEYSET_PAGE_ROWS);
+    const wrapper = mountTable(h.store);
+    await h.store.loadFirstPage();
+    await settle(wrapper);
+
+    // Nothing evicted yet: the top of the window IS the top of the list.
+    await reach(wrapper, "scroll-start");
+    expect(h.requests).toHaveLength(1);
+
+    for (let page = 1; page < PAGES_TO_EVICT; page++) {
+      await reach(wrapper, "scroll-end");
+    }
+    expect(h.store.canLoadPrevious.value).toBe(true);
+    const before = h.requests.length;
+
+    await reach(wrapper, "scroll-start");
+
+    expect(h.requests).toHaveLength(before + 1);
+    // The evicted page's OWN boundary: the first page's, which is no cursor.
+    expect(h.requests[before]?.cursor).toBeNull();
+    expect(wrapper.text()).toContain("v0");
+  });
+
+  it("numbers rows over the WHOLE set once the head was evicted", async () => {
+    const { wrapper } = await scrolledPastTheBound();
+
+    const rows = wrapper.findAll('[role="row"][tabindex="0"]');
+    expect(rows).toHaveLength(IN_MEMORY_WINDOW_ROWS);
+    // One page went off the head, so the first resident row is the 101st.
+    expect(rows[0]?.attributes("aria-rowindex")).toBe(
+      String(KEYSET_PAGE_ROWS + 1),
+    );
+    expect(rows[0]?.text()).toContain(`v${String(KEYSET_PAGE_ROWS)}`);
+    expect(footerText(wrapper)).toContain(
+      `Rows 101–2,100 of ${groupThousands(IN_MEMORY_WINDOW_ROWS + 5 * KEYSET_PAGE_ROWS)}`,
+    );
+  });
+});
+
+describe("InventoryTable — a store that has not been asked yet", () => {
+  it("renders the loading skeleton, NEVER the empty screen", async () => {
+    // The page waits for the backend to name the active project before its
+    // first read. The empty screen in that gap would say the target served
+    // nothing.
+    const h = pagedHarness(250);
+    const wrapper = mountTable(h.store);
+    await settle(wrapper);
+
+    expect(h.store.loadState.value).toBe("idle");
+    expect(wrapper.text()).not.toContain(EMPTY_HEADING);
+    expect(wrapper.text()).toContain(
+      `Loading the first ${String(KEYSET_PAGE_ROWS)} rows…`,
+    );
+    expect(wrapper.find("[data-defminer-table-footer]").exists()).toBe(false);
   });
 });

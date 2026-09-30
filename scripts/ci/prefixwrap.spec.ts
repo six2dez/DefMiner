@@ -25,7 +25,7 @@
 //   missing file  — a gate that cannot find its target must never pass.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,6 +77,23 @@ describe("prefixwrap gate — the shipped stylesheet is contained", () => {
 
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBeGreaterThan(0);
+  });
+
+  it("carries the virtual scroller's own layout rules, scoped under the root", () => {
+    // WITHOUT THESE THE SCROLLER IS NOT A SCROLL CONTAINER. Measured inside a
+    // real Caido: the stylesheet was never loaded, the inventory scroller grew
+    // to the height of its rows with `overflow-y: visible`, the host page
+    // scrolled instead, and no page past the first was ever requested. The load
+    // harness imported the file itself and could not see it. Asserted against
+    // the BUILT css, which is the only thing Caido ever loads.
+    const css = readFileSync(join(REPO_ROOT, BUILT_CSS), "utf8");
+
+    expect(css).toMatch(
+      /#plugin--defminer \.vue-recycle-scroller\.direction-vertical:not\(\.page-mode\)\s*\{[^}]*overflow-y:\s*auto/,
+    );
+    expect(css).toMatch(
+      /#plugin--defminer \.vue-recycle-scroller\.ready \.vue-recycle-scroller__item-view\s*\{[^}]*position:\s*absolute/,
+    );
   });
 });
 

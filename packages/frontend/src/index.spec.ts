@@ -142,4 +142,19 @@ describe("init", () => {
 
     expect(addPage).toHaveBeenCalledTimes(1);
   });
+
+  it("sizes the mount element to Caido's page box, so the tables' scrollers are bounded", () => {
+    // MEASURED IN A REAL CAIDO: with no size of its own the element took the
+    // height of its content, every `h-full` below it followed, and the table
+    // scrollers never scrolled — the host page did, and no page past the first
+    // was ever requested. The stylesheet cannot size this element (its rules
+    // are prefix-wrapped to sit UNDER it), so the size is set inline.
+    const { sdk, addPage } = stubSdk();
+
+    init(sdk as unknown as Parameters<typeof init>[0]);
+
+    const [, options] = addPage.mock.calls[0];
+    expect(options.body.style.height).toBe("100%");
+    expect(options.body.style.width).toBe("100%");
+  });
 });

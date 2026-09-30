@@ -26,5 +26,15 @@ declare module "vue-virtual-scroller" {
     keyField: string;
     /** Pixels of rendered overscan above and below the viewport. */
     buffer?: number;
+    /**
+     * `scroll-start` and `scroll-end`, declared as the listener props Vue
+     * compiles `@scroll-start` / `@scroll-end` into. The component emits each
+     * when the FIRST or the LAST item is newly given a view — that is, when it
+     * enters the rendered range, viewport plus `buffer` — which is what the
+     * inventory table pages on. Verified against the installed dist
+     * (`updateVisibleItems`, the `newlyUsedView` branch).
+     */
+    onScrollStart?: () => void;
+    onScrollEnd?: () => void;
   }>;
 }

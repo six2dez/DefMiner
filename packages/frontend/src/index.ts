@@ -56,6 +56,15 @@ export const SIDEBAR_LABEL = "DefMiner";
 export function init(sdk: Caido): void {
   const body = document.createElement("div");
   body.id = MOUNT_ELEMENT_ID;
+  // THE PAGE FILLS THE BOX CAIDO GIVES IT, AND NO MORE. Without an explicit
+  // size the element takes the height of its content, every `h-full` below it
+  // resolves to "as tall as the rows", and the tables' scrollers never become
+  // scroll containers — the host page scrolls instead and no page past the
+  // first is ever asked for. Inline, because the stylesheet cannot reach this
+  // element: every rule is prefix-wrapped to sit UNDER `#plugin--defminer`,
+  // which matches its descendants and never the element itself.
+  body.style.height = "100%";
+  body.style.width = "100%";
 
   createApp(App)
     .use(createPinia())

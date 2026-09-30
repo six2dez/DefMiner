@@ -147,11 +147,34 @@ export type InventoryStore<TRow> = TriageGate & {
   readonly visibleTotal: ComputedRef<VisibleTotal | null>;
   /** True when a page has been evicted off the head and can be refetched. */
   readonly canLoadPrevious: ComputedRef<boolean>;
+  /**
+   * The 0-based position of the first resident row in the WHOLE result set:
+   * how many rows the evicted head pages held. What `aria-rowindex` adds to a
+   * row's index in the window, so assistive technology is told a row's place
+   * in the list and not its place in whatever happens to be in memory.
+   */
+  readonly firstRowIndex: ComputedRef<number>;
   loadFirstPage: () => Promise<void>;
+  /**
+   * Append the page after the resident window.
+   *
+   * ONE PAGE REQUEST AT A TIME, IN EITHER DIRECTION. A call made while a next
+   * or previous page is already being fetched joins that request instead of
+   * starting a second one. The table asks from scroll handlers that fire many
+   * times a second, and two concurrent requests would read the same cursor and
+   * append the same rows twice — or, one per direction, leave the eviction
+   * bookkeeping describing a window that no longer exists.
+   */
   loadNextPage: () => Promise<void>;
+  /** Refetch the nearest evicted page before the window. Serialised with
+   *  {@link loadNextPage}; see there. */
   loadPreviousPage: () => Promise<void>;
   setSort: (sortKey: string, direction: "asc" | "desc") => Promise<void>;
   setFilter: (filter: PageRequest["filter"]) => Promise<void>;
+  /** Start over under another project: the selection, the open panel, the
+   *  filter and the count all belong to the previous one and are cleared.
+   *  The sort is kept — it is how the operator reads the table, not a fact
+   *  about any project. */
   setProject: (projectId: string) => Promise<void>;
   selectRow: (rowKey: string) => void;
   clearSelection: () => void;
@@ -182,6 +205,13 @@ type ResidentPage<TRow> = {
   readonly exhausted: boolean;
 };
 
+/** A page evicted off the head: where to ask for it again, and how many rows
+ *  it held — which is what {@link InventoryStore.firstRowIndex} sums. */
+type EvictedPage = {
+  readonly requestCursor: PageCursor | null;
+  readonly rowCount: number;
+};
+
 type Assembled<TRow> =
   | {
       readonly kind: "page";
@@ -200,8 +230,8 @@ export function createInventoryStore<TRow>(
   options: InventoryStoreOptions<TRow>,
 ): InventoryStore<TRow> {
   const pages = shallowRef<ResidentPage<TRow>[]>([]);
-  /** The request cursors of pages evicted off the HEAD, nearest last. */
-  const evicted = shallowRef<(PageCursor | null)[]>([]);
+  /** The pages evicted off the HEAD, nearest last. */
+  const evicted = shallowRef<EvictedPage[]>([]);
   const projectId = ref(options.projectId);
   const sortKey = ref(options.sortKey);
   const direction = ref<"asc" | "desc">(options.direction);
@@ -223,6 +253,18 @@ export function createInventoryStore<TRow>(
    * end, because the assembly loop awaits several times.
    */
   let generation = 0;
+
+  /**
+   * The page request in flight, and the generation it was started under.
+   *
+   * Keyed by generation because a request the window has since been discarded
+   * under is not one a new call should wait on: it will come back stale and
+   * change nothing, and joining it would drop the new call on the floor.
+   */
+  let paging: {
+    readonly generation: number;
+    readonly done: Promise<void>;
+  } | null = null;
 
   const residentRowCount = (): number =>
     pages.value.reduce((sum, page) => sum + page.rows.length, 0);
@@ -296,7 +338,10 @@ export function createInventoryStore<TRow>(
       pages.value.length > 1
     ) {
       const head = pages.value[0];
-      evicted.value = [...evicted.value, head.requestCursor];
+      evicted.value = [
+        ...evicted.value,
+        { requestCursor: head.requestCursor, rowCount: head.rows.length },
+      ];
       pages.value = pages.value.slice(1);
     }
   };
@@ -346,7 +391,23 @@ export function createInventoryStore<TRow>(
     loadState.value = "ready";
   };
 
-  const loadNextPage = async (): Promise<void> => {
+  /** Run one page request, or join the one already in flight. See
+   *  {@link InventoryStore.loadNextPage}. */
+  const serialised = (run: () => Promise<void>): Promise<void> => {
+    if (paging !== null && paging.generation === generation) {
+      return paging.done;
+    }
+    const mine = {
+      generation,
+      done: run().finally(() => {
+        if (paging === mine) paging = null;
+      }),
+    };
+    paging = mine;
+    return mine.done;
+  };
+
+  const nextPage = async (): Promise<void> => {
     const last = pages.value[pages.value.length - 1];
     if (last === undefined) return;
     if (last.exhausted) return;
@@ -366,13 +427,13 @@ export function createInventoryStore<TRow>(
     loadState.value = "ready";
   };
 
-  const loadPreviousPage = async (): Promise<void> => {
+  const previousPage = async (): Promise<void> => {
     const stack = evicted.value;
-    if (stack.length === 0) return;
-    const startCursor = stack[stack.length - 1];
+    const nearest = stack[stack.length - 1];
+    if (nearest === undefined) return;
 
     loadState.value = "loading";
-    const outcome = await assemble(startCursor);
+    const outcome = await assemble(nearest.requestCursor);
     if (outcome.kind === "stale") return;
     if (outcome.kind === "failed") {
       applyFailure(outcome.failure);
@@ -417,9 +478,13 @@ export function createInventoryStore<TRow>(
       () => selectedRowKey.value !== null || panelOpen.value,
     ),
 
+    firstRowIndex: computed(() =>
+      evicted.value.reduce((sum, page) => sum + page.rowCount, 0),
+    ),
+
     loadFirstPage,
-    loadNextPage,
-    loadPreviousPage,
+    loadNextPage: () => serialised(nextPage),
+    loadPreviousPage: () => serialised(previousPage),
 
     // The three that change the QUESTION all discard the window and start over.
     // None of them touches the resident rows in place.
@@ -434,6 +499,11 @@ export function createInventoryStore<TRow>(
     },
     setProject: async (nextProjectId) => {
       projectId.value = nextProjectId;
+      // THE FILTER GOES WITH THE PROJECT. Its value was picked from the
+      // previous project's rows, and a filter left standing over a project
+      // that has none of them renders the filtered-empty screen over data the
+      // operator has not looked at yet.
+      filter.value = null;
       selectedRowKey.value = null;
       panelOpen.value = false;
       total.value = null;

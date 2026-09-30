@@ -49,9 +49,30 @@
 // left-edge bar — and nothing else in it is `primary`-toned. Both are named
 // constants in table-contract.ts so a spec can COUNT them rather than read for
 // them.
+//
+// ===========================================================================
+// THE TABLE PAGES ITSELF, AND KEEPS THE OPERATOR'S PLACE WHILE IT DOES
+// ===========================================================================
+// The store could always fetch the next page; nothing on screen ever asked it
+// to, so the first hundred rows were the only hundred anybody could read.
+// Scrolling now asks: when the LAST resident row enters the scroller's rendered
+// range the next page is requested, and when the FIRST one does and pages were
+// evicted off the head, the nearest of those is refetched. A footer states
+// which rows of how many are resident and carries the same request as a
+// button, because a triage surface is a keyboard surface and a scroll gesture
+// is not the only way to reach the end of a list.
+//
+// THE WINDOW MOVES UNDER THE OPERATOR, SO THE OFFSET MOVES WITH IT. Past the
+// 2,000-row bound a forward page evicts a page off the head, and a backward
+// one prepends a page. `RecycleScroller` places a row by its INDEX, so either
+// shifts every row on screen by a page — the operator would silently skip a
+// hundred rows, or read the same hundred twice. After every change to the
+// window the first row's key is looked up in the other window and the scroll
+// offset is corrected by the difference, so the row under the operator's eye
+// stays there.
 
 import type { PageRequest } from "@defminer/engine/contract";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { RecycleScroller } from "vue-virtual-scroller";
 
 import { RPC_ERROR_STATE_BODY } from "../api/client";
@@ -66,6 +87,7 @@ import {
   CELL_CLASS,
   counted,
   FOCUS_RING_CLASS,
+  groupThousands,
   ROW_HEIGHT_CLASS,
   SELECTED_ROW_ACCENT_CLASS,
 } from "./table-contract";
@@ -126,6 +148,16 @@ const OPEN_HEALTH_LABEL = "Open Health";
 /** The loading label, with its number READ FROM the page-size constant. */
 const LOADING_LABEL = `Loading the first ${String(KEYSET_PAGE_ROWS)} rows…`;
 
+/** The footer's paging copy. Its one number is read from the page size, like
+ *  the loading label's. */
+const LOADING_MORE_LABEL = `Loading the next ${String(KEYSET_PAGE_ROWS)} rows…`;
+const LOADING_PREVIOUS_LABEL = `Loading the previous ${String(KEYSET_PAGE_ROWS)} rows…`;
+const LOAD_MORE_LABEL = "Load more rows";
+/** A PAGE that failed, as opposed to the table: the rows already on screen
+ *  are still true and stay there, so this is a footer line with its own retry
+ *  rather than the error screen that would replace them. */
+const PAGING_FAILED_BODY = "The DefMiner backend did not return these rows.";
+
 // ---------------------------------------------------------------------------
 // THE FIVE STATES, AS ONE VALUE
 // ---------------------------------------------------------------------------
@@ -146,8 +178,20 @@ const rows = computed<readonly TRow[]>(() => store.rows.value);
 const filter = computed<PageRequest["filter"]>(() => store.filter.value);
 
 const view = computed<View>(() => {
-  if (store.loadState.value === "failed") return "failed";
-  if (store.loadState.value === "loading" && rows.value.length === 0) {
+  // THE ERROR SCREEN REPLACES THE TABLE ONLY WHEN THERE IS NO TABLE. A failed
+  // FIRST page has nothing to show; a failed NEXT page leaves every resident
+  // row true, and throwing them away to say so would cost the operator their
+  // place. That failure is the footer's.
+  if (store.loadState.value === "failed" && rows.value.length === 0) {
+    return "failed";
+  }
+  // `idle` IS "NOT ASKED YET", NOT "NOTHING THERE". The page waits for the
+  // backend to name the active project before the first read, and the empty
+  // screen shown in that gap would tell the operator the target served nothing.
+  if (
+    (store.loadState.value === "loading" || store.loadState.value === "idle") &&
+    rows.value.length === 0
+  ) {
     return "loading";
   }
   if (rows.value.length > 0) return "populated";
@@ -313,6 +357,125 @@ function openEvidence(row: TRow): void {
   store.selectRow(rowKey(row));
   store.openPanel();
 }
+
+// ---------------------------------------------------------------------------
+// PAGING — ASKED FOR BY THE SCROLL, AND BY THE FOOTER
+// ---------------------------------------------------------------------------
+
+/** Which end the table last asked for, so the footer names the rows it is
+ *  loading and its Retry repeats THAT request rather than guessing. */
+type PagingDirection = "next" | "previous";
+const lastPaging = ref<PagingDirection>("next");
+
+/** A page request is in flight while rows are on screen. The FIRST page's
+ *  loading is the skeleton screen's, not the footer's. */
+const paging = computed<boolean>(
+  () => store.loadState.value === "loading" && rows.value.length > 0,
+);
+
+/** A page request failed while rows are on screen. See {@link view}. */
+const pagingFailed = computed<boolean>(
+  () => store.loadState.value === "failed" && rows.value.length > 0,
+);
+
+/** There are rows after the window that nothing has asked for yet. */
+const canLoadMore = computed<boolean>(
+  () =>
+    store.loadState.value === "ready" &&
+    !store.complete.value &&
+    store.nextCursor.value !== null,
+);
+
+function requestPage(direction: PagingDirection): void {
+  lastPaging.value = direction;
+  void (direction === "next" ? store.loadNextPage() : store.loadPreviousPage());
+}
+
+/**
+ * The last resident row entered the rendered range.
+ *
+ * ONLY FROM `ready`. Not while a request is in flight — the store would join
+ * it anyway — and NOT after one failed: a backend that did not answer is not
+ * re-asked because the operator nudged the scroll bar. The footer's Retry is
+ * the deliberate act for that.
+ */
+function onReachedEnd(): void {
+  if (!canLoadMore.value) return;
+  requestPage("next");
+}
+
+/** The first resident row entered the rendered range, and there are evicted
+ *  rows before it. Same `ready` rule as {@link onReachedEnd}. */
+function onReachedStart(): void {
+  if (store.loadState.value !== "ready" || !store.canLoadPrevious.value) return;
+  requestPage("previous");
+}
+
+function retryPaging(): void {
+  requestPage(lastPaging.value);
+}
+
+/**
+ * Which rows of how many the window holds, in the footer.
+ *
+ * ONE-BASED AND OVER THE WHOLE SET, the same numbering `aria-rowindex` uses.
+ * The total is the store's reachable count and is left off while it is
+ * unknown: "of 0" would claim a measured empty table.
+ */
+const positionText = computed<string>(() => {
+  const first = store.firstRowIndex.value + 1;
+  const last = store.firstRowIndex.value + rows.value.length;
+  const range = `Rows ${groupThousands(first)}–${groupThousands(last)}`;
+  const total = store.visibleTotal.value?.visible;
+  return total === undefined ? range : `${range} of ${groupThousands(total)}`;
+});
+
+/** The scroller instance, for the one DOM fact the correction below needs: the
+ *  element's scroll offset. */
+const scroller = ref<InstanceType<typeof RecycleScroller> | null>(null);
+
+/** That fact, declared STRUCTURALLY, the way `export-download.ts` declares the
+ *  document it touches: the component needs nothing else of the element. */
+type ScrollOffset = { scrollTop: number };
+
+/**
+ * How far the window's head moved between two windows, in rows: NEGATIVE when
+ * rows were evicted off the head, POSITIVE when a page was prepended, and zero
+ * when the head did not move or the windows share no row — a rebuilt window,
+ * whose scroll position starts over anyway.
+ */
+function headShift(
+  previous: readonly ScrollerItem[],
+  next: readonly ScrollerItem[],
+): number {
+  const previousHead = previous[0];
+  const nextHead = next[0];
+  if (previousHead === undefined || nextHead === undefined) return 0;
+  if (previousHead.__defminerRowKey === nextHead.__defminerRowKey) return 0;
+  const evictedRows = previous.findIndex(
+    (item) => item.__defminerRowKey === nextHead.__defminerRowKey,
+  );
+  if (evictedRows > 0) return -evictedRows;
+  const prependedRows = next.findIndex(
+    (item) => item.__defminerRowKey === previousHead.__defminerRowKey,
+  );
+  if (prependedRows > 0) return prependedRows;
+  return 0;
+}
+
+// AFTER THE DOM HAS THE NEW WINDOW (`flush: "post"`), so a prepended page has
+// already made the content taller and the corrected offset is not clamped.
+watch(
+  scrollerItems,
+  (next, previous) => {
+    const shift = headShift(previous, next);
+    if (shift === 0) return;
+    const element = scroller.value?.$el as ScrollOffset | undefined;
+    if (element === undefined) return;
+    element.scrollTop += shift * TABLE_ROW_HEIGHT_PX;
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
@@ -471,13 +634,18 @@ function openEvidence(row: TRow): void {
       :aria-colcount="columns.length"
     >
       <RecycleScroller
+        ref="scroller"
         v-slot="{ item, index }"
         class="h-full"
         :items="scrollerItems"
         :item-size="TABLE_ROW_HEIGHT_PX"
         :buffer="200"
         key-field="__defminerRowKey"
+        @scroll-end="onReachedEnd"
+        @scroll-start="onReachedStart"
       >
+        <!-- `aria-rowindex` is offset by the rows evicted off the head, so it
+             stays a position in the whole set once the window has moved. -->
         <div
           :class="[
             ROW_HEIGHT_CLASS,
@@ -489,7 +657,7 @@ function openEvidence(row: TRow): void {
           ]"
           role="row"
           tabindex="0"
-          :aria-rowindex="index + 1"
+          :aria-rowindex="store.firstRowIndex.value + index + 1"
           :aria-selected="isSelected(item.row)"
           @click="openEvidence(item.row)"
           @keydown.enter="openEvidence(item.row)"
@@ -529,6 +697,47 @@ function openEvidence(row: TRow): void {
           </button>
         </div>
       </RecycleScroller>
+    </div>
+
+    <!-- ===================================================================
+         THE FOOTER — where the table is in the list, and the way to the rest
+         of it that does not need a scroll gesture. Outside the scroller, so
+         the scroller's fixed item geometry is untouched, and at the row
+         height, so it never reflows the table when its text changes. No
+         spinner: the in-flight state is words, like the first page's.
+         =================================================================== -->
+    <div
+      v-if="view === 'populated'"
+      :class="[
+        ROW_HEIGHT_CLASS,
+        'flex shrink-0 items-center gap-2 border-t border-surface-600 px-2 text-xs text-surface-400',
+      ]"
+      data-defminer-table-footer
+    >
+      <span>{{ positionText }}</span>
+      <span v-if="paging">{{
+        lastPaging === "next" ? LOADING_MORE_LABEL : LOADING_PREVIOUS_LABEL
+      }}</span>
+      <template v-else-if="pagingFailed">
+        <span class="text-danger-500">{{ PAGING_FAILED_BODY }}</span>
+        <button
+          type="button"
+          :class="[FOCUS_RING_CLASS, 'font-semibold underline']"
+          data-defminer-paging-retry
+          @click="retryPaging"
+        >
+          {{ RETRY_LABEL }}
+        </button>
+      </template>
+      <button
+        v-else-if="canLoadMore"
+        type="button"
+        :class="[FOCUS_RING_CLASS, 'font-semibold underline']"
+        data-defminer-load-more
+        @click="requestPage('next')"
+      >
+        {{ LOAD_MORE_LABEL }}
+      </button>
     </div>
   </div>
 </template>
